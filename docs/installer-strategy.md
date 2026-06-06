@@ -294,7 +294,7 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 
 - `install-launch-agent.sh` updated: auto-copies `build/portier/` to `~/Applications/Portier/` by default; adds `--source-dir`, `--no-start`, and `--runtime service|node` options; fixes LaunchAgent label consistency (`com.portier.port-forwarding` everywhere).
 - `uninstall-launch-agent.sh` updated: adds `--purge` flag for removing config and logs (off by default — config is always preserved).
-- `build-pkg.sh` added: builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
+- `build-release.sh` added: builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
 - Signing and notarization documented in `deploy/macos/readme.md`.
 - `validate:service:macos` passes on macOS with `npm run validate:service:macos`.
 - npm scripts added: `install:macos`, `uninstall:macos`, `start:macos`, `stop:macos`, `status:macos`, `installer:macos`, `installer:macos:no-package`.

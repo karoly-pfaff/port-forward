@@ -51,8 +51,8 @@
     "status:macos": "bash scripts/macos/status-launch-agent.sh",
     "installer:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/windows/installer/build-installer.ps1",
     "installer:windows:no-package": "powershell -ExecutionPolicy Bypass -File ./scripts/windows/installer/build-installer.ps1 -NoPackage",
-    "installer:macos": "bash scripts/macos/build-pkg.sh",
-    "installer:macos:no-package": "bash scripts/macos/build-pkg.sh --no-package"
+    "installer:macos": "bash scripts/macos/build-release.sh",
+    "installer:macos:no-package": "bash scripts/macos/build-release.sh --no-package"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

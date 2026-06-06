@@ -20,7 +20,7 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 - `npm run installer:windows:no-package` — installer only, reuses existing `build/portier/`.
 - macOS install scripts updated: `install-launch-agent.sh` now auto-copies `build/portier/` to `~/Applications/Portier/` by default; adds `--source-dir`, `--no-start`, and `--runtime service|node` options; fixes label consistency bug (`com.portier.port-forwarding` everywhere).
 - `uninstall-launch-agent.sh` adds `--purge` flag for removing config and logs (config is preserved by default).
-- `build-pkg.sh` — builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
+- `build-release.sh` — builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
 - Signing and notarization documented in `deploy/macos/readme.md` (unsigned local builds supported; Developer ID signing documented as required for public distribution).
 - `npm run install:macos`, `uninstall:macos`, `start:macos`, `stop:macos`, `status:macos` — macOS LaunchAgent lifecycle shortcuts.
 - `npm run installer:macos` / `installer:macos:no-package` — macOS portable archive build.
