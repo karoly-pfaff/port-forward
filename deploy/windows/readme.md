@@ -34,7 +34,7 @@ npm run validate:package:smoke   # build, validate layout, and smoke-test
 Windows-specific package (produces build\windows\):
 
 ```powershell
-npm run package:windows
+npm run build:native:windows
 ```
 
 Output: `build\windows\` (service.exe, server.js, web\, readme.txt).
@@ -43,32 +43,32 @@ Clean and rebuild:
 
 ```powershell
 npm run package:clean
-npm run package:windows
+npm run build:native:windows
 ```
 
 ---
 
 ## Inno Setup Installer (v1.1)
 
-The `scripts/windows/installer/` directory contains an Inno Setup 6 script and a build wrapper.
+The `scripts/windows/release/` directory contains an Inno Setup 6 script and a build wrapper.
 
 **Prerequisites:**
 
 1. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 2. Ensure Go is installed (for `service.exe` compilation).
 
-**Build the installer:**
+**Build the installer (and portable archive):**
 
 ```powershell
-npm run installer:windows
+npm run release:current
 ```
 
-This runs `npm run package:portier` first, then calls ISCC.exe.
+This runs `npm run package:portier` first, produces the portable `.zip`, then calls ISCC.exe. The installer step is non-fatal if Inno Setup is absent — the portable zip is still produced.
 
 To skip the package step and reuse an existing `build/portier/`:
 
 ```powershell
-npm run installer:windows:no-package
+npm run release:current -- --no-build
 ```
 
 **Output:** `build/releases/windows/Portier-Setup-<version>.exe`
@@ -87,7 +87,7 @@ npm run installer:windows:no-package
 
 **SmartScreen note:** The installer is unsigned. Windows SmartScreen may warn before running it. For public distribution, sign `service.exe` and `Portier-Setup-<version>.exe` with an EV certificate.
 
-**Build script options:**
+**Build script options (`scripts/windows/release/build-release.ps1`):**
 
 | Parameter | Description |
 |-----------|-------------|
@@ -130,7 +130,7 @@ Copy-Item -Recurse -Force .\build\windows\* "$env:ProgramFiles\Portier\"
 **2. Install the service (run as Administrator):**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1
 ```
 
 Default parameter values when `-Scope Machine`:
@@ -152,16 +152,16 @@ The installer registers and starts a service with a command line equivalent to:
 Node fallback (requires Node.js; provide the full path to `node.exe` for a service):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1 `
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1 `
   -UseNode -NodePath "C:\Program Files\nodejs\node.exe"
 ```
 
 **Manage the service:**
 
 ```powershell
-.\scripts\windows\start-service.ps1
-.\scripts\windows\stop-service.ps1
-.\scripts\windows\status-service.ps1
+.\scripts\windows\service\start-service.ps1
+.\scripts\windows\service\stop-service.ps1
+.\scripts\windows\service\status-service.ps1
 ```
 
 Or use standard Windows tools:
@@ -175,7 +175,7 @@ Get-Service Portier
 **Uninstall (preserves rules.json by default):**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\uninstall-service.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\uninstall-service.ps1
 ```
 
 Pass `-RemoveConfig` to also delete `%ProgramData%\Portier` including `rules.json` and logs.
@@ -195,7 +195,7 @@ Copy-Item -Recurse -Force .\build\windows\* "$env:LOCALAPPDATA\Portier\"
 **2. Install the scheduled task:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1 -Scope User
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1 -Scope User
 ```
 
 Default parameter values when `-Scope User`:
@@ -217,22 +217,22 @@ The scheduler task runs at user logon with a command equivalent to:
 Node fallback for user install (node must be on PATH or provide full path):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1 -Scope User `
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1 -Scope User `
   -UseNode -NodePath "C:\Program Files\nodejs\node.exe"
 ```
 
 **Manage the task:**
 
 ```powershell
-.\scripts\windows\start-service.ps1  -Scope User
-.\scripts\windows\stop-service.ps1   -Scope User
-.\scripts\windows\status-service.ps1 -Scope User
+.\scripts\windows\service\start-service.ps1  -Scope User
+.\scripts\windows\service\stop-service.ps1   -Scope User
+.\scripts\windows\service\status-service.ps1 -Scope User
 ```
 
 **Uninstall (preserves rules.json by default):**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\uninstall-service.ps1 -Scope User
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\uninstall-service.ps1 -Scope User
 ```
 
 Pass `-RemoveConfig` to also delete `%APPDATA%\Portier` including `rules.json` and logs.

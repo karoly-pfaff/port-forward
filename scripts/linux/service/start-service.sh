@@ -10,7 +10,7 @@ fi
 
 if ! [ -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
   echo "Error: $SERVICE_NAME.service not found." >&2
-  echo "  Install it first with scripts/linux/install-service.sh." >&2
+  echo "  Install it first with scripts/linux/service/install-service.sh." >&2
   exit 1
 fi
 

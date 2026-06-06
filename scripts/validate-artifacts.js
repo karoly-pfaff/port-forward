@@ -245,7 +245,7 @@ console.log("");
 
 // Release directory
 if (!existsSync(releasesDir)) {
-  fail(`build/releases/${platformLabel}/ not found — run: npm run package:release:current`);
+  fail(`build/releases/${platformLabel}/ not found — run: npm run release:current`);
   console.error("[validate-release] FAILED: release directory missing.\n");
   process.exit(1);
 }
@@ -308,7 +308,7 @@ if (!portableOnly && installerName) {
     if (installerRequired) {
       fail(`Installer not found: ${installerName} (--installer-required)`);
     } else {
-      warn(`Installer not found: ${installerName} — build with: npm run installer:${platformLabel}`);
+      warn(`Installer not found: ${installerName} — build with: npm run release:current`);
     }
   } else {
     const iStat = statSync(installerPath);

@@ -2,13 +2,12 @@
 ; Inno Setup 6 required — https://jrsoftware.org/isinfo.php
 ;
 ; Build via npm:
-;   npm run installer:windows
-;   npm run installer:windows:no-package
+;   npm run release:current
 ;
 ; Build manually:
 ;   ISCC portier.iss /DAppVersion=1.0.0 /DSourceDir=..\..\..\build\portier /DOutputDir=..\..\..\build\releases\windows
 ;
-; The build-installer.ps1 script always passes absolute paths for SourceDir and
+; The build-release.ps1 script always passes absolute paths for SourceDir and
 ; OutputDir.  The defaults below are fallbacks for manual ISCC invocations from
 ; this directory.
 

@@ -182,11 +182,11 @@ function buildWindowsPortable(releasesDir, version) {
 
 function buildWindowsInstaller(releasesDir, version) {
   const installerScript = join(
-    repoRoot, "scripts", "windows", "installer", "build-installer.ps1"
+    repoRoot, "scripts", "windows", "release", "build-release.ps1"
   );
   log("  Installer: Inno Setup...");
 
-  // build-installer.ps1 handles ISCC.exe detection and exits 1 if unavailable.
+  // build-release.ps1 handles ISCC.exe detection and exits 1 if unavailable.
   // We treat installer failure as non-fatal: the portable zip is still valid.
   const result = spawnSync(
     "powershell",
@@ -209,8 +209,8 @@ function buildWindowsInstaller(releasesDir, version) {
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
 function buildMacosPortable(version) {
-  log("  Portable: delegating to scripts/macos/build-release.sh...");
-  run("bash", ["scripts/macos/build-release.sh", "--no-package", "--version", version], {
+  log("  Portable: delegating to scripts/macos/release/build-release.sh...");
+  run("bash", ["scripts/macos/release/build-release.sh", "--no-package", "--version", version], {
     shell: false,
   });
 }
@@ -218,8 +218,8 @@ function buildMacosPortable(version) {
 // ── Linux ─────────────────────────────────────────────────────────────────────
 
 function buildLinuxPortable(version) {
-  log("  Portable: delegating to scripts/linux/build-release.sh...");
-  run("bash", ["scripts/linux/build-release.sh", "--no-package", "--version", version], {
+  log("  Portable: delegating to scripts/linux/release/build-release.sh...");
+  run("bash", ["scripts/linux/release/build-release.sh", "--no-package", "--version", version], {
     shell: false,
   });
 }

@@ -72,13 +72,13 @@ if ($UseNode) {
   $binary    = $NodePath
   $serverJs  = Join-Path $paths.InstallDir "server.js"
   if (-not (Test-Path $serverJs)) {
-    throw "Node fallback expected server.js at '$serverJs'. Run 'npm run package:windows' first."
+    throw "Node fallback expected server.js at '$serverJs'. Run 'npm run build:native:windows' first."
   }
   $serviceArgs = "$(Format-Argument $serverJs) $(New-ServiceArguments -Paths $paths -HostAddress $HostAddress -Port $Port)"
 } else {
   $binary = Join-Path $paths.InstallDir "service.exe"
   if (-not (Test-Path $binary)) {
-    throw "Go service binary not found at '$binary'. Run 'npm run package:windows' first, or use -UseNode for Node.js fallback."
+    throw "Go service binary not found at '$binary'. Run 'npm run build:native:windows' first, or use -UseNode for Node.js fallback."
   }
   $serviceArgs = New-ServiceArguments -Paths $paths -HostAddress $HostAddress -Port $Port
 }

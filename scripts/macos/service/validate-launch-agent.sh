@@ -4,7 +4,7 @@
 # Uses test-specific label and paths; never touches production Portier installs.
 #
 # Usage:
-#   bash scripts/macos/validate-launch-agent.sh [--no-build] [--keep-files] [--port PORT]
+#   bash scripts/macos/service/validate-launch-agent.sh [--no-build] [--keep-files] [--port PORT]
 #
 # Flags:
 #   --no-build    Skip npm run package:portier; use existing build/portier/.
@@ -53,7 +53,7 @@ HEALTH_URL="http://${HOST_ADDR}:${PORT}/api/health"
 ROOT_URL="http://${HOST_ADDR}:${PORT}/"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 PACKAGE_DIR="$REPO_ROOT/build/portier"
 
 # Cleanup function — runs on EXIT regardless of success or failure

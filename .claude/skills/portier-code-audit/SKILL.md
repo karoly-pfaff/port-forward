@@ -14,7 +14,7 @@ Use when asked to audit, review, or assess changes in Portier — especially cha
    - TS/JS changes → `npm run lint`, `npm run typecheck`, `npm run test`
    - Go changes → `go -C service vet ./...`, `go -C service test ./...`
    - Both → run all of the above
-   - Packaging changes → `npm run validate:package:smoke` (preferred; no admin/root required); falls back to `npm run package:windows` on Windows or document the skip
+   - Packaging changes → `npm run validate:package:smoke` (preferred; no admin/root required); falls back to `npm run build:native:windows` on Windows or document the skip
 4. Report findings by severity. Do not bury correctness or security risks in a summary.
 5. Note what was run, what failed, and what was skipped with reasons.
 

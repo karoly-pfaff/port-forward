@@ -36,7 +36,7 @@ npm run validate:package:smoke   # build, validate layout, and smoke-test
 Linux-specific package (produces build/linux/ with linux/amd64 binary):
 
 ```bash
-bash scripts/linux/build-package.sh
+bash scripts/linux/build-native.sh
 ```
 
 ## Release Archive (v1.1)
@@ -44,9 +44,13 @@ bash scripts/linux/build-package.sh
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run installer:linux
-# or (skip package:portier step):
-npm run installer:linux:no-package
+npm run release:portable
+```
+
+To skip the `package:portier` step and reuse an existing `build/portier/`:
+
+```bash
+npm run release:portable -- --no-build
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
@@ -66,7 +70,7 @@ Extract and install from the archive on a target machine:
 
 ```bash
 tar -xzf portier-<version>-linux.tar.gz -C /opt/portier/
-sudo bash scripts/linux/install-service.sh --source-dir /opt/portier
+sudo bash scripts/linux/service/install-service.sh --source-dir /opt/portier
 ```
 
 > **Note:** `.deb` and `.rpm` packages are not yet implemented. The portable tar.gz is the v1.1 Linux release artifact. Packages are planned as a follow-up.
@@ -79,7 +83,7 @@ Build the package and install in one step:
 
 ```bash
 npm run package:portier
-sudo bash scripts/linux/install-service.sh
+sudo bash scripts/linux/service/install-service.sh
 ```
 
 The install script auto-copies `build/portier/` into `/opt/portier/`, creates the config directory and `rules.json` if missing, generates the systemd unit file, and enables and starts the service.
@@ -87,13 +91,13 @@ The install script auto-copies `build/portier/` into `/opt/portier/`, creates th
 Node fallback (requires Node.js):
 
 ```bash
-sudo bash scripts/linux/install-service.sh --runtime node
+sudo bash scripts/linux/service/install-service.sh --runtime node
 ```
 
 With custom paths:
 
 ```bash
-sudo bash scripts/linux/install-service.sh \
+sudo bash scripts/linux/service/install-service.sh \
   --install-dir /opt/portier \
   --config-path /etc/portier/rules.json \
   --host 127.0.0.1 \
@@ -120,9 +124,9 @@ If `build/portier/` exists at the time the script runs, it is copied automatical
 ### Manage
 
 ```bash
-sudo bash scripts/linux/status-service.sh
-sudo bash scripts/linux/stop-service.sh
-sudo bash scripts/linux/start-service.sh
+sudo bash scripts/linux/service/status-service.sh
+sudo bash scripts/linux/service/stop-service.sh
+sudo bash scripts/linux/service/start-service.sh
 ```
 
 Or use standard systemd tools directly:
@@ -140,19 +144,19 @@ sudo journalctl -u portier -f
 Stops the service, disables it, and removes the unit file. Preserves config and install directory by default:
 
 ```bash
-sudo bash scripts/linux/uninstall-service.sh
+sudo bash scripts/linux/service/uninstall-service.sh
 ```
 
 Also remove install directory (binaries and web assets):
 
 ```bash
-sudo bash scripts/linux/uninstall-service.sh --remove-files
+sudo bash scripts/linux/service/uninstall-service.sh --remove-files
 ```
 
 Also remove config directory (rules.json and logs):
 
 ```bash
-sudo bash scripts/linux/uninstall-service.sh --remove-files --remove-config
+sudo bash scripts/linux/service/uninstall-service.sh --remove-files --remove-config
 ```
 
 ---
@@ -196,7 +200,7 @@ The systemd install flow is validated by an explicit script that uses a test-spe
 ```bash
 sudo npm run validate:service:linux
 # or
-sudo bash scripts/linux/validate-systemd-service.sh
+sudo bash scripts/linux/service/validate-systemd-service.sh
 ```
 
 The script:

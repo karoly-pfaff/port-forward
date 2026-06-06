@@ -79,7 +79,7 @@ npm run start:service
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run installer:linux
+npm run release:portable
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
@@ -92,7 +92,7 @@ Build the package and install in one step:
 
 ```bash
 npm run package:portier
-sudo bash scripts/linux/install-service.sh
+sudo bash scripts/linux/service/install-service.sh
 ```
 
 The install script auto-copies `build/portier/` into `/opt/portier/`, creates `/etc/portier/rules.json` if missing, generates `/etc/systemd/system/portier.service`, enables and starts the service.
@@ -100,7 +100,7 @@ The install script auto-copies `build/portier/` into `/opt/portier/`, creates `/
 Node fallback (requires Node.js on the target machine):
 
 ```bash
-sudo bash scripts/linux/install-service.sh --runtime node
+sudo bash scripts/linux/service/install-service.sh --runtime node
 ```
 
 The Go service ExecStart:
@@ -112,10 +112,10 @@ The Go service ExecStart:
 Open `http://127.0.0.1:47831` after installation.
 
 ```bash
-sudo bash scripts/linux/status-service.sh
-sudo bash scripts/linux/stop-service.sh
-sudo bash scripts/linux/start-service.sh
-sudo bash scripts/linux/uninstall-service.sh   # preserves rules.json
+sudo bash scripts/linux/service/status-service.sh
+sudo bash scripts/linux/service/stop-service.sh
+sudo bash scripts/linux/service/start-service.sh
+sudo bash scripts/linux/service/uninstall-service.sh   # preserves rules.json
 ```
 
 See `deploy/systemd/readme.md` for flags, manual unit file install, and firewall notes.
@@ -125,7 +125,7 @@ See `deploy/systemd/readme.md` for flags, manual unit file install, and firewall
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run installer:macos
+npm run release:portable
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
@@ -138,7 +138,7 @@ Build the package and install:
 
 ```bash
 npm run package:portier
-bash scripts/macos/install-launch-agent.sh
+bash scripts/macos/service/install-launch-agent.sh
 ```
 
 The install script auto-copies `build/portier/` to `~/Applications/Portier/`, creates `~/Library/Application Support/Portier/rules.json` if missing, generates `~/Library/LaunchAgents/com.portier.port-forwarding.plist` with absolute paths, and bootstraps the agent for the current user. No `sudo` is required.
@@ -146,10 +146,10 @@ The install script auto-copies `build/portier/` to `~/Applications/Portier/`, cr
 Open `http://127.0.0.1:47831` after installation. Logs are written to `~/Library/Logs/Portier/`.
 
 ```bash
-bash scripts/macos/status-launch-agent.sh
-bash scripts/macos/stop-launch-agent.sh
-bash scripts/macos/start-launch-agent.sh
-bash scripts/macos/uninstall-launch-agent.sh   # preserves rules.json and logs
+bash scripts/macos/service/status-launch-agent.sh
+bash scripts/macos/service/stop-launch-agent.sh
+bash scripts/macos/service/start-launch-agent.sh
+bash scripts/macos/service/uninstall-launch-agent.sh   # preserves rules.json and logs
 ```
 
 Use `--runtime node` to run with `server.js` instead of the native binary. Use `--purge` on uninstall to also remove config and logs. See `deploy/macos/readme.md` for full options.
@@ -160,13 +160,13 @@ Forwarded ports on `0.0.0.0` may trigger macOS Firewall prompts. The management 
 
 Portier v1.1 adds an [Inno Setup](https://jrsoftware.org/isinfo.php) installer for machine-wide installation on Windows 10+ (64-bit).
 
-**Build the installer** (requires Inno Setup 6 and Go):
+**Build the release artifacts** (requires Inno Setup 6 for the installer):
 
 ```powershell
-npm run installer:windows
+npm run release:current
 ```
 
-Output: `build/releases/windows/Portier-Setup-<version>.exe`
+Output: `build/releases/windows/portier-<version>-windows-portable.zip` and `Portier-Setup-<version>.exe` (if Inno Setup is available)
 
 The installer:
 - Installs binaries to `%ProgramFiles%\Portier\`.
@@ -184,7 +184,7 @@ The installer is unsigned. Windows SmartScreen may warn before running it. Sign 
 Build the Windows package:
 
 ```powershell
-npm run package:windows
+npm run build:native:windows
 ```
 
 The output is created under `build\windows`:
@@ -209,23 +209,23 @@ Machine install (Administrator required — installs to `%ProgramFiles%\Portier`
 
 ```powershell
 Copy-Item -Recurse -Force .\build\windows\* "$env:ProgramFiles\Portier\"
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1
 ```
 
 User install (no Administrator — installs to `%LOCALAPPDATA%\Portier`):
 
 ```powershell
 Copy-Item -Recurse -Force .\build\windows\* "$env:LOCALAPPDATA\Portier\"
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1 -Scope User
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1 -Scope User
 ```
 
 Config for machine install: `%ProgramData%\Portier\rules.json`. Config for user install: `%APPDATA%\Portier\rules.json`. Use `-UseNode` to run `node server.js` instead of the Go binary (requires Node.js).
 
 ```powershell
-.\scripts\windows\status-service.ps1 [-Scope User]
-.\scripts\windows\stop-service.ps1   [-Scope User]
-.\scripts\windows\start-service.ps1  [-Scope User]
-.\scripts\windows\uninstall-service.ps1 [-Scope User]   # preserves rules.json
+.\scripts\windows\service\status-service.ps1 [-Scope User]
+.\scripts\windows\service\stop-service.ps1   [-Scope User]
+.\scripts\windows\service\start-service.ps1  [-Scope User]
+.\scripts\windows\service\uninstall-service.ps1 [-Scope User]   # preserves rules.json
 ```
 
 See `deploy/windows/readme.md` for detailed Windows packaging and service notes.
@@ -237,13 +237,13 @@ See `deploy/systemd/readme.md` for detailed Linux systemd notes.
 Build the current platform's portable archive and installer (if tooling is available):
 
 ```powershell
-npm run package:release:current
+npm run release:current
 ```
 
 Portable archive only (skip installer):
 
 ```powershell
-npm run package:release:portable
+npm run release:portable
 ```
 
 Validate the artifacts after building:
@@ -268,7 +268,7 @@ build/releases/
 
 Each portable archive contains the clean runtime layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`). Config (`rules.json`) is never bundled.
 
-Service binaries are platform-native. For a multi-platform release, run `package:release:current` on each target OS. The Windows installer is skipped (non-fatal) when Inno Setup is unavailable — the portable zip is still produced.
+Service binaries are platform-native. For a multi-platform release, run `release:current` on each target OS. The Windows installer is skipped (non-fatal) when Inno Setup is unavailable — the portable zip is still produced.
 
 macOS `.pkg` and Linux `.deb`/`.rpm` are out of v1.1 scope. See `docs/installer-strategy.md`.
 
@@ -468,9 +468,9 @@ npm run lint
 npm run typecheck
 npm run check
 npm run package:portier
-npm run package:windows
-npm run package:macos
-npm run package:linux
+npm run build:native:windows
+npm run build:native:macos
+npm run build:native:linux
 npm run package:clean
 npm run validate:package           # validate existing build/portier/ layout
 npm run validate:package:build     # build then validate
@@ -480,14 +480,8 @@ npm run validate:service:windows:user     # Windows user-scope (scheduled task, 
 npm run validate:service:windows:machine  # Windows machine-scope (Windows Service, admin required)
 npm run validate:service:macos            # macOS LaunchAgent (no sudo)
 npm run validate:service:linux            # Linux systemd (requires sudo)
-npm run installer:windows                 # build Inno Setup installer (requires Inno Setup 6)
-npm run installer:windows:no-package      # build installer only, skip package step
-npm run installer:macos                   # build macOS portable tar.gz
-npm run installer:macos:no-package        # macOS tar.gz only, skip package step
-npm run installer:linux                   # build Linux portable tar.gz
-npm run installer:linux:no-package        # Linux tar.gz only, skip package step
-npm run package:release:current           # portable archive + installer for current platform
-npm run package:release:portable          # portable archive only (skip installer)
+npm run release:current                   # portable archive + installer for current platform
+npm run release:portable                  # portable archive only (skip installer)
 npm run validate:release:current          # validate release artifacts for current platform
 npm run validate:release:portable         # validate portable archive only
 ```
@@ -495,23 +489,23 @@ npm run validate:release:portable         # validate portable archive only
 macOS LaunchAgent scripts (run on macOS):
 
 ```bash
-bash scripts/macos/build-package.sh
-bash scripts/macos/install-launch-agent.sh [--node-mode] [--install-dir PATH] [--config-path PATH]
-bash scripts/macos/status-launch-agent.sh
-bash scripts/macos/start-launch-agent.sh
-bash scripts/macos/stop-launch-agent.sh
-bash scripts/macos/uninstall-launch-agent.sh
+bash scripts/macos/build-native.sh
+bash scripts/macos/service/install-launch-agent.sh [--node-mode] [--install-dir PATH] [--config-path PATH]
+bash scripts/macos/service/status-launch-agent.sh
+bash scripts/macos/service/start-launch-agent.sh
+bash scripts/macos/service/stop-launch-agent.sh
+bash scripts/macos/service/uninstall-launch-agent.sh
 ```
 
 Linux service scripts (run as root on Linux):
 
 ```bash
-bash scripts/linux/build-release.sh            # portable tar.gz → build/releases/linux/
-sudo bash scripts/linux/install-service.sh [--runtime node] [--source-dir PATH] [--install-dir PATH] [--config-path PATH] [--no-enable]
-sudo bash scripts/linux/status-service.sh
-sudo bash scripts/linux/start-service.sh
-sudo bash scripts/linux/stop-service.sh
-sudo bash scripts/linux/uninstall-service.sh [--remove-files] [--remove-config]
+bash scripts/linux/release/build-release.sh    # portable tar.gz → build/releases/linux/
+sudo bash scripts/linux/service/install-service.sh [--runtime node] [--source-dir PATH] [--install-dir PATH] [--config-path PATH] [--no-enable]
+sudo bash scripts/linux/service/status-service.sh
+sudo bash scripts/linux/service/start-service.sh
+sudo bash scripts/linux/service/stop-service.sh
+sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-config]
 ```
 
 ## Release

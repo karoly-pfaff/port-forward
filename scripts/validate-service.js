@@ -4,9 +4,9 @@
  * Cross-platform dispatcher for OS service install validation.
  *
  * Runs the appropriate platform validation script for the current OS:
- *   Windows → scripts/windows/validate-user-install.ps1 (no admin required)
- *   macOS   → scripts/macos/validate-launch-agent.sh
- *   Linux   → scripts/linux/validate-systemd-service.sh (requires root/sudo)
+ *   Windows → scripts/windows/service/validate-user-install.ps1 (no admin required)
+ *   macOS   → scripts/macos/service/validate-launch-agent.sh
+ *   Linux   → scripts/linux/service/validate-systemd-service.sh (requires root/sudo)
  *
  * All extra arguments are forwarded to the platform script.
  *
@@ -25,17 +25,17 @@ if (platform === "win32") {
   cmd = "powershell";
   cmdArgs = [
     "-ExecutionPolicy", "Bypass",
-    "-File", "scripts\\windows\\validate-user-install.ps1",
+    "-File", "scripts\\windows\\service\\validate-user-install.ps1",
     ...extraArgs,
   ];
 } else if (platform === "darwin") {
   label = "macOS LaunchAgent — no sudo required";
   cmd = "bash";
-  cmdArgs = ["scripts/macos/validate-launch-agent.sh", ...extraArgs];
+  cmdArgs = ["scripts/macos/service/validate-launch-agent.sh", ...extraArgs];
 } else if (platform === "linux") {
   label = "Linux systemd — requires root/sudo";
   cmd = "bash";
-  cmdArgs = ["scripts/linux/validate-systemd-service.sh", ...extraArgs];
+  cmdArgs = ["scripts/linux/service/validate-systemd-service.sh", ...extraArgs];
 } else {
   console.error(`[validate:service:current] Unsupported platform: ${platform}`);
   console.error("  Supported platforms: win32, darwin, linux");

@@ -33,7 +33,7 @@ npm run validate:package:smoke   # build, validate layout, and smoke-test
 macOS-specific package (produces build/macos/ with darwin/amd64 binary):
 
 ```bash
-npm run package:macos
+npm run build:native:macos
 ```
 
 Or build manually with:
@@ -51,7 +51,7 @@ Build the package and install in one step:
 
 ```bash
 npm run package:portier
-bash scripts/macos/install-launch-agent.sh
+bash scripts/macos/service/install-launch-agent.sh
 ```
 
 The install script auto-copies `build/portier/` into `~/Applications/Portier/`, creates the config directory and `rules.json` if missing, generates the LaunchAgent plist with absolute paths, and bootstraps the agent for the current user. No `sudo` is required.
@@ -63,7 +63,7 @@ Open `http://127.0.0.1:47831` after installation.
 ## Install Script Options
 
 ```bash
-bash scripts/macos/install-launch-agent.sh [OPTIONS]
+bash scripts/macos/service/install-launch-agent.sh [OPTIONS]
 ```
 
 | Option | Default | Description |
@@ -87,13 +87,13 @@ If `build/portier/` exists at the time the script runs, it is copied automatical
 The install script uses the native service binary by default. If `build/portier/` is present, it copies automatically:
 
 ```bash
-bash scripts/macos/install-launch-agent.sh
+bash scripts/macos/service/install-launch-agent.sh
 ```
 
 With a custom install location:
 
 ```bash
-bash scripts/macos/install-launch-agent.sh \
+bash scripts/macos/service/install-launch-agent.sh \
   --install-dir ~/Applications/Portier \
   --config-path ~/Library/Application\ Support/Portier/rules.json
 ```
@@ -105,7 +105,7 @@ bash scripts/macos/install-launch-agent.sh \
 If the native binary is not available, deploy `server.js` and run with Node.js. This requires Node.js installed on the machine.
 
 ```bash
-bash scripts/macos/install-launch-agent.sh --runtime node
+bash scripts/macos/service/install-launch-agent.sh --runtime node
 ```
 
 The installer resolves the Node.js binary path at install time (using `which node` and common Homebrew locations) and writes the absolute path into the plist. This ensures the LaunchAgent can find Node.js even though launchd starts with a minimal `PATH`.
@@ -116,19 +116,19 @@ The installer resolves the Node.js binary path at install time (using `which nod
 
 ```bash
 # Status (and diagnostic output from launchctl)
-bash scripts/macos/status-launch-agent.sh
+bash scripts/macos/service/status-launch-agent.sh
 
 # Stop (unloads the agent — prevents auto-restart)
-bash scripts/macos/stop-launch-agent.sh
+bash scripts/macos/service/stop-launch-agent.sh
 
 # Start (or restart) the agent
-bash scripts/macos/start-launch-agent.sh
+bash scripts/macos/service/start-launch-agent.sh
 
 # Uninstall: stops agent and removes plist; preserves rules.json and logs
-bash scripts/macos/uninstall-launch-agent.sh
+bash scripts/macos/service/uninstall-launch-agent.sh
 
 # Uninstall and remove all config and logs (destructive)
-bash scripts/macos/uninstall-launch-agent.sh --purge
+bash scripts/macos/service/uninstall-launch-agent.sh --purge
 ```
 
 ---
@@ -166,9 +166,13 @@ To change the bind address or port, pass `--host` and `--port` to `install-launc
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run installer:macos
-# or (skip package:portier step):
-npm run installer:macos:no-package
+npm run release:portable
+```
+
+To skip the `package:portier` step and reuse an existing `build/portier/`:
+
+```bash
+npm run release:portable -- --no-build
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
@@ -188,7 +192,7 @@ Extract and install from the archive on a target machine:
 
 ```bash
 tar -xzf portier-portable-macos-<version>.tar.gz -C ~/Applications/Portier/
-bash scripts/macos/install-launch-agent.sh --source-dir ~/Applications/Portier
+bash scripts/macos/service/install-launch-agent.sh --source-dir ~/Applications/Portier
 ```
 
 > **Note:** `.pkg` installer support (via `pkgbuild`/`productbuild`) is not yet implemented. The portable tar.gz is the v1.1 macOS release artifact. `.pkg` is planned as a follow-up. See `docs/installer-strategy.md`.
@@ -264,7 +268,7 @@ The LaunchAgent install flow is validated by an explicit script that uses a test
 ```bash
 npm run validate:service:macos
 # or
-bash scripts/macos/validate-launch-agent.sh
+bash scripts/macos/service/validate-launch-agent.sh
 ```
 
 The script:

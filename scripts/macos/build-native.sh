@@ -78,7 +78,7 @@ Config (rules.json) is external and must be provided. A new empty rules.json is
 created automatically if the path does not exist when the service starts.
 
 LaunchAgent install (no sudo required):
-  bash scripts/macos/install-launch-agent.sh    (from the Portier repository)
+  bash scripts/macos/service/install-launch-agent.sh    (from the Portier repository)
   Installs to ~/Applications/Portier/ with config at:
   ~/Library/Application Support/Portier/rules.json
   See deploy/macos/readme.md for full options.

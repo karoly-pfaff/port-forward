@@ -13,7 +13,7 @@
 - `client/sources` = React TypeScript web UI
 - `shared/sources` = shared types, validation, constants, port advisory utilities
 - `deploy` = service examples, unit files, deploy docs/templates
-- `scripts` = executable automation scripts (`scripts/windows/`, `scripts/macos/`, `scripts/linux/`)
+- `scripts` = executable automation scripts; platform subdirs contain `release/` (artifact builders) and `service/` (OS service lifecycle) subfolders
 - `build` = generated build output
 
 ## Server Runtimes
@@ -122,11 +122,11 @@ Each script uses test-specific names, ports, and temp paths. Never touches produ
 ## Packaging Commands
 
 ```powershell
-npm run package:portier       # cross-platform: builds build/portier/ on the current OS
-npm run package:windows       # Windows package (build/windows/)
-npm run package:macos         # macOS package (build/macos/)
-npm run package:linux         # Linux package (build/linux/)
-npm run package:clean         # clean build/portier/ and all platform package dirs
+npm run package:portier           # cross-platform: builds build/portier/ on the current OS
+npm run build:native:windows      # Windows package (build/windows/)
+npm run build:native:macos        # macOS package (build/macos/)
+npm run build:native:linux        # Linux package (build/linux/)
+npm run package:clean             # clean build/portier/ and all platform package dirs
 ```
 
 ## macOS LaunchAgent Commands
@@ -134,11 +134,11 @@ npm run package:clean         # clean build/portier/ and all platform package di
 Lifecycle management (user-level, no sudo):
 
 ```bash
-bash scripts/macos/install-launch-agent.sh    # copies build/portier/ → ~/Applications/Portier/, registers LaunchAgent
-bash scripts/macos/uninstall-launch-agent.sh  # stops and removes LaunchAgent; preserves rules.json
-bash scripts/macos/start-launch-agent.sh      # start (or restart) the LaunchAgent
-bash scripts/macos/stop-launch-agent.sh       # stop the LaunchAgent
-bash scripts/macos/status-launch-agent.sh     # show LaunchAgent status via launchctl
+bash scripts/macos/service/install-launch-agent.sh    # copies build/portier/ → ~/Applications/Portier/, registers LaunchAgent
+bash scripts/macos/service/uninstall-launch-agent.sh  # stops and removes LaunchAgent; preserves rules.json
+bash scripts/macos/service/start-launch-agent.sh      # start (or restart) the LaunchAgent
+bash scripts/macos/service/stop-launch-agent.sh       # stop the LaunchAgent
+bash scripts/macos/service/status-launch-agent.sh     # show LaunchAgent status via launchctl
 ```
 
 Install script supports: `--source-dir`, `--install-dir`, `--config-path`, `--host`, `--port`, `--runtime service|node`, `--no-start`.
@@ -147,25 +147,24 @@ Uninstall script supports: `--purge` (removes config and logs; off by default).
 macOS release archive:
 
 ```bash
-npm run installer:macos               # package:portier then tar.gz
-npm run installer:macos:no-package    # tar.gz only (reuse existing build/portier/)
+npm run release:portable              # package:portier then portable tar.gz
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
 
 Unsigned. Gatekeeper may quarantine downloaded binaries. Sign with Developer ID for public distribution.
-Do not add `installer:macos` to `npm run check` — it is a release step.
+Do not add `release:*` to `npm run check` — it is a release step.
 
 ## Linux systemd Service Commands
 
 Lifecycle management (requires root/sudo):
 
 ```bash
-sudo bash scripts/linux/install-service.sh    # copies build/portier/ → /opt/portier/, registers systemd service
-sudo bash scripts/linux/uninstall-service.sh  # stops and removes service; preserves /etc/portier/rules.json
-sudo bash scripts/linux/start-service.sh      # start (or restart) the service
-sudo bash scripts/linux/stop-service.sh       # stop the service
-sudo bash scripts/linux/status-service.sh     # show service status via systemctl
+sudo bash scripts/linux/service/install-service.sh    # copies build/portier/ → /opt/portier/, registers systemd service
+sudo bash scripts/linux/service/uninstall-service.sh  # stops and removes service; preserves /etc/portier/rules.json
+sudo bash scripts/linux/service/start-service.sh      # start (or restart) the service
+sudo bash scripts/linux/service/stop-service.sh       # stop the service
+sudo bash scripts/linux/service/status-service.sh     # show service status via systemctl
 ```
 
 Install script supports: `--source-dir`, `--install-dir`, `--config-path`, `--host`, `--port`, `--runtime service|node`, `--no-enable`, `--no-start`.
@@ -174,33 +173,34 @@ Uninstall script supports: `--remove-files` (removes `/opt/portier/`), `--remove
 Linux release archive:
 
 ```bash
-npm run installer:linux               # package:portier then tar.gz
-npm run installer:linux:no-package    # tar.gz only (reuse existing build/portier/)
+npm run release:portable              # package:portier then portable tar.gz
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 
 No signing required for Linux tar.gz. Firewall rules for forwarded ports are the user's responsibility (ufw, iptables, firewalld).
-Do not add `installer:linux` to `npm run check` — it is a release step.
+Do not add `release:*` to `npm run check` — it is a release step.
 
-## Windows Installer Commands
+## Windows Release Commands
 
-Build the Inno Setup installer for machine-wide install on Windows 10+ (requires Inno Setup 6):
+Build the portable zip and Inno Setup installer for Windows 10+ (Inno Setup 6 required for the installer):
 
 ```powershell
-npm run installer:windows              # npm run package:portier then ISCC.exe
-npm run installer:windows:no-package   # ISCC.exe only (reuse existing build/portier/)
+npm run release:current     # portable zip + installer (installer non-fatal if Inno Setup absent)
+npm run release:portable    # portable zip only
 ```
 
-Output: `build/releases/windows/Portier-Setup-<version>.exe`
+Output:
+- `build/releases/windows/portier-<version>-windows-portable.zip`
+- `build/releases/windows/Portier-Setup-<version>.exe` (when Inno Setup available)
 
-Build options (via `build-installer.ps1`):
+Build script: `scripts/windows/release/build-release.ps1`
 - `-Version 1.1.0` — override version string (default: reads from `package.json`)
 - `-NoPackage` — skip `package:portier` step
 - `-InnoPath "C:\..."` — path to `ISCC.exe` if not on PATH
 
 The installer is unsigned. It does NOT create Windows Firewall rules. Config is preserved on uninstall.
-Do not add `installer:windows` to `npm run check` — it requires Inno Setup and is a release step.
+Do not add `release:*` to `npm run check` — it is a release step.
 
 ## Package Validation Commands
 
@@ -242,8 +242,8 @@ Release service validation: `npm run validate:service:current` (or per-platform 
 Build the current platform's portable archive (and installer if tooling is available):
 
 ```powershell
-npm run package:release:current       # portable + installer (non-fatal if installer tools absent)
-npm run package:release:portable      # portable archive only
+npm run release:current       # portable + installer (non-fatal if installer tools absent)
+npm run release:portable      # portable archive only
 ```
 
 Validate release artifacts:
@@ -261,7 +261,7 @@ Archive filenames are versioned:
 - Linux: `portier-<version>-linux.tar.gz`
 
 Service binaries are platform-native. Run on each OS for that OS's artifacts.
-Do not add `package:release:*` or `validate:release:*` to `npm run check` — they are release steps.
+Do not add `release:*` or `validate:release:*` to `npm run check` — they are release steps.
 
 ## Installer Strategy
 
@@ -329,7 +329,7 @@ v1.1 focuses on distribution and native OS service installers. The v1.1 scope, p
 - Use `sources/` for TypeScript source directories.
 - Use `build/` for generated build outputs.
 - Use `deploy/` for service examples and documentation.
-- Keep executable automation scripts under `scripts/`, with helpers in `scripts/windows/`, `scripts/macos/`, and `scripts/linux/`.
+- Keep executable automation scripts under `scripts/`, with `release/` (artifact builders) and `service/` (OS service lifecycle) subfolders under `scripts/windows/`, `scripts/macos/`, and `scripts/linux/`.
 - Normal documentation filenames are lowercase, such as `docs/architecture.md` and `docs/checklist.md`. The root `README.md` is uppercase.
 - Keep tool-required files uppercase: `AGENTS.md`, `CLAUDE.md`, and `SKILL.md` in Codex/Claude skill directories.
 - React component and view files under `client/sources/` use **CamelCase** filenames (e.g., `ForwardRuleList.tsx`, `StatCard.tsx`). Non-component files use the existing repo convention (e.g., `format.ts`, `nav.ts`).

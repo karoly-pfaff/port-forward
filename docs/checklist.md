@@ -111,13 +111,13 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 
 - [ ] macOS Firewall prompts or required settings documented and observed for LAN-visible forwarded ports.
 - [ ] Production install to `~/Applications/Portier` with config at `~/Library/Application Support/Portier/rules.json` verified.
-- [ ] Config preserved after `scripts/macos/uninstall-launch-agent.sh`.
+- [ ] Config preserved after `scripts/macos/service/uninstall-launch-agent.sh`.
 
 ### Linux Firewall (Manual — On Real Production Install)
 
 - [ ] Firewall rules for LAN-visible forwarded ports documented and observed.
 - [ ] Production install to `/opt/portier` with config at `/etc/portier/rules.json` verified.
-- [ ] Config preserved after `scripts/linux/uninstall-service.sh` without `--remove-config`.
+- [ ] Config preserved after `scripts/linux/service/uninstall-service.sh` without `--remove-config`.
 
 ## Post-v1.0 Follow-Ups
 
@@ -131,9 +131,9 @@ v1.1 focuses on distribution and native OS service installers. See `docs/install
 
 Checklist items to add per slice as work proceeds:
 
-- [x] **Slice 2** — Windows Inno Setup installer: machine-wide install (`%ProgramFiles%\Portier`), optional Windows Service task, uninstall preserves `rules.json`. Build via `npm run installer:windows`. Requires Inno Setup 6.
-- [x] **Slice 3** — macOS LaunchAgent polish: auto-copy from `build/portier/`, `--source-dir`/`--no-start`/`--runtime` options, label bug fixed, `--purge` on uninstall, `build-release.sh` for portable tar.gz, signing/notarization docs. Build via `npm run installer:macos`. Validate via `npm run validate:service:macos`.
-- [x] **Slice 4** — Linux install/uninstall/start/stop/status scripts complete; `--source-dir`/`--no-enable` added to `install-service.sh`; `build-release.sh` for portable tar.gz; `installer:linux`/`installer:linux:no-package` npm scripts; systemd unit examples and docs updated.
+- [x] **Slice 2** — Windows Inno Setup installer: machine-wide install (`%ProgramFiles%\Portier`), optional Windows Service task, uninstall preserves `rules.json`. Scripts in `scripts/windows/release/`. Build via `npm run release:current`. Requires Inno Setup 6.
+- [x] **Slice 3** — macOS LaunchAgent polish: auto-copy from `build/portier/`, `--source-dir`/`--no-start`/`--runtime` options, label bug fixed, `--purge` on uninstall, `scripts/macos/release/build-release.sh` for portable tar.gz, signing/notarization docs. Service lifecycle scripts in `scripts/macos/service/`. Build via `npm run release:current` (on macOS). Validate via `npm run validate:service:macos`.
+- [x] **Slice 4** — Linux install/uninstall/start/stop/status scripts complete; `--source-dir`/`--no-enable` added to `install-service.sh`; `scripts/linux/release/build-release.sh` for portable tar.gz; service lifecycle scripts in `scripts/linux/service/`; systemd unit examples and docs updated.
 - [x] **Slice 5** — `validate:service:*` scripts unified: all support `--no-build`, `--keep-files`, `--port`; test-specific names/paths/ports on all platforms; `validate:service:current` dispatches by OS with unsupported-platform error. Windows user-scope validated on Windows host. macOS/Linux validation requires the respective OS.
-- [x] **Slice 6** — `package:release:current` and `package:release:portable` produce `build/releases/<platform>/` with versioned portable archives. `validate:release:portable` validates layout, required files, forbidden files, and readme.txt content. Windows zip via `Compress-Archive`; macOS/Linux tar.gz via existing build-release.sh. Windows installer non-fatal if Inno Setup absent. macOS .pkg and Linux .deb/.rpm deferred.
+- [x] **Slice 6** — `release:current` and `release:portable` produce `build/releases/<platform>/` with versioned portable archives. `validate:release:portable` validates layout, required files, forbidden files, and readme.txt content. Windows zip via `Compress-Archive`; macOS/Linux tar.gz via `scripts/macos/release/build-release.sh` and `scripts/linux/release/build-release.sh`. Windows installer non-fatal if Inno Setup absent. macOS .pkg and Linux .deb/.rpm deferred.
 - [ ] **Slice 7** — v1.1 readiness audit passed; version bumped to `1.1.0`; changelog entry added; tag created.

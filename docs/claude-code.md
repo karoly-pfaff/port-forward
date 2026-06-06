@@ -28,7 +28,7 @@ node .claude/hooks/format-changed-files.js
 node .claude/hooks/validate-after-task.js
 ```
 
-The hooks do not run `npm run package:windows` automatically. Packaging is heavier and should be run only when explicitly requested or when a packaging task needs it.
+The hooks do not run `npm run build:native:windows` automatically. Packaging is heavier and should be run only when explicitly requested or when a packaging task needs it.
 
 ## Code Audit Skill
 

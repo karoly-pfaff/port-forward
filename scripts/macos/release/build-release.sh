@@ -3,7 +3,7 @@
 # Output: build/releases/macos/portier-portable-macos-<version>.tar.gz
 #
 # Usage:
-#   bash scripts/macos/build-release.sh [--no-package] [--version VERSION]
+#   bash scripts/macos/release/build-release.sh [--no-package] [--version VERSION]
 #
 # Options:
 #   --no-package     Skip npm run package:portier; use existing build/portier/.
@@ -17,7 +17,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 PACKAGE_DIR="$REPO_ROOT/build/portier"
 OUTPUT_DIR="$REPO_ROOT/build/releases/macos"
 

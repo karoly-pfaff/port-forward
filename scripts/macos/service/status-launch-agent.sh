@@ -11,8 +11,8 @@ if launchctl list "$LABEL" &>/dev/null; then
 else
   echo "Portier LaunchAgent: not loaded"
   echo ""
-  echo "  To start:   bash scripts/macos/start-launch-agent.sh"
-  echo "  To install: bash scripts/macos/install-launch-agent.sh"
+  echo "  To start:   bash scripts/macos/service/start-launch-agent.sh"
+  echo "  To install: bash scripts/macos/service/install-launch-agent.sh"
 fi
 
 echo ""

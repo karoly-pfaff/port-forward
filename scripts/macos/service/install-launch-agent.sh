@@ -8,7 +8,7 @@ LOG_DIR="$HOME/Library/Logs/Portier"
 USER_ID="$(id -u)"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 INSTALL_DIR="$HOME/Applications/Portier"
 CONFIG_PATH="$HOME/Library/Application Support/Portier/rules.json"

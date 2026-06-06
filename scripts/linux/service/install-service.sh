@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Usage: sudo bash scripts/linux/install-service.sh [OPTIONS]
+# Usage: sudo bash scripts/linux/service/install-service.sh [OPTIONS]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 SERVICE_UNIT="/etc/systemd/system/portier.service"
 SERVICE_NAME="portier"

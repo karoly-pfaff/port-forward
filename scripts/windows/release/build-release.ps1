@@ -24,15 +24,15 @@
 
 .EXAMPLE
   # Full build with version from package.json
-  powershell -ExecutionPolicy Bypass -File build-installer.ps1
+  powershell -ExecutionPolicy Bypass -File build-release.ps1
 
 .EXAMPLE
   # Skip package step, use existing build/portier/
-  powershell -ExecutionPolicy Bypass -File build-installer.ps1 -NoPackage
+  powershell -ExecutionPolicy Bypass -File build-release.ps1 -NoPackage
 
 .EXAMPLE
   # Explicit version and Inno Setup path
-  powershell -ExecutionPolicy Bypass -File build-installer.ps1 -Version 1.1.0 -InnoPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+  powershell -ExecutionPolicy Bypass -File build-release.ps1 -Version 1.1.0 -InnoPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 #>
 param(
   [string]$Version,
@@ -42,8 +42,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Log   { param([string]$m) Write-Host "[installer:windows] $m" }
-function Fail  { param([string]$m) Write-Error "[installer:windows] $m"; exit 1 }
+function Log   { param([string]$m) Write-Host "[release:windows] $m" }
+function Fail  { param([string]$m) Write-Error "[release:windows] $m"; exit 1 }
 
 # ── Locate the repo root (two directories above this script) ──────────────────
 $ScriptDir = $PSScriptRoot
@@ -81,7 +81,7 @@ if ($InnoPath) {
 
 if (-not $iscc) {
   Write-Host ""
-  Write-Host "[installer:windows] Inno Setup (ISCC.exe) not found." -ForegroundColor Yellow
+  Write-Host "[release:windows] Inno Setup (ISCC.exe) not found." -ForegroundColor Yellow
   Write-Host "  Install Inno Setup 6 from https://jrsoftware.org/isinfo.php"
   Write-Host "  Then re-run, or pass -InnoPath 'C:\path\to\ISCC.exe'"
   Write-Host ""
@@ -116,7 +116,7 @@ foreach ($rel in @("service.exe", "server.js", "web\index.html", "readme.txt")) 
   $p = Join-Path $PackageDir $rel
   if (-not (Test-Path $p)) {
     Write-Host ""
-    Write-Host "[installer:windows] Required file missing from build/portier/: $rel" -ForegroundColor Red
+    Write-Host "[release:windows] Required file missing from build/portier/: $rel" -ForegroundColor Red
     Write-Host "  Run: npm run package:portier"
     Write-Host "  Or pass -NoPackage if the directory is already built."
     exit 1
@@ -142,7 +142,7 @@ Log ""
 
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
-  Write-Host "[installer:windows] ISCC.exe failed (exit $LASTEXITCODE)." -ForegroundColor Red
+  Write-Host "[release:windows] ISCC.exe failed (exit $LASTEXITCODE)." -ForegroundColor Red
   exit 1
 }
 

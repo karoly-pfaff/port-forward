@@ -14,31 +14,27 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 
 ### Added
 
-- Windows Inno Setup installer (`scripts/windows/installer/portier.iss`): installs to `%ProgramFiles%\Portier\`, optional Windows Service registration with auto-start at boot, config at `%ProgramData%\Portier\rules.json`. Upgrade support: stops running service before overwriting binaries. Uninstall removes service registration and logs; preserves `rules.json` by default.
-- `build-installer.ps1` (`scripts/windows/installer/`): reads version from `package.json`, runs `package:portier`, calls ISCC.exe, produces `build/releases/windows/Portier-Setup-<version>.exe`.
-- `npm run installer:windows` — full installer build (package + ISCC).
-- `npm run installer:windows:no-package` — installer only, reuses existing `build/portier/`.
+- Windows Inno Setup installer (`scripts/windows/release/portier.iss`): installs to `%ProgramFiles%\Portier\`, optional Windows Service registration with auto-start at boot, config at `%ProgramData%\Portier\rules.json`. Upgrade support: stops running service before overwriting binaries. Uninstall removes service registration and logs; preserves `rules.json` by default.
+- `build-release.ps1` (`scripts/windows/release/`): reads version from `package.json`, runs `package:portier`, calls ISCC.exe, produces `build/releases/windows/Portier-Setup-<version>.exe`.
 - macOS install scripts updated: `install-launch-agent.sh` now auto-copies `build/portier/` to `~/Applications/Portier/` by default; adds `--source-dir`, `--no-start`, and `--runtime service|node` options; fixes label consistency bug (`com.portier.port-forwarding` everywhere).
 - `uninstall-launch-agent.sh` adds `--purge` flag for removing config and logs (config is preserved by default).
-- `build-release.sh` — builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
+- `scripts/macos/release/build-release.sh` — builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
 - Signing and notarization documented in `deploy/macos/readme.md` (unsigned local builds supported; Developer ID signing documented as required for public distribution).
-- `npm run installer:macos` / `installer:macos:no-package` — macOS portable archive build.
 - Linux `install-service.sh` updated: auto-copies `build/portier/` to `/opt/portier/` by default; adds `--source-dir`, `--no-enable`, `--no-start`, and `--runtime service|node` options.
-- Linux `build-release.sh` added: builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
+- `scripts/linux/release/build-release.sh` — builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
 - `deploy/systemd/readme.md` updated: install flags table, release archive section, firewall notes, journald commands, `--no-enable` documented.
-- `npm run installer:linux` / `installer:linux:no-package` — Linux portable archive build.
-- `scripts/windows/validate-user-install.ps1`: validates user-scope scheduled task flow with test name `PortierTestUser`, isolated temp dirs, auto-port detection, `-NoBuild`/`-KeepFiles`/`-Port` flags; never touches production.
-- `scripts/windows/validate-machine-service.ps1`: validates machine-scope Windows Service flow with test name `PortierTestMachine`; requires Administrator; same flags; never touches production.
-- `scripts/macos/validate-launch-agent.sh`: validates LaunchAgent flow with test label `com.portier.test`, temp plist at `~/Library/LaunchAgents/com.portier.test.plist`; no sudo required; `--no-build`/`--keep-files`/`--port` flags.
-- `scripts/linux/validate-systemd-service.sh`: validates systemd flow with test unit `portier-test.service`, temp paths under `/tmp/portier-test-<pid>/`; requires root; fails clearly if not root or systemd unavailable.
+- `scripts/windows/service/validate-user-install.ps1`: validates user-scope scheduled task flow with test name `PortierTestUser`, isolated temp dirs, auto-port detection, `-NoBuild`/`-KeepFiles`/`-Port` flags; never touches production.
+- `scripts/windows/service/validate-machine-service.ps1`: validates machine-scope Windows Service flow with test name `PortierTestMachine`; requires Administrator; same flags; never touches production.
+- `scripts/macos/service/validate-launch-agent.sh`: validates LaunchAgent flow with test label `com.portier.test`, temp plist at `~/Library/LaunchAgents/com.portier.test.plist`; no sudo required; `--no-build`/`--keep-files`/`--port` flags.
+- `scripts/linux/service/validate-systemd-service.sh`: validates systemd flow with test unit `portier-test.service`, temp paths under `/tmp/portier-test-<pid>/`; requires root; fails clearly if not root or systemd unavailable.
 - `scripts/validate-service.js`: cross-platform dispatcher — Windows runs user-scope, macOS runs LaunchAgent, Linux runs systemd; fails clearly on unsupported platforms.
 - `npm run validate:service:current` / `validate:service:windows:user` / `validate:service:windows:machine` / `validate:service:macos` / `validate:service:linux` — explicit release validation commands.
 
 - `scripts/package-release.js`: unified release packaging script for all platforms. Reads version from `package.json`, calls `package:portier`, produces portable archives (Windows `.zip`, macOS/Linux `.tar.gz`) and Windows installer (non-fatal if Inno Setup absent). Service binaries are platform-native; run on each target OS.
-- `scripts/validate-release-artifacts.js`: validates `build/releases/<platform>/` layout, archive contents (required/forbidden files, readme.txt content), and optional installer artifact.
+- `scripts/validate-artifacts.js`: validates `build/releases/<platform>/` layout, archive contents (required/forbidden files, readme.txt content), and optional installer artifact.
 - Updated `readme.txt` in Windows/macOS/Linux build scripts: now includes portable archive notice ("does not install OS services"), `--config` / `--static-dir web` options, "not bundled in this archive" note for config.
-- `npm run package:release` / `package:release:current` — full release packaging for current platform (portable + installer if available).
-- `npm run package:release:portable` — portable archive only, skip installer.
+- `npm run release` / `release:current` — full release packaging for current platform (portable + installer if available).
+- `npm run release:portable` — portable archive only, skip installer.
 - `npm run validate:release` / `validate:release:current` — validate release artifacts for current platform.
 - `npm run validate:release:portable` — validate portable archive only.
 

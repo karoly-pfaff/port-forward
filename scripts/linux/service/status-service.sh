@@ -5,7 +5,7 @@ SERVICE_NAME="portier"
 
 if ! [ -f "/etc/systemd/system/$SERVICE_NAME.service" ]; then
   echo "Portier systemd service: not installed."
-  echo "  Install with: sudo bash scripts/linux/install-service.sh"
+  echo "  Install with: sudo bash scripts/linux/service/install-service.sh"
   exit 0
 fi
 

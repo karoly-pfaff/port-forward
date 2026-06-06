@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Build a portable Linux release archive.
-# Usage: bash scripts/linux/build-release.sh [--no-package] [--version VERSION]
+# Usage: bash scripts/linux/release/build-release.sh [--no-package] [--version VERSION]
 #
 # Output: build/releases/linux/portier-<version>-linux.tar.gz
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 NO_PACKAGE=""
 VERSION_OVERRIDE=""

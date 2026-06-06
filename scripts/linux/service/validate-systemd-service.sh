@@ -4,7 +4,7 @@
 # never touches production Portier installs or the portier.service unit.
 #
 # Usage:
-#   sudo bash scripts/linux/validate-systemd-service.sh [--no-build] [--keep-files] [--port PORT]
+#   sudo bash scripts/linux/service/validate-systemd-service.sh [--no-build] [--keep-files] [--port PORT]
 #
 # Flags:
 #   --no-build    Skip npm run package:portier; use existing build/portier/.
@@ -49,13 +49,13 @@ HEALTH_URL="http://${HOST_ADDR}:${PORT}/api/health"
 ROOT_URL="http://${HOST_ADDR}:${PORT}/"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 PACKAGE_DIR="$REPO_ROOT/build/portier"
 
 # Require root
 if [ "$(id -u)" -ne 0 ]; then
   echo "[validate:linux] ERROR: This script requires root. Run with sudo." >&2
-  echo "  sudo bash scripts/linux/validate-systemd-service.sh" >&2
+  echo "  sudo bash scripts/linux/service/validate-systemd-service.sh" >&2
   exit 1
 fi
 

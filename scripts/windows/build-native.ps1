@@ -125,12 +125,12 @@ Config (rules.json) is external and must be provided. A new empty rules.json is
 created automatically if the path does not exist when the service starts.
 
 Machine-wide install (Inno Setup installer, requires Inno Setup 6):
-  npm run installer:windows    (from the Portier repository)
+  npm run release:current    (from the Portier repository)
   Installs to %ProgramFiles%\Portier\ with config at %ProgramData%\Portier\rules.json.
 
 Manual install scripts in the repository:
-  scripts\windows\install-service.ps1 -Scope Machine  (Administrator required)
-  scripts\windows\install-service.ps1 -Scope User     (no Administrator required)
+  scripts\windows\service\install-service.ps1 -Scope Machine  (Administrator required)
+  scripts\windows\service\install-service.ps1 -Scope User     (no Administrator required)
 
 Forwarded listen ports may need Windows Firewall inbound rules when listening on 0.0.0.0.
 Do not run both a Machine and User install on the same port at the same time.

@@ -126,32 +126,30 @@ npm run validate:package:build     # build then validate
 npm run validate:package:smoke     # build, validate, and run smoke test (preferred)
 ```
 
-**macOS installer — run explicitly when changing macOS scripts:**
+**macOS release archive — run explicitly when changing macOS scripts:**
 
 ```bash
-npm run installer:macos               # package:portier then tar.gz
-npm run installer:macos:no-package    # tar.gz only (reuse existing build/portier/)
+npm run release:portable   # package:portier then portable tar.gz (on macOS)
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`. Requires `bash` and `tar`. Do not add to `npm run check` or any automated validation chain.
 
-**Linux installer — run explicitly when changing Linux scripts:**
+**Linux release archive — run explicitly when changing Linux scripts:**
 
 ```bash
-npm run installer:linux               # package:portier then tar.gz
-npm run installer:linux:no-package    # tar.gz only (reuse existing build/portier/)
+npm run release:portable   # package:portier then portable tar.gz (on Linux)
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`. Requires `bash` and `tar`. Do not add to `npm run check` or any automated validation chain.
 
-**Windows installer — run explicitly when changing installer files (requires Inno Setup 6):**
+**Windows release artifacts — run explicitly when changing release files:**
 
 ```powershell
-npm run installer:windows              # package:portier + ISCC.exe
-npm run installer:windows:no-package   # ISCC.exe only (reuse existing build/portier/)
+npm run release:current    # portable zip + Inno Setup installer (installer non-fatal if absent)
+npm run release:portable   # portable zip only
 ```
 
-Output: `build/releases/windows/Portier-Setup-<version>.exe`. If Inno Setup is unavailable, report clearly — do not claim this step passed. Do not add to `npm run check` or any automated validation chain.
+Output: `build/releases/windows/portier-<version>-windows-portable.zip` and `Portier-Setup-<version>.exe`. If Inno Setup is unavailable, the portable zip is still produced — report the missing installer clearly. Do not add to `npm run check` or any automated validation chain.
 
 If a task touches packaging, run `npm run validate:package:smoke` when possible. The script:
 - Builds `build/portier/` via `package:portier` on the current platform
@@ -161,9 +159,9 @@ If a task touches packaging, run `npm run validate:package:smoke` when possible.
 The platform-specific scripts still output to their own dirs when called directly:
 
 ```powershell
-npm run package:windows     # Windows: produces build/windows/
-npm run package:macos       # macOS/cross-compile: produces build/macos/
-npm run package:linux       # Linux/cross-compile: produces build/linux/
+npm run build:native:windows     # Windows: produces build/windows/
+npm run build:native:macos       # macOS/cross-compile: produces build/macos/
+npm run build:native:linux       # Linux/cross-compile: produces build/linux/
 ```
 
 If packaging cannot run because prerequisites are unavailable (e.g., Go is not installed), document that limitation clearly.
@@ -206,7 +204,7 @@ Dev build output (repo-internal, not distributed): `service/build/portier-servic
 
 Packaging scripts:
 - `package:portier` → `build/portier/` (cross-platform, primary generic output)
-- `package:windows` → `build/windows/`, `package:macos` → `build/macos/`, `package:linux` → `build/linux/`
+- `build:native:windows` → `build/windows/`, `build:native:macos` → `build/macos/`, `build:native:linux` → `build/linux/`
 - `package:clean` removes `build/portier/` and all platform package output dirs
 
 Validation scripts:
@@ -226,8 +224,8 @@ Both runtimes are feature-complete. Package build correctness, OS service instal
 v1.1 focuses on distribution and installer work. Slices 2–6 are complete. Slice 7 (v1.1 readiness audit, version bump to 1.1.0, tag) is pending. See `docs/installer-strategy.md` for full scope and slice status.
 
 Release artifact commands (Slice 6):
-- `npm run package:release:current` — portable archive + installer for current platform
-- `npm run package:release:portable` — portable archive only
+- `npm run release:current` — portable archive + installer for current platform
+- `npm run release:portable` — portable archive only
 - `npm run validate:release:portable` — validate portable archive layout and contents
 - `npm run validate:release:current` — validate portable + installer artifacts
 

@@ -78,7 +78,7 @@ Config (rules.json) is external and must be provided. A new empty rules.json is
 created automatically if the path does not exist when the service starts.
 
 systemd service install (requires root):
-  sudo bash scripts/linux/install-service.sh    (from the Portier repository)
+  sudo bash scripts/linux/service/install-service.sh    (from the Portier repository)
   Installs to /opt/portier/ with config at /etc/portier/rules.json.
   See deploy/systemd/readme.md for full options.
 
