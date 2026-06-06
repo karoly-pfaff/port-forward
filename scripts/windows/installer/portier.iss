@@ -233,7 +233,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
     CreateConfigIfMissing;
-    if IsTaskSelected('installservice') then
+    if WizardIsTaskSelected('installservice') then
       DoInstallService;
   end;
 end;
