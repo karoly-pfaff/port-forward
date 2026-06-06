@@ -3,7 +3,7 @@
 # Output: build/releases/macos/portier-portable-macos-<version>.tar.gz
 #
 # Usage:
-#   bash scripts/macos/build-pkg.sh [--no-package] [--version VERSION]
+#   bash scripts/macos/build-release.sh [--no-package] [--version VERSION]
 #
 # Options:
 #   --no-package     Skip npm run package:portier; use existing build/portier/.
