@@ -1,0 +1,72 @@
+package domain
+
+type ForwardProtocol string
+
+const (
+	ProtocolTCP ForwardProtocol = "tcp"
+	ProtocolUDP ForwardProtocol = "udp"
+)
+
+type UdpMode string
+
+const (
+	UdpModeOneWay             UdpMode = "one-way"
+	UdpModeBidirectionalLast  UdpMode = "bidirectional-last-client"
+	UdpModeBidirectionalMulti UdpMode = "bidirectional-multi-client"
+)
+
+type ForwardRule struct {
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Protocol   ForwardProtocol `json:"protocol"`
+	ListenHost string          `json:"listenHost"`
+	ListenPort int             `json:"listenPort"`
+	TargetHost string          `json:"targetHost"`
+	TargetPort int             `json:"targetPort"`
+	Enabled    bool            `json:"enabled"`
+	UdpMode    *UdpMode        `json:"udpMode,omitempty"`
+}
+
+type PortAdvisory struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+}
+
+type ForwardRuleResponse struct {
+	ID         string          `json:"id"`
+	Name       string          `json:"name"`
+	Protocol   ForwardProtocol `json:"protocol"`
+	ListenHost string          `json:"listenHost"`
+	ListenPort int             `json:"listenPort"`
+	TargetHost string          `json:"targetHost"`
+	TargetPort int             `json:"targetPort"`
+	Enabled    bool            `json:"enabled"`
+	UdpMode    *UdpMode        `json:"udpMode,omitempty"`
+	Advisories []PortAdvisory  `json:"advisories"`
+}
+
+type ForwardStatus struct {
+	RuleID            string `json:"ruleId"`
+	Running           bool   `json:"running"`
+	ActiveConnections *int   `json:"activeConnections,omitempty"`
+	BytesIn           int64  `json:"bytesIn"`
+	BytesOut          int64  `json:"bytesOut"`
+	PacketsIn         *int64 `json:"packetsIn,omitempty"`
+	PacketsOut        *int64 `json:"packetsOut,omitempty"`
+	ActiveUdpSessions *int   `json:"activeUdpSessions,omitempty"`
+	LastError         string `json:"lastError,omitempty"`
+	StartedAt         string `json:"startedAt,omitempty"`
+}
+
+type ExportedConfig struct {
+	Version    string        `json:"version"`
+	ExportedAt string        `json:"exportedAt"`
+	Rules      []ForwardRule `json:"rules"`
+}
+
+type ImportResult struct {
+	Imported int      `json:"imported"`
+	Skipped  int      `json:"skipped"`
+	Errors   []string `json:"errors"`
+}

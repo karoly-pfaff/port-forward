@@ -1,0 +1,747 @@
+package manager
+
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"time"
+
+	"portier/service/sources/activity"
+	"portier/service/sources/config"
+	"portier/service/sources/domain"
+	"portier/service/sources/forwarders"
+	"portier/service/sources/validation"
+)
+
+type Manager struct {
+	rules      []domain.ForwardRule
+	runtime    map[string]runtimeState
+	store      *config.Store
+	activity   *activity.Store
+	onStartLog func(rule domain.ForwardRule)
+	onEventLog forwarders.LogFunc
+}
+
+type runtimeState struct {
+	running   bool
+	startedAt string
+	lastError string
+	tcp       *forwarders.TCPForwarder
+	udp       *forwarders.UDPForwarder
+}
+
+func New(rules []domain.ForwardRule) (*Manager, error) {
+	return NewWithStore(nil, rules)
+}
+
+func NewWithStore(store *config.Store, rules []domain.ForwardRule) (*Manager, error) {
+	if err := ensureNoDuplicateBindings(rules); err != nil {
+		return nil, err
+	}
+
+	copied := make([]domain.ForwardRule, len(rules))
+	copy(copied, rules)
+	return &Manager{rules: copied, runtime: make(map[string]runtimeState), store: store}, nil
+}
+
+func NewFromConfig(configPath string) (*Manager, error) {
+	store := config.NewStore(configPath)
+	rules, err := store.Load()
+	if err != nil {
+		return nil, err
+	}
+	return NewWithStore(&store, rules)
+}
+
+func (m *Manager) SetStartLogger(logger func(rule domain.ForwardRule)) {
+	m.onStartLog = logger
+}
+
+func (m *Manager) SetEventLogger(logger forwarders.LogFunc) {
+	m.onEventLog = logger
+}
+
+func (m *Manager) SetActivityStore(store *activity.Store) {
+	m.activity = store
+}
+
+func (m *Manager) StartEnabled() (int, error) {
+	started := 0
+	for _, rule := range m.rules {
+		if !rule.Enabled {
+			continue
+		}
+		if _, err := m.StartRule(rule.ID); err != nil {
+			return started, err
+		}
+		started++
+	}
+	return started, nil
+}
+
+func (m *Manager) StopAll() {
+	for _, rule := range m.ListRules() {
+		_, _ = m.StopRule(rule.ID)
+	}
+}
+
+func (m *Manager) ListRules() []domain.ForwardRule {
+	copied := make([]domain.ForwardRule, len(m.rules))
+	copy(copied, m.rules)
+	return copied
+}
+
+func (m *Manager) ListStatus() []domain.ForwardStatus {
+	statuses := make([]domain.ForwardStatus, 0, len(m.rules))
+	for _, rule := range m.rules {
+		statuses = append(statuses, m.statusForRule(rule))
+	}
+	return statuses
+}
+
+// ListActivity returns activity events with optional filters. Returns empty slice when no store is set.
+func (m *Manager) ListActivity(params activity.ListParams) []activity.ActivityEvent {
+	if m.activity == nil {
+		return []activity.ActivityEvent{}
+	}
+	return m.activity.List(params)
+}
+
+func (m *Manager) ExportConfig() domain.ExportedConfig {
+	rules := m.ListRules()
+	cfg := domain.ExportedConfig{
+		Version:    "1",
+		ExportedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
+		Rules:      rules,
+	}
+	m.emitActivity(activity.ActivityEventInput{
+		Type:     activity.EventConfigExported,
+		Severity: activity.SeverityInfo,
+		Message:  fmt.Sprintf("Config exported: %d rule(s).", len(rules)),
+		Details:  map[string]any{"ruleCount": len(rules)},
+	})
+	return cfg
+}
+
+func (m *Manager) CreateRule(input validation.ForwardRuleInput) (domain.ForwardRule, error) {
+	if input.ID == nil {
+		id := randomID()
+		input.ID = &id
+	}
+
+	rule, errors := validation.ValidateForwardRuleInput(input)
+	if len(errors) > 0 {
+		return domain.ForwardRule{}, ValidationError{Errors: errors}
+	}
+	if err := m.ensureNoDuplicate(rule, ""); err != nil {
+		return domain.ForwardRule{}, err
+	}
+
+	m.rules = append(m.rules, rule)
+	if err := m.persist(); err != nil {
+		m.rules = m.rules[:len(m.rules)-1]
+		return domain.ForwardRule{}, err
+	}
+
+	id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+	m.emitActivity(activity.ActivityEventInput{
+		Type:     activity.EventRuleCreated,
+		Severity: activity.SeveritySuccess,
+		RuleID:   &id,
+		RuleName: &name,
+		Protocol: &proto,
+		Message:  fmt.Sprintf(`Rule "%s" created.`, rule.Name),
+	})
+
+	if rule.Enabled {
+		if _, err := m.StartRule(rule.ID); err != nil {
+			return domain.ForwardRule{}, err
+		}
+	}
+	return rule, nil
+}
+
+func (m *Manager) UpdateRule(ruleID string, patch validation.ForwardRulePatch) (domain.ForwardRule, error) {
+	index := m.indexOf(ruleID)
+	if index < 0 {
+		return domain.ForwardRule{}, NotFoundError{Message: fmt.Sprintf("Forward rule %s was not found.", ruleID)}
+	}
+
+	existing := m.rules[index]
+	wasRunning := m.runtime[existing.ID].running
+	next, errors := validation.ApplyPatch(existing, patch)
+	if len(errors) > 0 {
+		return domain.ForwardRule{}, ValidationError{Errors: errors}
+	}
+	next.ID = existing.ID
+
+	if err := m.ensureNoDuplicate(next, existing.ID); err != nil {
+		return domain.ForwardRule{}, err
+	}
+
+	needsRestart := wasRunning && ForwardingFieldsChanged(existing, next)
+	if needsRestart {
+		m.stopRuntime(existing)
+		id, name, proto := existing.ID, existing.Name, string(existing.Protocol)
+		m.emitActivity(activity.ActivityEventInput{
+			Type:     activity.EventRuleStopped,
+			Severity: activity.SeverityInfo,
+			RuleID:   &id,
+			RuleName: &name,
+			Protocol: &proto,
+			Message:  fmt.Sprintf(`Rule "%s" stopped.`, existing.Name),
+		})
+	}
+
+	previous := m.rules[index]
+	m.rules[index] = next
+	if err := m.persist(); err != nil {
+		m.rules[index] = previous
+		if needsRestart {
+			_, _ = m.StartRule(previous.ID)
+		}
+		return domain.ForwardRule{}, err
+	}
+
+	id, name, proto := next.ID, next.Name, string(next.Protocol)
+	m.emitActivity(activity.ActivityEventInput{
+		Type:     activity.EventRuleUpdated,
+		Severity: activity.SeverityInfo,
+		RuleID:   &id,
+		RuleName: &name,
+		Protocol: &proto,
+		Message:  fmt.Sprintf(`Rule "%s" updated.`, next.Name),
+	})
+
+	if needsRestart {
+		if _, err := m.StartRule(next.ID); err != nil {
+			return domain.ForwardRule{}, err
+		}
+	}
+	return next, nil
+}
+
+func (m *Manager) DeleteRule(ruleID string) error {
+	index := m.indexOf(ruleID)
+	if index < 0 {
+		return NotFoundError{Message: fmt.Sprintf("Forward rule %s was not found.", ruleID)}
+	}
+
+	rule := m.rules[index]
+	wasRunning := m.runtime[rule.ID].running
+
+	previousRules := m.ListRules()
+	previousRuntime := m.copyRuntime()
+	m.stopRuntime(rule)
+
+	if wasRunning {
+		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+		m.emitActivity(activity.ActivityEventInput{
+			Type:     activity.EventRuleStopped,
+			Severity: activity.SeverityInfo,
+			RuleID:   &id,
+			RuleName: &name,
+			Protocol: &proto,
+			Message:  fmt.Sprintf(`Rule "%s" stopped.`, rule.Name),
+		})
+	}
+
+	m.rules = append(m.rules[:index], m.rules[index+1:]...)
+	delete(m.runtime, ruleID)
+	if err := m.persist(); err != nil {
+		m.rules = previousRules
+		m.runtime = previousRuntime
+		return err
+	}
+
+	id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+	m.emitActivity(activity.ActivityEventInput{
+		Type:     activity.EventRuleDeleted,
+		Severity: activity.SeverityWarning,
+		RuleID:   &id,
+		RuleName: &name,
+		Protocol: &proto,
+		Message:  fmt.Sprintf(`Rule "%s" deleted.`, rule.Name),
+	})
+	return nil
+}
+
+func (m *Manager) ReorderRules(ids []string) error {
+	for _, id := range ids {
+		if m.indexOf(id) < 0 {
+			return NotFoundError{Message: fmt.Sprintf("Rule %s was not found.", id)}
+		}
+	}
+
+	previousRules := m.ListRules()
+	nextRules := make([]domain.ForwardRule, 0, len(m.rules))
+	added := make(map[string]bool)
+	for _, id := range ids {
+		index := m.indexOf(id)
+		if index >= 0 && !added[id] {
+			nextRules = append(nextRules, m.rules[index])
+			added[id] = true
+		}
+	}
+	for _, rule := range m.rules {
+		if !added[rule.ID] {
+			nextRules = append(nextRules, rule)
+		}
+	}
+
+	m.rules = nextRules
+	if err := m.persist(); err != nil {
+		m.rules = previousRules
+		return err
+	}
+	return nil
+}
+
+func (m *Manager) ImportConfig(config domain.ExportedConfig, mode string) (domain.ImportResult, error) {
+	if config.Version != "1" {
+		return domain.ImportResult{}, ValidationError{Errors: []string{"config must be a valid Portier config object with version 1 and a rules array."}}
+	}
+	if mode != "replace" && mode != "merge" {
+		return domain.ImportResult{}, ValidationError{Errors: []string{"mode must be replace or merge."}}
+	}
+
+	validated, validationErrors := validateImportRules(config.Rules)
+	if len(validationErrors) > 0 {
+		m.emitActivity(activity.ActivityEventInput{
+			Type:     activity.EventConfigImportFailed,
+			Severity: activity.SeverityError,
+			Message:  fmt.Sprintf("Config import rejected: %d invalid rule(s).", len(validationErrors)),
+			Details:  map[string]any{"errors": strings.Join(validationErrors, "; ")},
+		})
+		return domain.ImportResult{Imported: 0, Skipped: 0, Errors: validationErrors}, nil
+	}
+	if err := ensureNoDuplicateBindings(validated); err != nil {
+		m.emitActivity(activity.ActivityEventInput{
+			Type:     activity.EventConfigImportFailed,
+			Severity: activity.SeverityError,
+			Message:  fmt.Sprintf("Config import rejected: %s", err.Error()),
+		})
+		return domain.ImportResult{Imported: 0, Skipped: 0, Errors: []string{err.Error()}}, nil
+	}
+
+	previousRules := m.ListRules()
+	previousRuntime := m.copyRuntime()
+	imported := 0
+	skipped := 0
+	startAfterPersist := make([]domain.ForwardRule, 0)
+
+	if mode == "replace" {
+		m.StopAll()
+		m.rules = make([]domain.ForwardRule, len(validated))
+		copy(m.rules, validated)
+		m.runtime = make(map[string]runtimeState)
+		imported = len(validated)
+		startAfterPersist = append(startAfterPersist, validated...)
+	} else {
+		nextRules := m.ListRules()
+		for _, rule := range validated {
+			candidate := rule
+			if m.hasIDIn(candidate.ID, nextRules) {
+				candidate.ID = randomID()
+			}
+			if conflict := findDuplicateBinding(candidate, nextRules, ""); conflict != nil {
+				conflictMsg := fmt.Sprintf(
+					`Rule "%s" conflicts with existing rule "%s" on %s %s:%d.`,
+					candidate.Name,
+					conflict.Name,
+					strings.ToUpper(string(candidate.Protocol)),
+					candidate.ListenHost,
+					candidate.ListenPort,
+				)
+				m.emitActivity(activity.ActivityEventInput{
+					Type:     activity.EventConfigImportFailed,
+					Severity: activity.SeverityWarning,
+					Message:  fmt.Sprintf("Config merge conflict: %s", conflictMsg),
+				})
+				return domain.ImportResult{
+					Imported: 0,
+					Skipped:  skipped + 1,
+					Errors:   []string{conflictMsg},
+				}, nil
+			}
+			nextRules = append(nextRules, candidate)
+			startAfterPersist = append(startAfterPersist, candidate)
+			imported++
+		}
+		m.rules = nextRules
+	}
+
+	if err := m.persist(); err != nil {
+		m.rules = previousRules
+		m.runtime = previousRuntime
+		return domain.ImportResult{}, err
+	}
+	for _, rule := range startAfterPersist {
+		if rule.Enabled {
+			_, _ = m.StartRule(rule.ID)
+		}
+	}
+
+	m.emitActivity(activity.ActivityEventInput{
+		Type:     activity.EventConfigImported,
+		Severity: activity.SeveritySuccess,
+		Message:  fmt.Sprintf("Config imported (%s): %d rule(s) added, %d skipped.", mode, imported, skipped),
+		Details:  map[string]any{"mode": mode, "imported": imported, "skipped": skipped},
+	})
+
+	return domain.ImportResult{Imported: imported, Skipped: skipped, Errors: []string{}}, nil
+}
+
+func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
+	rule, ok := m.ruleByID(ruleID)
+	if !ok {
+		return domain.ForwardStatus{}, NotFoundError{Message: fmt.Sprintf("Forward rule %s was not found.", ruleID)}
+	}
+
+	state := m.runtime[ruleID]
+	if state.running {
+		return m.statusForRule(rule), nil
+	}
+
+	onEvent := m.activityEventFunc()
+
+	if rule.Protocol == domain.ProtocolTCP {
+		tcpForwarder := forwarders.NewTCPForwarder(rule, m.onEventLog, onEvent)
+		if err := tcpForwarder.Start(); err != nil {
+			state.running = false
+			state.startedAt = ""
+			state.lastError = err.Error()
+			state.tcp = nil
+			m.runtime[ruleID] = state
+			id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+			m.emitActivity(activity.ActivityEventInput{
+				Type:     activity.EventRuleError,
+				Severity: activity.SeverityError,
+				RuleID:   &id,
+				RuleName: &name,
+				Protocol: &proto,
+				Message:  fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()),
+			})
+			return m.statusForRule(rule), err
+		}
+		state.running = true
+		state.startedAt = tcpForwarder.Status().StartedAt
+		state.lastError = ""
+		state.tcp = tcpForwarder
+		m.runtime[ruleID] = state
+		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+		m.emitActivity(activity.ActivityEventInput{
+			Type:     activity.EventRuleStarted,
+			Severity: activity.SeveritySuccess,
+			RuleID:   &id,
+			RuleName: &name,
+			Protocol: &proto,
+			Message:  fmt.Sprintf(`Rule "%s" started.`, rule.Name),
+		})
+		return m.statusForRule(rule), nil
+	}
+
+	if rule.Protocol == domain.ProtocolUDP {
+		udpForwarder := forwarders.NewUDPForwarder(rule, m.onEventLog, onEvent)
+		if err := udpForwarder.Start(); err != nil {
+			state.running = false
+			state.startedAt = ""
+			state.lastError = err.Error()
+			state.udp = nil
+			m.runtime[ruleID] = state
+			id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+			m.emitActivity(activity.ActivityEventInput{
+				Type:     activity.EventRuleError,
+				Severity: activity.SeverityError,
+				RuleID:   &id,
+				RuleName: &name,
+				Protocol: &proto,
+				Message:  fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()),
+			})
+			return m.statusForRule(rule), err
+		}
+		state.running = true
+		state.startedAt = udpForwarder.Status().StartedAt
+		state.lastError = ""
+		state.udp = udpForwarder
+		m.runtime[ruleID] = state
+		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+		m.emitActivity(activity.ActivityEventInput{
+			Type:     activity.EventRuleStarted,
+			Severity: activity.SeveritySuccess,
+			RuleID:   &id,
+			RuleName: &name,
+			Protocol: &proto,
+			Message:  fmt.Sprintf(`Rule "%s" started.`, rule.Name),
+		})
+		return m.statusForRule(rule), nil
+	}
+
+	return m.statusForRule(rule), nil
+}
+
+func (m *Manager) StopRule(ruleID string) (domain.ForwardStatus, error) {
+	rule, ok := m.ruleByID(ruleID)
+	if !ok {
+		return domain.ForwardStatus{}, NotFoundError{Message: fmt.Sprintf("Forward rule %s was not found.", ruleID)}
+	}
+
+	wasRunning := m.runtime[ruleID].running
+	m.stopRuntime(rule)
+
+	if wasRunning {
+		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+		m.emitActivity(activity.ActivityEventInput{
+			Type:     activity.EventRuleStopped,
+			Severity: activity.SeverityInfo,
+			RuleID:   &id,
+			RuleName: &name,
+			Protocol: &proto,
+			Message:  fmt.Sprintf(`Rule "%s" stopped.`, rule.Name),
+		})
+	}
+
+	return m.statusForRule(rule), nil
+}
+
+func (m *Manager) stopRuntime(rule domain.ForwardRule) {
+	state := m.runtime[rule.ID]
+	if state.tcp != nil {
+		state.tcp.Stop()
+		state.lastError = state.tcp.Status().LastError
+	}
+	if state.udp != nil {
+		state.udp.Stop()
+		state.lastError = state.udp.Status().LastError
+	}
+	state.running = false
+	state.startedAt = ""
+	state.tcp = nil
+	state.udp = nil
+	if state.lastError == "" {
+		delete(m.runtime, rule.ID)
+		return
+	}
+	m.runtime[rule.ID] = state
+}
+
+func ForwardingFieldsChanged(a domain.ForwardRule, b domain.ForwardRule) bool {
+	return a.Protocol != b.Protocol ||
+		a.ListenHost != b.ListenHost ||
+		a.ListenPort != b.ListenPort ||
+		a.TargetHost != b.TargetHost ||
+		a.TargetPort != b.TargetPort ||
+		udpModeValue(a.UdpMode) != udpModeValue(b.UdpMode)
+}
+
+func (m *Manager) statusForRule(rule domain.ForwardRule) domain.ForwardStatus {
+	state := m.runtime[rule.ID]
+	if rule.Protocol == domain.ProtocolTCP && state.tcp != nil {
+		return state.tcp.Status()
+	}
+	if rule.Protocol == domain.ProtocolUDP && state.udp != nil {
+		return state.udp.Status()
+	}
+
+	status := domain.ForwardStatus{
+		RuleID:   rule.ID,
+		Running:  state.running,
+		BytesIn:  0,
+		BytesOut: 0,
+	}
+	if state.running {
+		status.StartedAt = state.startedAt
+	}
+	if state.lastError != "" {
+		status.LastError = state.lastError
+	}
+
+	if rule.Protocol == domain.ProtocolTCP {
+		zero := 0
+		status.ActiveConnections = &zero
+	}
+
+	if rule.Protocol == domain.ProtocolUDP {
+		packetsIn := int64(0)
+		packetsOut := int64(0)
+		status.PacketsIn = &packetsIn
+		status.PacketsOut = &packetsOut
+
+		if rule.UdpMode != nil && *rule.UdpMode == domain.UdpModeBidirectionalMulti {
+			zero := 0
+			status.ActiveUdpSessions = &zero
+		}
+	}
+
+	return status
+}
+
+func (m *Manager) persist() error {
+	if m.store == nil {
+		return nil
+	}
+	return m.store.Save(m.rules)
+}
+
+func (m *Manager) ensureNoDuplicate(rule domain.ForwardRule, ignoreRuleID string) error {
+	if conflict := findDuplicateBinding(rule, m.rules, ignoreRuleID); conflict != nil {
+		return ConflictError{Message: fmt.Sprintf(
+			"A %s rule is already listening on %s:%d.",
+			strings.ToUpper(string(rule.Protocol)),
+			rule.ListenHost,
+			rule.ListenPort,
+		)}
+	}
+	return nil
+}
+
+func ensureNoDuplicateBindings(rules []domain.ForwardRule) error {
+	seen := make(map[string]domain.ForwardRule)
+	for _, rule := range rules {
+		key := listenKey(rule)
+		if existing, ok := seen[key]; ok {
+			return fmt.Errorf(
+				"a %s rule is already listening on %s:%d (rules %q and %q)",
+				rule.Protocol,
+				rule.ListenHost,
+				rule.ListenPort,
+				existing.Name,
+				rule.Name,
+			)
+		}
+		seen[key] = rule
+	}
+	return nil
+}
+
+func findDuplicateBinding(candidate domain.ForwardRule, rules []domain.ForwardRule, ignoreRuleID string) *domain.ForwardRule {
+	key := listenKey(candidate)
+	for _, rule := range rules {
+		if rule.ID == ignoreRuleID {
+			continue
+		}
+		if listenKey(rule) == key {
+			conflict := rule
+			return &conflict
+		}
+	}
+	return nil
+}
+
+func listenKey(rule domain.ForwardRule) string {
+	return fmt.Sprintf("%s:%s:%d", rule.Protocol, rule.ListenHost, rule.ListenPort)
+}
+
+func (m *Manager) indexOf(ruleID string) int {
+	for index, rule := range m.rules {
+		if rule.ID == ruleID {
+			return index
+		}
+	}
+	return -1
+}
+
+func (m *Manager) ruleByID(ruleID string) (domain.ForwardRule, bool) {
+	index := m.indexOf(ruleID)
+	if index < 0 {
+		return domain.ForwardRule{}, false
+	}
+	return m.rules[index], true
+}
+
+func (m *Manager) hasIDIn(ruleID string, rules []domain.ForwardRule) bool {
+	for _, rule := range rules {
+		if rule.ID == ruleID {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) copyRuntime() map[string]runtimeState {
+	copied := make(map[string]runtimeState, len(m.runtime))
+	for key, value := range m.runtime {
+		copied[key] = value
+	}
+	return copied
+}
+
+func validateImportRules(rules []domain.ForwardRule) ([]domain.ForwardRule, []string) {
+	validated := make([]domain.ForwardRule, 0, len(rules))
+	errors := make([]string, 0)
+	for _, raw := range rules {
+		rule, ruleErrors := validation.ValidateForwardRuleInput(validation.InputFromRule(raw))
+		if len(ruleErrors) > 0 {
+			name := raw.Name
+			if name == "" {
+				name = "?"
+			}
+			errors = append(errors, fmt.Sprintf(`Rule "%s": %s`, name, strings.Join(ruleErrors, " ")))
+			continue
+		}
+		validated = append(validated, rule)
+	}
+	return validated, errors
+}
+
+// emitActivity records an activity event if the activity store is configured.
+func (m *Manager) emitActivity(input activity.ActivityEventInput) {
+	if m.activity != nil {
+		m.activity.Add(input)
+	}
+}
+
+// activityEventFunc returns an EventFunc that records events to the activity store,
+// or nil when no store is configured.
+func (m *Manager) activityEventFunc() activity.EventFunc {
+	if m.activity == nil {
+		return nil
+	}
+	store := m.activity
+	return func(input activity.ActivityEventInput) {
+		store.Add(input)
+	}
+}
+
+func randomID() string {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return fmt.Sprintf("rule-%d", time.Now().UnixNano())
+	}
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	encoded := hex.EncodeToString(bytes)
+	return fmt.Sprintf("%s-%s-%s-%s-%s", encoded[0:8], encoded[8:12], encoded[12:16], encoded[16:20], encoded[20:32])
+}
+
+func udpModeValue(mode *domain.UdpMode) string {
+	if mode == nil {
+		return ""
+	}
+	return string(*mode)
+}
+
+type ValidationError struct {
+	Errors []string
+}
+
+func (e ValidationError) Error() string {
+	return strings.Join(e.Errors, " ")
+}
+
+type ConflictError struct {
+	Message string
+}
+
+func (e ConflictError) Error() string {
+	return e.Message
+}
+
+type NotFoundError struct {
+	Message string
+}
+
+func (e NotFoundError) Error() string {
+	return e.Message
+}
