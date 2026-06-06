@@ -1,0 +1,232 @@
+# Portier Agent Guide
+
+## Project
+
+- App name: Portier
+- Repository name: portier-port-forwarding
+- Purpose: local TCP/UDP port forwarding manager for development and LAN testing
+
+## Structure
+
+- `server/sources` = Node.js TypeScript service, REST API, TCP/UDP forwarding engine
+- `service/sources` = native Go service implementation for smaller binaries and service deployment
+- `client/sources` = React TypeScript web UI
+- `shared/sources` = shared types, validation, constants, port advisory utilities
+- `deploy` = service examples, unit files, deploy docs/templates
+- `scripts` = executable automation scripts (`scripts/windows/`, `scripts/macos/`, `scripts/linux/`)
+- `build` = generated build output
+
+## Server Runtimes
+
+- `service/` is the native Go service and the preferred production runtime. Default static dir: `web`.
+- `server/` is the TypeScript server and remains supported as reference/fallback. Default static dir: `client/build`.
+- Both implement the same REST API contract.
+
+## Packaged Runtime Layout
+
+```text
+<install-dir>/
+  service          (or service.exe on Windows)
+  server.js        (Node fallback — requires Node.js)
+  web/
+    index.html
+    assets/
+```
+
+Development build output (not distributed):
+
+```text
+service/build/portier-service
+server/build/
+client/build/
+```
+
+## Setup Commands
+
+```powershell
+npm install
+```
+
+## Development Commands
+
+```powershell
+npm run start:dev
+npm run dev:server
+npm run dev:client
+```
+
+## Validation Commands
+
+```powershell
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npm run check
+```
+
+## E2E Tests
+
+Playwright E2E tests live in `tests/e2e/`. They run against the TypeScript server serving the built React client.
+
+**Prerequisites (one-time):**
+```powershell
+npm run test:e2e:install   # installs Playwright Chromium browser
+npm run build:client       # must be built before running E2E
+```
+
+**Run:**
+```powershell
+npm run test:e2e           # headless
+npm run test:e2e:headed    # visible browser
+npm run test:e2e:fresh     # build:client then run
+```
+
+E2E server binds to `127.0.0.1:47890`. Do not include `test:e2e` in `npm run test` or `npm run check` — E2E is a separate step.
+
+Files:
+- `playwright.config.ts` — webServer, browser, reporter config
+- `tests/e2e/portier.spec.ts` — UI flow tests
+- `tests/e2e/tcp.spec.ts` — TCP real forwarding E2E
+- `tests/e2e/udp.spec.ts` — UDP one-way, last-client, multi-client E2E; activity assertions
+- `tests/e2e/helpers/port.ts` — `getFreePort`, `getFreeTcpPort`, `getFreeUdpPort`
+- `tests/e2e/helpers/network.ts` — TCP/UDP echo servers, receivers, clients
+- `tests/e2e/helpers/ui.ts` — `addRuleViaUI`, `startRuleViaUI`, `stopRuleViaUI`
+- `tests/e2e/helpers/api.ts` — `clearAllRules`, `createRule`, `startRule`, `stopRule`
+- `tests/e2e/helpers/setup.ts` — creates temp config before server starts
+- `tests/tsconfig.json` — TypeScript config for E2E files
+
+**Protocol automation coverage:**
+- TCP forwarding: automated E2E via `tcp.spec.ts`
+- UDP one-way: automated E2E via `udp.spec.ts`
+- UDP bidirectional-last-client: automated E2E via `udp.spec.ts`
+- UDP bidirectional-multi-client: automated E2E via `udp.spec.ts`
+
+**OS service install validation (run explicitly on the target platform, not part of `npm run check`):**
+- Windows scheduled task (no admin): `npm run validate:service:windows:user`
+- Windows Service (admin): `npm run validate:service:windows:machine`
+- macOS LaunchAgent (no sudo): `npm run validate:service:macos`
+- Linux systemd (root/sudo): `npm run validate:service:linux`
+- Current platform default: `npm run validate:service:current`
+
+Each script uses test-specific names, ports, and temp paths. Never touches production installs.
+
+**Remaining manual QA (cannot be automated):**
+- Firewall and OS permission behavior on each platform
+
+**Automated (not manual):**
+- Package build correctness: `npm run validate:package:smoke`
+- TCP/UDP protocol forwarding: `npm run test:e2e`
+- OS service install/start/stop/uninstall: `npm run validate:service:*`
+
+## Packaging Commands
+
+```powershell
+npm run package:portier       # cross-platform: builds build/portier/ on the current OS
+npm run package:windows       # Windows package (build/windows/)
+npm run package:macos         # macOS package (build/macos/)
+npm run package:linux         # Linux package (build/linux/)
+npm run package:clean         # clean build/portier/ and all platform package dirs
+```
+
+## Package Validation Commands
+
+```powershell
+npm run validate:package           # validate existing build/portier/ layout
+npm run validate:package:build     # build then validate
+npm run validate:package:smoke     # build, validate, and run smoke test (preferred for release)
+```
+
+`validate:package:smoke` is the recommended pre-release package check. It does not require
+Administrator or root. It does not install OS services.
+
+## OS Service Install Validation Commands
+
+Run these explicitly on the target platform — not included in `npm run check`:
+
+```powershell
+npm run validate:service:windows:user     # Windows scheduled task (no Administrator required)
+npm run validate:service:windows:machine  # Windows Service (Administrator required)
+```
+
+```bash
+npm run validate:service:macos    # macOS LaunchAgent (no sudo required)
+npm run validate:service:linux    # Linux systemd (requires root/sudo)
+npm run validate:service:current  # current platform, user-scope where possible
+```
+
+All service validation scripts accept:
+- `--no-build` / `-NoBuild` — skip `package:portier` build step
+- `--keep-files` / `-KeepFiles` — preserve temp files for debugging
+- `--port` / `-Port` — override the test port
+
+Normal development validation: `npm run check`
+Release package validation: `npm run validate:package:smoke`
+Release service validation: `npm run validate:service:current` (or per-platform variants)
+
+## Coding Guidelines
+
+- Keep TypeScript simple and explicit.
+- Prefer small modules over clever abstractions.
+- Keep shared validation and constants in `shared/sources`.
+- Keep TCP and UDP forwarding logic separate.
+- `ForwardManager` should own lifecycle orchestration.
+- Keep runtime config external.
+- Do not bake `rules.json` into executables.
+- Do not expose the management UI/API on `0.0.0.0` by default.
+- Management UI/API default: `127.0.0.1:47831`.
+- Recommended forward listen port range: `48000-48999`.
+- Go service static dir default: `web` (packaged layout). Dev: pass `--static-dir ../client/build`.
+- TypeScript server static dir default: `client/build`. Prod: pass `--static-dir web` or set `PORTIER_STATIC_DIR`.
+
+## Safety Rules
+
+- Warn clearly when a forward rule listens on `0.0.0.0`.
+- Treat management binding to `0.0.0.0` as dangerous.
+- Do not silently change firewall rules.
+- Do not add telemetry.
+- Do not add remote update/download behavior.
+- Do not store secrets in repo files.
+- Do not modify local user config files unless explicitly requested.
+
+## Do Not Edit Unless Explicitly Asked
+
+- `node_modules/`
+- `build/`
+- `server/build/`
+- `service/build/`
+- `client/build/`
+- `shared/build/`
+- `coverage/`
+- `.git/`
+- `.env`
+- `.env.*`
+- `*.log`
+- `rules.json`
+- generated package outputs
+- user-local config files
+
+## Networking Checklist
+
+- TCP sockets clean up on error and close.
+- UDP `bidirectional-last-client` mode is documented as limited.
+- Do not claim full multi-client UDP support unless implemented.
+- Duplicate `protocol + listenHost + listenPort` bindings are rejected.
+- Shutdown closes active sockets and servers.
+
+## Response Expectations
+
+- Summarize changed files.
+- List validation commands run.
+- State anything not run and why.
+- Call out follow-up tasks and risks.
+
+## Repository Naming
+
+- Use `sources/` for TypeScript source directories.
+- Use `build/` for generated build outputs.
+- Use `deploy/` for service examples and documentation.
+- Keep executable automation scripts under `scripts/`, with helpers in `scripts/windows/`, `scripts/macos/`, and `scripts/linux/`.
+- Normal documentation filenames are lowercase, such as `docs/architecture.md` and `docs/checklist.md`. The root `README.md` is uppercase.
+- Keep tool-required files uppercase: `AGENTS.md`, `CLAUDE.md`, and `SKILL.md` in Codex/Claude skill directories.
+- React component and view files under `client/sources/` use **CamelCase** filenames (e.g., `ForwardRuleList.tsx`, `StatCard.tsx`). Non-component files use the existing repo convention (e.g., `format.ts`, `nav.ts`).

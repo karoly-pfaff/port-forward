@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/format-changed-files.js"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/validate-after-task.js"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Edit(server/sources/**)",
+      "Edit(service/sources/**)",
+      "Edit(service/readme.md)",
+      "Edit(client/sources/**)",
+      "Edit(shared/sources/**)",
+      "Edit(docs/**)",
+      "Edit(deploy/**)",
+      "Edit(scripts/**)",
+      "Edit(README.md)",
+      "Edit(todo.md)",
+      "Edit(CLAUDE.md)",
+      "Edit(AGENTS.md)",
+      "Edit(.claude/**)",
+      "Edit(.codex/**)",
+      "Edit(audits/**)",
+      "Edit(.gitignore)",
+      "Edit(.gitattributes)",
+      "Edit(package.json)",
+      "Edit(tsconfig.base.json)",
+      "Edit(eslint.config.js)",
+      "Edit(service/go.mod)",
+      "Edit(service/go.sum)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run test)",
+      "Bash(npm run test:*)",
+      "Bash(npm run build)",
+      "Bash(npm run build:*)",
+      "Bash(npm run check)",
+      "Bash(npm run validate:*)",
+      "Bash(npm run package:*)",
+      "Bash(npm run format)",
+      "Bash(npm run dev)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install)",
+      "Bash(go test ./...)",
+      "Bash(go vet ./...)",
+      "Bash(go build ./...)",
+      "Bash(go -C service test ./...)",
+      "Bash(go -C service vet ./...)",
+      "Bash(go -C service build *)",
+      "Bash(gofmt -w *)",
+      "Bash(git diff*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git ls-files*)",
+      "Bash(git show*)",
+      "Bash(git add *)",
+      "Bash(git commit*)",
+      "Bash(git branch*)",
+      "Bash(git stash*)",
+      "Bash(node .claude/hooks/format-changed-files.js)",
+      "Bash(node .claude/hooks/validate-after-task.js)"
+    ],
+    "deny": [
+      "Edit(node_modules/**)",
+      "Edit(build/**)",
+      "Edit(server/build/**)",
+      "Edit(service/build/**)",
+      "Edit(client/build/**)",
+      "Edit(shared/build/**)",
+      "Edit(coverage/**)",
+      "Edit(.git/**)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Edit(**/*.log)",
+      "Edit(rules.json)",
+      "Write(node_modules/**)",
+      "Write(build/**)",
+      "Write(server/build/**)",
+      "Write(service/build/**)",
+      "Write(client/build/**)",
+      "Write(shared/build/**)",
+      "Write(coverage/**)",
+      "Write(.git/**)",
+      "Write(.env)",
+      "Write(.env.*)",
+      "Write(**/*.log)",
+      "Write(rules.json)",
+      "Bash(rm -rf *)",
+      "Bash(git reset --hard *)",
+      "Bash(git checkout -- *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f *)",
+      "Bash(npm publish*)"
+    ]
+  },
+  "project": {
+    "name": "Portier",
+    "defaultManagementAddress": "127.0.0.1:47831",
+    "recommendedForwardPortRange": "48000-48999",
+    "sensitivePaths": [
+      "rules.json",
+      "C:\\ProgramData\\Portier"
+    ],
+    "servicePathsRequireExplicitTask": [
+      "scripts/windows/*.ps1",
+      "deploy/systemd/*.service",
+      "deploy/systemd/*.service.example"
+    ]
+  }
+}

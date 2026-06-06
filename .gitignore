@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build outputs (all platforms/packages)
+build/
+client/build/
+server/build/
+service/build/
+shared/build/
+
+# Runtime data
+data/
+rules.json
+
+# Test coverage
+coverage/
+
+# Logs
+logs/
+*.log
+
+# Environment and secrets
+.env
+.env.*
+
+# Go
+go.work
+go.work.sum
+*.test
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Playwright E2E artifacts
+playwright-report/
+test-results/
+blob-report/
+
+# Audit documents
+audits/
+
+# Personal scratch files
+todo.md
