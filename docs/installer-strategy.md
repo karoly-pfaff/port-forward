@@ -275,13 +275,20 @@ The following are explicitly out of scope for v1.1. They may be considered for f
 
 Defines scope, platform decisions, layouts, and validation policy for v1.1.
 
-### Slice 2 — Windows installer (Inno Setup)
+### Slice 2 — Windows installer (Inno Setup) ✓
 
-- Build Inno Setup script for machine-wide install.
-- Install to `%ProgramFiles%\Portier\` with config at `%ProgramData%\Portier\`.
-- Optional Windows Service registration during install.
-- Uninstall preserves `rules.json` by default.
-- Add `validate:installer:windows` script if automatable.
+- `scripts/windows/installer/portier.iss` — Inno Setup 6 script.
+- `scripts/windows/installer/build-installer.ps1` — build wrapper: reads version from `package.json`, runs `package:portier`, invokes ISCC.exe.
+- Installs to `%ProgramFiles%\Portier\` with config at `%ProgramData%\Portier\`.
+- Optional Windows Service registration task (checked by default for machine-wide installs).
+- Uninstall stops and removes the service; `rules.json` is preserved.
+- Logs directory is removed on uninstall; config directory is not.
+- Upgrade support: installer stops any running service before overwriting binaries.
+- `npm run installer:windows` — full build (package + installer).
+- `npm run installer:windows:no-package` — installer only (reuses existing `build/portier/`).
+- Output: `build/releases/windows/Portier-Setup-<version>.exe`
+- Requires Inno Setup 6: https://jrsoftware.org/isinfo.php
+- Installer is unsigned; sign with an EV certificate before public distribution.
 
 ### Slice 3 — macOS package and LaunchAgent polish
 

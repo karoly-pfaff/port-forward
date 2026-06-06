@@ -126,6 +126,15 @@ npm run validate:package:build     # build then validate
 npm run validate:package:smoke     # build, validate, and run smoke test (preferred)
 ```
 
+**Windows installer — run explicitly when changing installer files (requires Inno Setup 6):**
+
+```powershell
+npm run installer:windows              # package:portier + ISCC.exe
+npm run installer:windows:no-package   # ISCC.exe only (reuse existing build/portier/)
+```
+
+Output: `build/releases/windows/Portier-Setup-<version>.exe`. If Inno Setup is unavailable, report clearly — do not claim this step passed. Do not add to `npm run check` or any automated validation chain.
+
 If a task touches packaging, run `npm run validate:package:smoke` when possible. The script:
 - Builds `build/portier/` via `package:portier` on the current platform
 - Validates the layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`)

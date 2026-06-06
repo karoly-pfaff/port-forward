@@ -142,6 +142,29 @@ If the Go binary is unavailable, use `--node-mode` with the bundled `server.js`.
 
 Forwarded ports on `0.0.0.0` may trigger macOS Firewall prompts. The management UI stays on `127.0.0.1:47831` and is not LAN-visible by default.
 
+### Windows Installer (v1.1)
+
+Portier v1.1 adds an [Inno Setup](https://jrsoftware.org/isinfo.php) installer for machine-wide installation on Windows 10+ (64-bit).
+
+**Build the installer** (requires Inno Setup 6 and Go):
+
+```powershell
+npm run installer:windows
+```
+
+Output: `build/releases/windows/Portier-Setup-<version>.exe`
+
+The installer:
+- Installs binaries to `%ProgramFiles%\Portier\`.
+- Creates config directory at `%ProgramData%\Portier\` and writes an empty `rules.json` if absent.
+- Offers an optional **Windows Service** task (checked by default): registers `Portier` as a Windows Service that auto-starts at boot.
+- On uninstall: stops and removes the service, removes `logs\`, and preserves `rules.json`.
+- Does not create Windows Firewall rules.
+
+The installer is unsigned. Windows SmartScreen may warn before running it. Sign with an EV certificate for public distribution. See `deploy/windows/readme.md` for full details and build options.
+
+---
+
 ### Windows Executable and Service
 
 Build the Windows package:
@@ -403,6 +426,8 @@ npm run validate:service:windows:user     # Windows user-scope (scheduled task, 
 npm run validate:service:windows:machine  # Windows machine-scope (Windows Service, admin required)
 npm run validate:service:macos            # macOS LaunchAgent (no sudo)
 npm run validate:service:linux            # Linux systemd (requires sudo)
+npm run installer:windows                 # build Inno Setup installer (requires Inno Setup 6)
+npm run installer:windows:no-package      # build installer only, skip package step
 ```
 
 macOS LaunchAgent scripts (run on macOS):

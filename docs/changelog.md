@@ -12,9 +12,15 @@ Portier v1.1 makes Portier easy and safe to install as a native background servi
 
 See `docs/installer-strategy.md` for scope, platform decisions, and implementation slices.
 
+### Added
+
+- Windows Inno Setup installer (`scripts/windows/installer/portier.iss`): installs to `%ProgramFiles%\Portier\`, optional Windows Service registration with auto-start at boot, config at `%ProgramData%\Portier\rules.json`. Upgrade support: stops running service before overwriting binaries. Uninstall removes service registration and logs; preserves `rules.json` by default.
+- `build-installer.ps1` (`scripts/windows/installer/`): reads version from `package.json`, runs `package:portier`, calls ISCC.exe, produces `build/releases/windows/Portier-Setup-<version>.exe`.
+- `npm run installer:windows` — full installer build (package + ISCC).
+- `npm run installer:windows:no-package` — installer only, reuses existing `build/portier/`.
+
 ### Planned
 
-- Windows Inno Setup installer with machine-wide and user-scope install, Windows Service registration, and config-preserving uninstall.
 - macOS `.pkg` installer or improved install flow; LaunchAgent polish; signing and notarization documentation.
 - Linux install/uninstall/start/stop/status scripts; systemd unit generation; Node fallback documentation.
 - `build/releases/` release artifact layout with portable archives and signed installers per platform.

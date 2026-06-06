@@ -129,6 +129,25 @@ npm run package:linux         # Linux package (build/linux/)
 npm run package:clean         # clean build/portier/ and all platform package dirs
 ```
 
+## Windows Installer Commands
+
+Build the Inno Setup installer for machine-wide install on Windows 10+ (requires Inno Setup 6):
+
+```powershell
+npm run installer:windows              # npm run package:portier then ISCC.exe
+npm run installer:windows:no-package   # ISCC.exe only (reuse existing build/portier/)
+```
+
+Output: `build/releases/windows/Portier-Setup-<version>.exe`
+
+Build options (via `build-installer.ps1`):
+- `-Version 1.1.0` — override version string (default: reads from `package.json`)
+- `-NoPackage` — skip `package:portier` step
+- `-InnoPath "C:\..."` — path to `ISCC.exe` if not on PATH
+
+The installer is unsigned. It does NOT create Windows Firewall rules. Config is preserved on uninstall.
+Do not add `installer:windows` to `npm run check` — it requires Inno Setup and is a release step.
+
 ## Package Validation Commands
 
 ```powershell

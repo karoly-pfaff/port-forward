@@ -131,7 +131,7 @@ v1.1 focuses on distribution and native OS service installers. See `docs/install
 
 Checklist items to add per slice as work proceeds:
 
-- [ ] **Slice 2** — Windows Inno Setup installer: machine-wide install, service registration, uninstall preserves config.
+- [x] **Slice 2** — Windows Inno Setup installer: machine-wide install (`%ProgramFiles%\Portier`), optional Windows Service task, uninstall preserves `rules.json`. Build via `npm run installer:windows`. Requires Inno Setup 6.
 - [ ] **Slice 3** — macOS `.pkg` installer or improved install flow; LaunchAgent polish; signing/notarization docs.
 - [ ] **Slice 4** — Linux install/uninstall/start/stop/status scripts complete; systemd unit generation verified.
 - [ ] **Slice 5** — `validate:service:*` commands pass on each target platform.

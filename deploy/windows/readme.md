@@ -48,6 +48,57 @@ npm run package:windows
 
 ---
 
+## Inno Setup Installer (v1.1)
+
+The `scripts/windows/installer/` directory contains an Inno Setup 6 script and a build wrapper.
+
+**Prerequisites:**
+
+1. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+2. Ensure Go is installed (for `service.exe` compilation).
+
+**Build the installer:**
+
+```powershell
+npm run installer:windows
+```
+
+This runs `npm run package:portier` first, then calls ISCC.exe.
+
+To skip the package step and reuse an existing `build/portier/`:
+
+```powershell
+npm run installer:windows:no-package
+```
+
+**Output:** `build/releases/windows/Portier-Setup-<version>.exe`
+
+**What the installer does:**
+
+| Location | Contents |
+|----------|----------|
+| `%ProgramFiles%\Portier\` | `service.exe`, `server.js`, `web\`, `readme.txt` |
+| `%ProgramData%\Portier\` | `rules.json` (created empty if absent), `logs\` |
+
+- The installer offers an optional **Windows Service** task (checked by default): registers `Portier` as an automatic Windows Service and starts it immediately.
+- The service command line is: `"%ProgramFiles%\Portier\service.exe" --service --config "%ProgramData%\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir "%ProgramFiles%\Portier\web"`
+- On upgrade (reinstall over an existing installation), the running service is stopped before files are overwritten.
+- Uninstall stops and removes the Windows Service. `rules.json` and `%ProgramData%\Portier\` are preserved by default. The `logs\` directory is removed.
+
+**SmartScreen note:** The installer is unsigned. Windows SmartScreen may warn before running it. For public distribution, sign `service.exe` and `Portier-Setup-<version>.exe` with an EV certificate.
+
+**Build script options:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `-Version 1.1.0` | Override version (default: reads from `package.json`) |
+| `-NoPackage` | Skip `npm run package:portier` |
+| `-InnoPath "C:\..."` | Full path to `ISCC.exe` if not on PATH |
+
+**Firewall:** The installer does not create Windows Firewall rules. Forwarded ports listening on `0.0.0.0` may trigger Windows Firewall prompts or require manual inbound rules.
+
+---
+
 ## Manual Test
 
 Go service:

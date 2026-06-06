@@ -43,7 +43,9 @@
     "validate:service:windows:machine": "powershell -ExecutionPolicy Bypass -File ./scripts/windows/validate-machine-service.ps1",
     "validate:service:macos": "bash scripts/macos/validate-launch-agent.sh",
     "validate:service:linux": "bash scripts/linux/validate-systemd-service.sh",
-    "validate:service:current": "node scripts/validate-service.js"
+    "validate:service:current": "node scripts/validate-service.js",
+    "installer:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/windows/installer/build-installer.ps1",
+    "installer:windows:no-package": "powershell -ExecutionPolicy Bypass -File ./scripts/windows/installer/build-installer.ps1 -NoPackage"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
