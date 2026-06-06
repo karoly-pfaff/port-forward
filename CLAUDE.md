@@ -135,6 +135,15 @@ npm run installer:macos:no-package    # tar.gz only (reuse existing build/portie
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`. Requires `bash` and `tar`. Do not add to `npm run check` or any automated validation chain.
 
+**Linux installer — run explicitly when changing Linux scripts:**
+
+```bash
+npm run installer:linux               # package:portier then tar.gz
+npm run installer:linux:no-package    # tar.gz only (reuse existing build/portier/)
+```
+
+Output: `build/releases/linux/portier-<version>-linux.tar.gz`. Requires `bash` and `tar`. Do not add to `npm run check` or any automated validation chain.
+
 **Windows installer — run explicitly when changing installer files (requires Inno Setup 6):**
 
 ```powershell

@@ -33,21 +33,56 @@ npm run package:portier          # builds build/portier/
 npm run validate:package:smoke   # build, validate layout, and smoke-test
 ```
 
-Linux-specific package (produces build/linux/):
+Linux-specific package (produces build/linux/ with linux/amd64 binary):
 
 ```bash
 bash scripts/linux/build-package.sh
 ```
 
+## Release Archive (v1.1)
+
+Build a portable tar.gz for distribution:
+
+```bash
+npm run installer:linux
+# or (skip package:portier step):
+npm run installer:linux:no-package
+```
+
+Output: `build/releases/linux/portier-<version>-linux.tar.gz`
+
+The archive contains the clean runtime layout:
+
+```text
+service
+server.js
+web/
+  index.html
+  assets/
+readme.txt
+```
+
+Extract and install from the archive on a target machine:
+
+```bash
+tar -xzf portier-<version>-linux.tar.gz -C /opt/portier/
+sudo bash scripts/linux/install-service.sh --source-dir /opt/portier
+```
+
+> **Note:** `.deb` and `.rpm` packages are not yet implemented. The portable tar.gz is the v1.1 Linux release artifact. Packages are planned as a follow-up.
+
 ## Helper Scripts (Recommended)
 
 ### Install
 
-Go service (preferred):
+Build the package and install in one step:
 
 ```bash
+npm run package:portier
 sudo bash scripts/linux/install-service.sh
 ```
+
+The install script auto-copies `build/portier/` into `/opt/portier/`, creates the config directory and `rules.json` if missing, generates the systemd unit file, and enables and starts the service.
 
 Node fallback (requires Node.js):
 
@@ -67,16 +102,20 @@ sudo bash scripts/linux/install-service.sh \
 
 Supported flags:
 
-| Flag             | Default                       | Description                              |
-|------------------|-------------------------------|------------------------------------------|
-| `--install-dir`  | `/opt/portier`                | Directory containing binaries and web/   |
-| `--config-path`  | `/etc/portier/rules.json`     | Path to rules.json                       |
-| `--host`         | `127.0.0.1`                   | Management UI/API bind address           |
-| `--port`         | `47831`                       | Management UI/API port                   |
-| `--static-dir`   | `<install-dir>/web`           | Path to web UI assets                    |
-| `--runtime`      | `service`                     | `service` (Go binary) or `node`          |
-| `--node-path`    | `/usr/bin/node`               | Path to node executable (node mode only) |
-| `--no-start`     | —                             | Enable but do not start the service      |
+| Flag             | Default                       | Description                                        |
+|------------------|-------------------------------|----------------------------------------------------|
+| `--source-dir`   | `build/portier/` (auto)       | Copy runtime files from this directory             |
+| `--install-dir`  | `/opt/portier`                | Target directory for binaries and web/             |
+| `--config-path`  | `/etc/portier/rules.json`     | Path to rules.json                                 |
+| `--host`         | `127.0.0.1`                   | Management UI/API bind address                     |
+| `--port`         | `47831`                       | Management UI/API port                             |
+| `--static-dir`   | `<install-dir>/web`           | Path to web UI assets                              |
+| `--runtime`      | `service`                     | `service` (Go binary) or `node`                    |
+| `--node-path`    | `/usr/bin/node`               | Path to node executable (node mode only)           |
+| `--no-enable`    | —                             | Skip `systemctl enable`; do not auto-start at boot |
+| `--no-start`     | —                             | Enable but do not start the service immediately    |
+
+If `build/portier/` exists at the time the script runs, it is copied automatically. Pass `--source-dir ""` (or remove `build/portier/`) to skip the copy and use an existing install directory instead.
 
 ### Manage
 

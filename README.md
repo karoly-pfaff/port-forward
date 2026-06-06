@@ -74,21 +74,28 @@ Run it against the dev client build:
 npm run start:service
 ```
 
+### Linux Release Archive (v1.1)
+
+Build a portable tar.gz for distribution:
+
+```bash
+npm run installer:linux
+```
+
+Output: `build/releases/linux/portier-<version>-linux.tar.gz`
+
+The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). No signing required for Linux tar.gz archives. See `deploy/systemd/readme.md`.
+
 ### Linux systemd Service
 
-Build the package and copy files to `/opt/portier`:
+Build the package and install in one step:
 
 ```bash
-npm run package:linux
-sudo mkdir -p /opt/portier
-sudo cp -r build/linux/* /opt/portier/
-```
-
-Install as a systemd service (Go service, preferred):
-
-```bash
+npm run package:portier
 sudo bash scripts/linux/install-service.sh
 ```
+
+The install script auto-copies `build/portier/` into `/opt/portier/`, creates `/etc/portier/rules.json` if missing, generates `/etc/systemd/system/portier.service`, enables and starts the service.
 
 Node fallback (requires Node.js on the target machine):
 
@@ -96,7 +103,7 @@ Node fallback (requires Node.js on the target machine):
 sudo bash scripts/linux/install-service.sh --runtime node
 ```
 
-The install script creates `/etc/portier/rules.json` if it does not exist, generates `/etc/systemd/system/portier.service`, enables and starts the service. The Go service ExecStart is:
+The Go service ExecStart:
 
 ```text
 /opt/portier/service --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir /opt/portier/web
@@ -451,8 +458,8 @@ bash scripts/macos/uninstall-launch-agent.sh
 Linux service scripts (run as root on Linux):
 
 ```bash
-bash scripts/linux/build-package.sh
-sudo bash scripts/linux/install-service.sh [--runtime node] [--install-dir PATH] [--config-path PATH]
+bash scripts/linux/build-release.sh            # portable tar.gz → build/releases/linux/
+sudo bash scripts/linux/install-service.sh [--runtime node] [--source-dir PATH] [--install-dir PATH] [--config-path PATH] [--no-enable]
 sudo bash scripts/linux/status-service.sh
 sudo bash scripts/linux/start-service.sh
 sudo bash scripts/linux/stop-service.sh

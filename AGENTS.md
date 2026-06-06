@@ -156,6 +156,33 @@ Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
 Unsigned. Gatekeeper may quarantine downloaded binaries. Sign with Developer ID for public distribution.
 Do not add `installer:macos` to `npm run check` — it is a release step.
 
+## Linux systemd Service Commands
+
+Lifecycle management (requires root/sudo):
+
+```bash
+sudo bash scripts/linux/install-service.sh    # copies build/portier/ → /opt/portier/, registers systemd service
+sudo bash scripts/linux/uninstall-service.sh  # stops and removes service; preserves /etc/portier/rules.json
+sudo bash scripts/linux/start-service.sh      # start (or restart) the service
+sudo bash scripts/linux/stop-service.sh       # stop the service
+sudo bash scripts/linux/status-service.sh     # show service status via systemctl
+```
+
+Install script supports: `--source-dir`, `--install-dir`, `--config-path`, `--host`, `--port`, `--runtime service|node`, `--no-enable`, `--no-start`.
+Uninstall script supports: `--remove-files` (removes `/opt/portier/`), `--remove-config` (removes config directory; off by default).
+
+Linux release archive:
+
+```bash
+npm run installer:linux               # package:portier then tar.gz
+npm run installer:linux:no-package    # tar.gz only (reuse existing build/portier/)
+```
+
+Output: `build/releases/linux/portier-<version>-linux.tar.gz`
+
+No signing required for Linux tar.gz. Firewall rules for forwarded ports are the user's responsibility (ufw, iptables, firewalld).
+Do not add `installer:linux` to `npm run check` — it is a release step.
+
 ## Windows Installer Commands
 
 Build the Inno Setup installer for machine-wide install on Windows 10+ (requires Inno Setup 6):

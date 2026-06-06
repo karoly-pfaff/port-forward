@@ -23,13 +23,17 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 - `build-release.sh` — builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
 - Signing and notarization documented in `deploy/macos/readme.md` (unsigned local builds supported; Developer ID signing documented as required for public distribution).
 - `npm run installer:macos` / `installer:macos:no-package` — macOS portable archive build.
+- Linux `install-service.sh` updated: auto-copies `build/portier/` to `/opt/portier/` by default; adds `--source-dir`, `--no-enable`, `--no-start`, and `--runtime service|node` options.
+- Linux `build-release.sh` added: builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
+- `deploy/systemd/readme.md` updated: install flags table, release archive section, firewall notes, journald commands, `--no-enable` documented.
+- `npm run installer:linux` / `installer:linux:no-package` — Linux portable archive build.
 
 ### Planned
 
-- Linux install/uninstall/start/stop/status scripts; systemd unit generation; Node fallback documentation.
 - `build/releases/` release artifact layout with portable archives and signed installers per platform.
 - Explicit service validation scripts (`validate:service:*`) passing on each target platform.
 - macOS `.pkg` installer via `pkgbuild`/`productbuild` (requires macOS tooling; deferred).
+- Linux `.deb` / `.rpm` packages (deferred beyond v1.1).
 
 ---
 

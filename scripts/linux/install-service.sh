@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
+# Usage: sudo bash scripts/linux/install-service.sh [OPTIONS]
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 SERVICE_UNIT="/etc/systemd/system/portier.service"
 SERVICE_NAME="portier"
@@ -12,6 +16,14 @@ STATIC_DIR=""
 RUNTIME="service"
 NODE_PATH="/usr/bin/node"
 NO_START=""
+NO_ENABLE=""
+SOURCE_DIR=""
+
+# Auto-detect source from build/portier/ if present
+_AUTO_SOURCE="$REPO_ROOT/build/portier"
+if [ -d "$_AUTO_SOURCE" ]; then
+  SOURCE_DIR="$_AUTO_SOURCE"
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -22,7 +34,9 @@ while [[ $# -gt 0 ]]; do
     --static-dir)   STATIC_DIR="$2";   shift 2 ;;
     --runtime)      RUNTIME="$2";      shift 2 ;;
     --node-path)    NODE_PATH="$2";    shift 2 ;;
+    --source-dir)   SOURCE_DIR="$2";   shift 2 ;;
     --no-start)     NO_START="1";      shift   ;;
+    --no-enable)    NO_ENABLE="1";     shift   ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -36,6 +50,7 @@ echo "  Install dir : $INSTALL_DIR"
 echo "  Config      : $CONFIG_PATH"
 echo "  Runtime     : $RUNTIME"
 echo "  Management  : http://$HOST:$PORT"
+[ -n "$SOURCE_DIR" ] && echo "  Source      : $SOURCE_DIR"
 echo ""
 
 # --- Root check ---
@@ -88,6 +103,18 @@ fi
 
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$CONFIG_DIR"
+
+# --- Copy runtime files if source-dir is set ---
+
+if [ -n "$SOURCE_DIR" ]; then
+  if [ ! -d "$SOURCE_DIR" ]; then
+    echo "Error: Source directory not found: $SOURCE_DIR" >&2
+    exit 1
+  fi
+  cp -r "$SOURCE_DIR/." "$INSTALL_DIR/"
+  chmod +x "$INSTALL_DIR/service" 2>/dev/null || true
+  echo "Copied runtime files from $SOURCE_DIR to $INSTALL_DIR"
+fi
 
 # --- Create default rules.json if missing ---
 
@@ -149,22 +176,34 @@ echo "Unit written: $SERVICE_UNIT"
 # --- Enable service ---
 
 systemctl daemon-reload
-systemctl enable "$SERVICE_NAME"
+
+if [ -z "$NO_ENABLE" ]; then
+  systemctl enable "$SERVICE_NAME"
+  echo "Service enabled (starts at boot)."
+fi
 
 if [ -z "$NO_START" ]; then
   systemctl start "$SERVICE_NAME"
   echo "Service started."
 fi
 
+if [ -n "$NO_START" ] && [ -n "$NO_ENABLE" ]; then
+  STATUS_MSG="installed (not enabled, not started)"
+elif [ -n "$NO_START" ]; then
+  STATUS_MSG="installed and enabled (not started)"
+else
+  STATUS_MSG="running"
+fi
+
 echo ""
-echo "Portier is $([ -z "$NO_START" ] && echo "running" || echo "installed (not started)")."
+echo "Portier is $STATUS_MSG."
 echo ""
 echo "  Management UI : http://$HOST:$PORT"
 echo "  Config        : $CONFIG_PATH"
 echo "  Unit file     : $SERVICE_UNIT"
 echo ""
 echo "Next steps:"
-echo "  Status    sudo bash \"$(dirname "$0")/status-service.sh\""
-echo "  Stop      sudo bash \"$(dirname "$0")/stop-service.sh\""
-echo "  Uninstall sudo bash \"$(dirname "$0")/uninstall-service.sh\""
+echo "  Status    sudo bash \"$SCRIPT_DIR/status-service.sh\""
+echo "  Stop      sudo bash \"$SCRIPT_DIR/stop-service.sh\""
+echo "  Uninstall sudo bash \"$SCRIPT_DIR/uninstall-service.sh\""
 echo "  Logs      sudo journalctl -u $SERVICE_NAME -f"

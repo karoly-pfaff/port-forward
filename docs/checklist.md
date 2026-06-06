@@ -133,7 +133,7 @@ Checklist items to add per slice as work proceeds:
 
 - [x] **Slice 2** — Windows Inno Setup installer: machine-wide install (`%ProgramFiles%\Portier`), optional Windows Service task, uninstall preserves `rules.json`. Build via `npm run installer:windows`. Requires Inno Setup 6.
 - [x] **Slice 3** — macOS LaunchAgent polish: auto-copy from `build/portier/`, `--source-dir`/`--no-start`/`--runtime` options, label bug fixed, `--purge` on uninstall, `build-release.sh` for portable tar.gz, signing/notarization docs. Build via `npm run installer:macos`. Validate via `npm run validate:service:macos`.
-- [ ] **Slice 4** — Linux install/uninstall/start/stop/status scripts complete; systemd unit generation verified.
+- [x] **Slice 4** — Linux install/uninstall/start/stop/status scripts complete; `--source-dir`/`--no-enable` added to `install-service.sh`; `build-release.sh` for portable tar.gz; `installer:linux`/`installer:linux:no-package` npm scripts; systemd unit examples and docs updated.
 - [ ] **Slice 5** — `validate:service:*` commands pass on each target platform.
 - [ ] **Slice 6** — `build/releases/` artifact layout produced; portable archives and installers smoke-tested.
 - [ ] **Slice 7** — v1.1 readiness audit passed; version bumped to `1.1.0`; changelog entry added; tag created.

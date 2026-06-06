@@ -301,12 +301,17 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - `.pkg` installer is documented as a follow-up; requires macOS tooling (`pkgbuild`/`productbuild`).
 - Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
 
-### Slice 4 — Linux install scripts
+### Slice 4 — Linux install scripts ✓
 
-- Complete install/uninstall/start/stop/status scripts under `scripts/linux/`.
-- systemd unit generation with correct `ExecStart` for Go service.
-- Node fallback mode documented in `deploy/systemd/readme.md`.
-- `validate:service:linux` passes on target Linux host.
+- `install-service.sh` updated: auto-copies `build/portier/` to `/opt/portier/` by default; adds `--source-dir`, `--no-enable`, `--no-start`, `--runtime service|node` options.
+- `uninstall-service.sh`: stops, disables, and removes the unit file; preserves `/etc/portier/rules.json` by default; `--remove-files` removes `/opt/portier/`; `--remove-config` removes config directory.
+- `start-service.sh`, `stop-service.sh`, `status-service.sh`: lifecycle helpers that require root.
+- `build-release.sh` added: builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
+- systemd unit examples updated: `portier.service.example` (Go service), `portier-node.service.example` (Node fallback).
+- `deploy/systemd/readme.md` updated: install flags table with `--source-dir` / `--no-enable`, release archive section, firewall notes, journald log commands.
+- npm scripts added: `installer:linux`, `installer:linux:no-package`.
+- Output: `build/releases/linux/portier-<version>-linux.tar.gz`
+- `validate:service:linux` must be run explicitly on a Linux host with systemd and root.
 
 ### Slice 5 — Explicit service validation scripts
 
