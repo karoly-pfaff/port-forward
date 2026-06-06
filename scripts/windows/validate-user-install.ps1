@@ -30,7 +30,7 @@ $HOST_ADDR       = "127.0.0.1"
 
 $SCRIPT_DIR  = $PSScriptRoot
 $REPO_ROOT   = Split-Path (Split-Path $SCRIPT_DIR -Parent) -Parent
-$PACKAGE_DIR = Join-Path $REPO_ROOT "build" "portier"
+$PACKAGE_DIR = Join-Path (Join-Path $REPO_ROOT "build") "portier"
 
 function Log  { param([string]$m) Write-Host "[validate:user] $m" }
 function Pass { param([string]$m) Write-Host "  [PASS] $m" }
@@ -114,8 +114,10 @@ try {
   $trigger   = New-ScheduledTaskTrigger -AtLogon
   $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew
   $taskDesc  = "Portier user-scope install validation (test, safe to remove)"
+  $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $principal   = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
   Register-ScheduledTask -TaskName $TEST_TASK_NAME -Action $action -Trigger $trigger `
-    -Settings $settings -Description $taskDesc | Out-Null
+    -Settings $settings -Description $taskDesc -Principal $principal | Out-Null
   Pass "Scheduled task '$TEST_TASK_NAME' registered."
 
   # Start task on demand
@@ -168,6 +170,13 @@ try {
   $exitCode = 1
   Write-Host ""
   Write-Host "[validate:user] FAILED: $_" -ForegroundColor Red
+  if ($_ -match "Access is denied" -or $_ -match "0x80070005") {
+    Write-Host ""
+    Write-Host "[validate:user] NOTE: 'Access is denied' when creating a scheduled task usually means:" -ForegroundColor Yellow
+    Write-Host "  - A domain Group Policy restricts scheduled task creation to administrators on this machine." -ForegroundColor Yellow
+    Write-Host "  - The script is running in a non-interactive session without the required token." -ForegroundColor Yellow
+    Write-Host "  Run this validation from an interactive PowerShell terminal on a non-domain-restricted machine." -ForegroundColor Yellow
+  }
 } finally {
   # Always clean up the task regardless of success or failure
   $leftover = Get-ScheduledTask -TaskName $TEST_TASK_NAME -ErrorAction SilentlyContinue

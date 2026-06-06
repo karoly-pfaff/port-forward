@@ -32,10 +32,14 @@ if (platform === "win32") {
   label = "macOS LaunchAgent — no sudo required";
   cmd = "bash";
   cmdArgs = ["scripts/macos/validate-launch-agent.sh", ...extraArgs];
-} else {
+} else if (platform === "linux") {
   label = "Linux systemd — requires root/sudo";
   cmd = "bash";
   cmdArgs = ["scripts/linux/validate-systemd-service.sh", ...extraArgs];
+} else {
+  console.error(`[validate:service:current] Unsupported platform: ${platform}`);
+  console.error("  Supported platforms: win32, darwin, linux");
+  process.exit(1);
 }
 
 console.log(`[validate:service:current] Platform: ${platform}`);

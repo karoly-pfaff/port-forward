@@ -27,11 +27,16 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 - Linux `build-release.sh` added: builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
 - `deploy/systemd/readme.md` updated: install flags table, release archive section, firewall notes, journald commands, `--no-enable` documented.
 - `npm run installer:linux` / `installer:linux:no-package` — Linux portable archive build.
+- `scripts/windows/validate-user-install.ps1`: validates user-scope scheduled task flow with test name `PortierTestUser`, isolated temp dirs, auto-port detection, `-NoBuild`/`-KeepFiles`/`-Port` flags; never touches production.
+- `scripts/windows/validate-machine-service.ps1`: validates machine-scope Windows Service flow with test name `PortierTestMachine`; requires Administrator; same flags; never touches production.
+- `scripts/macos/validate-launch-agent.sh`: validates LaunchAgent flow with test label `com.portier.test`, temp plist at `~/Library/LaunchAgents/com.portier.test.plist`; no sudo required; `--no-build`/`--keep-files`/`--port` flags.
+- `scripts/linux/validate-systemd-service.sh`: validates systemd flow with test unit `portier-test.service`, temp paths under `/tmp/portier-test-<pid>/`; requires root; fails clearly if not root or systemd unavailable.
+- `scripts/validate-service.js`: cross-platform dispatcher — Windows runs user-scope, macOS runs LaunchAgent, Linux runs systemd; fails clearly on unsupported platforms.
+- `npm run validate:service:current` / `validate:service:windows:user` / `validate:service:windows:machine` / `validate:service:macos` / `validate:service:linux` — explicit release validation commands.
 
 ### Planned
 
 - `build/releases/` release artifact layout with portable archives and signed installers per platform.
-- Explicit service validation scripts (`validate:service:*`) passing on each target platform.
 - macOS `.pkg` installer via `pkgbuild`/`productbuild` (requires macOS tooling; deferred).
 - Linux `.deb` / `.rpm` packages (deferred beyond v1.1).
 

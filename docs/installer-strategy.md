@@ -313,13 +313,15 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 - `validate:service:linux` must be run explicitly on a Linux host with systemd and root.
 
-### Slice 5 — Explicit service validation scripts
+### Slice 5 — Explicit service validation scripts ✓
 
-- `validate:service:windows:user` — Windows scheduled task (no admin).
-- `validate:service:windows:machine` — Windows Service (admin).
-- `validate:service:macos` — macOS LaunchAgent.
-- `validate:service:linux` — Linux systemd.
-- `validate:service:current` — current platform.
+- `validate:service:windows:user` — Windows scheduled task, no Administrator required. Test task name: `PortierTestUser`. Temp paths under `$TEMP\PortierTestUser\`.
+- `validate:service:windows:machine` — Windows Service, Administrator required. Test service name: `PortierTestMachine`. Temp paths under `$TEMP\PortierTestMachine\`.
+- `validate:service:macos` — macOS LaunchAgent, no sudo required. Test label: `com.portier.test`. Plist at `~/Library/LaunchAgents/com.portier.test.plist`. Temp paths under `$TMPDIR`.
+- `validate:service:linux` — Linux systemd, root/sudo required. Test unit: `portier-test.service`. Temp paths under `/tmp/portier-test-<pid>/`. Fails clearly if not root or systemd unavailable.
+- `validate:service:current` — cross-platform Node dispatcher. Runs user-scope on Windows, LaunchAgent on macOS, systemd on Linux. Fails clearly on unsupported platforms.
+- All scripts support `--no-build` / `-NoBuild`, `--keep-files` / `-KeepFiles`, `--port` / `-Port`.
+- None touch production service names, install directories, config paths, or port 47831.
 
 ### Slice 6 — Release artifact generation
 

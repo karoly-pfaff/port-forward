@@ -138,7 +138,7 @@ Build the package and install:
 
 ```bash
 npm run package:portier
-npm run install:macos
+bash scripts/macos/install-launch-agent.sh
 ```
 
 The install script auto-copies `build/portier/` to `~/Applications/Portier/`, creates `~/Library/Application Support/Portier/rules.json` if missing, generates `~/Library/LaunchAgents/com.portier.port-forwarding.plist` with absolute paths, and bootstraps the agent for the current user. No `sudo` is required.
@@ -442,6 +442,10 @@ npm run validate:service:macos            # macOS LaunchAgent (no sudo)
 npm run validate:service:linux            # Linux systemd (requires sudo)
 npm run installer:windows                 # build Inno Setup installer (requires Inno Setup 6)
 npm run installer:windows:no-package      # build installer only, skip package step
+npm run installer:macos                   # build macOS portable tar.gz
+npm run installer:macos:no-package        # macOS tar.gz only, skip package step
+npm run installer:linux                   # build Linux portable tar.gz
+npm run installer:linux:no-package        # Linux tar.gz only, skip package step
 ```
 
 macOS LaunchAgent scripts (run on macOS):

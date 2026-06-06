@@ -31,7 +31,7 @@ $HOST_ADDR         = "127.0.0.1"
 
 $SCRIPT_DIR  = $PSScriptRoot
 $REPO_ROOT   = Split-Path (Split-Path $SCRIPT_DIR -Parent) -Parent
-$PACKAGE_DIR = Join-Path $REPO_ROOT "build" "portier"
+$PACKAGE_DIR = Join-Path (Join-Path $REPO_ROOT "build") "portier"
 
 function Log  { param([string]$m) Write-Host "[validate:machine] $m" }
 function Pass { param([string]$m) Write-Host "  [PASS] $m" }
