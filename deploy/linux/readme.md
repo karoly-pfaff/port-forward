@@ -4,7 +4,7 @@ Portier can run as a system-level systemd service on Linux.
 
 **Recommended:** use the helper scripts in `scripts/linux/` — they generate and install the unit file automatically.
 
-The `deploy/systemd/` directory contains example unit files for reference and manual installs.
+The `deploy/linux/` directory contains example unit files for reference and manual installs.
 
 ---
 
@@ -168,7 +168,7 @@ The example unit files in this directory can be copied and used without the help
 Go service (preferred):
 
 ```bash
-sudo cp deploy/systemd/portier.service.example /etc/systemd/system/portier.service
+sudo cp deploy/linux/portier.service.example /etc/systemd/system/portier.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now portier
 ```
@@ -176,7 +176,7 @@ sudo systemctl enable --now portier
 Node fallback:
 
 ```bash
-sudo cp deploy/systemd/portier-node.service.example /etc/systemd/system/portier.service
+sudo cp deploy/linux/portier-node.service.example /etc/systemd/system/portier.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now portier
 ```

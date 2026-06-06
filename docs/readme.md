@@ -17,7 +17,7 @@ Raw release readiness audit reports live in `audits/` (gitignored, local only).
 
 - [deploy/windows/readme.md](../deploy/windows/readme.md) — Windows service install, packaging, both runtimes.
 - [deploy/macos/readme.md](../deploy/macos/readme.md) — macOS LaunchAgent install, Go service and Node fallback modes.
-- [deploy/systemd/readme.md](../deploy/systemd/readme.md) — Linux systemd unit, both runtimes, firewall notes.
+- [deploy/linux/readme.md](../deploy/linux/readme.md) — Linux systemd unit, both runtimes, firewall notes.
 
 ## UI and Client
 

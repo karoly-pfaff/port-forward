@@ -22,7 +22,7 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 - Signing and notarization documented in `deploy/macos/readme.md` (unsigned local builds supported; Developer ID signing documented as required for public distribution).
 - Linux `install-service.sh` updated: auto-copies `build/portier/` to `/opt/portier/` by default; adds `--source-dir`, `--no-enable`, `--no-start`, and `--runtime service|node` options.
 - `scripts/linux/release/build-release.sh` — builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
-- `deploy/systemd/readme.md` updated: install flags table, release archive section, firewall notes, journald commands, `--no-enable` documented.
+- `deploy/linux/readme.md` updated: install flags table, release archive section, firewall notes, journald commands, `--no-enable` documented.
 - `scripts/windows/service/validate-user-install.ps1`: validates user-scope scheduled task flow with test name `PortierTestUser`, isolated temp dirs, auto-port detection, `-NoBuild`/`-KeepFiles`/`-Port` flags; never touches production.
 - `scripts/windows/service/validate-machine-service.ps1`: validates machine-scope Windows Service flow with test name `PortierTestMachine`; requires Administrator; same flags; never touches production.
 - `scripts/macos/service/validate-launch-agent.sh`: validates LaunchAgent flow with test label `com.portier.test`, temp plist at `~/Library/LaunchAgents/com.portier.test.plist`; no sudo required; `--no-build`/`--keep-files`/`--port` flags.

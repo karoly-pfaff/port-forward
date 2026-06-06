@@ -84,7 +84,7 @@ npm run release:portable
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 
-The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). No signing required for Linux tar.gz archives. See `deploy/systemd/readme.md`.
+The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). No signing required for Linux tar.gz archives. See `deploy/linux/readme.md`.
 
 ### Linux systemd Service
 
@@ -118,7 +118,7 @@ sudo bash scripts/linux/service/start-service.sh
 sudo bash scripts/linux/service/uninstall-service.sh   # preserves rules.json
 ```
 
-See `deploy/systemd/readme.md` for flags, manual unit file install, and firewall notes.
+See `deploy/linux/readme.md` for flags, manual unit file install, and firewall notes.
 
 ### macOS Release Archive (v1.1)
 
@@ -230,7 +230,7 @@ Config for machine install: `%ProgramData%\Portier\rules.json`. Config for user 
 
 See `deploy/windows/readme.md` for detailed Windows packaging and service notes.
 See `deploy/macos/readme.md` for detailed macOS LaunchAgent notes.
-See `deploy/systemd/readme.md` for detailed Linux systemd notes.
+See `deploy/linux/readme.md` for detailed Linux systemd notes.
 
 ### Release Artifact Generation (v1.1)
 

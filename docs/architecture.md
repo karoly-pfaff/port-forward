@@ -144,7 +144,7 @@ Portier ships with service/daemon integration examples for each supported platfo
 
 | Platform | Mechanism | Scripts | Docs |
 |---|---|---|---|
-| Linux | systemd unit | `scripts/linux/` | `deploy/systemd/readme.md` |
+| Linux | systemd unit | `scripts/linux/` | `deploy/linux/readme.md` |
 | Windows | Windows service (`sc.exe`) | `scripts/windows/` | `deploy/windows/readme.md` |
 | macOS | user-level LaunchAgent | `scripts/macos/` | `deploy/macos/readme.md` |
 

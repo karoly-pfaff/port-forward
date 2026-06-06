@@ -123,8 +123,8 @@
     ],
     "servicePathsRequireExplicitTask": [
       "scripts/windows/*.ps1",
-      "deploy/systemd/*.service",
-      "deploy/systemd/*.service.example"
+      "deploy/linux/*.service",
+      "deploy/linux/*.service.example"
     ]
   }
 }

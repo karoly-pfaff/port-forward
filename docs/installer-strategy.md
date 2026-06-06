@@ -306,7 +306,7 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - `start-service.sh`, `stop-service.sh`, `status-service.sh`: lifecycle helpers that require root.
 - `scripts/linux/release/build-release.sh` added: builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
 - systemd unit examples updated: `portier.service.example` (Go service), `portier-node.service.example` (Node fallback).
-- `deploy/systemd/readme.md` updated: install flags table with `--source-dir` / `--no-enable`, release archive section, firewall notes, journald log commands.
+- `deploy/linux/readme.md` updated: install flags table with `--source-dir` / `--no-enable`, release archive section, firewall notes, journald log commands.
 - Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 - `validate:service:linux` must be run explicitly on a Linux host with systemd and root.
 
