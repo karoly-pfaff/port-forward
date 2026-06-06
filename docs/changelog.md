@@ -34,9 +34,16 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 - `scripts/validate-service.js`: cross-platform dispatcher — Windows runs user-scope, macOS runs LaunchAgent, Linux runs systemd; fails clearly on unsupported platforms.
 - `npm run validate:service:current` / `validate:service:windows:user` / `validate:service:windows:machine` / `validate:service:macos` / `validate:service:linux` — explicit release validation commands.
 
+- `scripts/package-release.js`: unified release packaging script for all platforms. Reads version from `package.json`, calls `package:portier`, produces portable archives (Windows `.zip`, macOS/Linux `.tar.gz`) and Windows installer (non-fatal if Inno Setup absent). Service binaries are platform-native; run on each target OS.
+- `scripts/validate-release-artifacts.js`: validates `build/releases/<platform>/` layout, archive contents (required/forbidden files, readme.txt content), and optional installer artifact.
+- Updated `readme.txt` in Windows/macOS/Linux build scripts: now includes portable archive notice ("does not install OS services"), `--config` / `--static-dir web` options, "not bundled in this archive" note for config.
+- `npm run package:release` / `package:release:current` — full release packaging for current platform (portable + installer if available).
+- `npm run package:release:portable` — portable archive only, skip installer.
+- `npm run validate:release` / `validate:release:current` — validate release artifacts for current platform.
+- `npm run validate:release:portable` — validate portable archive only.
+
 ### Planned
 
-- `build/releases/` release artifact layout with portable archives and signed installers per platform.
 - macOS `.pkg` installer via `pkgbuild`/`productbuild` (requires macOS tooling; deferred).
 - Linux `.deb` / `.rpm` packages (deferred beyond v1.1).
 

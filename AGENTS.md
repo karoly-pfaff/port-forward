@@ -237,6 +237,32 @@ Normal development validation: `npm run check`
 Release package validation: `npm run validate:package:smoke`
 Release service validation: `npm run validate:service:current` (or per-platform variants)
 
+## Release Artifact Commands
+
+Build the current platform's portable archive (and installer if tooling is available):
+
+```powershell
+npm run package:release:current       # portable + installer (non-fatal if installer tools absent)
+npm run package:release:portable      # portable archive only
+```
+
+Validate release artifacts:
+
+```powershell
+npm run validate:release:portable     # checks archive contents, readme.txt, forbidden files
+npm run validate:release:current      # also checks installer artifact if present
+```
+
+Output layout: `build/releases/windows/`, `build/releases/macos/`, `build/releases/linux/`.
+
+Archive filenames are versioned:
+- Windows: `portier-<version>-windows-portable.zip`, `Portier-Setup-<version>.exe`
+- macOS: `portier-portable-macos-<version>.tar.gz`
+- Linux: `portier-<version>-linux.tar.gz`
+
+Service binaries are platform-native. Run on each OS for that OS's artifacts.
+Do not add `package:release:*` or `validate:release:*` to `npm run check` — they are release steps.
+
 ## Installer Strategy
 
 v1.1 focuses on distribution and native OS service installers. The v1.1 scope, platform strategy, install layouts, artifact targets, and implementation slices are defined in `docs/installer-strategy.md`.

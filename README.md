@@ -232,6 +232,46 @@ See `deploy/windows/readme.md` for detailed Windows packaging and service notes.
 See `deploy/macos/readme.md` for detailed macOS LaunchAgent notes.
 See `deploy/systemd/readme.md` for detailed Linux systemd notes.
 
+### Release Artifact Generation (v1.1)
+
+Build the current platform's portable archive and installer (if tooling is available):
+
+```powershell
+npm run package:release:current
+```
+
+Portable archive only (skip installer):
+
+```powershell
+npm run package:release:portable
+```
+
+Validate the artifacts after building:
+
+```powershell
+npm run validate:release:portable
+npm run validate:release:current
+```
+
+**Output layout:**
+
+```text
+build/releases/
+  windows/
+    portier-<version>-windows-portable.zip   (from Compress-Archive)
+    Portier-Setup-<version>.exe              (Inno Setup installer, if available)
+  macos/
+    portier-portable-macos-<version>.tar.gz
+  linux/
+    portier-<version>-linux.tar.gz
+```
+
+Each portable archive contains the clean runtime layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`). Config (`rules.json`) is never bundled.
+
+Service binaries are platform-native. For a multi-platform release, run `package:release:current` on each target OS. The Windows installer is skipped (non-fatal) when Inno Setup is unavailable — the portable zip is still produced.
+
+macOS `.pkg` and Linux `.deb`/`.rpm` are out of v1.1 scope. See `docs/installer-strategy.md`.
+
 ## Package Layout
 
 The runtime package layout for all platforms:
@@ -446,6 +486,10 @@ npm run installer:macos                   # build macOS portable tar.gz
 npm run installer:macos:no-package        # macOS tar.gz only, skip package step
 npm run installer:linux                   # build Linux portable tar.gz
 npm run installer:linux:no-package        # Linux tar.gz only, skip package step
+npm run package:release:current           # portable archive + installer for current platform
+npm run package:release:portable          # portable archive only (skip installer)
+npm run validate:release:current          # validate release artifacts for current platform
+npm run validate:release:portable         # validate portable archive only
 ```
 
 macOS LaunchAgent scripts (run on macOS):
@@ -472,7 +516,7 @@ sudo bash scripts/linux/uninstall-service.sh [--remove-files] [--remove-config]
 
 ## Release
 
-Current version: **1.0.0**
+Current version: **1.0.0** (v1.1 in progress)
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.

@@ -323,11 +323,18 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - All scripts support `--no-build` / `-NoBuild`, `--keep-files` / `-KeepFiles`, `--port` / `-Port`.
 - None touch production service names, install directories, config paths, or port 47831.
 
-### Slice 6 — Release artifact generation
+### Slice 6 — Release artifact generation ✓
 
-- `package:releases` script (or per-platform variants) producing `build/releases/` layout.
-- Portable archives and installer outputs in the defined layout.
-- Smoke test each portable archive on the corresponding platform.
+- `scripts/package-release.js`: unified Node script for all platforms. Reads version from `package.json` (or `--version`). Calls `package:portier` (unless `--no-build`), then builds portable archives and, where tooling is available, installer artifacts.
+- Windows: produces `portier-<version>-windows-portable.zip` from `build/portier/` via PowerShell `Compress-Archive`. Calls `build-installer.ps1 -NoPackage` for the Inno Setup installer (non-fatal if ISCC.exe is absent).
+- macOS: delegates to `scripts/macos/build-release.sh --no-package --version <v>` → `portier-portable-macos-<version>.tar.gz`.
+- Linux: delegates to `scripts/linux/build-release.sh --no-package --version <v>` → `portier-<version>-linux.tar.gz`.
+- Service binaries are platform-native; only the current OS can produce its artifacts. For multi-platform releases, run on each target OS.
+- `scripts/validate-release-artifacts.js`: validates `build/releases/<platform>/` layout. Lists archive contents, checks required files (`service`/`service.exe`, `server.js`, `web/index.html`, `web/assets/`, `readme.txt`), checks forbidden files absent, extracts and checks readme.txt content.
+- All three `readme.txt` files (Windows/macOS/Linux) updated: added "does not install OS services", "not bundled in this archive", `--config` / `--static-dir web` flags, portable archive notice.
+- npm scripts: `package:release`, `package:release:current`, `package:release:portable`, `validate:release`, `validate:release:current`, `validate:release:portable`.
+- Output: `build/releases/windows/portier-<version>-windows-portable.zip`, `build/releases/macos/portier-portable-macos-<version>.tar.gz`, `build/releases/linux/portier-<version>-linux.tar.gz`, `build/releases/windows/Portier-Setup-<version>.exe` (when Inno Setup available).
+- macOS `.pkg` and Linux `.deb`/`.rpm` remain out of v1.1 scope.
 
 ### Slice 7 — v1.1 readiness audit
 

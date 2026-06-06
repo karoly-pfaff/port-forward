@@ -221,9 +221,17 @@ Validation scripts:
 
 ## Remaining Work
 
-Both runtimes are feature-complete. Package build correctness and OS service install/uninstall flows are automated. Remaining manual work is firewall and OS permission behavior. See `docs/checklist.md`.
+Both runtimes are feature-complete. Package build correctness, OS service install/uninstall flows, and release artifact generation are automated. Remaining manual work is firewall and OS permission behavior. See `docs/checklist.md`.
 
-v1.1 focuses on distribution and installer work. See `docs/installer-strategy.md` for the v1.1 scope, platform strategy, install layouts, artifact targets, and implementation slices.
+v1.1 focuses on distribution and installer work. Slices 2–6 are complete. Slice 7 (v1.1 readiness audit, version bump to 1.1.0, tag) is pending. See `docs/installer-strategy.md` for full scope and slice status.
+
+Release artifact commands (Slice 6):
+- `npm run package:release:current` — portable archive + installer for current platform
+- `npm run package:release:portable` — portable archive only
+- `npm run validate:release:portable` — validate portable archive layout and contents
+- `npm run validate:release:current` — validate portable + installer artifacts
+
+Do not add release artifact commands to `npm run check`. They are explicit release steps.
 
 ## Review Checklist
 

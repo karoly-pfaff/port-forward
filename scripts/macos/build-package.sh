@@ -52,26 +52,40 @@ rm -rf "$OUTPUT_DIR/web"
 cp -r "$REPO_ROOT/client/build" "$OUTPUT_DIR/web"
 
 cat > "$OUTPUT_DIR/readme.txt" << 'EOF'
-Portier macOS Package
-=====================
+Portier macOS Portable Package
+================================
+
+This portable archive contains the Portier runtime files only. It does not
+install OS services. Use the install scripts from the Portier repository to
+set up a macOS LaunchAgent.
 
 Native service (preferred):
-  ./service --service --config "~/Library/Application Support/Portier/rules.json" --host 127.0.0.1 --port 47831 --static-dir ./web
+  ./service --service --config ~/Library/Application\ Support/Portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
 
 Node server (fallback, requires Node.js):
-  node ./server.js --service --config "~/Library/Application Support/Portier/rules.json" --host 127.0.0.1 --port 47831 --static-dir ./web
+  node ./server.js --service --config ~/Library/Application\ Support/Portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
 
-Install as a LaunchAgent from the repository:
-  bash scripts/macos/install-launch-agent.sh --install-dir ~/Applications/Portier
-
-Config file:
-  Keep rules.json external. The recommended config path is:
-  ~/Library/Application Support/Portier/rules.json
+Options:
+  --config <path>     Path to rules.json (required; not bundled in this archive)
+  --host <addr>       Management host (default: 127.0.0.1)
+  --port <port>       Management port (default: 47831)
+  --static-dir <dir>  Path to web UI directory (use ./web from this directory)
 
 Default management URL:
   http://127.0.0.1:47831
 
+Config (rules.json) is external and must be provided. A new empty rules.json is
+created automatically if the path does not exist when the service starts.
+
+LaunchAgent install (no sudo required):
+  bash scripts/macos/install-launch-agent.sh    (from the Portier repository)
+  Installs to ~/Applications/Portier/ with config at:
+  ~/Library/Application Support/Portier/rules.json
+  See deploy/macos/readme.md for full options.
+
 Forwarded listen ports may need macOS Firewall rules.
+Unsigned — macOS Gatekeeper may quarantine downloaded binaries.
+  Clear quarantine: xattr -cr ./service
 EOF
 
 rm -rf "$BUNDLE_WORK"

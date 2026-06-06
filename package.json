@@ -49,7 +49,13 @@
     "installer:macos": "bash scripts/macos/build-release.sh",
     "installer:macos:no-package": "bash scripts/macos/build-release.sh --no-package",
     "installer:linux": "bash scripts/linux/build-release.sh",
-    "installer:linux:no-package": "bash scripts/linux/build-release.sh --no-package"
+    "installer:linux:no-package": "bash scripts/linux/build-release.sh --no-package",
+    "package:release": "node scripts/package-release.js --current-platform",
+    "package:release:current": "node scripts/package-release.js --current-platform",
+    "package:release:portable": "node scripts/package-release.js --current-platform --portable-only",
+    "validate:release": "node scripts/validate-release-artifacts.js",
+    "validate:release:current": "node scripts/validate-release-artifacts.js --platform current",
+    "validate:release:portable": "node scripts/validate-release-artifacts.js --platform current --portable-only"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

@@ -99,29 +99,38 @@ if (Test-Path $webOutputPath) {
 Copy-Item -LiteralPath (Join-Path $repoRoot "client\build") -Destination $webOutputPath -Recurse -Force
 
 @"
-Portier Windows Package
-=======================
+Portier Windows Portable Package
+=================================
+
+This portable archive contains the Portier runtime files only. It does not
+install OS services. Use the Inno Setup installer or the install scripts from
+the Portier repository to set up a Windows Service or scheduled task.
 
 Native service (preferred):
-  .\service.exe --service --config "%ProgramData%\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
+  .\service.exe --service --config "C:\path\to\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
 
 Node server (fallback, requires Node.js):
-  node .\server.js --service --config "%ProgramData%\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
+  node .\server.js --service --config "C:\path\to\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
 
-Machine install (requires Administrator):
-  Copy this directory to %ProgramFiles%\Portier\, then:
-  powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1
-
-  Installs a Windows service. Config at %ProgramData%\Portier\rules.json.
-
-User install (no Administrator required):
-  Copy this directory to %LOCALAPPDATA%\Portier\, then:
-  powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1 -Scope User
-
-  Registers a scheduled task that auto-starts at logon. Config at %APPDATA%\Portier\rules.json.
+Options:
+  --config <path>     Path to rules.json (required; not bundled in this archive)
+  --host <addr>       Management host (default: 127.0.0.1)
+  --port <port>       Management port (default: 47831)
+  --static-dir <dir>  Path to web UI directory (use ".\web" from this directory)
 
 Default management URL:
   http://127.0.0.1:47831
+
+Config (rules.json) is external and must be provided. A new empty rules.json is
+created automatically if the path does not exist when the service starts.
+
+Machine-wide install (Inno Setup installer, requires Inno Setup 6):
+  npm run installer:windows    (from the Portier repository)
+  Installs to %ProgramFiles%\Portier\ with config at %ProgramData%\Portier\rules.json.
+
+Manual install scripts in the repository:
+  scripts\windows\install-service.ps1 -Scope Machine  (Administrator required)
+  scripts\windows\install-service.ps1 -Scope User     (no Administrator required)
 
 Forwarded listen ports may need Windows Firewall inbound rules when listening on 0.0.0.0.
 Do not run both a Machine and User install on the same port at the same time.

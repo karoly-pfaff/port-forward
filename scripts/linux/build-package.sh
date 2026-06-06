@@ -52,8 +52,12 @@ rm -rf "$OUTPUT_DIR/web"
 cp -r "$REPO_ROOT/client/build" "$OUTPUT_DIR/web"
 
 cat > "$OUTPUT_DIR/readme.txt" << 'EOF'
-Portier Linux Package
-=====================
+Portier Linux Portable Package
+================================
+
+This portable archive contains the Portier runtime files only. It does not
+install OS services. Use the install scripts from the Portier repository to
+set up a systemd service.
 
 Native service (preferred):
   ./service --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
@@ -61,17 +65,22 @@ Native service (preferred):
 Node server (fallback, requires Node.js):
   node ./server.js --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
 
-Install as a systemd service from the repository:
-  sudo cp deploy/systemd/portier.service.example /etc/systemd/system/portier.service
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now portier
-
-Config file:
-  Keep rules.json external. The recommended config path is:
-  /etc/portier/rules.json
+Options:
+  --config <path>     Path to rules.json (required; not bundled in this archive)
+  --host <addr>       Management host (default: 127.0.0.1)
+  --port <port>       Management port (default: 47831)
+  --static-dir <dir>  Path to web UI directory (use ./web from this directory)
 
 Default management URL:
   http://127.0.0.1:47831
+
+Config (rules.json) is external and must be provided. A new empty rules.json is
+created automatically if the path does not exist when the service starts.
+
+systemd service install (requires root):
+  sudo bash scripts/linux/install-service.sh    (from the Portier repository)
+  Installs to /opt/portier/ with config at /etc/portier/rules.json.
+  See deploy/systemd/readme.md for full options.
 
 Forwarded listen ports may need firewall rules (ufw, iptables, firewalld).
 EOF
