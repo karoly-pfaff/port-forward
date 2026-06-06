@@ -1,0 +1,14 @@
+[Unit]
+Description=Portier Node Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/portier
+ExecStart=/usr/bin/node /opt/portier/server.js --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir /opt/portier/web
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

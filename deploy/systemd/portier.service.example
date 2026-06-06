@@ -1,0 +1,13 @@
+[Unit]
+Description=Portier Native Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/portier
+ExecStart=/opt/portier/service --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir /opt/portier/web
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

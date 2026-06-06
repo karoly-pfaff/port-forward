@@ -1,0 +1,135 @@
+param(
+  [string]$OutputDir = ".\build\windows",
+  [switch]$Clean
+)
+
+$ErrorActionPreference = "Stop"
+
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+$outputPath = if ([System.IO.Path]::IsPathRooted($OutputDir)) {
+  $OutputDir
+} else {
+  Join-Path $repoRoot $OutputDir
+}
+$outputPath = [System.IO.Path]::GetFullPath($outputPath)
+
+$serverJsPath = Join-Path $outputPath "server.js"
+$serviceExePath = Join-Path $outputPath "service.exe"
+$webOutputPath = Join-Path $outputPath "web"
+$bundleWorkPath = Join-Path $outputPath "_bundle"
+$bundleCjsPath = Join-Path $bundleWorkPath "server.cjs"
+$bundleEntryPath = Join-Path $repoRoot "server\sources\index.ts"
+
+function Get-LocalToolPath {
+  param([string]$Name)
+
+  $cmdPath = Join-Path $repoRoot "node_modules\.bin\$Name.cmd"
+  if (Test-Path $cmdPath) { return $cmdPath }
+
+  $plainPath = Join-Path $repoRoot "node_modules\.bin\$Name"
+  if (Test-Path $plainPath) { return $plainPath }
+
+  throw "Required local tool '$Name' was not found. Run 'npm install' first."
+}
+
+function Invoke-CommandInRepo {
+  param([string]$FilePath, [string[]]$Arguments)
+
+  Push-Location $repoRoot
+  try {
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+      throw "Command failed with exit code $LASTEXITCODE`: $FilePath $($Arguments -join ' ')"
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
+if ($Clean -and (Test-Path $outputPath)) {
+  Remove-Item -LiteralPath $outputPath -Recurse -Force
+}
+
+New-Item -ItemType Directory -Force -Path $bundleWorkPath | Out-Null
+
+Write-Host "Building shared package..."
+Invoke-CommandInRepo "npm.cmd" @("run", "build:shared")
+
+Write-Host "Building server package..."
+Invoke-CommandInRepo "npm.cmd" @("run", "build:server")
+
+Write-Host "Building client package..."
+Invoke-CommandInRepo "npm.cmd" @("run", "build:client")
+
+$esbuild = Get-LocalToolPath "esbuild"
+
+Write-Host "Bundling server as server.js..."
+Invoke-CommandInRepo $esbuild @(
+  $bundleEntryPath,
+  "--bundle",
+  "--minify",
+  "--platform=node",
+  "--format=cjs",
+  "--target=node22",
+  "--outfile=$bundleCjsPath"
+)
+Copy-Item -LiteralPath $bundleCjsPath -Destination $serverJsPath -Force
+
+Write-Host "Building Go service for Windows..."
+Push-Location (Join-Path $repoRoot "service")
+try {
+  $env:GOOS = "windows"
+  $env:GOARCH = "amd64"
+  $env:CGO_ENABLED = "0"
+  & go build -o $serviceExePath ./sources
+  if ($LASTEXITCODE -ne 0) {
+    throw "Go build failed with exit code $LASTEXITCODE"
+  }
+} finally {
+  Remove-Item Env:\GOOS -ErrorAction SilentlyContinue
+  Remove-Item Env:\GOARCH -ErrorAction SilentlyContinue
+  Remove-Item Env:\CGO_ENABLED -ErrorAction SilentlyContinue
+  Pop-Location
+}
+
+Write-Host "Copying web UI..."
+if (Test-Path $webOutputPath) {
+  Remove-Item -LiteralPath $webOutputPath -Recurse -Force
+}
+Copy-Item -LiteralPath (Join-Path $repoRoot "client\build") -Destination $webOutputPath -Recurse -Force
+
+@"
+Portier Windows Package
+=======================
+
+Go service (preferred):
+  .\service.exe --service --config "%ProgramData%\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
+
+Node server (fallback, requires Node.js):
+  node .\server.js --service --config "%ProgramData%\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
+
+Machine install (requires Administrator):
+  Copy this directory to %ProgramFiles%\Portier\, then:
+  powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1
+
+  Installs a Windows service. Config at %ProgramData%\Portier\rules.json.
+
+User install (no Administrator required):
+  Copy this directory to %LOCALAPPDATA%\Portier\, then:
+  powershell -ExecutionPolicy Bypass -File .\scripts\windows\install-service.ps1 -Scope User
+
+  Registers a scheduled task that auto-starts at logon. Config at %APPDATA%\Portier\rules.json.
+
+Default management URL:
+  http://127.0.0.1:47831
+
+Forwarded listen ports may need Windows Firewall inbound rules when listening on 0.0.0.0.
+Do not run both a Machine and User install on the same port at the same time.
+"@ | Set-Content -LiteralPath (Join-Path $outputPath "readme.txt") -Encoding ascii
+
+Remove-Item -LiteralPath $bundleWorkPath -Recurse -Force
+
+Write-Host "Windows package created at $outputPath"
+Write-Host "  Go service : $serviceExePath"
+Write-Host "  Node server: $serverJsPath"
+Write-Host "  Web UI     : $webOutputPath"
