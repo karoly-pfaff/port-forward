@@ -1,0 +1,126 @@
+# QA Checklist
+
+## Automated Release Validation
+
+Run these before tagging v1.0.0:
+
+- [ ] `npm run lint`
+- [ ] `npm run typecheck`
+- [ ] `npm run test`
+- [ ] `npm run build`
+- [ ] `npm run build:client`
+- [ ] `npm run test:e2e`
+- [ ] `npm run check`
+- [ ] `go test ./...` from `service/`
+- [ ] `go build ./...` from `service/`
+- [ ] `npm run build:service`
+- [ ] `npm run validate:package:smoke` — builds `build/portier/`, validates layout, runs smoke test
+
+## Explicit OS Service Install Validation
+
+These commands must be run explicitly on the target platform before distribution. They are not run by `npm run check`.
+
+Each script uses test-specific service names, ports, and temp directories. Production Portier installs and config are never touched.
+
+- [ ] `npm run validate:service:windows:user` — Windows scheduled task (no Administrator required)
+- [ ] `npm run validate:service:windows:machine` — Windows Service (Administrator required)
+- [ ] `npm run validate:service:macos` — macOS LaunchAgent (no sudo required)
+- [ ] `npm run validate:service:linux` — Linux systemd unit (root/sudo required)
+
+Each script validates:
+1. Package copy to isolated temp install dir
+2. Service/task/agent registration with test-specific name
+3. Service start
+4. `/api/health` responds 200
+5. Web UI HTML served at `/`
+6. Service stop
+7. Service/task/agent unregistered and verified removed
+8. Temp files cleaned up
+
+Flags supported by all scripts:
+- `--no-build` / `-NoBuild` — skip `npm run package:portier`, use existing `build/portier/`
+- `--keep-files` / `-KeepFiles` — preserve temp directories on failure for debugging
+- `--port` / `-Port` — override the management port (default: auto-detect free port)
+
+## Automated Coverage Confirmed
+
+Shared and TypeScript coverage:
+
+- [ ] Shared validation and port advisories
+- [ ] TypeScript server CRUD HTTP layer
+- [ ] TypeScript server import/export HTTP layer
+- [ ] TypeScript server status, start/stop, reorder, duplicate binding, and static serving behavior
+- [ ] Client App integration flows
+- [ ] Settings import/FileReader flow
+- [ ] Dashboard, Activity, Settings, API Docs, Forward Rules, and drawer flows
+
+Playwright E2E coverage:
+
+- [ ] App load
+- [ ] Add/edit/delete rule flows
+- [ ] Start/stop rule flow
+- [ ] Settings config import
+- [ ] Mobile sidebar behavior
+- [ ] TCP real forwarding
+- [ ] UDP one-way real forwarding
+- [ ] UDP bidirectional-last-client real forwarding
+- [ ] UDP bidirectional-multi-client real forwarding
+- [ ] TCP and UDP activity assertions
+
+Go service coverage:
+
+- [ ] Config load/save and import/export
+- [ ] Manager lifecycle, duplicate binding rejection, update/restart behavior, and reorder
+- [ ] API routes and error shapes
+- [ ] TCP real forwarding and activity
+- [ ] UDP one-way, bidirectional-last-client, bidirectional-multi-client, stats, sessions, stop, and activity
+- [ ] Port advisories, validation, options, static serving, and health endpoint
+
+## Manual Platform QA Required Before Distribution
+
+Manual QA is now limited to firewall behavior and production install paths. Core TCP/UDP protocol correctness and OS service install/uninstall flows are automated.
+
+### Package Build and Smoke Test (Automated)
+
+- [ ] `npm run validate:package:smoke` passes — builds `build/portier/`, validates layout and content, runs smoke test.
+  - Validates: `service`/`service.exe`, `server.js`, `web/index.html`, `web/assets/`, `readme.txt`.
+  - Validates: `readme.txt` mentions management URL and config path.
+  - Validates: `node_modules`, `rules.json`, `sources/`, `client/`, `server/` are absent from the package.
+  - Smoke test: starts the packaged binary, polls `/api/health`, GETs `/`, verifies HTML is served, stops cleanly.
+
+### OS Service Install Validation (Automated — Run Explicitly)
+
+Service install, start, health check, stop, and uninstall are validated by explicit commands on each platform:
+
+- [ ] `npm run validate:service:windows:user` — Windows scheduled task, no Administrator required.
+- [ ] `npm run validate:service:windows:machine` — Windows Service, Administrator required.
+- [ ] `npm run validate:service:macos` — macOS LaunchAgent, no sudo required.
+- [ ] `npm run validate:service:linux` — Linux systemd unit, root/sudo required.
+
+Each script uses test-specific names and temp directories. Production Portier installs are not touched.
+
+Pass `--no-build` to reuse an existing `build/portier/` and skip the package build step.
+
+### Windows Firewall (Manual — On Real Production Install)
+
+- [ ] Windows Firewall prompts or required inbound rules documented and observed for LAN-visible forwarded ports.
+- [ ] Production install to `%ProgramFiles%\Portier` (Machine) or `%LOCALAPPDATA%\Portier` (User) verified.
+- [ ] Config preserved at `%ProgramData%\Portier\rules.json` (Machine) or `%APPDATA%\Portier\rules.json` (User) after uninstall.
+
+### macOS Firewall (Manual — On Real Production Install)
+
+- [ ] macOS Firewall prompts or required settings documented and observed for LAN-visible forwarded ports.
+- [ ] Production install to `~/Applications/Portier` with config at `~/Library/Application Support/Portier/rules.json` verified.
+- [ ] Config preserved after `scripts/macos/uninstall-launch-agent.sh`.
+
+### Linux Firewall (Manual — On Real Production Install)
+
+- [ ] Firewall rules for LAN-visible forwarded ports documented and observed.
+- [ ] Production install to `/opt/portier` with config at `/etc/portier/rules.json` verified.
+- [ ] Config preserved after `scripts/linux/uninstall-service.sh` without `--remove-config`.
+
+## Post-v1.0 Follow-Ups
+
+- Drag-and-drop rule reorder testing, if drag-and-drop UI replaces the current Move Up/Down controls.
+- macOS `.app` bundle or Homebrew formula.
+- Linux hardening beyond the example systemd unit.
