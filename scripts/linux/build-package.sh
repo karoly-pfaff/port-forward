@@ -55,7 +55,7 @@ cat > "$OUTPUT_DIR/readme.txt" << 'EOF'
 Portier Linux Package
 =====================
 
-Go service (preferred):
+Native service (preferred):
   ./service --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
 
 Node server (fallback, requires Node.js):

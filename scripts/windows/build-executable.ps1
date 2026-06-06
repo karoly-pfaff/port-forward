@@ -102,7 +102,7 @@ Copy-Item -LiteralPath (Join-Path $repoRoot "client\build") -Destination $webOut
 Portier Windows Package
 =======================
 
-Go service (preferred):
+Native service (preferred):
   .\service.exe --service --config "%ProgramData%\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
 
 Node server (fallback, requires Node.js):
