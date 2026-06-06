@@ -1,0 +1,22 @@
+{
+  "name": "@portier/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch sources/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run sources",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@portier/shared": "*",
+    "cors": "^2.8.5",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.2",
+    "tsx": "^4.19.4"
+  }
+}
