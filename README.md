@@ -139,10 +139,10 @@ The install script auto-copies `build/portier/` to `~/Applications/Portier/`, cr
 Open `http://127.0.0.1:47831` after installation. Logs are written to `~/Library/Logs/Portier/`.
 
 ```bash
-npm run status:macos
-npm run stop:macos
-npm run start:macos
-npm run uninstall:macos     # preserves rules.json and logs
+bash scripts/macos/status-launch-agent.sh
+bash scripts/macos/stop-launch-agent.sh
+bash scripts/macos/start-launch-agent.sh
+bash scripts/macos/uninstall-launch-agent.sh   # preserves rules.json and logs
 ```
 
 Use `--runtime node` to run with `server.js` instead of the native binary. Use `--purge` on uninstall to also remove config and logs. See `deploy/macos/readme.md` for full options.

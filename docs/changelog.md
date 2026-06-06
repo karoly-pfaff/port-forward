@@ -22,7 +22,6 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 - `uninstall-launch-agent.sh` adds `--purge` flag for removing config and logs (config is preserved by default).
 - `build-release.sh` — builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
 - Signing and notarization documented in `deploy/macos/readme.md` (unsigned local builds supported; Developer ID signing documented as required for public distribution).
-- `npm run install:macos`, `uninstall:macos`, `start:macos`, `stop:macos`, `status:macos` — macOS LaunchAgent lifecycle shortcuts.
 - `npm run installer:macos` / `installer:macos:no-package` — macOS portable archive build.
 
 ### Planned

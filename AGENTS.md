@@ -134,11 +134,11 @@ npm run package:clean         # clean build/portier/ and all platform package di
 Lifecycle management (user-level, no sudo):
 
 ```bash
-npm run install:macos       # copies build/portier/ → ~/Applications/Portier/, registers LaunchAgent
-npm run uninstall:macos     # stops and removes LaunchAgent; preserves rules.json
-npm run start:macos         # start (or restart) the LaunchAgent
-npm run stop:macos          # stop the LaunchAgent
-npm run status:macos        # show LaunchAgent status via launchctl
+bash scripts/macos/install-launch-agent.sh    # copies build/portier/ → ~/Applications/Portier/, registers LaunchAgent
+bash scripts/macos/uninstall-launch-agent.sh  # stops and removes LaunchAgent; preserves rules.json
+bash scripts/macos/start-launch-agent.sh      # start (or restart) the LaunchAgent
+bash scripts/macos/stop-launch-agent.sh       # stop the LaunchAgent
+bash scripts/macos/status-launch-agent.sh     # show LaunchAgent status via launchctl
 ```
 
 Install script supports: `--source-dir`, `--install-dir`, `--config-path`, `--host`, `--port`, `--runtime service|node`, `--no-start`.

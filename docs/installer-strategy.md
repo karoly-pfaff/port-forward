@@ -297,7 +297,7 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - `build-release.sh` added: builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
 - Signing and notarization documented in `deploy/macos/readme.md`.
 - `validate:service:macos` passes on macOS with `npm run validate:service:macos`.
-- npm scripts added: `install:macos`, `uninstall:macos`, `start:macos`, `stop:macos`, `status:macos`, `installer:macos`, `installer:macos:no-package`.
+- npm scripts added: `installer:macos`, `installer:macos:no-package`.
 - `.pkg` installer is documented as a follow-up; requires macOS tooling (`pkgbuild`/`productbuild`).
 - Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
 

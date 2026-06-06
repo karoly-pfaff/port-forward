@@ -51,7 +51,7 @@ Build the package and install in one step:
 
 ```bash
 npm run package:portier
-npm run install:macos
+bash scripts/macos/install-launch-agent.sh
 ```
 
 The install script auto-copies `build/portier/` into `~/Applications/Portier/`, creates the config directory and `rules.json` if missing, generates the LaunchAgent plist with absolute paths, and bootstraps the agent for the current user. No `sudo` is required.
@@ -117,19 +117,15 @@ The installer resolves the Node.js binary path at install time (using `which nod
 ```bash
 # Status (and diagnostic output from launchctl)
 bash scripts/macos/status-launch-agent.sh
-# or: npm run status:macos
 
 # Stop (unloads the agent — prevents auto-restart)
 bash scripts/macos/stop-launch-agent.sh
-# or: npm run stop:macos
 
 # Start (or restart) the agent
 bash scripts/macos/start-launch-agent.sh
-# or: npm run start:macos
 
 # Uninstall: stops agent and removes plist; preserves rules.json and logs
 bash scripts/macos/uninstall-launch-agent.sh
-# or: npm run uninstall:macos
 
 # Uninstall and remove all config and logs (destructive)
 bash scripts/macos/uninstall-launch-agent.sh --purge
