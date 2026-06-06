@@ -25,7 +25,7 @@ Raw release readiness audit reports live in `audits/` (gitignored, local only).
 
 ## QA
 
-- [checklist.md](checklist.md) — automated and manual platform QA checklist for v1.0.0.
+- [checklist.md](checklist.md) — automated and manual platform QA checklist.
 
 ## Agent and Tooling
 

@@ -510,7 +510,7 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 
 ## Release
 
-Current version: **1.0.0** (v1.1 in progress)
+Current version: **1.1.0**
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.

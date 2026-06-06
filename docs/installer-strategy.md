@@ -149,15 +149,14 @@ v1.1 target output under `build/releases/`:
 
 ```text
 build/releases/windows/
-  Portier-Setup-1.1.0.exe
-  portier-portable-windows.zip
+  Portier-Setup-<version>.exe
+  portier-<version>-windows-portable.zip
 
 build/releases/macos/
-  Portier-1.1.0.pkg
-  portier-portable-macos.tar.gz
+  portier-portable-macos-<version>.tar.gz   (.pkg deferred to future release)
 
 build/releases/linux/
-  portier-1.1.0-linux.tar.gz
+  portier-<version>-linux.tar.gz
 ```
 
 Portable archives contain the clean runtime layout:
@@ -334,9 +333,9 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - Output: `build/releases/windows/portier-<version>-windows-portable.zip`, `build/releases/macos/portier-portable-macos-<version>.tar.gz`, `build/releases/linux/portier-<version>-linux.tar.gz`, `build/releases/windows/Portier-Setup-<version>.exe` (when Inno Setup available).
 - macOS `.pkg` and Linux `.deb`/`.rpm` remain out of v1.1 scope.
 
-### Slice 7 — v1.1 readiness audit
+### Slice 7 — v1.1 readiness audit ✓
 
-- All Slice 2–6 items passing on each target platform.
-- Version bumped to `1.1.0`.
-- Changelog entry added.
-- Git tag `v1.1.0` created.
+- All Slice 2–6 items passing on Windows (current platform). macOS/Linux service validation requires respective OS hosts.
+- Version bumped to `1.1.0` across all package.json files.
+- Changelog entry finalized (date: 2026-06-06).
+- Git tag `v1.1.0` ready to create.

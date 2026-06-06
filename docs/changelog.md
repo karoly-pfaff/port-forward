@@ -4,7 +4,7 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [1.1.0] - Unreleased
+## [1.1.0] - 2026-06-06
 
 ### Goal
 
@@ -38,9 +38,9 @@ See `docs/installer-strategy.md` for scope, platform decisions, and implementati
 - `npm run validate:release` / `validate:release:current` — validate release artifacts for current platform.
 - `npm run validate:release:portable` — validate portable archive only.
 
-### Planned
+### Deferred
 
-- macOS `.pkg` installer via `pkgbuild`/`productbuild` (requires macOS tooling; deferred).
+- macOS `.pkg` installer via `pkgbuild`/`productbuild` (requires macOS tooling; deferred to future release).
 - Linux `.deb` / `.rpm` packages (deferred beyond v1.1).
 
 ---
