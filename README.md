@@ -21,8 +21,8 @@ npm run start:dev
 Run them separately:
 
 ```powershell
-npm run dev:server
-npm run dev:client
+npm run dev -w server
+npm run dev -w client
 ```
 
 The server listens on `http://127.0.0.1:47831` by default. The client runs at `http://127.0.0.1:5173` and proxies `/api` requests to the server.
@@ -379,8 +379,6 @@ These scripts use test-specific service names, ports, and temp directories. They
 ```powershell
 npm run start:server
 npm run start:dev
-npm run dev:server
-npm run dev:client
 npm run build
 npm run build:server
 npm run build:service

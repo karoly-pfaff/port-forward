@@ -105,14 +105,14 @@ Do not add `test:e2e` to `npm run test` or `npm run check`. E2E is a separate st
 **OS service install validation is automated — run explicitly before release:**
 
 ```powershell
-npm run check:service:windows:user     # Windows scheduled task (no admin)
-npm run check:service:windows:machine  # Windows Service (admin)
-npm run check:service:current          # current platform
+npm run validate:service:windows:user     # Windows scheduled task (no admin)
+npm run validate:service:windows:machine  # Windows Service (admin)
+npm run validate:service:current          # current platform
 ```
 
 ```bash
-npm run check:service:macos   # macOS LaunchAgent (no sudo)
-npm run check:service:linux   # Linux systemd (sudo)
+npm run validate:service:macos   # macOS LaunchAgent (no sudo)
+npm run validate:service:linux   # Linux systemd (sudo)
 ```
 
 These use test-specific names and temp dirs. Never touch production installs.
@@ -121,12 +121,12 @@ Do not add these to `npm run check`. Run them explicitly when releasing.
 **Package build is automated — do not treat it as manual QA:**
 
 ```powershell
-npm run check:package           # validate existing build/portier/ layout
-npm run check:package:build     # build then validate
-npm run check:package:smoke     # build, validate, and run smoke test (preferred)
+npm run validate:package           # validate existing build/portier/ layout
+npm run validate:package:build     # build then validate
+npm run validate:package:smoke     # build, validate, and run smoke test (preferred)
 ```
 
-If a task touches packaging, run `npm run check:package:smoke` when possible. The script:
+If a task touches packaging, run `npm run validate:package:smoke` when possible. The script:
 - Builds `build/portier/` via `package:portier` on the current platform
 - Validates the layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`)
 - Smoke-tests the packaged binary on a free port without requiring admin/root

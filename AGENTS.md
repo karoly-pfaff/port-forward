@@ -51,8 +51,8 @@ npm install
 
 ```powershell
 npm run start:dev
-npm run dev:server
-npm run dev:client
+npm run dev -w server
+npm run dev -w client
 ```
 
 ## Validation Commands
