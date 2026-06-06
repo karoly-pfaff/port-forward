@@ -129,6 +129,33 @@ npm run package:linux         # Linux package (build/linux/)
 npm run package:clean         # clean build/portier/ and all platform package dirs
 ```
 
+## macOS LaunchAgent Commands
+
+Lifecycle management (user-level, no sudo):
+
+```bash
+npm run install:macos       # copies build/portier/ → ~/Applications/Portier/, registers LaunchAgent
+npm run uninstall:macos     # stops and removes LaunchAgent; preserves rules.json
+npm run start:macos         # start (or restart) the LaunchAgent
+npm run stop:macos          # stop the LaunchAgent
+npm run status:macos        # show LaunchAgent status via launchctl
+```
+
+Install script supports: `--source-dir`, `--install-dir`, `--config-path`, `--host`, `--port`, `--runtime service|node`, `--no-start`.
+Uninstall script supports: `--purge` (removes config and logs; off by default).
+
+macOS release archive:
+
+```bash
+npm run installer:macos               # package:portier then tar.gz
+npm run installer:macos:no-package    # tar.gz only (reuse existing build/portier/)
+```
+
+Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
+
+Unsigned. Gatekeeper may quarantine downloaded binaries. Sign with Developer ID for public distribution.
+Do not add `installer:macos` to `npm run check` — it is a release step.
+
 ## Windows Installer Commands
 
 Build the Inno Setup installer for machine-wide install on Windows 10+ (requires Inno Setup 6):

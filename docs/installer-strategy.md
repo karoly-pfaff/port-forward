@@ -290,12 +290,16 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - Requires Inno Setup 6: https://jrsoftware.org/isinfo.php
 - Installer is unsigned; sign with an EV certificate before public distribution.
 
-### Slice 3 — macOS package and LaunchAgent polish
+### Slice 3 — macOS package and LaunchAgent polish ✓
 
-- `.pkg` installer or improved install flow using `pkgbuild` / `productbuild`.
-- LaunchAgent script improvements identified during v1.0 testing.
-- Signing and notarization documentation added.
-- `validate:service:macos` passes on target hardware.
+- `install-launch-agent.sh` updated: auto-copies `build/portier/` to `~/Applications/Portier/` by default; adds `--source-dir`, `--no-start`, and `--runtime service|node` options; fixes LaunchAgent label consistency (`com.portier.port-forwarding` everywhere).
+- `uninstall-launch-agent.sh` updated: adds `--purge` flag for removing config and logs (off by default — config is always preserved).
+- `build-pkg.sh` added: builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
+- Signing and notarization documented in `deploy/macos/readme.md`.
+- `validate:service:macos` passes on macOS with `npm run validate:service:macos`.
+- npm scripts added: `install:macos`, `uninstall:macos`, `start:macos`, `stop:macos`, `status:macos`, `installer:macos`, `installer:macos:no-package`.
+- `.pkg` installer is documented as a follow-up; requires macOS tooling (`pkgbuild`/`productbuild`).
+- Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
 
 ### Slice 4 — Linux install scripts
 

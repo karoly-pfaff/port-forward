@@ -113,32 +113,39 @@ sudo bash scripts/linux/uninstall-service.sh   # preserves rules.json
 
 See `deploy/systemd/readme.md` for flags, manual unit file install, and firewall notes.
 
+### macOS Release Archive (v1.1)
+
+Build a portable tar.gz for distribution:
+
+```bash
+npm run installer:macos
+```
+
+Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
+
+The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). Unsigned — macOS Gatekeeper may quarantine downloaded binaries; use `xattr -cr` to clear. Sign with Developer ID for public distribution. See `deploy/macos/readme.md` for signing notes.
+
 ### macOS LaunchAgent
 
 Build the package and install:
 
 ```bash
-npm run package:macos
-mkdir -p ~/Applications/Portier
-cp -r build/macos/* ~/Applications/Portier/
-
-bash scripts/macos/install-launch-agent.sh \
-  --install-dir ~/Applications/Portier \
-  --config-path ~/Library/Application\ Support/Portier/rules.json
+npm run package:portier
+npm run install:macos
 ```
 
-The install script creates `~/Library/Application Support/Portier/rules.json` if it does not exist, generates `~/Library/LaunchAgents/com.portier.port-forwarding.plist` with absolute paths, and bootstraps the agent for the current user. No `sudo` is required.
+The install script auto-copies `build/portier/` to `~/Applications/Portier/`, creates `~/Library/Application Support/Portier/rules.json` if missing, generates `~/Library/LaunchAgents/com.portier.port-forwarding.plist` with absolute paths, and bootstraps the agent for the current user. No `sudo` is required.
 
 Open `http://127.0.0.1:47831` after installation. Logs are written to `~/Library/Logs/Portier/`.
 
 ```bash
-bash scripts/macos/status-launch-agent.sh
-bash scripts/macos/stop-launch-agent.sh
-bash scripts/macos/start-launch-agent.sh
-bash scripts/macos/uninstall-launch-agent.sh   # preserves rules.json
+npm run status:macos
+npm run stop:macos
+npm run start:macos
+npm run uninstall:macos     # preserves rules.json and logs
 ```
 
-If the Go binary is unavailable, use `--node-mode` with the bundled `server.js`. See `deploy/macos/readme.md` for LaunchAgent details.
+Use `--runtime node` to run with `server.js` instead of the native binary. Use `--purge` on uninstall to also remove config and logs. See `deploy/macos/readme.md` for full options.
 
 Forwarded ports on `0.0.0.0` may trigger macOS Firewall prompts. The management UI stays on `127.0.0.1:47831` and is not LAN-visible by default.
 

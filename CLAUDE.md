@@ -126,6 +126,25 @@ npm run validate:package:build     # build then validate
 npm run validate:package:smoke     # build, validate, and run smoke test (preferred)
 ```
 
+**macOS installer — run explicitly when changing macOS scripts:**
+
+```bash
+npm run installer:macos               # package:portier then tar.gz
+npm run installer:macos:no-package    # tar.gz only (reuse existing build/portier/)
+```
+
+Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`. Requires `bash` and `tar`. Do not add to `npm run check` or any automated validation chain.
+
+**macOS LaunchAgent lifecycle (macOS only, no sudo):**
+
+```bash
+npm run install:macos       # copies build/portier/ → ~/Applications/Portier/, registers LaunchAgent
+npm run uninstall:macos     # removes LaunchAgent plist; preserves rules.json
+npm run start:macos         # start/restart the LaunchAgent
+npm run stop:macos          # stop the LaunchAgent
+npm run status:macos        # show launchctl status
+```
+
 **Windows installer — run explicitly when changing installer files (requires Inno Setup 6):**
 
 ```powershell

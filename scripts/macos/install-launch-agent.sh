@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LABEL="com.portier"
+LABEL="com.portier.port-forwarding"
 PLIST_DIR="$HOME/Library/LaunchAgents"
 PLIST_PATH="$PLIST_DIR/$LABEL.plist"
 LOG_DIR="$HOME/Library/Logs/Portier"
 USER_ID="$(id -u)"
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 INSTALL_DIR="$HOME/Applications/Portier"
 CONFIG_PATH="$HOME/Library/Application Support/Portier/rules.json"
@@ -14,15 +17,32 @@ PORT="47831"
 STATIC_DIR=""
 NODE_MODE=""
 EXECUTABLE=""
+NO_START=""
+SOURCE_DIR=""
+
+# Auto-detect source from repo build/portier/ if it exists alongside the script.
+_AUTO_SOURCE="$REPO_ROOT/build/portier"
+if [ -d "$_AUTO_SOURCE" ]; then
+  SOURCE_DIR="$_AUTO_SOURCE"
+fi
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --install-dir)  INSTALL_DIR="$2";  shift 2 ;;
     --config-path)  CONFIG_PATH="$2";  shift 2 ;;
+    --source-dir)   SOURCE_DIR="$2";   shift 2 ;;
     --host)         HOST="$2";         shift 2 ;;
     --port)         PORT="$2";         shift 2 ;;
     --static-dir)   STATIC_DIR="$2";   shift 2 ;;
+    --no-start)     NO_START="1";      shift   ;;
     --node-mode)    NODE_MODE="1";     shift   ;;
+    --runtime)
+      case "$2" in
+        node)    NODE_MODE="1" ;;
+        service) NODE_MODE=""  ;;
+        *) echo "Unknown --runtime value: $2 (expected 'service' or 'node')" >&2; exit 1 ;;
+      esac
+      shift 2 ;;
     --executable)   EXECUTABLE="$2";   shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -38,13 +58,32 @@ echo ""
 echo "  Install dir : $INSTALL_DIR"
 echo "  Config      : $CONFIG_PATH"
 echo "  Management  : http://$HOST:$PORT"
-echo "  Mode        : ${NODE_MODE:+node (fallback)}${NODE_MODE:-packaged executable}"
+echo "  Mode        : ${NODE_MODE:+node (fallback)}${NODE_MODE:-native service}"
 echo ""
 
-# --- Validate ---
+# --- Copy runtime files from source dir ---
+# Copies build/portier/ (or --source-dir) into the install directory.
+# Skip only if SOURCE_DIR is empty (manual layout already in place).
+
+if [ -n "$SOURCE_DIR" ]; then
+  if [ ! -d "$SOURCE_DIR" ]; then
+    echo "Error: source directory not found: $SOURCE_DIR" >&2
+    echo "  Run 'npm run package:portier' or pass --source-dir <dir>." >&2
+    exit 1
+  fi
+  echo "Copying runtime files: $SOURCE_DIR -> $INSTALL_DIR"
+  mkdir -p "$INSTALL_DIR"
+  cp -r "$SOURCE_DIR/." "$INSTALL_DIR/"
+  if [ -f "$INSTALL_DIR/service" ]; then
+    chmod +x "$INSTALL_DIR/service"
+  fi
+  echo ""
+fi
+
+# --- Validate installed files ---
 
 if [ -n "$NODE_MODE" ]; then
-  # Resolve node binary at install time so launchd can find it without PATH
+  # Resolve node binary at install time so launchd can find it without PATH.
   NODE_BIN="$(which node 2>/dev/null || true)"
   if [ -z "$NODE_BIN" ]; then
     for CANDIDATE in /usr/local/bin/node /opt/homebrew/bin/node; do
@@ -68,7 +107,8 @@ if [ -n "$NODE_MODE" ]; then
 else
   if [ ! -f "$EXECUTABLE" ]; then
     echo "Error: Executable not found: $EXECUTABLE" >&2
-    echo "  Copy the service binary to the install directory, or use --node-mode for Node.js fallback." >&2
+    echo "  Run 'npm run package:portier' and then re-run this script," >&2
+    echo "  or use --runtime node for Node.js fallback." >&2
     exit 1
   fi
 fi
@@ -142,9 +182,19 @@ fi
 
 echo "Plist written: $PLIST_PATH"
 
-# --- Load the LaunchAgent ---
-# Unload first if it is already registered to avoid a stale registration.
+# --- Load or skip the LaunchAgent ---
 
+if [ -n "$NO_START" ]; then
+  echo ""
+  echo "Skipping LaunchAgent load (--no-start)."
+  echo ""
+  echo "To start Portier later:"
+  echo "  bash \"$(dirname "$0")/start-launch-agent.sh\""
+  echo "  or: launchctl bootstrap gui/$USER_ID \"$PLIST_PATH\""
+  exit 0
+fi
+
+# Unload first if already registered to avoid a stale registration on reinstall.
 if launchctl list "$LABEL" &>/dev/null; then
   echo "LaunchAgent already loaded — unloading before reinstall..."
   launchctl bootout "gui/$USER_ID/$LABEL" 2>/dev/null \
