@@ -124,3 +124,16 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 - Drag-and-drop rule reorder testing, if drag-and-drop UI replaces the current Move Up/Down controls.
 - macOS `.app` bundle or Homebrew formula.
 - Linux hardening beyond the example systemd unit.
+
+## v1.1 Installer Readiness
+
+v1.1 focuses on distribution and native OS service installers. See `docs/installer-strategy.md` for scope and implementation slices.
+
+Checklist items to add per slice as work proceeds:
+
+- [ ] **Slice 2** — Windows Inno Setup installer: machine-wide install, service registration, uninstall preserves config.
+- [ ] **Slice 3** — macOS `.pkg` installer or improved install flow; LaunchAgent polish; signing/notarization docs.
+- [ ] **Slice 4** — Linux install/uninstall/start/stop/status scripts complete; systemd unit generation verified.
+- [ ] **Slice 5** — `validate:service:*` commands pass on each target platform.
+- [ ] **Slice 6** — `build/releases/` artifact layout produced; portable archives and installers smoke-tested.
+- [ ] **Slice 7** — v1.1 readiness audit passed; version bumped to `1.1.0`; changelog entry added; tag created.

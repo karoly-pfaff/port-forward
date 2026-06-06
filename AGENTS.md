@@ -164,6 +164,10 @@ Normal development validation: `npm run check`
 Release package validation: `npm run validate:package:smoke`
 Release service validation: `npm run validate:service:current` (or per-platform variants)
 
+## Installer Strategy
+
+v1.1 focuses on distribution and native OS service installers. The v1.1 scope, platform strategy, install layouts, artifact targets, and implementation slices are defined in `docs/installer-strategy.md`.
+
 ## Coding Guidelines
 
 - Keep TypeScript simple and explicit.

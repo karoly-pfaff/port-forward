@@ -196,6 +196,8 @@ Validation scripts:
 
 Both runtimes are feature-complete. Package build correctness and OS service install/uninstall flows are automated. Remaining manual work is firewall and OS permission behavior. See `docs/checklist.md`.
 
+v1.1 focuses on distribution and installer work. See `docs/installer-strategy.md` for the v1.1 scope, platform strategy, install layouts, artifact targets, and implementation slices.
+
 ## Review Checklist
 
 - TypeScript types are strict and useful.

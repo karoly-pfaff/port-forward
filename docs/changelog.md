@@ -4,6 +4,24 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [1.1.0] - Unreleased
+
+### Goal
+
+Portier v1.1 makes Portier easy and safe to install as a native background service on Windows, macOS, and Linux, with automated package/service validation and clean release artifacts.
+
+See `docs/installer-strategy.md` for scope, platform decisions, and implementation slices.
+
+### Planned
+
+- Windows Inno Setup installer with machine-wide and user-scope install, Windows Service registration, and config-preserving uninstall.
+- macOS `.pkg` installer or improved install flow; LaunchAgent polish; signing and notarization documentation.
+- Linux install/uninstall/start/stop/status scripts; systemd unit generation; Node fallback documentation.
+- `build/releases/` release artifact layout with portable archives and signed installers per platform.
+- Explicit service validation scripts (`validate:service:*`) passing on each target platform.
+
+---
+
 ## [1.0.0] - 2026-06-06
 
 ### Added

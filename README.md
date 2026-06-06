@@ -432,6 +432,7 @@ sudo bash scripts/linux/uninstall-service.sh [--remove-files] [--remove-config]
 Current version: **1.0.0**
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
+- [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
 
 ## Agent Workflow
 
