@@ -125,6 +125,23 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 - macOS `.app` bundle or Homebrew formula.
 - Linux hardening beyond the example systemd unit.
 
+## v1.2 Roadmap
+
+v1.2 focuses on diagnostics and operational polish. See `docs/roadmap.md` for goals, slices, and non-goals.
+
+Checklist items to add per slice as work proceeds:
+
+- [ ] **Slice 1** — Runtime info endpoint and UI display
+- [ ] **Slice 2** — Rule diagnostics API
+- [ ] **Slice 3** — Rule diagnostics UI
+- [ ] **Slice 4** — Activity Log polish
+- [ ] **Slice 5** — Settings / runtime / config polish
+- [ ] **Slice 6** — Safer networking UX pass
+- [ ] **Slice 7** — Diagnostics export
+- [ ] **Slice 8** — v1.2 readiness audit, version bump, changelog, tag
+
+---
+
 ## v1.1 Installer Readiness
 
 v1.1 focuses on distribution and native OS service installers. See `docs/installer-strategy.md` for scope and implementation slices.

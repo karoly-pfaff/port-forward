@@ -221,9 +221,11 @@ Validation scripts:
 
 Both runtimes are feature-complete. Package build correctness, OS service install/uninstall flows, and release artifact generation are automated. Remaining manual work is firewall and OS permission behavior. See `docs/checklist.md`.
 
-v1.1 focuses on distribution and installer work. Slices 2–6 are complete. Slice 7 (v1.1 readiness audit, version bump to 1.1.0, tag) is pending. See `docs/installer-strategy.md` for full scope and slice status.
+v1.1 is complete: distribution, installers, release artifacts, service and package validation, platform polish. Tagged 1.1.0. See `docs/installer-strategy.md` for scope and slice history.
 
-Release artifact commands (Slice 6):
+v1.2 targets diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export. See `docs/roadmap.md` for goals, slices, and non-goals.
+
+Release artifact commands:
 - `npm run release:current` — portable archive + installer for current platform
 - `npm run release:portable` — portable archive only
 - `npm run validate:release:portable` — validate portable archive layout and contents

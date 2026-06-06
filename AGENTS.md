@@ -267,6 +267,10 @@ Do not add `release:*` or `validate:release:*` to `npm run check` — they are r
 
 v1.1 focuses on distribution and native OS service installers. The v1.1 scope, platform strategy, install layouts, artifact targets, and implementation slices are defined in `docs/installer-strategy.md`.
 
+## Roadmap
+
+v1.2 targets diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export. See `docs/roadmap.md`.
+
 ## Coding Guidelines
 
 - Keep TypeScript simple and explicit.
