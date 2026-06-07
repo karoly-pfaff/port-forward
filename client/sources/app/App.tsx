@@ -374,7 +374,10 @@ export function App(): ReactElement {
           )}
 
           {view === "settings" && (
-            <SettingsView onRulesUpdated={handleRulesUpdatedFromSettings} />
+            <SettingsView
+              onRulesUpdated={handleRulesUpdatedFromSettings}
+              diagnosisMap={diagnosisMap}
+            />
           )}
 
           {view === "api-docs" && <ApiDocsView />}

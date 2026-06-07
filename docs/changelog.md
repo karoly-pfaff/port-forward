@@ -8,6 +8,18 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (v1.2 Slice 7 — Diagnostics export / support bundle)
+
+- **Download Diagnostics JSON** button in Settings, below Runtime / Environment. Assembles a local JSON support bundle and downloads it directly in the browser — no upload, no backend endpoint.
+- **Bundle contents**: `schemaVersion`, `exportedAt`, `app` (name + version), `runtime` (from `GET /api/runtime`), `rules` (fresh fetch), `statuses` (fresh fetch), `diagnostics` (any results already run in the current UI session), `activity` (up to 100 recent events), and `metadata` (management URL, source, generatedBy).
+- **Partial-failure handling**: each data source is fetched independently using `Promise.allSettled`. If any source fails, the rest are still included; an `errors` array is added to the bundle and a warning is shown in the UI. The download still proceeds.
+- **Empty diagnostics note**: if no rule diagnostics have been run in the current session, the bundle includes `diagnosticsNote: "No rule diagnostics had been run in this UI session."` alongside an empty `diagnostics` object.
+- **Excluded data**: raw config file contents from disk, logs, environment variables, OS user name, home directory beyond paths already in the runtime endpoint, node_modules, and build file listings. Nothing is uploaded or transmitted.
+- **Filename format**: `portier-diagnostics-YYYYMMDD-HHMMSS.json` (local time; no characters invalid on Windows).
+- **`diagnosticsExport.ts`** helper module added at `client/sources/features/settings/`: exports `buildDiagnosticsBundle()`, `buildDiagnosticsFilename()`, and `downloadJson()`.
+- **`settings-warn` CSS class** added for the partial-data warning state.
+- **New tests**: `diagnosticsExport.test.ts` (28 unit tests covering bundle structure, diagnostics inclusion, partial failure, filename, and download mechanics); 10 new `SettingsView` component tests covering render, fetch calls, success/partial/disabled states, bundle schema, and diagnostics from UI state. 216 tests total pass.
+
 ### Added (v1.2 Slice 6 — Safer networking UX)
 
 - **Listen host presets** in the Add/Edit Rule drawer: "Local only" (127.0.0.1) and "LAN exposed" (0.0.0.0) quick-select buttons. Active preset is highlighted; manual host entry remains fully supported.

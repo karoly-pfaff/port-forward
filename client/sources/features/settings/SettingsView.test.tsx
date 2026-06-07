@@ -1,14 +1,18 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RuntimeInfo } from "@portier/shared";
+import type { ForwardRuleResponse, ForwardStatus, RuntimeInfo } from "@portier/shared";
 import { SettingsView } from "./SettingsView.js";
 import * as portierApi from "../../api/portierApi.js";
+import type { DiagnosisEntry } from "../forwards/ForwardRuleList.js";
 
 vi.mock("../../api/portierApi.js", () => ({
   exportConfig: vi.fn(),
   importConfig: vi.fn(),
-  fetchRuntimeInfo: vi.fn().mockRejectedValue(new Error("unavailable"))
+  fetchRuntimeInfo: vi.fn().mockRejectedValue(new Error("unavailable")),
+  fetchForwardRules: vi.fn().mockResolvedValue([]),
+  fetchForwardStatus: vi.fn().mockResolvedValue([]),
+  fetchActivity: vi.fn().mockResolvedValue([])
 }));
 
 const testRuntimeInfo: RuntimeInfo = {
@@ -45,7 +49,7 @@ describe("SettingsView", () => {
   it("renders the Export Config section with a download button", () => {
     render(<SettingsView onRulesUpdated={vi.fn()} />);
     expect(screen.getByText("Export Config")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Download/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download Config/ })).toBeInTheDocument();
   });
 
   it("export button mentions Activity Log is not included", () => {
@@ -223,7 +227,7 @@ describe("SettingsView export", () => {
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
 
     render(<SettingsView onRulesUpdated={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Download Config/ }));
 
     await waitFor(() => {
       expect(screen.getByText("Config exported successfully.")).toBeInTheDocument();
@@ -234,7 +238,7 @@ describe("SettingsView export", () => {
     vi.mocked(portierApi.exportConfig).mockRejectedValue(new Error("network error"));
 
     render(<SettingsView onRulesUpdated={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Download Config/ }));
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toHaveTextContent("network error");
@@ -389,5 +393,190 @@ describe("SettingsView import flow", () => {
     render(<SettingsView onRulesUpdated={vi.fn()} />);
     expect(screen.queryByRole("button", { name: /Import Rules/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Replace All Rules/ })).not.toBeInTheDocument();
+  });
+});
+
+const testRuleForDiag: ForwardRuleResponse = {
+  id: "r1",
+  name: "My Rule",
+  protocol: "tcp",
+  listenHost: "127.0.0.1",
+  listenPort: 48001,
+  targetHost: "127.0.0.1",
+  targetPort: 3000,
+  enabled: true,
+  advisories: []
+};
+
+const testStatusForDiag: ForwardStatus = {
+  ruleId: "r1",
+  running: true,
+  bytesIn: 0,
+  bytesOut: 0
+};
+
+describe("SettingsView diagnostics export", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([testRuleForDiag]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([testStatusForDiag]);
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  });
+
+  it("renders Diagnostics Export section with button", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText("Diagnostics Export")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Download Diagnostics/ })).toBeInTheDocument();
+  });
+
+  it("helper text mentions what is included and excluded", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText(/runtime info, rules, statuses, recent activity/)).toBeInTheDocument();
+    expect(screen.getByText(/Does not include logs, environment variables/)).toBeInTheDocument();
+  });
+
+  it("button is disabled while export is in progress", async () => {
+    let resolveBundle!: () => void;
+    vi.mocked(portierApi.fetchForwardRules).mockReturnValue(
+      new Promise<ForwardRuleResponse[]>((resolve) => {
+        resolveBundle = () => resolve([]);
+      })
+    );
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const btn = screen.getByRole("button", { name: /Download Diagnostics/ });
+    await userEvent.click(btn);
+
+    expect(screen.getByRole("button", { name: /Generating/ })).toBeDisabled();
+    resolveBundle();
+  });
+
+  it("clicking export fetches rules, statuses, and activity", async () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Download Diagnostics/ })).not.toBeDisabled();
+    });
+
+    expect(portierApi.fetchForwardRules).toHaveBeenCalled();
+    expect(portierApi.fetchForwardStatus).toHaveBeenCalled();
+    expect(portierApi.fetchActivity).toHaveBeenCalledWith({ limit: 100 });
+  });
+
+  it("shows success message after successful export", async () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent("Diagnostics exported successfully.");
+    });
+  });
+
+  it("shows partial warning when some sources fail", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockRejectedValue(new Error("network error"));
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("status")).toHaveTextContent(/partial data/);
+    });
+  });
+
+  it("triggers download even with partial data", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockRejectedValue(new Error("network error"));
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+
+    await waitFor(() => {
+      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+    });
+  });
+
+  it("includes diagnostics from diagnosisMap prop when available", async () => {
+    const diagResult = {
+      ruleId: "r1",
+      ruleName: "My Rule",
+      protocol: "tcp" as const,
+      summary: { status: "pass" as const, message: "OK" },
+      checks: [],
+      diagnosedAt: "2026-01-01T00:00:00.000Z"
+    };
+    const diagnosisMap = new Map<string, DiagnosisEntry>([
+      ["r1", { state: "done", result: diagResult }]
+    ]);
+
+    let capturedData: unknown;
+    vi.mocked(URL.createObjectURL).mockImplementation((blob) => {
+      const reader = new FileReader();
+      reader.readAsText(blob as Blob);
+      reader.onload = () => { capturedData = JSON.parse(reader.result as string); };
+      return "blob:test";
+    });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} diagnosisMap={diagnosisMap} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+
+    await waitFor(() => {
+      expect(capturedData).toBeDefined();
+    });
+
+    const bundle = capturedData as Record<string, unknown>;
+    const diagnostics = bundle["diagnostics"] as Record<string, unknown>;
+    expect(diagnostics["r1"]).toBeDefined();
+  });
+
+  it("exports with empty diagnostics and includes a note in the bundle", async () => {
+    let capturedJson = "";
+    vi.mocked(URL.createObjectURL).mockImplementation((blob) => {
+      const reader = new FileReader();
+      reader.readAsText(blob as Blob);
+      reader.onload = () => { capturedJson = reader.result as string; };
+      return "blob:test";
+    });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+
+    await waitFor(() => {
+      expect(capturedJson).not.toBe("");
+    });
+
+    const bundle = JSON.parse(capturedJson) as Record<string, unknown>;
+    expect(bundle["schemaVersion"]).toBe("1");
+    expect(bundle["diagnostics"]).toEqual({});
+    expect(bundle["diagnosticsNote"]).toContain("No rule diagnostics");
+  });
+
+  it("exported bundle contains required top-level keys", async () => {
+    let capturedJson = "";
+    vi.mocked(URL.createObjectURL).mockImplementation((blob) => {
+      const reader = new FileReader();
+      reader.readAsText(blob as Blob);
+      reader.onload = () => { capturedJson = reader.result as string; };
+      return "blob:test";
+    });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+
+    await waitFor(() => {
+      expect(capturedJson).not.toBe("");
+    });
+
+    const bundle = JSON.parse(capturedJson) as Record<string, unknown>;
+    expect(bundle).toHaveProperty("schemaVersion");
+    expect(bundle).toHaveProperty("exportedAt");
+    expect(bundle).toHaveProperty("app");
+    expect(bundle).toHaveProperty("rules");
+    expect(bundle).toHaveProperty("statuses");
+    expect(bundle).toHaveProperty("activity");
+    expect(bundle).toHaveProperty("metadata");
   });
 });

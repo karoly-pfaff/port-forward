@@ -1920,6 +1920,15 @@ select[aria-invalid="true"] {
   font-size: 0.82rem;
 }
 
+.settings-warn {
+  padding: 8px 12px;
+  border: 1px solid var(--amber-border);
+  border-radius: var(--radius-sm);
+  background: var(--amber-bg);
+  color: var(--amber);
+  font-size: 0.82rem;
+}
+
 .settings-confirm-replace {
   display: flex;
   flex-direction: column;

@@ -7,6 +7,8 @@ import {
   PORTIER_RECOMMENDED_FORWARD_PORT_MIN
 } from "@portier/shared";
 import { exportConfig, importConfig, fetchRuntimeInfo } from "../../api/portierApi.js";
+import type { DiagnosisEntry } from "../forwards/ForwardRuleList.js";
+import { buildDiagnosticsBundle, buildDiagnosticsFilename, downloadJson } from "./diagnosticsExport.js";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -26,6 +28,7 @@ function makeExportFilename(): string {
 
 interface SettingsViewProps {
   onRulesUpdated: (rules: ForwardRuleResponse[]) => void;
+  diagnosisMap?: ReadonlyMap<string, DiagnosisEntry>;
 }
 
 interface ParsedImport {
@@ -36,7 +39,7 @@ interface ParsedImport {
   enabledCount: number;
 }
 
-export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElement {
+export function SettingsView({ onRulesUpdated, diagnosisMap }: SettingsViewProps): ReactElement {
   const [exporting, setExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -53,6 +56,10 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
   const [runtimeUnavailable, setRuntimeUnavailable] = useState(false);
+  const [diagExporting, setDiagExporting] = useState(false);
+  const [diagExportSuccess, setDiagExportSuccess] = useState(false);
+  const [diagExportPartial, setDiagExportPartial] = useState(false);
+  const [diagExportError, setDiagExportError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRuntimeInfo()
@@ -82,6 +89,27 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
     if (copiedKey === key) return "Copied!";
     if (copiedKey === `${key}:fail`) return "Failed";
     return "Copy";
+  }
+
+  async function handleDiagnosticsExport(): Promise<void> {
+    setDiagExporting(true);
+    setDiagExportSuccess(false);
+    setDiagExportPartial(false);
+    setDiagExportError(null);
+    try {
+      const bundle = await buildDiagnosticsBundle(diagnosisMap ?? new Map());
+      downloadJson(buildDiagnosticsFilename(), bundle);
+      if (bundle.errors && bundle.errors.length > 0) {
+        setDiagExportPartial(true);
+      } else {
+        setDiagExportSuccess(true);
+        setTimeout(() => setDiagExportSuccess(false), 3000);
+      }
+    } catch (error) {
+      setDiagExportError(error instanceof Error ? error.message : "Export failed.");
+    } finally {
+      setDiagExporting(false);
+    }
   }
 
   async function handleExport(): Promise<void> {
@@ -218,7 +246,7 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
               </p>
               <div>
                 <button type="button" onClick={handleExport} disabled={exporting}>
-                  {exporting ? "Exporting…" : "Download Config (JSON)"}
+                  {exporting ? "Exporting…" : "Download Config"}
                 </button>
               </div>
               {exportSuccess && (
@@ -422,6 +450,32 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
                   </div>
                 </>
               ) : null}
+            </div>
+
+            {/* Diagnostics Export */}
+            <div className="settings-section">
+              <div className="settings-section-title">Diagnostics Export</div>
+              <p className="settings-desc">
+                Downloads a local JSON bundle with runtime info, rules, statuses, recent activity,
+                and any diagnostics run in this session. Does not include logs, environment variables,
+                or raw local files. Nothing is uploaded.
+              </p>
+              <div>
+                <button type="button" onClick={() => void handleDiagnosticsExport()} disabled={diagExporting}>
+                  {diagExporting ? "Generating…" : "Download Diagnostics"}
+                </button>
+              </div>
+              {diagExportSuccess && (
+                <div className="settings-success" role="status">Diagnostics exported successfully.</div>
+              )}
+              {diagExportPartial && (
+                <div className="settings-warn" role="status">
+                  Exported with partial data — some sources could not be reached. See the errors field in the downloaded file.
+                </div>
+              )}
+              {diagExportError && (
+                <div className="settings-error" role="alert">{diagExportError}</div>
+              )}
             </div>
 
             {/* About */}
