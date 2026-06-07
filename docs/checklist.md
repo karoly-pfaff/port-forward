@@ -62,6 +62,7 @@ Shared and TypeScript coverage:
 - [ ] Client App integration flows
 - [ ] Settings import/FileReader flow
 - [ ] Dashboard, Activity, Settings, API Docs, Forward Rules, and drawer flows
+- [ ] Rule diagnostics UI: Diagnose button, loading state, pass/warn/fail/skip panel, error display, duplicate prevention, clear on close/delete
 - [ ] **API documentation rule:** when an API endpoint is added, removed, or changed — both `docs/api-contract.md` and the client in-app API Docs view (`client/sources/features/apidocs/ApiDocsView.tsx`) must be updated, along with `ApiDocsView.test.tsx`.
 
 Playwright E2E coverage:

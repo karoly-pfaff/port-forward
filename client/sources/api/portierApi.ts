@@ -10,6 +10,7 @@ import type {
   ImportMode,
   ImportResult,
   PortAdvisory,
+  RuleDiagnosticsResult,
   RuntimeInfo
 } from "@portier/shared";
 
@@ -94,6 +95,12 @@ export async function fetchActivity(params: FetchActivityParams = {}): Promise<A
   await ensureOk(response);
   const body = (await response.json()) as { events: ActivityEvent[] };
   return body.events;
+}
+
+export async function diagnoseForwardRule(ruleId: string): Promise<RuleDiagnosticsResult> {
+  const response = await fetch(`/api/forwards/${ruleId}/diagnose`, { method: "POST" });
+  await ensureOk(response);
+  return (await response.json()) as RuleDiagnosticsResult;
 }
 
 export async function fetchRuntimeInfo(): Promise<RuntimeInfo> {

@@ -1,9 +1,15 @@
-import { useState, useRef, type ReactElement } from "react";
-import { Pencil } from "lucide-react";
-import type { ForwardRule, ForwardRuleResponse, ForwardStatus } from "@portier/shared";
+import { useState, useRef, Fragment, type ReactElement } from "react";
+import { Pencil, Stethoscope } from "lucide-react";
+import type { ForwardRule, ForwardRuleResponse, ForwardStatus, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
+import { RuleDiagnosticsPanel } from "./RuleDiagnosticsPanel.js";
 import { formatBytes, formatUdpModeLabel } from "../../utils/format.js";
+
+export type DiagnosisEntry =
+  | { state: "pending" }
+  | { state: "done"; result: RuleDiagnosticsResult }
+  | { state: "error"; message: string };
 
 interface ForwardRuleListProps {
   rules: ForwardRuleResponse[];
@@ -11,10 +17,13 @@ interface ForwardRuleListProps {
   busyRuleIds: Set<string>;
   loading: boolean;
   editingRuleId: string | null;
+  diagnosisMap: Map<string, DiagnosisEntry>;
   onEdit: (rule: ForwardRule) => void;
   onStart: (rule: ForwardRule) => void;
   onStop: (rule: ForwardRule) => void;
   onDelete: (rule: ForwardRule) => void;
+  onDiagnose: (ruleId: string) => void;
+  onClearDiagnosis: (ruleId: string) => void;
   onReorder?: (ids: string[]) => void;
   onGoToActivity?: (ruleId: string) => void;
   onAddRule: () => void;
@@ -31,10 +40,13 @@ export function ForwardRuleList({
   busyRuleIds,
   loading,
   editingRuleId,
+  diagnosisMap,
   onEdit,
   onStart,
   onStop,
   onDelete,
+  onDiagnose,
+  onClearDiagnosis,
   onReorder,
   onGoToActivity,
   onAddRule,
@@ -77,6 +89,7 @@ export function ForwardRuleList({
 
   function handleConfirmDelete(rule: ForwardRule): void {
     setConfirmingDeleteId(null);
+    onClearDiagnosis(rule.id);
     onDelete(rule);
   }
 
@@ -150,148 +163,173 @@ export function ForwardRuleList({
                 const isBusy = busyRuleIds.has(rule.id);
                 const isConfirming = confirmingDeleteId === rule.id;
                 const isSelected = editingRuleId === rule.id;
+                const diagEntry = diagnosisMap.get(rule.id);
+                const isDiagPending = diagEntry?.state === "pending";
 
                 return (
-                  <tr
-                    key={rule.id}
-                    draggable={canReorder}
-                    onDragStart={() => { dragIdRef.current = rule.id; }}
-                    onDragOver={(e) => { e.preventDefault(); setDragOverId(rule.id); }}
-                    onDrop={() => {
-                      const fromId = dragIdRef.current;
-                      if (!fromId || fromId === rule.id) return;
-                      const fromIdx = filteredRules.findIndex((r) => r.id === fromId);
-                      const toIdx = filteredRules.findIndex((r) => r.id === rule.id);
-                      const reordered = [...filteredRules];
-                      const [moved] = reordered.splice(fromIdx, 1);
-                      reordered.splice(toIdx, 0, moved);
-                      onReorder?.(reordered.map((r) => r.id));
-                      dragIdRef.current = null;
-                      setDragOverId(null);
-                    }}
-                    onDragEnd={() => { dragIdRef.current = null; setDragOverId(null); }}
-                    className={
-                      dragIdRef.current === rule.id
-                        ? "row-dragging"
-                        : dragOverId === rule.id
-                        ? "row-dragover"
-                        : isSelected
-                        ? "row-selected"
-                        : status?.lastError
-                        ? "row-error"
-                        : undefined
-                    }
-                  >
-                    <td className="col-drag-handle">
-                      {canReorder && <span className="drag-handle" aria-hidden="true">⠿</span>}
-                    </td>
-                    <td>
-                      {rule.name}
-                      <AdvisoryList advisories={rule.advisories.filter((a) => a.code !== "LAN_EXPOSURE")} compact />
-                    </td>
-                    <td>
-                      <span className={`protocol-badge protocol-badge--${rule.protocol}`}>
-                        {rule.protocol.toUpperCase()}
-                      </span>
-                      {rule.protocol === "udp" && (
-                        <span className="udp-mode-label">{formatUdpModeLabel(rule.udpMode)}</span>
-                      )}
-                    </td>
-                    <td className="endpoint-cell">
-                      <span className="endpoint-host">{rule.listenHost}</span>
-                      <span className="endpoint-port">:{rule.listenPort}</span>
-                    </td>
-                    <td className="endpoint-cell">
-                      <span className="endpoint-host">{rule.targetHost}</span>
-                      <span className="endpoint-port">:{rule.targetPort}</span>
-                    </td>
-                    <td>
-                      <span className={`autostart-cell autostart-cell--${rule.enabled ? "yes" : "no"}`}>
-                        {rule.enabled ? "Yes" : "No"}
-                      </span>
-                    </td>
-                    <td>
-                      <ForwardStatusBadge
-                        status={status}
-                        onErrorClick={onGoToActivity ? () => onGoToActivity(rule.id) : undefined}
-                      />
-                    </td>
-                    <td className="traffic-cell">
-                      {rule.protocol === "tcp" && (
-                        <span className="traffic-active">
-                          {status?.activeConnections ?? 0} active
+                  <Fragment key={rule.id}>
+                    <tr
+                      draggable={canReorder}
+                      onDragStart={() => { dragIdRef.current = rule.id; }}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverId(rule.id); }}
+                      onDrop={() => {
+                        const fromId = dragIdRef.current;
+                        if (!fromId || fromId === rule.id) return;
+                        const fromIdx = filteredRules.findIndex((r) => r.id === fromId);
+                        const toIdx = filteredRules.findIndex((r) => r.id === rule.id);
+                        const reordered = [...filteredRules];
+                        const [moved] = reordered.splice(fromIdx, 1);
+                        reordered.splice(toIdx, 0, moved);
+                        onReorder?.(reordered.map((r) => r.id));
+                        dragIdRef.current = null;
+                        setDragOverId(null);
+                      }}
+                      onDragEnd={() => { dragIdRef.current = null; setDragOverId(null); }}
+                      className={
+                        dragIdRef.current === rule.id
+                          ? "row-dragging"
+                          : dragOverId === rule.id
+                          ? "row-dragover"
+                          : isSelected
+                          ? "row-selected"
+                          : status?.lastError
+                          ? "row-error"
+                          : undefined
+                      }
+                    >
+                      <td className="col-drag-handle">
+                        {canReorder && <span className="drag-handle" aria-hidden="true">⠿</span>}
+                      </td>
+                      <td>
+                        {rule.name}
+                        <AdvisoryList advisories={rule.advisories.filter((a) => a.code !== "LAN_EXPOSURE")} compact />
+                      </td>
+                      <td>
+                        <span className={`protocol-badge protocol-badge--${rule.protocol}`}>
+                          {rule.protocol.toUpperCase()}
                         </span>
-                      )}
-                      {rule.protocol === "udp" && rule.udpMode === "bidirectional-multi-client" && (
-                        <span className="traffic-active">
-                          {status?.activeUdpSessions ?? 0} sessions
+                        {rule.protocol === "udp" && (
+                          <span className="udp-mode-label">{formatUdpModeLabel(rule.udpMode)}</span>
+                        )}
+                      </td>
+                      <td className="endpoint-cell">
+                        <span className="endpoint-host">{rule.listenHost}</span>
+                        <span className="endpoint-port">:{rule.listenPort}</span>
+                      </td>
+                      <td className="endpoint-cell">
+                        <span className="endpoint-host">{rule.targetHost}</span>
+                        <span className="endpoint-port">:{rule.targetPort}</span>
+                      </td>
+                      <td>
+                        <span className={`autostart-cell autostart-cell--${rule.enabled ? "yes" : "no"}`}>
+                          {rule.enabled ? "Yes" : "No"}
                         </span>
-                      )}
-                      <span className="traffic-bytes">
-                        {formatBytes(status?.bytesIn ?? 0)} / {formatBytes(status?.bytesOut ?? 0)}
-                      </span>
-                    </td>
-                    <td>
-                      {isConfirming ? (
-                        <div className="confirm-delete">
-                          <span className="confirm-label">
-                            Delete &ldquo;{rule.name}&rdquo;?
+                      </td>
+                      <td>
+                        <ForwardStatusBadge
+                          status={status}
+                          onErrorClick={onGoToActivity ? () => onGoToActivity(rule.id) : undefined}
+                        />
+                      </td>
+                      <td className="traffic-cell">
+                        {rule.protocol === "tcp" && (
+                          <span className="traffic-active">
+                            {status?.activeConnections ?? 0} active
                           </span>
-                          <button
-                            type="button"
-                            className="danger"
-                            onClick={() => handleConfirmDelete(rule)}
-                            disabled={isBusy}
-                          >
-                            Confirm
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmingDeleteId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="actions">
-                          <button
-                            type="button"
-                            className={`btn-icon${!isBusy && !status?.running ? " btn-icon--start" : ""}${!isBusy && status?.running ? " btn-icon--stop" : ""}`}
-                            aria-label={isBusy ? undefined : status?.running ? "Stop" : "Start"}
-                            title={isBusy ? undefined : status?.running ? "Stop" : "Start"}
-                            onClick={() =>
-                              status?.running ? onStop(rule) : onStart(rule)
-                            }
-                            disabled={isBusy}
-                          >
-                            {isBusy ? "…" : status?.running ? "⏹" : "▶"}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-icon"
-                            aria-label="Edit"
-                            title="Edit"
-                            onClick={() => onEdit(rule)}
-                            disabled={isBusy}
-                          >
-                            <Pencil size={14} aria-hidden="true" />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                    <td className="delete-cell">
-                      <button
-                        type="button"
-                        className="delete-cell-btn"
-                        aria-label="Delete"
-                        title="Delete"
-                        onClick={() => setConfirmingDeleteId(rule.id)}
-                        disabled={isBusy || isConfirming}
-                      >
-                        🗑
-                      </button>
-                    </td>
-                  </tr>
+                        )}
+                        {rule.protocol === "udp" && rule.udpMode === "bidirectional-multi-client" && (
+                          <span className="traffic-active">
+                            {status?.activeUdpSessions ?? 0} sessions
+                          </span>
+                        )}
+                        <span className="traffic-bytes">
+                          {formatBytes(status?.bytesIn ?? 0)} / {formatBytes(status?.bytesOut ?? 0)}
+                        </span>
+                      </td>
+                      <td>
+                        {isConfirming ? (
+                          <div className="confirm-delete">
+                            <span className="confirm-label">
+                              Delete &ldquo;{rule.name}&rdquo;?
+                            </span>
+                            <button
+                              type="button"
+                              className="danger"
+                              onClick={() => handleConfirmDelete(rule)}
+                              disabled={isBusy}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmingDeleteId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="actions">
+                            <button
+                              type="button"
+                              className={`btn-icon${!isBusy && !status?.running ? " btn-icon--start" : ""}${!isBusy && status?.running ? " btn-icon--stop" : ""}`}
+                              aria-label={isBusy ? undefined : status?.running ? "Stop" : "Start"}
+                              title={isBusy ? undefined : status?.running ? "Stop" : "Start"}
+                              onClick={() =>
+                                status?.running ? onStop(rule) : onStart(rule)
+                              }
+                              disabled={isBusy}
+                            >
+                              {isBusy ? "…" : status?.running ? "⏹" : "▶"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              aria-label="Edit"
+                              title="Edit"
+                              onClick={() => onEdit(rule)}
+                              disabled={isBusy}
+                            >
+                              <Pencil size={14} aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-icon"
+                              aria-label="Diagnose"
+                              title="Diagnose"
+                              onClick={() => onDiagnose(rule.id)}
+                              disabled={isBusy || isDiagPending}
+                            >
+                              {isDiagPending ? "…" : <Stethoscope size={14} aria-hidden="true" />}
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                      <td className="delete-cell">
+                        <button
+                          type="button"
+                          className="delete-cell-btn"
+                          aria-label="Delete"
+                          title="Delete"
+                          onClick={() => setConfirmingDeleteId(rule.id)}
+                          disabled={isBusy || isConfirming}
+                        >
+                          🗑
+                        </button>
+                      </td>
+                    </tr>
+                    {diagEntry && (
+                      <tr className="diag-row">
+                        <td colSpan={10} className="diag-row-cell">
+                          <RuleDiagnosticsPanel
+                            loading={diagEntry.state === "pending"}
+                            result={diagEntry.state === "done" ? diagEntry.result : undefined}
+                            error={diagEntry.state === "error" ? diagEntry.message : undefined}
+                            onClear={() => onClearDiagnosis(rule.id)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
               {filteredRules.length === 0 && !loading && (

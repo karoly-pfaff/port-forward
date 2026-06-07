@@ -8,6 +8,20 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (v1.2 Slice 3 — rule diagnostics UI)
+
+- **Diagnose** action button (stethoscope icon) added to every rule row in the Forward Rules table.
+- Clicking Diagnose calls `POST /api/forwards/:id/diagnose` and shows a collapsible diagnostics panel inline below the rule row — no navigation required.
+- Diagnostics panel states: loading spinner while in flight, pass/warn/fail summary with timestamp, per-check rows with pass/warn/fail/skip status, and error display for API failures.
+- Duplicate Diagnose clicks are prevented while a request is in flight for that rule; other rules remain clickable.
+- Re-running Diagnose replaces the previous result immediately (pending → result).
+- Closing the panel (✕ button) clears the result; deleting a rule also clears its diagnostic state.
+- `diagnoseForwardRule(ruleId)` API helper added to `client/sources/api/portierApi.ts`.
+- `DiagnosisEntry` union type exported from `ForwardRuleList.tsx` for App-level state management.
+- `RuleDiagnosticsPanel` component added at `client/sources/features/forwards/RuleDiagnosticsPanel.tsx`.
+- CSS for diagnostics panel added to `client/sources/styles/styles.css`.
+- 11 new `RuleDiagnosticsPanel` unit tests; 9 new `ForwardRuleList` diagnostics tests; 2 new `App` integration tests (133 total client tests).
+
 ### Added (v1.2 Slice 2 — rule diagnostics API)
 
 - `POST /api/forwards/:id/diagnose` endpoint on both the TypeScript server and Go service: runs diagnostic checks against an existing forward rule without changing rule state or opening long-lived sockets.

@@ -12,6 +12,7 @@ vi.mock("../api/portierApi.js", () => ({
   setForwardRuleRunning: vi.fn(),
   reorderForwardRules: vi.fn(),
   fetchActivity: vi.fn().mockResolvedValue([]),
+  diagnoseForwardRule: vi.fn(),
   exportConfig: vi.fn(),
   importConfig: vi.fn()
 }));
@@ -293,6 +294,53 @@ describe("App drawer", () => {
       expect.objectContaining({ name: "Updated Rule" })
     );
     await screen.findByText("Updated Rule");
+  });
+});
+
+describe("App diagnostics", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+  });
+
+  it("clicking Diagnose calls diagnoseForwardRule and shows result summary", async () => {
+    const diagResult = {
+      ruleId: "r1",
+      ruleName: "Test Rule",
+      protocol: "tcp" as const,
+      summary: { status: "pass" as const, message: "All checks passed." },
+      checks: [
+        { id: "listen-bind", label: "Listen Bind", status: "pass" as const, message: "Port 48001 can be bound." },
+      ],
+      diagnosedAt: new Date("2026-01-01T12:00:00Z").toISOString(),
+    };
+
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([sampleRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([stoppedStatus]);
+    vi.mocked(portierApi.diagnoseForwardRule).mockResolvedValue(diagResult);
+
+    render(<App />);
+    await screen.findByText("Test Rule");
+
+    await userEvent.click(screen.getByRole("button", { name: "Diagnose" }));
+
+    expect(portierApi.diagnoseForwardRule).toHaveBeenCalledWith("r1");
+    await screen.findByText("All checks passed.");
+    expect(screen.getByText("Listen Bind")).toBeInTheDocument();
+  });
+
+  it("shows error in the diagnostics panel when diagnoseForwardRule rejects", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([sampleRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([stoppedStatus]);
+    vi.mocked(portierApi.diagnoseForwardRule).mockRejectedValue(new Error("Service unavailable"));
+
+    render(<App />);
+    await screen.findByText("Test Rule");
+
+    await userEvent.click(screen.getByRole("button", { name: "Diagnose" }));
+
+    await screen.findByText("Service unavailable");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });
 

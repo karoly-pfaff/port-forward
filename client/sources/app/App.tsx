@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { ActivityEvent, ForwardRule, ForwardRuleInput, ForwardRuleResponse, ForwardStatus } from "@portier/shared";
 import {
   deleteForwardRule,
+  diagnoseForwardRule,
   fetchActivity,
   fetchForwardRules,
   fetchForwardStatus,
@@ -9,6 +10,7 @@ import {
   saveForwardRule,
   setForwardRuleRunning,
 } from "../api/portierApi.js";
+import type { DiagnosisEntry } from "../features/forwards/ForwardRuleList.js";
 import { ForwardRuleForm } from "../features/forwards/ForwardRuleForm.js";
 import { ForwardRuleList } from "../features/forwards/ForwardRuleList.js";
 import { ActivityLogView } from "../features/activity/ActivityLogView.js";
@@ -38,6 +40,7 @@ export function App(): ReactElement {
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activityRuleFilter, setActivityRuleFilter] = useState<string | null>(null);
+  const [diagnosisMap, setDiagnosisMap] = useState<Map<string, DiagnosisEntry>>(new Map());
 
   const refreshInFlightRef = useRef(false);
   const handleCancelRef = useRef<() => void>(() => {});
@@ -172,6 +175,7 @@ export function App(): ReactElement {
     setErrors([]);
     try {
       await deleteForwardRule(rule);
+      handleClearDiagnosis(rule.id);
       if (editingRuleId === rule.id) {
         setEditingRuleId(null);
         setShowForm(false);
@@ -208,6 +212,26 @@ export function App(): ReactElement {
     } catch (error) {
       setErrors([errorMessage(error)]);
     }
+  }
+
+  async function handleDiagnose(ruleId: string): Promise<void> {
+    setDiagnosisMap((prev) => new Map([...prev, [ruleId, { state: "pending" }]]));
+    try {
+      const result = await diagnoseForwardRule(ruleId);
+      setDiagnosisMap((prev) => new Map([...prev, [ruleId, { state: "done", result }]]));
+    } catch (error) {
+      setDiagnosisMap((prev) =>
+        new Map([...prev, [ruleId, { state: "error", message: errorMessage(error) }]])
+      );
+    }
+  }
+
+  function handleClearDiagnosis(ruleId: string): void {
+    setDiagnosisMap((prev) => {
+      const next = new Map(prev);
+      next.delete(ruleId);
+      return next;
+    });
   }
 
   function handleEditRule(rule: ForwardRule): void {
@@ -319,10 +343,13 @@ export function App(): ReactElement {
                 busyRuleIds={busyRuleIds}
                 loading={loadingRules}
                 editingRuleId={editingRuleId}
+                diagnosisMap={diagnosisMap}
                 onEdit={handleEditRule}
                 onStart={handleStart}
                 onStop={handleStop}
                 onDelete={handleDelete}
+                onDiagnose={handleDiagnose}
+                onClearDiagnosis={handleClearDiagnosis}
                 onReorder={handleReorder}
                 onGoToActivity={handleGoToActivity}
                 onAddRule={handleAddRule}

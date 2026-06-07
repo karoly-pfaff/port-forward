@@ -1328,6 +1328,160 @@ select[aria-invalid="true"] {
   color: var(--red);
 }
 
+/* ==============================================
+   Diagnostics Panel
+   ============================================== */
+
+.diag-row-cell {
+  padding: 0 !important;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.diag-panel {
+  padding: 10px 16px 12px;
+  font-size: 0.8rem;
+}
+
+.diag-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.diag-panel-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.diag-panel-close {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.diag-panel-loading {
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.diag-panel-error {
+  color: var(--red);
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+.diag-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diag-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.diag-summary--pass {
+  background: var(--green-bg);
+  border: 1px solid var(--green-border);
+  color: var(--green);
+}
+
+.diag-summary--warn {
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-border);
+  color: var(--amber);
+}
+
+.diag-summary--fail {
+  background: var(--red-bg);
+  border: 1px solid var(--red-border);
+  color: var(--red);
+}
+
+.diag-summary-icon {
+  flex-shrink: 0;
+}
+
+.diag-summary-message {
+  flex: 1;
+}
+
+.diag-summary-time {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.diag-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diag-check {
+  display: grid;
+  grid-template-columns: 18px 140px 1fr;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+}
+
+.diag-check--pass {
+  color: var(--text-primary);
+}
+
+.diag-check--pass .diag-check-icon {
+  color: var(--green);
+}
+
+.diag-check--warn {
+  background: var(--amber-bg);
+}
+
+.diag-check--warn .diag-check-icon {
+  color: var(--amber);
+}
+
+.diag-check--fail {
+  background: var(--red-bg);
+}
+
+.diag-check--fail .diag-check-icon {
+  color: var(--red);
+}
+
+.diag-check--skip {
+  color: var(--text-muted);
+}
+
+.diag-check-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.diag-check-message {
+  color: var(--text-secondary);
+}
+
+.diag-check--warn .diag-check-message,
+.diag-check--fail .diag-check-message {
+  color: var(--text-primary);
+}
+
 .advisory.compact {
   font-size: 0.7rem;
   font-weight: 500;
