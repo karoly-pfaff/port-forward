@@ -18,6 +18,7 @@ NODE_PATH="/usr/bin/node"
 NO_START=""
 NO_ENABLE=""
 SOURCE_DIR=""
+DRY_RUN=""
 
 # Auto-detect source from build/portier/ if present
 _AUTO_SOURCE="$REPO_ROOT/build/portier"
@@ -37,12 +38,35 @@ while [[ $# -gt 0 ]]; do
     --source-dir)   SOURCE_DIR="$2";   shift 2 ;;
     --no-start)     NO_START="1";      shift   ;;
     --no-enable)    NO_ENABLE="1";     shift   ;;
+    --dry-run)      DRY_RUN="1";       shift   ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
 
 [ -z "$STATIC_DIR" ] && STATIC_DIR="$INSTALL_DIR/web"
 CONFIG_DIR="$(dirname "$CONFIG_PATH")"
+
+if [ -n "$DRY_RUN" ]; then
+  if [ "$RUNTIME" = "node" ]; then
+    EXEC_START="$NODE_PATH $INSTALL_DIR/server.js"
+  else
+    EXEC_START="$INSTALL_DIR/service"
+  fi
+  FULL_EXEC_START="$EXEC_START --service --config $CONFIG_PATH --host $HOST --port $PORT --static-dir $STATIC_DIR"
+
+  echo "DryRun: Portier systemd service install plan"
+  echo ""
+  echo "  InstallDir : $INSTALL_DIR"
+  echo "  ConfigPath : $CONFIG_PATH"
+  echo "  StaticDir  : $STATIC_DIR"
+  echo "  ServiceUnit: $SERVICE_UNIT"
+  echo "  ServiceName: $SERVICE_NAME"
+  echo "  Host       : $HOST"
+  echo "  Port       : $PORT"
+  echo "  Runtime    : $RUNTIME"
+  echo "  ExecStart  : $FULL_EXEC_START"
+  exit 0
+fi
 
 echo "Portier systemd service install"
 echo ""

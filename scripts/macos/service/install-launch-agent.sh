@@ -19,6 +19,7 @@ NODE_MODE=""
 EXECUTABLE=""
 NO_START=""
 SOURCE_DIR=""
+DRY_RUN=""
 
 # Auto-detect source from repo build/portier/ if it exists alongside the script.
 _AUTO_SOURCE="$REPO_ROOT/build/portier"
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --port)         PORT="$2";         shift 2 ;;
     --static-dir)   STATIC_DIR="$2";   shift 2 ;;
     --no-start)     NO_START="1";      shift   ;;
+    --dry-run)      DRY_RUN="1";       shift   ;;
     --node-mode)    NODE_MODE="1";     shift   ;;
     --runtime)
       case "$2" in
@@ -52,6 +54,36 @@ done
 [ -z "$EXECUTABLE" ]  && EXECUTABLE="$INSTALL_DIR/service"
 
 CONFIG_DIR="$(dirname "$CONFIG_PATH")"
+
+if [ -n "$DRY_RUN" ]; then
+  RUNTIME_DESC="${NODE_MODE:+node (fallback)}${NODE_MODE:-native service}"
+  EXEC_ENTRY="${NODE_MODE:+<node-binary> $INSTALL_DIR/server.js}${NODE_MODE:-$EXECUTABLE}"
+
+  echo "DryRun: Portier LaunchAgent install plan"
+  echo ""
+  echo "  Label      : $LABEL"
+  echo "  PlistPath  : $PLIST_PATH"
+  echo "  InstallDir : $INSTALL_DIR"
+  echo "  ConfigPath : $CONFIG_PATH"
+  echo "  StaticDir  : $STATIC_DIR"
+  echo "  Host       : $HOST"
+  echo "  Port       : $PORT"
+  echo "  Runtime    : $RUNTIME_DESC"
+  echo "  Executable : $EXEC_ENTRY"
+  echo ""
+  echo "  ProgramArguments (plist):"
+  echo "    $EXEC_ENTRY"
+  echo "    --service"
+  echo "    --config"
+  echo "    $CONFIG_PATH"
+  echo "    --host"
+  echo "    $HOST"
+  echo "    --port"
+  echo "    $PORT"
+  echo "    --static-dir"
+  echo "    $STATIC_DIR"
+  exit 0
+fi
 
 echo "Portier LaunchAgent install"
 echo ""

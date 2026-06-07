@@ -10,7 +10,8 @@ param(
   [string]$DisplayName = "Portier Port Forwarding",
   [string]$Description = "TCP/UDP port forwarding service for local development.",
   [switch]$UseNode,
-  [string]$NodePath = "node"
+  [string]$NodePath = "node",
+  [switch]$DryRun
 )
 
 $ErrorActionPreference = "Stop"
@@ -62,11 +63,36 @@ function New-ServiceArguments {
   return "--service --config $(Format-Argument $Paths.ConfigPath) --host $HostAddress --port $Port --static-dir $(Format-Argument $Paths.StaticDir)"
 }
 
-if ($Scope -eq "Machine" -and -not (Test-IsAdministrator)) {
+if (-not $DryRun -and $Scope -eq "Machine" -and -not (Test-IsAdministrator)) {
   throw "Machine-scope install requires Administrator. Re-run as Administrator, or use -Scope User for a per-user install."
 }
 
 $paths = Get-InstallPaths -Scope $Scope -InstallDir $InstallDir -ConfigDir $ConfigDir -StaticDir $StaticDir
+
+if ($DryRun) {
+  $runtime = if ($UseNode) { "node (fallback): $NodePath" } else { "Go service: service.exe" }
+  $plannedBinary = if ($UseNode) { $NodePath } else { Join-Path $paths.InstallDir "service.exe" }
+  $plannedArgs   = New-ServiceArguments -Paths $paths -HostAddress $HostAddress -Port $Port
+  $plannedCmd    = if ($UseNode) {
+    "$(Format-Argument $plannedBinary) $(Format-Argument (Join-Path $paths.InstallDir 'server.js')) $plannedArgs"
+  } else {
+    "$(Format-Argument $plannedBinary) $plannedArgs"
+  }
+
+  Write-Host "DryRun: Portier Windows service install plan"
+  Write-Host ""
+  Write-Host "  Scope      : $Scope"
+  Write-Host "  ServiceName: $ServiceName"
+  Write-Host "  InstallDir : $($paths.InstallDir)"
+  Write-Host "  ConfigPath : $($paths.ConfigPath)"
+  Write-Host "  LogsDir    : $($paths.LogsDir)"
+  Write-Host "  StaticDir  : $($paths.StaticDir)"
+  Write-Host "  Host       : $HostAddress"
+  Write-Host "  Port       : $Port"
+  Write-Host "  Runtime    : $runtime"
+  Write-Host "  Command    : $plannedCmd"
+  exit 0
+}
 
 if ($UseNode) {
   $binary    = $NodePath

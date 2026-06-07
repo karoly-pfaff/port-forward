@@ -2,7 +2,7 @@
 
 ## Automated Release Validation
 
-Run these before tagging v1.1.0:
+Run these before tagging:
 
 - [ ] `npm run lint`
 - [ ] `npm run typecheck`
@@ -15,6 +15,14 @@ Run these before tagging v1.1.0:
 - [ ] `go build ./...` from `service/`
 - [ ] `npm run build:service`
 - [ ] `npm run validate:runtime:smoke` — builds `build/portier/`, validates layout, runs smoke test
+
+## Additional Validation Suites
+
+Run explicitly — not part of `npm run check`. Slower or platform-sensitive.
+
+- [ ] `npm run validate:contract` — API contract parity: runs all API scenarios against TypeScript server; if Go binary available, runs same scenarios against Go service and compares response shapes, status codes, field names, and error shapes. (`scripts/validate-contract.js`)
+- [ ] `npm run validate:binary` (or `validate:runtime:behavior`) — Runtime binary behavior: starts `build/portier/service[.exe]`, verifies health, static serving, missing-static-dir handling, invalid-config failure, and clean shutdown. Runs `build:runtime` first unless `--no-build` is passed. (`scripts/validate-binary.js`)
+- [ ] `npm run validate:scripts` — Installer script analysis: static analysis of all platform install and validation scripts (no firewall commands, test-specific names in validate scripts, production path defaults in install scripts, quoting correctness); plus dry-run execution on the current platform. (`scripts/validate-scripts.js`)
 
 ## Explicit OS Service Install Validation
 

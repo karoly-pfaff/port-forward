@@ -236,6 +236,48 @@ Normal development validation: `npm run check`
 Release package validation: `npm run validate:runtime:smoke`
 Release service validation: `npm run validate:service:current` (or per-platform variants)
 
+## Additional Validation Suites
+
+Run explicitly — not part of `npm run check`. Slower or platform-sensitive.
+
+```powershell
+npm run validate:contract          # API contract parity (TypeScript + Go if available)
+npm run validate:binary            # runtime binary behavior (build:runtime + 5 behavioral tests)
+npm run validate:runtime:behavior  # alias for validate:binary (fits validate:runtime:* namespace)
+npm run validate:scripts           # installer script static analysis + dry-run on current platform
+```
+
+**`validate:contract`** — Starts the TypeScript server (and the Go binary if present) and runs all API scenarios: CRUD forwards, start/stop, status, activity, config export/import, port advisory, error shapes, duplicate binding, unknown-ID 404s. Skips Go parity with a clear message if the binary is not built. Use `--skip-go` to force skip.
+
+**`validate:binary`** (also `validate:runtime:behavior`) — Runs `build:runtime` then tests `build/portier/service[.exe]` behavior:
+1. `/api/health` responds on a free port
+2. `/` serves HTML when `web/` static dir is present
+3. API works when static dir is missing; `/` returns non-200
+4. Invalid JSON config → process exits with non-zero code
+5. Process terminates within 5s after kill signal
+
+Pass `--no-build` to reuse an existing `build/portier/`.
+
+**`validate:scripts`** — Static analysis + dry-run:
+- All install scripts: no silent firewall commands
+- Validate scripts: test-specific names (not production), no hard-coded port 47831
+- `install-service.ps1`: `Format-Argument` quoting helper, `-DryRun` parameter
+- `install-launch-agent.sh`: plist uses absolute paths (not `~`), `--dry-run` flag
+- `install-service.sh`: default `INSTALL_DIR=/opt/portier`, default `CONFIG_PATH=/etc/portier/rules.json`, `--dry-run` flag
+- Dry-run execution on the current platform validates planned output contains required fields without performing any real install
+
+Naming convention:
+- `npm run test` = unit/integration test runner (Vitest + Go test)
+- `npm run test:e2e` = Playwright browser E2E tests
+- `npm run validate:contract` = TS/Go API parity validation runner
+- `npm run validate:binary` / `validate:runtime:behavior` = packaged binary behavior validation
+- `npm run validate:scripts` = installer script static analysis + dry-run validation
+
+**Installer dry-run flags** (added to production install scripts):
+- Windows: `install-service.ps1 -DryRun` — prints install plan (scope, paths, command line) and exits without creating dirs or registering services
+- macOS: `install-launch-agent.sh --dry-run` — prints install plan (label, plist path, paths, ProgramArguments) and exits without creating files or loading LaunchAgent
+- Linux: `install-service.sh --dry-run` — prints install plan (paths, service unit, ExecStart) and exits without creating files or running systemctl
+
 ## Release Artifact Commands
 
 Build the current platform's portable archive (and installer if tooling is available):
