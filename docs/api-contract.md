@@ -207,7 +207,7 @@ Response:
 ```json
 {
   "name": "Portier",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "runtime": "node" | "go",
   "platform": "windows" | "macos" | "linux" | "unknown",
   "arch": "x64" | "arm64" | "unknown",

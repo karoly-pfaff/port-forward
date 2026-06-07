@@ -254,7 +254,7 @@ Both runtimes are feature-complete. Package build correctness, OS service instal
 
 v1.1 is complete: distribution, installers, release artifacts, service and package validation, platform polish. Tagged 1.1.0. See `docs/installer-strategy.md` for scope and slice history.
 
-v1.2 targets diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export. See `docs/roadmap.md` for goals, slices, and non-goals.
+v1.2 is complete: runtime info endpoint, rule diagnostics API and UI, Activity Log polish, safer networking UX, settings/config polish, and diagnostics export. Tagged 1.2.0. See `docs/roadmap.md` for goals, slices, and non-goals.
 
 Release artifact commands:
 - `npm run build:release:current` — portable archive + installer for current platform

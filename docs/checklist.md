@@ -163,8 +163,8 @@ Checklist items to add per slice as work proceeds:
 - [x] **Slice 4** — Activity Log polish: View Activity button per rule row, filter banner, type filter, clear filters, `DELETE /api/activity` on both runtimes, Export JSON, Clear Log, packet throttle note; `docs/api-contract.md` updated; client in-app API Docs updated; contract validator updated; tests added.
 - [x] **Slice 5** — Settings / runtime / config polish: copy buttons (config path, static dir, management URL), datetime export filename, export note excludes Activity Log, export success/error feedback, import mode with descriptions above file picker, replace confirm backup export button, `PORTIER_APP_VERSION` constant, version in sidebar footer; 24 new tests.
 - [x] **Slice 6** — Safer networking UX: listen host presets (Local only / LAN exposed), inline LAN warning in form, platform-aware firewall note, friendly conflict error copy, improved LAN_EXPOSURE advisory message; 17 new/updated ForwardRuleForm tests.
-- [ ] **Slice 7** — Diagnostics export
-- [ ] **Slice 8** — v1.2 readiness audit, version bump, changelog, tag
+- [x] **Slice 7** — Diagnostics export: Download Diagnostics JSON button in Settings; client-side bundle (runtime, rules, statuses, activity, UI-session diagnostics); partial-failure errors array; no backend endpoint; 216 client tests passing.
+- [x] **Slice 8** — v1.2 readiness audit, version bump, changelog, tag: all validation passed; version bumped to 1.2.0; changelog finalized; tag ready.
 
 ---
 

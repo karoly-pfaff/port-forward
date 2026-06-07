@@ -303,9 +303,9 @@ client/build/
 Open `http://127.0.0.1:47831` in a browser to use the management interface. It has five views:
 
 - **Dashboard** — stat cards (total/running/stopped/error, TCP/UDP counts), top rules by traffic, recent activity, quick actions.
-- **Forward Rules** — rules table with search, status filter, auto-refresh, Move Up/Down ordering, and an Add/Edit/Delete drawer.
-- **Activity** — in-memory activity log with severity filter, limit selector, and auto-refresh. Resets on server restart.
-- **Settings** — management endpoint info, recommended port range, config export (download JSON) and import (merge or replace, with validation preview).
+- **Forward Rules** — rules table with search, status filter, auto-refresh, Move Up/Down ordering, Add/Edit/Delete drawer, Diagnose action (per-rule diagnostic checks), and View Activity shortcut (per rule).
+- **Activity** — in-memory activity log with severity, type, and rule filters, export as JSON, clear log, and auto-refresh. Resets on server restart.
+- **Settings** — runtime/environment info with copy buttons, config export (datetime-stamped JSON), config import (merge or replace, with backup prompt on replace), and Download Diagnostics JSON (local bundle, no upload).
 - **API Docs** — client-side reference page listing all REST endpoints.
 
 The sidebar is accessible on mobile via a hamburger button in the header. The management UI only binds to `127.0.0.1` by default and is not reachable from the LAN.
@@ -544,11 +544,11 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 
 ## Release
 
-Current version: **1.1.0**
+Current version: **1.2.0**
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — planned releases; v1.2 targets diagnostics and operational polish.
+- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; future work tracked there.
 
 ## Agent Workflow
 
@@ -578,9 +578,12 @@ Events include:
 - `DELETE /api/forwards/:id`
 - `POST /api/forwards/:id/start`
 - `POST /api/forwards/:id/stop`
+- `POST /api/forwards/:id/diagnose` — diagnostic checks without mutating state (v1.2)
 - `GET /api/ports/advisory?port=48001&listenHost=0.0.0.0&purpose=forward`
 - `GET /api/status`
+- `GET /api/runtime` — runtime environment info (v1.2)
 - `GET /api/activity?limit=100&severity=error` (optional: ruleId, type, severity)
+- `DELETE /api/activity` — clear the activity log (v1.2)
 - `GET /api/config/export`
 - `POST /api/config/import` — body: `{ mode, config }`
 - `POST /api/forwards/reorder` — body: `{ ids: string[] }`

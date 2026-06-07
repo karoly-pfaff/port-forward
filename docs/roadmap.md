@@ -126,7 +126,7 @@ Possible API direction:
 5. ~~**Settings / runtime / config polish**~~ — ✓ Complete. Copy buttons for config path, static dir, management URL; datetime export filename; export note excludes Activity Log; export success/error feedback; import mode with descriptions above file picker; replace confirm backup export button; `PORTIER_APP_VERSION` constant; version in sidebar footer. 24 new tests.
 6. ~~**Safer networking UX pass**~~ — ✓ Complete. Listen host presets (Local only / LAN exposed), inline LAN warning in form, platform-aware firewall note, friendly conflict error copy, improved LAN_EXPOSURE advisory message. `ForwardRuleForm` accepts optional `runtimePlatform` prop. 17 new/updated tests.
 7. ~~**Diagnostics export**~~ — ✓ Complete. Client-side bundle: runtime, rules, statuses, activity, UI-session diagnostics. Download Diagnostics JSON button in Settings. Partial-failure handling with `errors` array. No backend endpoint. 216 tests passing.
-8. **v1.2 readiness audit, version bump, changelog, tag**
+8. ~~**v1.2 readiness audit, version bump, changelog, tag**~~ — ✓ Complete. All slices shipped; version bumped to 1.2.0; changelog finalized; tag ready.
 
 ---
 

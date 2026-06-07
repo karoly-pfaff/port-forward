@@ -196,8 +196,8 @@ Do not add `build:release:*` to `npm run check` — it is a release step.
 Build the portable zip and Inno Setup installer for Windows 10+ (Inno Setup 6 required for the installer):
 
 ```powershell
-npm run release:current     # portable zip + installer (installer non-fatal if Inno Setup absent)
-npm run release:portable    # portable zip only
+npm run build:release:current     # portable zip + installer (installer non-fatal if Inno Setup absent)
+npm run build:release:portable    # portable zip only
 ```
 
 Output:
@@ -205,7 +205,7 @@ Output:
 - `build/releases/windows/Portier-Setup-<version>.exe` (when Inno Setup available)
 
 Build script: `scripts/windows/release/build-release.ps1`
-- `-Version 1.1.0` — override version string (default: reads from `package.json`)
+- `-Version 1.2.0` — override version string (default: reads from `package.json`)
 - `-NoPackage` — skip `build:runtime` step
 - `-InnoPath "C:\..."` — path to `ISCC.exe` if not on PATH
 

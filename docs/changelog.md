@@ -4,9 +4,11 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — v1.2 planned
+## [1.2.0] - 2026-06-07
 
-See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
+### Goal
+
+Portier v1.2 improves operational confidence with diagnostics, visibility, and safer networking UX. See `docs/roadmap.md` for goals, slices, and non-goals.
 
 ### Added (v1.2 Slice 7 — Diagnostics export / support bundle)
 
