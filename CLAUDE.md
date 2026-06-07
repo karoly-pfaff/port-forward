@@ -274,6 +274,7 @@ Do not add release artifact commands to `npm run check`. They are explicit relea
 - Port advisory rules live in `shared/sources`.
 - Tests cover validation and lifecycle behavior where practical.
 - `README.md`, `docs/architecture.md`, and `docs/checklist.md` are updated for user-visible behavior changes.
+- When an API endpoint is added, removed, or changed: update both `docs/api-contract.md` (durable external contract) AND the client in-app API Docs view (`client/sources/features/apidocs/ApiDocsView.tsx`) (user-facing in-app reference). Update `ApiDocsView.test.tsx` for new endpoints. Do not mark an API slice complete until both documentation surfaces and their tests are updated.
 
 ## Claude Response Style
 

@@ -56,4 +56,48 @@ describe("ApiDocsView", () => {
     render(<ApiDocsView />);
     expect(screen.getByText(/Does not restart running rules/)).toBeInTheDocument();
   });
+
+  it("lists the POST /api/forwards/:id/diagnose endpoint", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("/api/forwards/:id/diagnose")).toBeInTheDocument();
+  });
+
+  it("describes that diagnostics do not mutate rule state", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText(/without changing its state/i)).toBeInTheDocument();
+  });
+
+  it("shows diagnostic status values including pass, warn, fail, and skip", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/pass.*warn.*fail.*skip/i);
+  });
+
+  it("includes TCP and UDP diagnostic behavior notes", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/TCP:.*target-connect/i);
+    expect(container.textContent).toMatch(/UDP:.*target-connect.*skip/i);
+  });
+
+  it("lists the GET /api/runtime endpoint", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("/api/runtime")).toBeInTheDocument();
+  });
+
+  it("documents all expected public API endpoints", () => {
+    render(<ApiDocsView />);
+    const expectedPaths = [
+      "/api/forwards",
+      "/api/forwards/:id/diagnose",
+      "/api/forwards/reorder",
+      "/api/status",
+      "/api/runtime",
+      "/api/activity",
+      "/api/config/export",
+      "/api/config/import",
+      "/api/ports/advisory",
+    ];
+    for (const path of expectedPaths) {
+      expect(screen.queryAllByText(path).length).toBeGreaterThan(0);
+    }
+  });
 });

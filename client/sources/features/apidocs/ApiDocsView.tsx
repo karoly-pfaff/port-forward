@@ -6,6 +6,7 @@ interface EndpointDoc {
   purpose: string;
   params?: string;
   response?: string;
+  notes?: string;
 }
 
 const ENDPOINTS: EndpointDoc[] = [
@@ -49,6 +50,17 @@ const ENDPOINTS: EndpointDoc[] = [
   },
   {
     method: "POST",
+    path: "/api/forwards/:id/diagnose",
+    purpose:
+      "Diagnose an existing forwarding rule without changing its state. Does not start, stop, or modify the rule.",
+    params: "Path: id (rule ID). No request body required.",
+    response:
+      "RuleDiagnosticsResult { ruleId, ruleName, protocol, summary, checks[], diagnosedAt } · 404 when rule not found",
+    notes:
+      "Status values: pass · warn · fail · skip. Check IDs: listen-host · listen-bind · target-host · target-connect · udp-mode · lan-exposure · privileged-port · common-port. TCP: target-connect attempts a short connection to the target. UDP: target-connect is always skip (UDP reachability cannot be verified). Running rule: listen-bind returns pass if Portier owns the socket."
+  },
+  {
+    method: "POST",
     path: "/api/forwards/reorder",
     purpose: "Reorder rules by providing an array of IDs in the desired order. Does not restart running rules.",
     params: "Body: { ids: string[] }",
@@ -59,6 +71,13 @@ const ENDPOINTS: EndpointDoc[] = [
     path: "/api/status",
     purpose: "List runtime status for all rules.",
     response: "ForwardStatus[]"
+  },
+  {
+    method: "GET",
+    path: "/api/runtime",
+    purpose: "Expose runtime environment details for the local management UI. Added in v1.2.",
+    response:
+      "RuntimeInfo { name, version, runtime, platform, arch, uptimeSeconds, startedAt, managementHost, managementPort, configPath, staticDir, serviceMode, pid }"
   },
   {
     method: "GET",
@@ -125,6 +144,9 @@ export function ApiDocsView(): ReactElement {
                 )}
                 {ep.response && (
                   <p className="api-meta"><strong>Response:</strong> {ep.response}</p>
+                )}
+                {ep.notes && (
+                  <p className="api-meta"><strong>Notes:</strong> {ep.notes}</p>
                 )}
               </li>
             ))}

@@ -376,6 +376,17 @@ v1.2 targets diagnostics and operational polish: runtime info endpoint, rule dia
 - generated package outputs
 - user-local config files
 
+## API Documentation Rule
+
+Whenever an API endpoint is added, removed, or changed, update **both** documentation surfaces:
+
+1. `docs/api-contract.md` — the durable external/project API contract.
+2. `client/sources/features/apidocs/ApiDocsView.tsx` — the user-facing in-app API reference.
+
+Also update `client/sources/features/apidocs/ApiDocsView.test.tsx` for new endpoints.
+
+Do not consider an API slice complete until both documentation surfaces and their tests are updated.
+
 ## Networking Checklist
 
 - TCP sockets clean up on error and close.

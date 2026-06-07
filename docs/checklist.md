@@ -62,6 +62,7 @@ Shared and TypeScript coverage:
 - [ ] Client App integration flows
 - [ ] Settings import/FileReader flow
 - [ ] Dashboard, Activity, Settings, API Docs, Forward Rules, and drawer flows
+- [ ] **API documentation rule:** when an API endpoint is added, removed, or changed — both `docs/api-contract.md` and the client in-app API Docs view (`client/sources/features/apidocs/ApiDocsView.tsx`) must be updated, along with `ApiDocsView.test.tsx`.
 
 Playwright E2E coverage:
 
@@ -155,7 +156,7 @@ v1.2 focuses on diagnostics and operational polish. See `docs/roadmap.md` for go
 Checklist items to add per slice as work proceeds:
 
 - [ ] **Slice 1** — Runtime info endpoint and UI display
-- [ ] **Slice 2** — Rule diagnostics API
+- [x] **Slice 2** — Rule diagnostics API: `POST /api/forwards/:id/diagnose` in both runtimes; `docs/api-contract.md` updated; client in-app API Docs updated; API Docs tests updated.
 - [ ] **Slice 3** — Rule diagnostics UI
 - [ ] **Slice 4** — Activity Log polish
 - [ ] **Slice 5** — Settings / runtime / config polish
