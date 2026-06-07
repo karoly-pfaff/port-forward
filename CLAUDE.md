@@ -10,7 +10,6 @@
 
 - Use `sources`, not `src`.
 - Use `build`, not `dist`.
-- Use `deploy`, not `deployment`.
 - Use `scripts` for executable automation.
 - Use lowercase filenames for normal markdown docs.
 - Keep tool-required files uppercase: `AGENTS.md`, `CLAUDE.md`, and `SKILL.md`.
@@ -24,8 +23,7 @@
 - `service/sources` handles the native Go service runtime focused on smaller binaries and service deployment.
 - `client/sources` handles the React UI only.
 - `shared/sources` owns types, validation, port constants, and port advisory logic.
-- `deploy` contains service examples, docs, and templates only.
-- `scripts` contains executable scripts.
+- `scripts` contains executable scripts; each platform subdir (`windows/`, `macos/`, `linux/`) also contains its platform docs and templates.
 
 ## Coding Rules
 
@@ -121,15 +119,15 @@ Do not add these to `npm run check`. Run them explicitly when releasing.
 **Package build is automated — do not treat it as manual QA:**
 
 ```powershell
-npm run validate:package           # validate existing build/portier/ layout
-npm run validate:package:build     # build then validate
-npm run validate:package:smoke     # build, validate, and run smoke test (preferred)
+npm run validate:runtime           # validate existing build/portier/ layout
+npm run validate:runtime:build     # build then validate
+npm run validate:runtime:smoke     # build, validate, and run smoke test (preferred)
 ```
 
 **macOS release archive — run explicitly when changing macOS scripts:**
 
 ```bash
-npm run release:portable   # package:portier then portable tar.gz (on macOS)
+npm run build:release:portable   # build:runtime then portable tar.gz (on macOS)
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`. Requires `bash` and `tar`. Do not add to `npm run check` or any automated validation chain.
@@ -137,7 +135,7 @@ Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`. Requires
 **Linux release archive — run explicitly when changing Linux scripts:**
 
 ```bash
-npm run release:portable   # package:portier then portable tar.gz (on Linux)
+npm run build:release:portable   # build:runtime then portable tar.gz (on Linux)
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`. Requires `bash` and `tar`. Do not add to `npm run check` or any automated validation chain.
@@ -145,23 +143,23 @@ Output: `build/releases/linux/portier-<version>-linux.tar.gz`. Requires `bash` a
 **Windows release artifacts — run explicitly when changing release files:**
 
 ```powershell
-npm run release:current    # portable zip + Inno Setup installer (installer non-fatal if absent)
-npm run release:portable   # portable zip only
+npm run build:release:current    # portable zip + Inno Setup installer (installer non-fatal if absent)
+npm run build:release:portable   # portable zip only
 ```
 
 Output: `build/releases/windows/portier-<version>-windows-portable.zip` and `Portier-Setup-<version>.exe`. If Inno Setup is unavailable, the portable zip is still produced — report the missing installer clearly. Do not add to `npm run check` or any automated validation chain.
 
-If a task touches packaging, run `npm run validate:package:smoke` when possible. The script:
-- Builds `build/portier/` via `package:portier` on the current platform
+If a task touches packaging, run `npm run validate:runtime:smoke` when possible. The script:
+- Builds `build/portier/` via `build:runtime` on the current platform
 - Validates the layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`)
 - Smoke-tests the packaged binary on a free port without requiring admin/root
 
 The platform-specific scripts still output to their own dirs when called directly:
 
 ```powershell
-npm run build:native:windows     # Windows: produces build/windows/
-npm run build:native:macos       # macOS/cross-compile: produces build/macos/
-npm run build:native:linux       # Linux/cross-compile: produces build/linux/
+npm run build:runtime:windows     # Windows: produces build/windows/
+npm run build:runtime:macos       # macOS/cross-compile: produces build/macos/
+npm run build:runtime:linux       # Linux/cross-compile: produces build/linux/
 ```
 
 If packaging cannot run because prerequisites are unavailable (e.g., Go is not installed), document that limitation clearly.
@@ -203,14 +201,14 @@ Production/install layout for all platforms:
 Dev build output (repo-internal, not distributed): `service/build/portier-service`, `server/build/`, `client/build/`.
 
 Packaging scripts:
-- `package:portier` → `build/portier/` (cross-platform, primary generic output)
-- `build:native:windows` → `build/windows/`, `build:native:macos` → `build/macos/`, `build:native:linux` → `build/linux/`
-- `package:clean` removes `build/portier/` and all platform package output dirs
+- `build:runtime` → `build/portier/` (cross-platform, primary generic output)
+- `build:runtime:windows` → `build/windows/`, `build:runtime:macos` → `build/macos/`, `build:runtime:linux` → `build/linux/`
+- `build:clean` removes `build/portier/`, all platform package output dirs, and `build/releases/`
 
 Validation scripts:
-- `validate:package` → validates `build/portier/` layout
-- `validate:package:build` → builds then validates
-- `validate:package:smoke` → builds, validates, and smoke-tests the packaged binary
+- `validate:runtime` → validates `build/portier/` layout
+- `validate:runtime:build` → builds then validates
+- `validate:runtime:smoke` → builds, validates, and smoke-tests the packaged binary
 - `validate:service:windows:user` → Windows scheduled task install/start/stop/uninstall (no admin)
 - `validate:service:windows:machine` → Windows Service install/start/stop/uninstall (admin required)
 - `validate:service:macos` → macOS LaunchAgent install/start/stop/uninstall (no sudo)
@@ -226,8 +224,8 @@ v1.1 is complete: distribution, installers, release artifacts, service and packa
 v1.2 targets diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export. See `docs/roadmap.md` for goals, slices, and non-goals.
 
 Release artifact commands:
-- `npm run release:current` — portable archive + installer for current platform
-- `npm run release:portable` — portable archive only
+- `npm run build:release:current` — portable archive + installer for current platform
+- `npm run build:release:portable` — portable archive only
 - `npm run validate:release:portable` — validate portable archive layout and contents
 - `npm run validate:release:current` — validate portable + installer artifacts
 

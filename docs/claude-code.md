@@ -28,7 +28,7 @@ node .claude/hooks/format-changed-files.js
 node .claude/hooks/validate-after-task.js
 ```
 
-The hooks do not run `npm run build:native:windows` automatically. Packaging is heavier and should be run only when explicitly requested or when a packaging task needs it.
+The hooks do not run `npm run build:runtime:windows` automatically. Packaging is heavier and should be run only when explicitly requested or when a packaging task needs it.
 
 ## Code Audit Skill
 
@@ -59,7 +59,7 @@ npm run test:e2e:fresh   # build:client + test:e2e combined
 Package smoke test (preferred pre-release package check):
 
 ```powershell
-npm run validate:package:smoke   # build, validate layout, smoke-test binary
+npm run validate:runtime:smoke   # build, validate layout, smoke-test binary
 ```
 
 Go service validation (when Go is installed):

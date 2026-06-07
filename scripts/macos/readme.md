@@ -26,14 +26,14 @@ All paths are configurable via install script parameters. `~` is expanded to the
 Cross-platform generic package (validates on any OS):
 
 ```bash
-npm run package:portier          # builds build/portier/
-npm run validate:package:smoke   # build, validate layout, and smoke-test
+npm run build:runtime            # builds build/portier/
+npm run validate:runtime:smoke   # build, validate layout, and smoke-test
 ```
 
 macOS-specific package (produces build/macos/ with darwin/amd64 binary):
 
 ```bash
-npm run build:native:macos
+npm run build:runtime:macos
 ```
 
 Or build manually with:
@@ -50,7 +50,7 @@ npm run build:service   # cross-compiles Go for current platform
 Build the package and install in one step:
 
 ```bash
-npm run package:portier
+npm run build:runtime
 bash scripts/macos/service/install-launch-agent.sh
 ```
 
@@ -166,13 +166,13 @@ To change the bind address or port, pass `--host` and `--port` to `install-launc
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run release:portable
+npm run build:release:portable
 ```
 
-To skip the `package:portier` step and reuse an existing `build/portier/`:
+To skip the `build:runtime` step and reuse an existing `build/portier/`:
 
 ```bash
-npm run release:portable -- --no-build
+npm run build:release:portable -- --no-build
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
@@ -257,7 +257,7 @@ launchctl bootout gui/$(id -u)/com.portier.port-forwarding
 
 ## Plist Template
 
-`deploy/macos/com.portier.plist.example` is a hand-edited reference plist. Use the install script instead for normal installs, as the script expands `$HOME` to an absolute path and sets all flags from parameters.
+`scripts/macos/service/com.portier.plist.example` is a hand-edited reference plist. Use the install script instead for normal installs, as the script expands `$HOME` to an absolute path and sets all flags from parameters.
 
 ---
 
@@ -272,7 +272,7 @@ bash scripts/macos/service/validate-launch-agent.sh
 ```
 
 The script:
-- Builds `build/portier/` via `npm run package:portier` (pass `--no-build` to skip)
+- Builds `build/portier/` via `npm run build:runtime` (pass `--no-build` to skip)
 - Installs the test LaunchAgent (`com.portier.test`), polls `/api/health`, verifies the web UI
 - Stops and removes the test LaunchAgent, verifies it is unloaded
 - Cleans up all temp files

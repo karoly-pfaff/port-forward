@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   Reads the version from package.json (or accepts -Version), runs
-  npm run package:portier to produce build/portier/, then calls ISCC.exe
+  npm run build:runtime to produce build/portier/, then calls ISCC.exe
   to produce build/releases/windows/Portier-Setup-<version>.exe.
 
   Inno Setup 6 must be installed before running this script.
@@ -15,7 +15,7 @@
   package.json.
 
 .PARAMETER NoPackage
-  Skip npm run package:portier and use the existing build/portier/ directory.
+  Skip npm run build:runtime and use the existing build/portier/ directory.
   Useful when build/portier/ is already up to date.
 
 .PARAMETER InnoPath
@@ -95,12 +95,12 @@ Log ""
 
 # ── Build package (unless skipped) ───────────────────────────────────────────
 if (-not $NoPackage) {
-  Log "Running npm run package:portier..."
+  Log "Running npm run build:runtime..."
   $npm = if (Get-Command "npm.cmd" -ErrorAction SilentlyContinue) { "npm.cmd" } else { "npm" }
   Push-Location $RepoRoot
   try {
-    & $npm run package:portier
-    if ($LASTEXITCODE -ne 0) { Fail "npm run package:portier failed (exit $LASTEXITCODE)." }
+    & $npm run build:runtime
+    if ($LASTEXITCODE -ne 0) { Fail "npm run build:runtime failed (exit $LASTEXITCODE)." }
   } finally {
     Pop-Location
   }
@@ -117,7 +117,7 @@ foreach ($rel in @("service.exe", "server.js", "web\index.html", "readme.txt")) 
   if (-not (Test-Path $p)) {
     Write-Host ""
     Write-Host "[release:windows] Required file missing from build/portier/: $rel" -ForegroundColor Red
-    Write-Host "  Run: npm run package:portier"
+    Write-Host "  Run: npm run build:runtime"
     Write-Host "  Or pass -NoPackage if the directory is already built."
     exit 1
   }

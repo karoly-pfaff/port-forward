@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build a Linux runtime package under build/linux/.
+# Build a macOS runtime package under build/macos/.
 # Output layout:
-#   build/linux/
-#     service          (Go binary, linux/amd64)
+#   build/macos/
+#     service          (Go binary, darwin/amd64)
 #     server.js        (Node/TypeScript server bundle — fallback, requires Node.js)
 #     web/             (built React client)
 #     readme.txt
@@ -10,14 +10,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-OUTPUT_DIR="${1:-$REPO_ROOT/build/linux}"
+OUTPUT_DIR="${1:-$REPO_ROOT/build/macos}"
 
 ESBUILD="$REPO_ROOT/node_modules/.bin/esbuild"
 BUNDLE_ENTRY="$REPO_ROOT/server/sources/index.ts"
 BUNDLE_WORK="$OUTPUT_DIR/_bundle"
 BUNDLE_CJS="$BUNDLE_WORK/server.cjs"
 
-echo "Building Linux package → $OUTPUT_DIR"
+echo "Building macOS package → $OUTPUT_DIR"
 echo ""
 
 mkdir -p "$OUTPUT_DIR"
@@ -42,9 +42,9 @@ echo "Bundling server as server.js..."
   --outfile="$BUNDLE_CJS"
 cp "$BUNDLE_CJS" "$OUTPUT_DIR/server.js"
 
-echo "Building Go service for Linux (linux/amd64)..."
+echo "Building Go service for macOS (darwin/amd64)..."
 pushd "$REPO_ROOT/service" > /dev/null
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$OUTPUT_DIR/service" ./sources
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o "$OUTPUT_DIR/service" ./sources
 popd > /dev/null
 
 echo "Copying web UI..."
@@ -52,18 +52,18 @@ rm -rf "$OUTPUT_DIR/web"
 cp -r "$REPO_ROOT/client/build" "$OUTPUT_DIR/web"
 
 cat > "$OUTPUT_DIR/readme.txt" << 'EOF'
-Portier Linux Portable Package
+Portier macOS Portable Package
 ================================
 
 This portable archive contains the Portier runtime files only. It does not
 install OS services. Use the install scripts from the Portier repository to
-set up a systemd service.
+set up a macOS LaunchAgent.
 
 Native service (preferred):
-  ./service --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
+  ./service --service --config ~/Library/Application\ Support/Portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
 
 Node server (fallback, requires Node.js):
-  node ./server.js --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
+  node ./server.js --service --config ~/Library/Application\ Support/Portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
 
 Options:
   --config <path>     Path to rules.json (required; not bundled in this archive)
@@ -77,18 +77,21 @@ Default management URL:
 Config (rules.json) is external and must be provided. A new empty rules.json is
 created automatically if the path does not exist when the service starts.
 
-systemd service install (requires root):
-  sudo bash scripts/linux/service/install-service.sh    (from the Portier repository)
-  Installs to /opt/portier/ with config at /etc/portier/rules.json.
-  See deploy/linux/readme.md for full options.
+LaunchAgent install (no sudo required):
+  bash scripts/macos/service/install-launch-agent.sh    (from the Portier repository)
+  Installs to ~/Applications/Portier/ with config at:
+  ~/Library/Application Support/Portier/rules.json
+  See scripts/macos/readme.md for full options.
 
-Forwarded listen ports may need firewall rules (ufw, iptables, firewalld).
+Forwarded listen ports may need macOS Firewall rules.
+Unsigned — macOS Gatekeeper may quarantine downloaded binaries.
+  Clear quarantine: xattr -cr ./service
 EOF
 
 rm -rf "$BUNDLE_WORK"
 
 echo ""
-echo "Linux package created at $OUTPUT_DIR"
+echo "macOS package created at $OUTPUT_DIR"
 echo "  Go service : $OUTPUT_DIR/service"
 echo "  Node server: $OUTPUT_DIR/server.js"
 echo "  Web UI     : $OUTPUT_DIR/web"

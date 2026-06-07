@@ -6,7 +6,7 @@
 #   bash scripts/macos/release/build-release.sh [--no-package] [--version VERSION]
 #
 # Options:
-#   --no-package     Skip npm run package:portier; use existing build/portier/.
+#   --no-package     Skip npm run build:runtime; use existing build/portier/.
 #   --version V      Override version string (default: reads from package.json).
 #
 # Note: .pkg creation (pkgbuild/productbuild) requires macOS with Xcode Command
@@ -56,18 +56,18 @@ echo "  Output dir : $OUTPUT_DIR"
 echo ""
 
 if [ -z "$NO_PACKAGE" ]; then
-  echo "Running npm run package:portier..."
-  npm --prefix "$REPO_ROOT" run package:portier
+  echo "Running npm run build:runtime..."
+  npm --prefix "$REPO_ROOT" run build:runtime
   echo ""
 else
-  echo "Skipping package build (--no-package)."
+  echo "Skipping runtime build (--no-package)."
 fi
 
 # Verify required files in build/portier/
 for req in service server.js "web/index.html" readme.txt; do
   if [ ! -e "$PACKAGE_DIR/$req" ]; then
     echo "Error: Required file not found in build/portier/: $req" >&2
-    echo "  Run: npm run package:portier" >&2
+    echo "  Run: npm run build:runtime" >&2
     exit 1
   fi
 done

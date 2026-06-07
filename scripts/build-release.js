@@ -11,7 +11,7 @@
  * command separately on each target OS.
  *
  * Usage:
- *   node scripts/package-release.js [options]
+ *   node scripts/build-release.js [options]
  *
  * Options:
  *   --current-platform      Build artifacts for the current OS only (default).
@@ -20,7 +20,7 @@
  *   --linux                 Build Linux artifacts. Must run on Linux.
  *   --portable-only         Produce portable archives only; skip installer builds.
  *   --skip-installers       Alias for --portable-only.
- *   --no-build              Skip npm run package:portier; use existing build/portier/.
+ *   --no-build              Skip npm run build:runtime; use existing build/portier/.
  *   --version <v>           Override version string (default: reads from package.json).
  */
 
@@ -56,12 +56,12 @@ const anyExplicit = explicitWindows || explicitMacos || explicitLinux;
 function readVersion() {
   const pkgPath = join(repoRoot, "package.json");
   if (!existsSync(pkgPath)) {
-    console.error("[package-release] package.json not found.");
+    console.error("[build-release] package.json not found.");
     process.exit(1);
   }
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   if (!pkg.version) {
-    console.error("[package-release] version field missing in package.json.");
+    console.error("[build-release] version field missing in package.json.");
     process.exit(1);
   }
   return pkg.version;
@@ -84,7 +84,7 @@ if (anyExplicit) {
 for (const target of targets) {
   if (target !== process.platform) {
     const name = target === "win32" ? "Windows" : target === "darwin" ? "macOS" : "Linux";
-    console.error(`[package-release] Cannot build ${name} artifacts on ${process.platform}.`);
+    console.error(`[build-release] Cannot build ${name} artifacts on ${process.platform}.`);
     console.error("  Portier service binaries are platform-native.");
     console.error("  Run this command on the target OS to build its artifacts.");
     process.exit(1);
@@ -93,7 +93,7 @@ for (const target of targets) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function log(msg) { console.log(`[package-release] ${msg}`); }
+function log(msg) { console.log(`[build-release] ${msg}`); }
 
 function run(cmd, args, opts = {}) {
   const result = spawnSync(cmd, args, {
@@ -103,12 +103,12 @@ function run(cmd, args, opts = {}) {
     ...opts,
   });
   if ((result.status ?? 1) !== 0) {
-    console.error(`[package-release] Command failed (exit ${result.status ?? 1}): ${cmd} ${args.join(" ")}`);
+    console.error(`[build-release] Command failed (exit ${result.status ?? 1}): ${cmd} ${args.join(" ")}`);
     process.exit(result.status ?? 1);
   }
 }
 
-// ── Build base package ────────────────────────────────────────────────────────
+// ── Build runtime package ─────────────────────────────────────────────────────
 
 log(`Version      : ${version}`);
 log(`Platform(s)  : ${[...targets].join(", ")}`);
@@ -117,17 +117,17 @@ log(`Skip build   : ${noBuild}`);
 log("");
 
 if (!noBuild) {
-  log("Running npm run package:portier...");
-  run(npmCmd, ["run", "package:portier"]);
+  log("Running npm run build:runtime...");
+  run(npmCmd, ["run", "build:runtime"]);
   log("");
 } else {
-  log("Skipping package build (--no-build).");
+  log("Skipping runtime build (--no-build).");
   log("");
 }
 
 const packageDir = join(repoRoot, "build", "portier");
 if (!existsSync(packageDir)) {
-  console.error("[package-release] build/portier/ not found. Run: npm run package:portier");
+  console.error("[build-release] build/portier/ not found. Run: npm run build:runtime");
   process.exit(1);
 }
 
@@ -196,10 +196,10 @@ function buildWindowsInstaller(releasesDir, version) {
 
   if ((result.status ?? 1) !== 0) {
     console.warn(
-      "[package-release]   WARNING: Windows installer build failed (Inno Setup unavailable or errored)."
+      "[build-release]   WARNING: Windows installer build failed (Inno Setup unavailable or errored)."
     );
     console.warn(
-      "[package-release]   Portable zip is still valid. Install Inno Setup 6 to build the installer."
+      "[build-release]   Portable zip is still valid. Install Inno Setup 6 to build the installer."
     );
   } else {
     log(`  Created : build/releases/windows/Portier-Setup-${version}.exe`);

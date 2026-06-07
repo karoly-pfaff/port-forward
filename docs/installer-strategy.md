@@ -197,10 +197,10 @@ TCP and UDP correctness are automated, not manual QA-only.
 ### Package validation (run when packaging changes)
 
 ```powershell
-npm run package:portier
-npm run validate:package
-npm run validate:package:build
-npm run validate:package:smoke    # preferred: builds, validates layout, smoke-tests binary
+npm run build:runtime
+npm run validate:runtime
+npm run validate:runtime:build
+npm run validate:runtime:smoke    # preferred: builds, validates layout, smoke-tests binary
 ```
 
 ### Explicit service validation (run on target platform before release)
@@ -277,13 +277,13 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 ### Slice 2 — Windows installer (Inno Setup) ✓
 
 - `scripts/windows/release/portier.iss` — Inno Setup 6 script.
-- `scripts/windows/release/build-release.ps1` — build wrapper: reads version from `package.json`, runs `package:portier`, invokes ISCC.exe.
+- `scripts/windows/release/build-release.ps1` — build wrapper: reads version from `package.json`, runs `build:runtime`, invokes ISCC.exe.
 - Installs to `%ProgramFiles%\Portier\` with config at `%ProgramData%\Portier\`.
 - Optional Windows Service registration task (checked by default for machine-wide installs).
 - Uninstall stops and removes the service; `rules.json` is preserved.
 - Logs directory is removed on uninstall; config directory is not.
 - Upgrade support: installer stops any running service before overwriting binaries.
-- `npm run release:current` — full build (portable + installer; installer non-fatal if Inno Setup absent).
+- `npm run build:release:current` — full build (portable + installer; installer non-fatal if Inno Setup absent).
 - Output: `build/releases/windows/Portier-Setup-<version>.exe`
 - Requires Inno Setup 6: https://jrsoftware.org/isinfo.php
 - Installer is unsigned; sign with an EV certificate before public distribution.
@@ -293,7 +293,7 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - `install-launch-agent.sh` updated: auto-copies `build/portier/` to `~/Applications/Portier/` by default; adds `--source-dir`, `--no-start`, and `--runtime service|node` options; fixes LaunchAgent label consistency (`com.portier.port-forwarding` everywhere).
 - `uninstall-launch-agent.sh` updated: adds `--purge` flag for removing config and logs (off by default — config is always preserved).
 - `scripts/macos/release/build-release.sh` added: builds `build/releases/macos/portier-portable-macos-<version>.tar.gz` from `build/portier/`.
-- Signing and notarization documented in `deploy/macos/readme.md`.
+- Signing and notarization documented in `scripts/macos/readme.md`.
 - `validate:service:macos` passes on macOS with `npm run validate:service:macos`.
 - `.pkg` installer is documented as a follow-up; requires macOS tooling (`pkgbuild`/`productbuild`).
 - Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
@@ -305,7 +305,7 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 - `start-service.sh`, `stop-service.sh`, `status-service.sh`: lifecycle helpers that require root.
 - `scripts/linux/release/build-release.sh` added: builds `build/releases/linux/portier-<version>-linux.tar.gz` from `build/portier/`.
 - systemd unit examples updated: `portier.service.example` (Go service), `portier-node.service.example` (Node fallback).
-- `deploy/linux/readme.md` updated: install flags table with `--source-dir` / `--no-enable`, release archive section, firewall notes, journald log commands.
+- `scripts/linux/readme.md` updated: install flags table with `--source-dir` / `--no-enable`, release archive section, firewall notes, journald log commands.
 - Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 - `validate:service:linux` must be run explicitly on a Linux host with systemd and root.
 
@@ -322,14 +322,14 @@ Defines scope, platform decisions, layouts, and validation policy for v1.1.
 
 ### Slice 6 — Release artifact generation ✓
 
-- `scripts/package-release.js`: unified Node script for all platforms. Reads version from `package.json` (or `--version`). Calls `package:portier` (unless `--no-build`), then builds portable archives and, where tooling is available, installer artifacts.
+- `scripts/build-release.js`: unified Node script for all platforms. Reads version from `package.json` (or `--version`). Calls `build:runtime` (unless `--no-build`), then builds portable archives and, where tooling is available, installer artifacts.
 - Windows: produces `portier-<version>-windows-portable.zip` from `build/portier/` via PowerShell `Compress-Archive`. Calls `scripts/windows/release/build-release.ps1 -NoPackage` for the Inno Setup installer (non-fatal if ISCC.exe is absent).
 - macOS: delegates to `scripts/macos/release/build-release.sh --no-package --version <v>` → `portier-portable-macos-<version>.tar.gz`.
 - Linux: delegates to `scripts/linux/release/build-release.sh --no-package --version <v>` → `portier-<version>-linux.tar.gz`.
 - Service binaries are platform-native; only the current OS can produce its artifacts. For multi-platform releases, run on each target OS.
-- `scripts/validate-artifacts.js`: validates `build/releases/<platform>/` layout. Lists archive contents, checks required files (`service`/`service.exe`, `server.js`, `web/index.html`, `web/assets/`, `readme.txt`), checks forbidden files absent, extracts and checks readme.txt content.
+- `scripts/validate-release.js`: validates `build/releases/<platform>/` layout. Lists archive contents, checks required files (`service`/`service.exe`, `server.js`, `web/index.html`, `web/assets/`, `readme.txt`), checks forbidden files absent, extracts and checks readme.txt content.
 - All three `readme.txt` files (Windows/macOS/Linux) updated: added "does not install OS services", "not bundled in this archive", `--config` / `--static-dir web` flags, portable archive notice.
-- npm scripts: `release`, `release:current`, `release:portable`, `validate:release`, `validate:release:current`, `validate:release:portable`.
+- npm scripts: `build:release`, `build:release:current`, `build:release:portable`, `validate:release`, `validate:release:current`, `validate:release:portable`.
 - Output: `build/releases/windows/portier-<version>-windows-portable.zip`, `build/releases/macos/portier-portable-macos-<version>.tar.gz`, `build/releases/linux/portier-<version>-linux.tar.gz`, `build/releases/windows/Portier-Setup-<version>.exe` (when Inno Setup available).
 - macOS `.pkg` and Linux `.deb`/`.rpm` remain out of v1.1 scope.
 

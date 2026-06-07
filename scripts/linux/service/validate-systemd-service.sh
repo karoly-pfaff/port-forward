@@ -7,7 +7,7 @@
 #   sudo bash scripts/linux/service/validate-systemd-service.sh [--no-build] [--keep-files] [--port PORT]
 #
 # Flags:
-#   --no-build    Skip npm run package:portier; use existing build/portier/.
+#   --no-build    Skip npm run build:runtime; use existing build/portier/.
 #   --keep-files  Preserve temp directories after validation (for debugging).
 #   --port PORT   Management port for the test service (default: auto-detect free port).
 set -uo pipefail
@@ -140,8 +140,8 @@ fi
 
 # Build package if requested
 if [ -z "$NO_BUILD" ]; then
-  log "Running npm run package:portier..."
-  npm run package:portier
+  log "Running npm run build:runtime..."
+  npm run build:runtime
   log ""
 else
   log "Skipping package build (--no-build)."
@@ -151,7 +151,7 @@ fi
 SERVICE_BIN="$PACKAGE_DIR/service"
 if [ ! -f "$SERVICE_BIN" ]; then
   echo "[validate:linux] ERROR: service binary not found: $SERVICE_BIN" >&2
-  echo "  Run: npm run package:portier" >&2
+  echo "  Run: npm run build:runtime" >&2
   exit 1
 fi
 if [ ! -d "$PACKAGE_DIR/web" ]; then

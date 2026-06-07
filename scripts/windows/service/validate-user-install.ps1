@@ -5,7 +5,7 @@
   Never touches production Portier installs, config, or task names.
 
 .PARAMETER NoBuild
-  Skip npm run package:portier and use the existing build/portier/ directory.
+  Skip npm run build:runtime and use the existing build/portier/ directory.
 
 .PARAMETER KeepFiles
   Preserve temp directories after validation (useful for debugging failures).
@@ -78,10 +78,10 @@ try {
 
   # Build package if requested
   if (-not $NoBuild) {
-    Log "Running npm run package:portier..."
+    Log "Running npm run build:runtime..."
     $npm = if (Get-Command "npm.cmd" -ErrorAction SilentlyContinue) { "npm.cmd" } else { "npm" }
-    & $npm run package:portier
-    if ($LASTEXITCODE -ne 0) { throw "npm run package:portier failed (exit $LASTEXITCODE)." }
+    & $npm run build:runtime
+    if ($LASTEXITCODE -ne 0) { throw "npm run build:runtime failed (exit $LASTEXITCODE)." }
     Log ""
   } else {
     Log "Skipping package build (-NoBuild)."
@@ -89,10 +89,10 @@ try {
 
   # Verify package contents
   if (-not (Test-Path (Join-Path $PACKAGE_DIR "service.exe"))) {
-    throw "service.exe not found in build/portier/. Run: npm run package:portier"
+    throw "service.exe not found in build/portier/. Run: npm run build:runtime"
   }
   if (-not (Test-Path (Join-Path $PACKAGE_DIR "web"))) {
-    throw "web/ not found in build/portier/. Run: npm run package:portier"
+    throw "web/ not found in build/portier/. Run: npm run build:runtime"
   }
 
   # Set up test install dir

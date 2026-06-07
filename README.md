@@ -79,19 +79,19 @@ npm run start:service
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run release:portable
+npm run build:release:portable
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 
-The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). No signing required for Linux tar.gz archives. See `deploy/linux/readme.md`.
+The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). No signing required for Linux tar.gz archives. See `scripts/linux/readme.md`.
 
 ### Linux systemd Service
 
 Build the package and install in one step:
 
 ```bash
-npm run package:portier
+npm run build:runtime
 sudo bash scripts/linux/service/install-service.sh
 ```
 
@@ -118,26 +118,26 @@ sudo bash scripts/linux/service/start-service.sh
 sudo bash scripts/linux/service/uninstall-service.sh   # preserves rules.json
 ```
 
-See `deploy/linux/readme.md` for flags, manual unit file install, and firewall notes.
+See `scripts/linux/readme.md` for flags, manual unit file install, and firewall notes.
 
 ### macOS Release Archive (v1.1)
 
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run release:portable
+npm run build:release:portable
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
 
-The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). Unsigned — macOS Gatekeeper may quarantine downloaded binaries; use `xattr -cr` to clear. Sign with Developer ID for public distribution. See `deploy/macos/readme.md` for signing notes.
+The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). Unsigned — macOS Gatekeeper may quarantine downloaded binaries; use `xattr -cr` to clear. Sign with Developer ID for public distribution. See `scripts/macos/readme.md` for signing notes.
 
 ### macOS LaunchAgent
 
 Build the package and install:
 
 ```bash
-npm run package:portier
+npm run build:runtime
 bash scripts/macos/service/install-launch-agent.sh
 ```
 
@@ -152,7 +152,7 @@ bash scripts/macos/service/start-launch-agent.sh
 bash scripts/macos/service/uninstall-launch-agent.sh   # preserves rules.json and logs
 ```
 
-Use `--runtime node` to run with `server.js` instead of the native binary. Use `--purge` on uninstall to also remove config and logs. See `deploy/macos/readme.md` for full options.
+Use `--runtime node` to run with `server.js` instead of the native binary. Use `--purge` on uninstall to also remove config and logs. See `scripts/macos/readme.md` for full options.
 
 Forwarded ports on `0.0.0.0` may trigger macOS Firewall prompts. The management UI stays on `127.0.0.1:47831` and is not LAN-visible by default.
 
@@ -163,7 +163,7 @@ Portier v1.1 adds an [Inno Setup](https://jrsoftware.org/isinfo.php) installer f
 **Build the release artifacts** (requires Inno Setup 6 for the installer):
 
 ```powershell
-npm run release:current
+npm run build:release:current
 ```
 
 Output: `build/releases/windows/portier-<version>-windows-portable.zip` and `Portier-Setup-<version>.exe` (if Inno Setup is available)
@@ -175,7 +175,7 @@ The installer:
 - On uninstall: stops and removes the service, removes `logs\`, and preserves `rules.json`.
 - Does not create Windows Firewall rules.
 
-The installer is unsigned. Windows SmartScreen may warn before running it. Sign with an EV certificate for public distribution. See `deploy/windows/readme.md` for full details and build options.
+The installer is unsigned. Windows SmartScreen may warn before running it. Sign with an EV certificate for public distribution. See `scripts/windows/readme.md` for full details and build options.
 
 ---
 
@@ -184,7 +184,7 @@ The installer is unsigned. Windows SmartScreen may warn before running it. Sign 
 Build the Windows package:
 
 ```powershell
-npm run build:native:windows
+npm run build:runtime:windows
 ```
 
 The output is created under `build\windows`:
@@ -228,22 +228,22 @@ Config for machine install: `%ProgramData%\Portier\rules.json`. Config for user 
 .\scripts\windows\service\uninstall-service.ps1 [-Scope User]   # preserves rules.json
 ```
 
-See `deploy/windows/readme.md` for detailed Windows packaging and service notes.
-See `deploy/macos/readme.md` for detailed macOS LaunchAgent notes.
-See `deploy/linux/readme.md` for detailed Linux systemd notes.
+See `scripts/windows/readme.md` for detailed Windows packaging and service notes.
+See `scripts/macos/readme.md` for detailed macOS LaunchAgent notes.
+See `scripts/linux/readme.md` for detailed Linux systemd notes.
 
 ### Release Artifact Generation (v1.1)
 
 Build the current platform's portable archive and installer (if tooling is available):
 
 ```powershell
-npm run release:current
+npm run build:release:current
 ```
 
 Portable archive only (skip installer):
 
 ```powershell
-npm run release:portable
+npm run build:release:portable
 ```
 
 Validate the artifacts after building:
@@ -448,7 +448,7 @@ These scripts use test-specific service names, ports, and temp directories. They
 
 **Automated (not manual):**
 
-- Package build and layout: `npm run validate:package:smoke`
+- Package build and layout: `npm run validate:runtime:smoke`
 - OS service install/start/stop/uninstall: `npm run validate:service:*`
 
 ## Scripts
@@ -467,21 +467,21 @@ npm run test:e2e:fresh
 npm run lint
 npm run typecheck
 npm run check
-npm run package:portier
-npm run build:native:windows
-npm run build:native:macos
-npm run build:native:linux
-npm run package:clean
-npm run validate:package           # validate existing build/portier/ layout
-npm run validate:package:build     # build then validate
-npm run validate:package:smoke     # build, validate, and run smoke test
+npm run build:runtime
+npm run build:runtime:windows
+npm run build:runtime:macos
+npm run build:runtime:linux
+npm run build:clean
+npm run validate:runtime           # validate existing build/portier/ layout
+npm run validate:runtime:build     # build then validate
+npm run validate:runtime:smoke     # build, validate, and run smoke test
 npm run validate:service:current          # OS service install validation for current platform
 npm run validate:service:windows:user     # Windows user-scope (scheduled task, no admin)
 npm run validate:service:windows:machine  # Windows machine-scope (Windows Service, admin required)
 npm run validate:service:macos            # macOS LaunchAgent (no sudo)
 npm run validate:service:linux            # Linux systemd (requires sudo)
-npm run release:current                   # portable archive + installer for current platform
-npm run release:portable                  # portable archive only (skip installer)
+npm run build:release:current             # portable archive + installer for current platform
+npm run build:release:portable            # portable archive only (skip installer)
 npm run validate:release:current          # validate release artifacts for current platform
 npm run validate:release:portable         # validate portable archive only
 ```
@@ -489,7 +489,7 @@ npm run validate:release:portable         # validate portable archive only
 macOS LaunchAgent scripts (run on macOS):
 
 ```bash
-bash scripts/macos/build-native.sh
+bash scripts/macos/build-runtime.sh
 bash scripts/macos/service/install-launch-agent.sh [--node-mode] [--install-dir PATH] [--config-path PATH]
 bash scripts/macos/service/status-launch-agent.sh
 bash scripts/macos/service/start-launch-agent.sh

@@ -8,7 +8,7 @@
  * readme.txt mentions the management URL and external config.
  *
  * Usage:
- *   node scripts/validate-release-artifacts.js [options]
+ *   node scripts/validate-release.js [options]
  *
  * Options:
  *   --version <v>                   Version string (default: reads from package.json).
@@ -245,7 +245,7 @@ console.log("");
 
 // Release directory
 if (!existsSync(releasesDir)) {
-  fail(`build/releases/${platformLabel}/ not found — run: npm run release:current`);
+  fail(`build/releases/${platformLabel}/ not found — run: npm run build:release:current`);
   console.error("[validate-release] FAILED: release directory missing.\n");
   process.exit(1);
 }
@@ -308,7 +308,7 @@ if (!portableOnly && installerName) {
     if (installerRequired) {
       fail(`Installer not found: ${installerName} (--installer-required)`);
     } else {
-      warn(`Installer not found: ${installerName} — build with: npm run release:current`);
+      warn(`Installer not found: ${installerName} — build with: npm run build:release:current`);
     }
   } else {
     const iStat = statSync(installerPath);

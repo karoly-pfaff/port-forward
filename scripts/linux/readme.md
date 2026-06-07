@@ -4,7 +4,7 @@ Portier can run as a system-level systemd service on Linux.
 
 **Recommended:** use the helper scripts in `scripts/linux/` — they generate and install the unit file automatically.
 
-The `deploy/linux/` directory contains example unit files for reference and manual installs.
+The example unit files in `scripts/linux/service/` can be used for manual installs.
 
 ---
 
@@ -29,14 +29,14 @@ The `deploy/linux/` directory contains example unit files for reference and manu
 Cross-platform generic package (validates on any OS):
 
 ```bash
-npm run package:portier          # builds build/portier/
-npm run validate:package:smoke   # build, validate layout, and smoke-test
+npm run build:runtime            # builds build/portier/
+npm run validate:runtime:smoke   # build, validate layout, and smoke-test
 ```
 
 Linux-specific package (produces build/linux/ with linux/amd64 binary):
 
 ```bash
-bash scripts/linux/build-native.sh
+bash scripts/linux/build-runtime.sh
 ```
 
 ## Release Archive (v1.1)
@@ -44,13 +44,13 @@ bash scripts/linux/build-native.sh
 Build a portable tar.gz for distribution:
 
 ```bash
-npm run release:portable
+npm run build:release:portable
 ```
 
-To skip the `package:portier` step and reuse an existing `build/portier/`:
+To skip the `build:runtime` step and reuse an existing `build/portier/`:
 
 ```bash
-npm run release:portable -- --no-build
+npm run build:release:portable -- --no-build
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
@@ -82,7 +82,7 @@ sudo bash scripts/linux/service/install-service.sh --source-dir /opt/portier
 Build the package and install in one step:
 
 ```bash
-npm run package:portier
+npm run build:runtime
 sudo bash scripts/linux/service/install-service.sh
 ```
 
@@ -163,12 +163,12 @@ sudo bash scripts/linux/service/uninstall-service.sh --remove-files --remove-con
 
 ## Manual Install (Example Unit Files)
 
-The example unit files in this directory can be copied and used without the helper scripts.
+The example unit files in `scripts/linux/service/` can be copied and used without the helper scripts.
 
 Go service (preferred):
 
 ```bash
-sudo cp deploy/linux/portier.service.example /etc/systemd/system/portier.service
+sudo cp scripts/linux/service/portier.service.example /etc/systemd/system/portier.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now portier
 ```
@@ -176,7 +176,7 @@ sudo systemctl enable --now portier
 Node fallback:
 
 ```bash
-sudo cp deploy/linux/portier-node.service.example /etc/systemd/system/portier.service
+sudo cp scripts/linux/service/portier-node.service.example /etc/systemd/system/portier.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now portier
 ```
@@ -204,7 +204,7 @@ sudo bash scripts/linux/service/validate-systemd-service.sh
 ```
 
 The script:
-- Builds `build/portier/` via `npm run package:portier` (pass `--no-build` to skip)
+- Builds `build/portier/` via `npm run build:runtime` (pass `--no-build` to skip)
 - Writes a `portier-test.service` unit to `/etc/systemd/system/`
 - Starts the service, polls `/api/health`, verifies the web UI
 - Stops the service, removes the unit file, runs `daemon-reload`, verifies removal

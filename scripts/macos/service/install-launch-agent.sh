@@ -68,7 +68,7 @@ echo ""
 if [ -n "$SOURCE_DIR" ]; then
   if [ ! -d "$SOURCE_DIR" ]; then
     echo "Error: source directory not found: $SOURCE_DIR" >&2
-    echo "  Run 'npm run package:portier' or pass --source-dir <dir>." >&2
+    echo "  Run 'npm run build:runtime' or pass --source-dir <dir>." >&2
     exit 1
   fi
   echo "Copying runtime files: $SOURCE_DIR -> $INSTALL_DIR"
@@ -107,7 +107,7 @@ if [ -n "$NODE_MODE" ]; then
 else
   if [ ! -f "$EXECUTABLE" ]; then
     echo "Error: Executable not found: $EXECUTABLE" >&2
-    echo "  Run 'npm run package:portier' and then re-run this script," >&2
+    echo "  Run 'npm run build:runtime' and then re-run this script," >&2
     echo "  or use --runtime node for Node.js fallback." >&2
     exit 1
   fi

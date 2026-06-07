@@ -125,7 +125,7 @@ Config (rules.json) is external and must be provided. A new empty rules.json is
 created automatically if the path does not exist when the service starts.
 
 Machine-wide install (Inno Setup installer, requires Inno Setup 6):
-  npm run release:current    (from the Portier repository)
+  npm run build:release:current    (from the Portier repository)
   Installs to %ProgramFiles%\Portier\ with config at %ProgramData%\Portier\rules.json.
 
 Manual install scripts in the repository:

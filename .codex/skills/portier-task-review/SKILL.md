@@ -23,7 +23,7 @@ Run the narrowest applicable set and report results:
 | TS/JS only | `npm run lint` → `npm run typecheck` → `npm run test` |
 | Go only | `go -C service vet ./...` → `go -C service test ./...` |
 | Both | All of the above |
-| Packaging | `npm run validate:package:smoke` (preferred; no admin/root required) |
+| Packaging | `npm run validate:runtime:smoke` (preferred; no admin/root required) |
 
 - Note any command that was skipped and why.
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /* global console, process, setTimeout */
 /**
- * Cross-platform package validation for the Portier build/portier/ output.
+ * Cross-platform runtime validation for the Portier build/portier/ output.
  *
  * Usage:
- *   node scripts/validate-package.js [--build] [--smoke]
+ *   node scripts/validate-runtime.js [--build] [--smoke]
  *
- *   --build   run `npm run package:portier` before validating
+ *   --build   run `npm run build:runtime` before validating
  *   --smoke   start the packaged service and verify it responds
  */
 
@@ -188,24 +188,24 @@ async function runSmoke() {
 
 async function main() {
   if (shouldBuild) {
-    console.log("[validate-package] Running npm run package:portier...\n");
-    const result = spawnSync(npmCommand, ["run", "package:portier"], {
+    console.log("[validate-runtime] Running npm run build:runtime...\n");
+    const result = spawnSync(npmCommand, ["run", "build:runtime"], {
       stdio: "inherit",
       cwd: repoRoot,
       shell: isWindows,
     });
     if ((result.status ?? 1) !== 0) {
-      console.error("[validate-package] package:portier failed.");
+      console.error("[validate-runtime] build:runtime failed.");
       process.exit(1);
     }
     console.log("");
   }
 
-  console.log(`[validate-package] Validating: ${packageDir}\n`);
+  console.log(`[validate-runtime] Validating: ${packageDir}\n`);
 
   if (!existsSync(packageDir)) {
-    fail("build/portier/ does not exist — run: npm run package:portier");
-    console.error(`\n[validate-package] Validation FAILED (package directory missing).\n`);
+    fail("build/portier/ does not exist — run: npm run build:runtime");
+    console.error(`\n[validate-runtime] Validation FAILED (runtime directory missing).\n`);
     process.exit(1);
   }
   if (!statSync(packageDir).isDirectory()) {
@@ -255,30 +255,30 @@ async function main() {
   checkAbsent("server");
 
   console.log(
-    `\n[validate-package] ${passed} passed, ${warned} warned, ${failed} failed.`
+    `\n[validate-runtime] ${passed} passed, ${warned} warned, ${failed} failed.`
   );
 
   if (failed > 0) {
-    console.error("[validate-package] Validation FAILED.\n");
+    console.error("[validate-runtime] Validation FAILED.\n");
     process.exit(1);
   }
 
-  console.log("[validate-package] Package layout validated.\n");
+  console.log("[validate-runtime] Runtime layout validated.\n");
 
   if (shouldSmoke) {
     await runSmoke();
     console.log(
-      `\n[validate-package] ${passed} passed, ${warned} warned, ${failed} failed (including smoke).`
+      `\n[validate-runtime] ${passed} passed, ${warned} warned, ${failed} failed (including smoke).`
     );
     if (failed > 0) {
-      console.error("[validate-package] Smoke test FAILED.\n");
+      console.error("[validate-runtime] Smoke test FAILED.\n");
       process.exit(1);
     }
-    console.log("[validate-package] Smoke test passed.\n");
+    console.log("[validate-runtime] Smoke test passed.\n");
   }
 }
 
 main().catch((err) => {
-  console.error("[validate-package] Unexpected error:", err);
+  console.error("[validate-runtime] Unexpected error:", err);
   process.exit(1);
 });

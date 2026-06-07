@@ -14,7 +14,7 @@ Run these before tagging v1.1.0:
 - [ ] `go test ./...` from `service/`
 - [ ] `go build ./...` from `service/`
 - [ ] `npm run build:service`
-- [ ] `npm run validate:package:smoke` — builds `build/portier/`, validates layout, runs smoke test
+- [ ] `npm run validate:runtime:smoke` — builds `build/portier/`, validates layout, runs smoke test
 
 ## Explicit OS Service Install Validation
 
@@ -38,7 +38,7 @@ Each script validates:
 8. Temp files cleaned up
 
 Flags supported by all scripts:
-- `--no-build` / `-NoBuild` — skip `npm run package:portier`, use existing `build/portier/`
+- `--no-build` / `-NoBuild` — skip `npm run build:runtime`, use existing `build/portier/`
 - `--keep-files` / `-KeepFiles` — preserve temp directories on failure for debugging
 - `--port` / `-Port` — override the management port (default: auto-detect free port)
 
@@ -82,7 +82,7 @@ Manual QA is now limited to firewall behavior and production install paths. Core
 
 ### Package Build and Smoke Test (Automated)
 
-- [ ] `npm run validate:package:smoke` passes — builds `build/portier/`, validates layout and content, runs smoke test.
+- [ ] `npm run validate:runtime:smoke` passes — builds `build/portier/`, validates layout and content, runs smoke test.
   - Validates: `service`/`service.exe`, `server.js`, `web/index.html`, `web/assets/`, `readme.txt`.
   - Validates: `readme.txt` mentions management URL and config path.
   - Validates: `node_modules`, `rules.json`, `sources/`, `client/`, `server/` are absent from the package.

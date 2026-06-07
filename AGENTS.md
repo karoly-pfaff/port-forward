@@ -12,8 +12,7 @@
 - `service/sources` = native Go service implementation for smaller binaries and service deployment
 - `client/sources` = React TypeScript web UI
 - `shared/sources` = shared types, validation, constants, port advisory utilities
-- `deploy` = service examples, unit files, deploy docs/templates
-- `scripts` = executable automation scripts; platform subdirs contain `release/` (artifact builders) and `service/` (OS service lifecycle) subfolders
+- `scripts` = executable automation scripts; platform subdirs contain `release/` (artifact builders), `service/` (OS service lifecycle), and platform-specific docs/templates
 - `build` = generated build output
 
 ## Server Runtimes
@@ -115,18 +114,18 @@ Each script uses test-specific names, ports, and temp paths. Never touches produ
 - Firewall and OS permission behavior on each platform
 
 **Automated (not manual):**
-- Package build correctness: `npm run validate:package:smoke`
+- Package build correctness: `npm run validate:runtime:smoke`
 - TCP/UDP protocol forwarding: `npm run test:e2e`
 - OS service install/start/stop/uninstall: `npm run validate:service:*`
 
 ## Packaging Commands
 
 ```powershell
-npm run package:portier           # cross-platform: builds build/portier/ on the current OS
-npm run build:native:windows      # Windows package (build/windows/)
-npm run build:native:macos        # macOS package (build/macos/)
-npm run build:native:linux        # Linux package (build/linux/)
-npm run package:clean             # clean build/portier/ and all platform package dirs
+npm run build:runtime             # cross-platform: builds build/portier/ on the current OS
+npm run build:runtime:windows     # Windows package (build/windows/)
+npm run build:runtime:macos       # macOS package (build/macos/)
+npm run build:runtime:linux       # Linux package (build/linux/)
+npm run build:clean               # clean build/portier/ and all platform package dirs
 ```
 
 ## macOS LaunchAgent Commands
@@ -147,13 +146,13 @@ Uninstall script supports: `--purge` (removes config and logs; off by default).
 macOS release archive:
 
 ```bash
-npm run release:portable              # package:portier then portable tar.gz
+npm run build:release:portable        # build:runtime then portable tar.gz
 ```
 
 Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
 
 Unsigned. Gatekeeper may quarantine downloaded binaries. Sign with Developer ID for public distribution.
-Do not add `release:*` to `npm run check` — it is a release step.
+Do not add `build:release:*` to `npm run check` — it is a release step.
 
 ## Linux systemd Service Commands
 
@@ -173,13 +172,13 @@ Uninstall script supports: `--remove-files` (removes `/opt/portier/`), `--remove
 Linux release archive:
 
 ```bash
-npm run release:portable              # package:portier then portable tar.gz
+npm run build:release:portable        # build:runtime then portable tar.gz
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 
 No signing required for Linux tar.gz. Firewall rules for forwarded ports are the user's responsibility (ufw, iptables, firewalld).
-Do not add `release:*` to `npm run check` — it is a release step.
+Do not add `build:release:*` to `npm run check` — it is a release step.
 
 ## Windows Release Commands
 
@@ -196,21 +195,21 @@ Output:
 
 Build script: `scripts/windows/release/build-release.ps1`
 - `-Version 1.1.0` — override version string (default: reads from `package.json`)
-- `-NoPackage` — skip `package:portier` step
+- `-NoPackage` — skip `build:runtime` step
 - `-InnoPath "C:\..."` — path to `ISCC.exe` if not on PATH
 
 The installer is unsigned. It does NOT create Windows Firewall rules. Config is preserved on uninstall.
-Do not add `release:*` to `npm run check` — it is a release step.
+Do not add `build:release:*` to `npm run check` — it is a release step.
 
 ## Package Validation Commands
 
 ```powershell
-npm run validate:package           # validate existing build/portier/ layout
-npm run validate:package:build     # build then validate
-npm run validate:package:smoke     # build, validate, and run smoke test (preferred for release)
+npm run validate:runtime           # validate existing build/portier/ layout
+npm run validate:runtime:build     # build then validate
+npm run validate:runtime:smoke     # build, validate, and run smoke test (preferred for release)
 ```
 
-`validate:package:smoke` is the recommended pre-release package check. It does not require
+`validate:runtime:smoke` is the recommended pre-release package check. It does not require
 Administrator or root. It does not install OS services.
 
 ## OS Service Install Validation Commands
@@ -229,12 +228,12 @@ npm run validate:service:current  # current platform, user-scope where possible
 ```
 
 All service validation scripts accept:
-- `--no-build` / `-NoBuild` — skip `package:portier` build step
+- `--no-build` / `-NoBuild` — skip `build:runtime` build step
 - `--keep-files` / `-KeepFiles` — preserve temp files for debugging
 - `--port` / `-Port` — override the test port
 
 Normal development validation: `npm run check`
-Release package validation: `npm run validate:package:smoke`
+Release package validation: `npm run validate:runtime:smoke`
 Release service validation: `npm run validate:service:current` (or per-platform variants)
 
 ## Release Artifact Commands
@@ -242,8 +241,8 @@ Release service validation: `npm run validate:service:current` (or per-platform 
 Build the current platform's portable archive (and installer if tooling is available):
 
 ```powershell
-npm run release:current       # portable + installer (non-fatal if installer tools absent)
-npm run release:portable      # portable archive only
+npm run build:release:current       # portable + installer (non-fatal if installer tools absent)
+npm run build:release:portable      # portable archive only
 ```
 
 Validate release artifacts:
@@ -261,7 +260,7 @@ Archive filenames are versioned:
 - Linux: `portier-<version>-linux.tar.gz`
 
 Service binaries are platform-native. Run on each OS for that OS's artifacts.
-Do not add `release:*` or `validate:release:*` to `npm run check` — they are release steps.
+Do not add `build:release:*` or `validate:release:*` to `npm run check` — they are release steps.
 
 ## Installer Strategy
 
@@ -332,8 +331,7 @@ v1.2 targets diagnostics and operational polish: runtime info endpoint, rule dia
 
 - Use `sources/` for TypeScript source directories.
 - Use `build/` for generated build outputs.
-- Use `deploy/` for service examples and documentation.
-- Keep executable automation scripts under `scripts/`, with `release/` (artifact builders) and `service/` (OS service lifecycle) subfolders under `scripts/windows/`, `scripts/macos/`, and `scripts/linux/`.
+- Keep executable automation scripts under `scripts/`, with `release/` (artifact builders), `service/` (OS service lifecycle), and platform docs/templates under `scripts/windows/`, `scripts/macos/`, and `scripts/linux/`.
 - Normal documentation filenames are lowercase, such as `docs/architecture.md` and `docs/checklist.md`. The root `README.md` is uppercase.
 - Keep tool-required files uppercase: `AGENTS.md`, `CLAUDE.md`, and `SKILL.md` in Codex/Claude skill directories.
 - React component and view files under `client/sources/` use **CamelCase** filenames (e.g., `ForwardRuleList.tsx`, `StatCard.tsx`). Non-component files use the existing repo convention (e.g., `format.ts`, `nav.ts`).

@@ -27,14 +27,14 @@ Runtime config and the web UI stay external in both modes.
 Cross-platform generic package (validates on any OS):
 
 ```powershell
-npm run package:portier          # builds build/portier/
-npm run validate:package:smoke   # build, validate layout, and smoke-test
+npm run build:runtime            # builds build/portier/
+npm run validate:runtime:smoke   # build, validate layout, and smoke-test
 ```
 
 Windows-specific package (produces build\windows\):
 
 ```powershell
-npm run build:native:windows
+npm run build:runtime:windows
 ```
 
 Output: `build\windows\` (service.exe, server.js, web\, readme.txt).
@@ -42,8 +42,8 @@ Output: `build\windows\` (service.exe, server.js, web\, readme.txt).
 Clean and rebuild:
 
 ```powershell
-npm run package:clean
-npm run build:native:windows
+npm run build:clean
+npm run build:runtime:windows
 ```
 
 ---
@@ -60,15 +60,15 @@ The `scripts/windows/release/` directory contains an Inno Setup 6 script and a b
 **Build the installer (and portable archive):**
 
 ```powershell
-npm run release:current
+npm run build:release:current
 ```
 
-This runs `npm run package:portier` first, produces the portable `.zip`, then calls ISCC.exe. The installer step is non-fatal if Inno Setup is absent — the portable zip is still produced.
+This runs `npm run build:runtime` first, produces the portable `.zip`, then calls ISCC.exe. The installer step is non-fatal if Inno Setup is absent — the portable zip is still produced.
 
 To skip the package step and reuse an existing `build/portier/`:
 
 ```powershell
-npm run release:current -- --no-build
+npm run build:release:current -- --no-build
 ```
 
 **Output:** `build/releases/windows/Portier-Setup-<version>.exe`
@@ -92,7 +92,7 @@ npm run release:current -- --no-build
 | Parameter | Description |
 |-----------|-------------|
 | `-Version 1.1.0` | Override version (default: reads from `package.json`) |
-| `-NoPackage` | Skip `npm run package:portier` |
+| `-NoPackage` | Skip `npm run build:runtime` |
 | `-InnoPath "C:\..."` | Full path to `ISCC.exe` if not on PATH |
 
 **Firewall:** The installer does not create Windows Firewall rules. Forwarded ports listening on `0.0.0.0` may trigger Windows Firewall prompts or require manual inbound rules.
@@ -365,7 +365,7 @@ npm run validate:service:current
 ```
 
 Both scripts:
-- Build `build/portier/` via `npm run package:portier` (pass `-NoBuild` to skip)
+- Build `build/portier/` via `npm run build:runtime` (pass `-NoBuild` to skip)
 - Install the test service/task, poll `/api/health`, verify the web UI
 - Stop and unregister the test service/task, verify removal
 - Clean up all temp files

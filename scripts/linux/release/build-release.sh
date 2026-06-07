@@ -43,11 +43,11 @@ echo ""
 
 # Build package unless --no-package
 if [ -z "$NO_PACKAGE" ]; then
-  echo "Running npm run package:portier..."
-  npm --prefix "$REPO_ROOT" run package:portier
+  echo "Running npm run build:runtime..."
+  npm --prefix "$REPO_ROOT" run build:runtime
   echo ""
 else
-  echo "Skipping package:portier (--no-package)."
+  echo "Skipping runtime build (--no-package)."
   echo ""
 fi
 
@@ -55,7 +55,7 @@ fi
 for f in "service" "server.js" "web/index.html" "readme.txt"; do
   if [ ! -e "$PACKAGE_DIR/$f" ]; then
     echo "Error: Required file missing from $PACKAGE_DIR: $f" >&2
-    echo "  Run: npm run package:portier" >&2
+    echo "  Run: npm run build:runtime" >&2
     exit 1
   fi
 done
@@ -78,4 +78,4 @@ tar -tzf "$OUTPUT_DIR/$ARCHIVE_NAME"
 echo ""
 echo "Install on a target Linux machine:"
 echo "  tar -xzf $ARCHIVE_NAME -C /opt/portier/"
-echo "  sudo bash scripts/linux/install-service.sh --source-dir /opt/portier"
+echo "  sudo bash scripts/linux/service/install-service.sh --source-dir /opt/portier"
