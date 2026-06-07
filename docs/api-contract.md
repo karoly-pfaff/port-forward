@@ -223,6 +223,67 @@ Field notes:
 - `startedAt`: ISO 8601 / RFC 3339 string of service startup time.
 - `serviceMode`: reflects the `--service` flag / headless mode.
 
+## `POST /api/forwards/:id/diagnose`
+
+Purpose: run diagnostic checks against an existing forward rule without changing rule state. Added in v1.2.
+
+Both runtimes implement this endpoint with the same response shape.
+
+Request body: empty or `{}`. No body is required; the rule configuration is read from the server state.
+
+Response: `RuleDiagnosticsResult`.
+
+Errors:
+
+- `404` when the rule is not found.
+
+No state is mutated. The rule is not started, stopped, or modified. No sockets remain open after the response.
+
+### Response shape
+
+```json
+{
+  "ruleId": "string",
+  "ruleName": "string",
+  "protocol": "tcp" | "udp",
+  "summary": {
+    "status": "pass" | "warn" | "fail",
+    "message": "string"
+  },
+  "checks": [
+    {
+      "id": "string",
+      "label": "string",
+      "status": "pass" | "warn" | "fail" | "skip",
+      "message": "string",
+      "details": { "key": "value" }
+    }
+  ],
+  "diagnosedAt": "ISO timestamp"
+}
+```
+
+### Check IDs
+
+| ID | When it runs | Status |
+|----|-------------|--------|
+| `listen-host` | Always | `pass` for specific host; `warn` for `0.0.0.0` |
+| `lan-exposure` | Always | `pass` unless listenHost is `0.0.0.0`; then `warn` |
+| `privileged-port` | Always | `warn` for ports below 1024 |
+| `common-port` | Always | `warn` if listenPort is a well-known service port |
+| `listen-bind` | Always | `pass` if port is available to bind; `fail` if occupied or permission denied; `pass` if rule is running (Portier owns the socket) |
+| `target-host` | Always | `pass` if targetHost resolves; `fail` if DNS lookup fails |
+| `target-connect` | TCP: after target-host. UDP: always | TCP: `pass` if TCP connection succeeds; `fail` if refused/timeout. UDP: always `skip` (UDP reachability cannot be verified) |
+| `udp-mode` | UDP only | `pass` for `one-way` and `bidirectional-multi-client`; `warn` for `bidirectional-last-client` |
+
+### Running-rule listen-bind behavior
+
+If the rule is currently running, its own listener already occupies the port. The diagnostic does not attempt a bind and returns `pass` with message: `"Rule is currently running; the listen port is already owned by Portier."` This prevents a false failure when Portier itself is the occupant.
+
+### UDP target-connect limitation
+
+UDP reachability cannot be proven without a protocol-specific response from the target. The `target-connect` check is always `skip` for UDP rules. This is by design, not an omission.
+
 ## `GET /api/health`
 
 Purpose: lightweight health probe for the native Go service.
@@ -273,4 +334,8 @@ The client should import these from `@portier/shared`:
 - `ImportMode`
 - `ImportResult`
 - `RuntimeInfo`
+- `DiagnosticStatus`
+- `DiagnosticCheck`
+- `DiagnosticSummary`
+- `RuleDiagnosticsResult`
 - port constants and advisory helpers

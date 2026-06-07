@@ -8,6 +8,21 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (v1.2 Slice 2 — rule diagnostics API)
+
+- `POST /api/forwards/:id/diagnose` endpoint on both the TypeScript server and Go service: runs diagnostic checks against an existing forward rule without changing rule state or opening long-lived sockets.
+- Response shape: `RuleDiagnosticsResult` — ruleId, ruleName, protocol, summary (`pass`/`warn`/`fail`), checks array, diagnosedAt timestamp.
+- Checks implemented: `listen-host`, `lan-exposure`, `privileged-port`, `common-port`, `listen-bind`, `target-host`, `target-connect`, `udp-mode` (UDP only).
+- `listen-bind` skips the bind attempt when the rule is running and returns `pass` — Portier owns the socket.
+- `target-connect` is always `skip` for UDP rules (UDP reachability cannot be verified without a protocol-specific response).
+- `udp-mode` warns for `bidirectional-last-client`; passes for `one-way` and `bidirectional-multi-client`.
+- `DiagnosticStatus`, `DiagnosticCheck`, `DiagnosticSummary`, `RuleDiagnosticsResult` types exported from `@portier/shared`.
+- `getRule(id)` method added to `ForwardManager` (TypeScript server).
+- `diagnoseRule()` helper added to `server/sources/diagnose.ts` (TypeScript) and `service/sources/api/diagnose.go` (Go).
+- `DiagnosticCheck`, `DiagnosticSummary`, `RuleDiagnosticsResult` types added to `service/sources/domain/domain.go`.
+- `validate:contract` updated with diagnose scenarios: unknown rule 404, TCP reachable target, UDP target-connect skip, LAN exposure warning, response shape verification.
+- TypeScript tests and Go tests added for all check scenarios.
+
 ### Added (v1.2 Slice 1 — runtime info)
 
 - `GET /api/runtime` endpoint on both the TypeScript server and Go service: returns name, version, runtime (`"node"`/`"go"`), platform, arch, uptimeSeconds, startedAt, managementHost/Port, configPath, staticDir, serviceMode, and pid.

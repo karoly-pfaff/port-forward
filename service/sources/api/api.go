@@ -213,6 +213,9 @@ func (h *Handler) serveForwardByID(w http.ResponseWriter, r *http.Request) {
 		case "stop":
 			h.stopForward(w, ruleID)
 			return
+		case "diagnose":
+			h.diagnoseForward(w, ruleID)
+			return
 		}
 	}
 
@@ -263,6 +266,34 @@ func (h *Handler) stopForward(w http.ResponseWriter, ruleID string) {
 		return
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *Handler) diagnoseForward(w http.ResponseWriter, ruleID string) {
+	var targetRule *domain.ForwardRule
+	for _, r := range h.manager.ListRules() {
+		if r.ID == ruleID {
+			rule := r
+			targetRule = &rule
+			break
+		}
+	}
+	if targetRule == nil {
+		writeJSON(w, http.StatusNotFound, map[string][]string{
+			"errors": {notFoundMessage},
+		})
+		return
+	}
+
+	var isRunning bool
+	for _, s := range h.manager.ListStatus() {
+		if s.RuleID == ruleID {
+			isRunning = s.Running
+			break
+		}
+	}
+
+	result := diagnoseRule(*targetRule, isRunning)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) reorderForwards(w http.ResponseWriter, r *http.Request) {

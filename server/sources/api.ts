@@ -12,6 +12,7 @@ import type {
 import { getPortAdvisories, PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT } from "@portier/shared";
 import type { ForwardManager } from "./forward-manager.js";
 import { ConflictError, NotFoundError, ValidationError } from "./forward-manager.js";
+import { diagnoseRule } from "./diagnose.js";
 import type { ActivityStore } from "./activity/activity-store.js";
 
 export interface RuntimeInfoOptions {
@@ -93,6 +94,20 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
   app.post("/api/forwards/:id/stop", async (request, response, next) => {
     try {
       response.json(await manager.stopRule(request.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/forwards/:id/diagnose", async (request, response, next) => {
+    try {
+      const rule = manager.getRule(request.params.id);
+      if (!rule) {
+        response.status(404).json({ errors: [`Forward rule ${request.params.id} was not found.`] });
+        return;
+      }
+      const isRunning = manager.getStatus(rule.id).running;
+      response.json(await diagnoseRule(rule, isRunning));
     } catch (error) {
       next(error);
     }

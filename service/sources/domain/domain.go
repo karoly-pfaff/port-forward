@@ -70,3 +70,34 @@ type ImportResult struct {
 	Skipped  int      `json:"skipped"`
 	Errors   []string `json:"errors"`
 }
+
+type DiagnosticStatus string
+
+const (
+	DiagnosticPass DiagnosticStatus = "pass"
+	DiagnosticWarn DiagnosticStatus = "warn"
+	DiagnosticFail DiagnosticStatus = "fail"
+	DiagnosticSkip DiagnosticStatus = "skip"
+)
+
+type DiagnosticCheck struct {
+	ID      string           `json:"id"`
+	Label   string           `json:"label"`
+	Status  DiagnosticStatus `json:"status"`
+	Message string           `json:"message"`
+	Details map[string]any   `json:"details,omitempty"`
+}
+
+type DiagnosticSummary struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+type RuleDiagnosticsResult struct {
+	RuleID      string            `json:"ruleId"`
+	RuleName    string            `json:"ruleName"`
+	Protocol    ForwardProtocol   `json:"protocol"`
+	Summary     DiagnosticSummary `json:"summary"`
+	Checks      []DiagnosticCheck `json:"checks"`
+	DiagnosedAt string            `json:"diagnosedAt"`
+}

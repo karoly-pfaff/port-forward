@@ -1,4 +1,5 @@
 import http from "node:http";
+import net from "node:net";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -7,7 +8,7 @@ import type { ForwardRule } from "@portier/shared";
 import { createApp, type RuntimeInfoOptions } from "./api.js";
 import { ForwardManager, type RuleStore } from "./forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
-import { getFreeTcpPort } from "./test-helpers.js";
+import { getFreeTcpPort, getFreeUdpPort } from "./test-helpers.js";
 
 class MemoryStore implements RuleStore {
   constructor(private rules: ForwardRule[] = []) {}
@@ -679,5 +680,255 @@ describe("GET /api/runtime", () => {
       expect(body.name).toBe("Portier");
       expect(typeof body.pid).toBe("number");
     });
+  });
+});
+
+// ── Diagnose helpers ────────────────────────────────────────────────────────
+
+function startEchoServer(): Promise<{ port: number; close: () => Promise<void> }> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as net.AddressInfo;
+      resolve({
+        port,
+        close: () => new Promise<void>((res, rej) => server.close((err) => (err ? rej(err) : res())))
+      });
+    });
+  });
+}
+
+describe("POST /api/forwards/:id/diagnose", () => {
+  it("returns 404 for an unknown rule", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/no-such-id/diagnose`, {
+        method: "POST"
+      });
+      expect(response.status).toBe(404);
+      const body = (await response.json()) as { errors: string[] };
+      expect(Array.isArray(body.errors)).toBe(true);
+      expect(body.errors.length).toBeGreaterThan(0);
+    });
+  });
+
+  it("diagnoses a TCP rule with a reachable target and returns pass for target-connect", async () => {
+    const echo = await startEchoServer();
+    const listenPort = await getFreeTcpPort();
+    const rule: ForwardRule = {
+      id: "diag-tcp",
+      name: "Diag TCP",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort: echo.port,
+      enabled: false
+    };
+
+    try {
+      await withServer(async (port) => {
+        const response = await fetch(`http://127.0.0.1:${port}/api/forwards/diag-tcp/diagnose`, {
+          method: "POST"
+        });
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as {
+          ruleId: string;
+          ruleName: string;
+          protocol: string;
+          summary: { status: string; message: string };
+          checks: Array<{ id: string; status: string }>;
+          diagnosedAt: string;
+        };
+        expect(body.ruleId).toBe("diag-tcp");
+        expect(body.protocol).toBe("tcp");
+        expect(typeof body.diagnosedAt).toBe("string");
+        expect(() => new Date(body.diagnosedAt)).not.toThrow();
+
+        const connectCheck = body.checks.find((c) => c.id === "target-connect");
+        expect(connectCheck).toBeDefined();
+        expect(connectCheck?.status).toBe("pass");
+      }, { rules: [rule] });
+    } finally {
+      await echo.close();
+    }
+  });
+
+  it("diagnoses a TCP rule with an unreachable target and returns fail for target-connect", async () => {
+    const unreachablePort = await getFreeTcpPort();
+    // Port is free — nothing listening there
+    const rule: ForwardRule = {
+      id: "diag-tcp-fail",
+      name: "Diag TCP Fail",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: await getFreeTcpPort(),
+      targetHost: "127.0.0.1",
+      targetPort: unreachablePort,
+      enabled: false
+    };
+
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/diag-tcp-fail/diagnose`, {
+        method: "POST"
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { checks: Array<{ id: string; status: string }> };
+      const connectCheck = body.checks.find((c) => c.id === "target-connect");
+      expect(connectCheck).toBeDefined();
+      expect(connectCheck?.status).toBe("fail");
+    }, { rules: [rule] });
+  });
+
+  it("diagnoses a UDP rule and skips target-connect", async () => {
+    const rule: ForwardRule = {
+      id: "diag-udp",
+      name: "Diag UDP",
+      protocol: "udp",
+      listenHost: "127.0.0.1",
+      listenPort: await getFreeUdpPort(),
+      targetHost: "127.0.0.1",
+      targetPort: await getFreeUdpPort(),
+      enabled: false,
+      udpMode: "one-way"
+    };
+
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/diag-udp/diagnose`, {
+        method: "POST"
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { checks: Array<{ id: string; status: string }> };
+      const connectCheck = body.checks.find((c) => c.id === "target-connect");
+      expect(connectCheck).toBeDefined();
+      expect(connectCheck?.status).toBe("skip");
+
+      const udpModeCheck = body.checks.find((c) => c.id === "udp-mode");
+      expect(udpModeCheck).toBeDefined();
+      expect(udpModeCheck?.status).toBe("pass");
+    }, { rules: [rule] });
+  });
+
+  it("warns on LAN exposure for 0.0.0.0 listen host", async () => {
+    const rule: ForwardRule = {
+      id: "diag-lan",
+      name: "Diag LAN",
+      protocol: "tcp",
+      listenHost: "0.0.0.0",
+      listenPort: await getFreeTcpPort(),
+      targetHost: "127.0.0.1",
+      targetPort: await getFreeTcpPort(),
+      enabled: false
+    };
+
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/diag-lan/diagnose`, {
+        method: "POST"
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { checks: Array<{ id: string; status: string }> };
+      const lanCheck = body.checks.find((c) => c.id === "lan-exposure");
+      expect(lanCheck).toBeDefined();
+      expect(lanCheck?.status).toBe("warn");
+
+      const hostCheck = body.checks.find((c) => c.id === "listen-host");
+      expect(hostCheck).toBeDefined();
+      expect(hostCheck?.status).toBe("warn");
+    }, { rules: [rule] });
+  });
+
+  it("does not fail listen-bind when the rule is running (Portier owns the socket)", async () => {
+    const listenPort = await getFreeTcpPort();
+    const echo = await startEchoServer();
+    const rule: ForwardRule = {
+      id: "diag-running",
+      name: "Diag Running",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort: echo.port,
+      enabled: true
+    };
+
+    try {
+      await withServer(async (port) => {
+        // Start the rule so it owns the listen socket
+        await fetch(`http://127.0.0.1:${port}/api/forwards/diag-running/start`, { method: "POST" });
+
+        const response = await fetch(`http://127.0.0.1:${port}/api/forwards/diag-running/diagnose`, {
+          method: "POST"
+        });
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { checks: Array<{ id: string; status: string }> };
+        const bindCheck = body.checks.find((c) => c.id === "listen-bind");
+        expect(bindCheck).toBeDefined();
+        // Must not be fail — running rule owns the socket legitimately
+        expect(bindCheck?.status).not.toBe("fail");
+      }, { rules: [rule] });
+    } finally {
+      await echo.close();
+    }
+  });
+
+  it("response shape is stable (required fields present)", async () => {
+    const rule: ForwardRule = {
+      id: "diag-shape",
+      name: "Diag Shape",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: await getFreeTcpPort(),
+      targetHost: "127.0.0.1",
+      targetPort: await getFreeTcpPort(),
+      enabled: false
+    };
+
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/diag-shape/diagnose`, {
+        method: "POST"
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(typeof body.ruleId).toBe("string");
+      expect(typeof body.ruleName).toBe("string");
+      expect(typeof body.protocol).toBe("string");
+      expect(typeof body.diagnosedAt).toBe("string");
+      expect(body.summary).toBeDefined();
+      expect(typeof (body.summary as Record<string, unknown>).status).toBe("string");
+      expect(typeof (body.summary as Record<string, unknown>).message).toBe("string");
+      expect(Array.isArray(body.checks)).toBe(true);
+      const checks = body.checks as Array<Record<string, unknown>>;
+      expect(checks.length).toBeGreaterThan(0);
+      for (const check of checks) {
+        expect(typeof check.id).toBe("string");
+        expect(typeof check.label).toBe("string");
+        expect(typeof check.status).toBe("string");
+        expect(typeof check.message).toBe("string");
+      }
+    }, { rules: [rule] });
+  });
+
+  it("warns for bidirectional-last-client UDP mode", async () => {
+    const rule: ForwardRule = {
+      id: "diag-udp-bidi",
+      name: "Diag UDP Bidi",
+      protocol: "udp",
+      listenHost: "127.0.0.1",
+      listenPort: await getFreeUdpPort(),
+      targetHost: "127.0.0.1",
+      targetPort: await getFreeUdpPort(),
+      enabled: false,
+      udpMode: "bidirectional-last-client"
+    };
+
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/diag-udp-bidi/diagnose`, {
+        method: "POST"
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { checks: Array<{ id: string; status: string }> };
+      const udpModeCheck = body.checks.find((c) => c.id === "udp-mode");
+      expect(udpModeCheck).toBeDefined();
+      expect(udpModeCheck?.status).toBe("warn");
+    }, { rules: [rule] });
   });
 });

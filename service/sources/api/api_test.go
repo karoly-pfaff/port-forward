@@ -1468,3 +1468,386 @@ func sendAndReceiveUDP(t *testing.T, listenPort int, payload string, timeout tim
 	}
 	return string(buf[:n])
 }
+
+// ── Diagnose tests ─────────────────────────────────────────────────────────
+
+func TestDiagnoseUnknownRuleReturns404(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/no-such-id/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusNotFound)
+	}
+	var body struct {
+		Errors []string `json:"errors"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Errors) == 0 {
+		t.Fatal("expected errors[] in 404 response")
+	}
+}
+
+func TestDiagnoseResponseShape(t *testing.T) {
+	listenPort := freeAPITCPPort(t)
+	configPath := writeTestConfig(t, fmt.Sprintf(`[
+  {
+    "id": "shape-rule",
+    "name": "Shape Rule",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": %d,
+    "targetHost": "127.0.0.1",
+    "targetPort": 9999,
+    "enabled": false
+  }
+]`, listenPort))
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/shape-rule/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	requiredFields := []string{"ruleId", "ruleName", "protocol", "summary", "checks", "diagnosedAt"}
+	for _, f := range requiredFields {
+		if _, ok := body[f]; !ok {
+			t.Fatalf("missing field: %s", f)
+		}
+	}
+	if body["ruleId"] != "shape-rule" {
+		t.Fatalf("ruleId = %v, want shape-rule", body["ruleId"])
+	}
+	if body["protocol"] != "tcp" {
+		t.Fatalf("protocol = %v, want tcp", body["protocol"])
+	}
+
+	summary, ok := body["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("summary is not an object: %T", body["summary"])
+	}
+	if _, ok := summary["status"].(string); !ok {
+		t.Fatal("summary.status is not a string")
+	}
+	if _, ok := summary["message"].(string); !ok {
+		t.Fatal("summary.message is not a string")
+	}
+
+	checks, ok := body["checks"].([]any)
+	if !ok || len(checks) == 0 {
+		t.Fatal("checks must be a non-empty array")
+	}
+	for _, raw := range checks {
+		check, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("check is not an object: %T", raw)
+		}
+		for _, f := range []string{"id", "label", "status", "message"} {
+			if _, ok := check[f].(string); !ok {
+				t.Fatalf("check.%s is not a string: %v", f, check[f])
+			}
+		}
+	}
+}
+
+func TestDiagnoseTCPReachableTargetPassesConnect(t *testing.T) {
+	targetPort, stopTarget := startAPIEchoServer(t, "diag-reach")
+	defer stopTarget()
+	listenPort := freeAPITCPPort(t)
+	configPath := writeTestConfig(t, fmt.Sprintf(`[
+  {
+    "id": "diag-reach",
+    "name": "Diag Reach",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": %d,
+    "targetHost": "127.0.0.1",
+    "targetPort": %d,
+    "enabled": false
+  }
+]`, listenPort, targetPort))
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/diag-reach/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body struct {
+		Checks []map[string]any `json:"checks"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var connectCheck map[string]any
+	for _, c := range body.Checks {
+		if c["id"] == "target-connect" {
+			connectCheck = c
+		}
+	}
+	if connectCheck == nil {
+		t.Fatal("expected target-connect check")
+	}
+	if connectCheck["status"] != "pass" {
+		t.Fatalf("target-connect status = %v, want pass", connectCheck["status"])
+	}
+}
+
+func TestDiagnoseTCPUnreachableTargetFailsConnect(t *testing.T) {
+	listenPort := freeAPITCPPort(t)
+	unreachablePort := freeAPITCPPort(t) // nothing listening
+	configPath := writeTestConfig(t, fmt.Sprintf(`[
+  {
+    "id": "diag-unreach",
+    "name": "Diag Unreach",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": %d,
+    "targetHost": "127.0.0.1",
+    "targetPort": %d,
+    "enabled": false
+  }
+]`, listenPort, unreachablePort))
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/diag-unreach/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body struct {
+		Checks []map[string]any `json:"checks"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var connectCheck map[string]any
+	for _, c := range body.Checks {
+		if c["id"] == "target-connect" {
+			connectCheck = c
+		}
+	}
+	if connectCheck == nil {
+		t.Fatal("expected target-connect check")
+	}
+	if connectCheck["status"] != "fail" {
+		t.Fatalf("target-connect status = %v, want fail", connectCheck["status"])
+	}
+}
+
+func TestDiagnoseUDPSkipsTargetConnect(t *testing.T) {
+	listenPort := freeAPIUDPPort(t)
+	configPath := writeTestConfig(t, fmt.Sprintf(`[
+  {
+    "id": "diag-udp",
+    "name": "Diag UDP",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": %d,
+    "targetHost": "127.0.0.1",
+    "targetPort": 9999,
+    "enabled": false,
+    "udpMode": "one-way"
+  }
+]`, listenPort))
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/diag-udp/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body struct {
+		Checks []map[string]any `json:"checks"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var connectCheck, udpModeCheck map[string]any
+	for _, c := range body.Checks {
+		switch c["id"] {
+		case "target-connect":
+			connectCheck = c
+		case "udp-mode":
+			udpModeCheck = c
+		}
+	}
+	if connectCheck == nil {
+		t.Fatal("expected target-connect check")
+	}
+	if connectCheck["status"] != "skip" {
+		t.Fatalf("target-connect status = %v, want skip", connectCheck["status"])
+	}
+	if udpModeCheck == nil {
+		t.Fatal("expected udp-mode check")
+	}
+	if udpModeCheck["status"] != "pass" {
+		t.Fatalf("udp-mode status = %v, want pass (one-way)", udpModeCheck["status"])
+	}
+}
+
+func TestDiagnoseUDPBidirectionalLastClientWarn(t *testing.T) {
+	listenPort := freeAPIUDPPort(t)
+	configPath := writeTestConfig(t, fmt.Sprintf(`[
+  {
+    "id": "diag-udp-bidi",
+    "name": "Diag UDP Bidi",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": %d,
+    "targetHost": "127.0.0.1",
+    "targetPort": 9999,
+    "enabled": false,
+    "udpMode": "bidirectional-last-client"
+  }
+]`, listenPort))
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/diag-udp-bidi/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body struct {
+		Checks []map[string]any `json:"checks"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var udpModeCheck map[string]any
+	for _, c := range body.Checks {
+		if c["id"] == "udp-mode" {
+			udpModeCheck = c
+		}
+	}
+	if udpModeCheck == nil {
+		t.Fatal("expected udp-mode check")
+	}
+	if udpModeCheck["status"] != "warn" {
+		t.Fatalf("udp-mode status = %v, want warn", udpModeCheck["status"])
+	}
+}
+
+func TestDiagnoseLANExposureWarns(t *testing.T) {
+	listenPort := freeAPITCPPort(t)
+	configPath := writeTestConfig(t, fmt.Sprintf(`[
+  {
+    "id": "diag-lan",
+    "name": "Diag LAN",
+    "protocol": "tcp",
+    "listenHost": "0.0.0.0",
+    "listenPort": %d,
+    "targetHost": "127.0.0.1",
+    "targetPort": 9999,
+    "enabled": false
+  }
+]`, listenPort))
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/diag-lan/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body struct {
+		Checks []map[string]any `json:"checks"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var lanCheck map[string]any
+	for _, c := range body.Checks {
+		if c["id"] == "lan-exposure" {
+			lanCheck = c
+		}
+	}
+	if lanCheck == nil {
+		t.Fatal("expected lan-exposure check")
+	}
+	if lanCheck["status"] != "warn" {
+		t.Fatalf("lan-exposure status = %v, want warn", lanCheck["status"])
+	}
+}
+
+func TestDiagnoseRunningRuleDoesNotFailListenBind(t *testing.T) {
+	targetPort, stopTarget := startAPIEchoServer(t, "diag-run")
+	defer stopTarget()
+	listenPort := freeAPITCPPort(t)
+	handler := newTestHandler(t, "", writeTCPRuleConfig(t, "diag-run", listenPort, targetPort, false))
+	defer handler.manager.StopAll()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	// Start the rule so it owns the listen socket.
+	startResp, err := http.Post(server.URL+"/api/forwards/diag-run/start", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST start failed: %v", err)
+	}
+	startResp.Body.Close()
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("start status = %d", startResp.StatusCode)
+	}
+
+	response, err := http.Post(server.URL+"/api/forwards/diag-run/diagnose", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST diagnose failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("diagnose status = %d, want 200", response.StatusCode)
+	}
+
+	var body struct {
+		Checks []map[string]any `json:"checks"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	var bindCheck map[string]any
+	for _, c := range body.Checks {
+		if c["id"] == "listen-bind" {
+			bindCheck = c
+		}
+	}
+	if bindCheck == nil {
+		t.Fatal("expected listen-bind check")
+	}
+	if bindCheck["status"] == "fail" {
+		t.Fatalf("listen-bind must not be fail when rule is running (got %v)", bindCheck["status"])
+	}
+}

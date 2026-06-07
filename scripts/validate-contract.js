@@ -661,6 +661,190 @@ async function runScenarios(baseUrl, runtime) {
       fail(`GET /api/unknown → expected 404, got ${res.status}`);
     }
   }
+
+  // ── POST /api/forwards/:id/diagnose ─────────────────────────────────────
+
+  // Unknown rule → 404 with errors[]
+  {
+    const res = await api.post("/api/forwards/no-such-id/diagnose", {});
+    if (res.status === 404) {
+      const data = res.json();
+      if (Array.isArray(data.errors)) {
+        pass("POST /api/forwards/unknown/diagnose → 404 with errors[]");
+      } else {
+        fail("POST /api/forwards/unknown/diagnose → 404 but no errors[]");
+      }
+    } else {
+      fail(`POST /api/forwards/unknown/diagnose → expected 404, got ${res.status}`);
+    }
+  }
+
+  // Diagnose with reachable TCP target — create a temporary echo server
+  {
+    const echoPort = await getFreePort();
+    const echoServer = await new Promise((resolve, reject) => {
+      const srv = createServer();
+      srv.on("error", reject);
+      srv.listen(echoPort, "127.0.0.1", () => resolve(srv));
+    }).catch(() => null);
+
+    const diagListenPort = await getFreePort();
+    // Create a TCP rule pointing to the echo server
+    const createRes = await api.post("/api/forwards", {
+      name: "Diag Contract TCP",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: diagListenPort,
+      targetHost: "127.0.0.1",
+      targetPort: echoPort,
+      enabled: false,
+    });
+
+    let diagTcpId = null;
+    if (createRes.status === 201) {
+      diagTcpId = createRes.json().id;
+    }
+
+    if (diagTcpId && echoServer) {
+      const res = await api.post(`/api/forwards/${diagTcpId}/diagnose`, {});
+      if (res.status === 200) {
+        const data = res.json();
+        const requiredFields = ["ruleId", "ruleName", "protocol", "summary", "checks", "diagnosedAt"];
+        const missing = requiredFields.filter((f) => !(f in data));
+        if (missing.length === 0) {
+          pass("POST /api/forwards/:id/diagnose → 200 with required fields");
+        } else {
+          fail(`POST /api/forwards/:id/diagnose → missing fields: ${missing.join(", ")}`);
+        }
+        if (data.ruleId === diagTcpId && data.protocol === "tcp") {
+          pass("POST /api/forwards/:id/diagnose → ruleId and protocol correct");
+        } else {
+          fail(`POST /api/forwards/:id/diagnose → ruleId/protocol mismatch: ${JSON.stringify(data)}`);
+        }
+        if (data.summary && ["pass", "warn", "fail"].includes(data.summary.status)) {
+          pass("POST /api/forwards/:id/diagnose → summary.status is valid");
+        } else {
+          fail(`POST /api/forwards/:id/diagnose → summary.status invalid: ${data.summary?.status}`);
+        }
+        if (Array.isArray(data.checks) && data.checks.length > 0) {
+          const checkIds = data.checks.map((c) => c.id);
+          const expectedIds = ["listen-host", "lan-exposure", "privileged-port", "common-port", "listen-bind", "target-host", "target-connect"];
+          const missingIds = expectedIds.filter((id) => !checkIds.includes(id));
+          if (missingIds.length === 0) {
+            pass("POST /api/forwards/:id/diagnose → all expected check IDs present");
+          } else {
+            fail(`POST /api/forwards/:id/diagnose → missing check IDs: ${missingIds.join(", ")}`);
+          }
+          const connectCheck = data.checks.find((c) => c.id === "target-connect");
+          if (connectCheck && connectCheck.status === "pass") {
+            pass("POST /api/forwards/:id/diagnose → target-connect passes for reachable target");
+          } else {
+            fail(`POST /api/forwards/:id/diagnose → target-connect status: ${connectCheck?.status} (want pass)`);
+          }
+          const allHaveShape = data.checks.every(
+            (c) => typeof c.id === "string" && typeof c.label === "string" &&
+              typeof c.status === "string" && typeof c.message === "string"
+          );
+          if (allHaveShape) {
+            pass("POST /api/forwards/:id/diagnose → each check has id, label, status, message");
+          } else {
+            fail("POST /api/forwards/:id/diagnose → some checks are missing required fields");
+          }
+        } else {
+          fail("POST /api/forwards/:id/diagnose → checks must be a non-empty array");
+        }
+      } else {
+        fail(`POST /api/forwards/:id/diagnose → expected 200, got ${res.status}: ${res.body}`);
+      }
+    } else {
+      skip("POST /api/forwards/:id/diagnose (TCP reachable) — echo server or rule creation failed");
+    }
+
+    // Clean up
+    if (echoServer) { try { echoServer.close(); } catch { /* best effort */ } }
+    if (diagTcpId) { try { await api.delete(`/api/forwards/${diagTcpId}`); } catch { /* best effort */ } }
+  }
+
+  // Diagnose UDP rule — target-connect must be skip, udp-mode check must be present
+  {
+    const udpDiagPort = await getFreePort();
+    const createRes = await api.post("/api/forwards", {
+      name: "Diag Contract UDP",
+      protocol: "udp",
+      listenHost: "127.0.0.1",
+      listenPort: udpDiagPort,
+      targetHost: "127.0.0.1",
+      targetPort: 19998,
+      enabled: false,
+      udpMode: "bidirectional-last-client",
+    });
+
+    let diagUdpId = null;
+    if (createRes.status === 201) {
+      diagUdpId = createRes.json().id;
+    }
+
+    if (diagUdpId) {
+      const res = await api.post(`/api/forwards/${diagUdpId}/diagnose`, {});
+      if (res.status === 200) {
+        const data = res.json();
+        const connectCheck = data.checks?.find((c) => c.id === "target-connect");
+        if (connectCheck && connectCheck.status === "skip") {
+          pass("POST /api/forwards/:id/diagnose (UDP) → target-connect is skip");
+        } else {
+          fail(`POST /api/forwards/:id/diagnose (UDP) → target-connect status: ${connectCheck?.status} (want skip)`);
+        }
+        const udpModeCheck = data.checks?.find((c) => c.id === "udp-mode");
+        if (udpModeCheck && udpModeCheck.status === "warn") {
+          pass("POST /api/forwards/:id/diagnose (UDP) → udp-mode warns for bidirectional-last-client");
+        } else {
+          fail(`POST /api/forwards/:id/diagnose (UDP) → udp-mode status: ${udpModeCheck?.status} (want warn)`);
+        }
+      } else {
+        fail(`POST /api/forwards/:id/diagnose (UDP) → expected 200, got ${res.status}`);
+      }
+      try { await api.delete(`/api/forwards/${diagUdpId}`); } catch { /* best effort */ }
+    } else {
+      skip("POST /api/forwards/:id/diagnose (UDP) — rule creation failed");
+    }
+  }
+
+  // Diagnose with 0.0.0.0 listen host → lan-exposure must warn
+  {
+    const lanDiagPort = await getFreePort();
+    const createRes = await api.post("/api/forwards", {
+      name: "Diag Contract LAN",
+      protocol: "tcp",
+      listenHost: "0.0.0.0",
+      listenPort: lanDiagPort,
+      targetHost: "127.0.0.1",
+      targetPort: 19999,
+      enabled: false,
+    });
+
+    let diagLanId = null;
+    if (createRes.status === 201) {
+      diagLanId = createRes.json().id;
+    }
+
+    if (diagLanId) {
+      const res = await api.post(`/api/forwards/${diagLanId}/diagnose`, {});
+      if (res.status === 200) {
+        const data = res.json();
+        const lanCheck = data.checks?.find((c) => c.id === "lan-exposure");
+        if (lanCheck && lanCheck.status === "warn") {
+          pass("POST /api/forwards/:id/diagnose (0.0.0.0) → lan-exposure warns");
+        } else {
+          fail(`POST /api/forwards/:id/diagnose (0.0.0.0) → lan-exposure status: ${lanCheck?.status} (want warn)`);
+        }
+      } else {
+        fail(`POST /api/forwards/:id/diagnose (0.0.0.0) → expected 200, got ${res.status}`);
+      }
+      try { await api.delete(`/api/forwards/${diagLanId}`); } catch { /* best effort */ }
+    } else {
+      skip("POST /api/forwards/:id/diagnose (LAN) — rule creation failed");
+    }
+  }
 }
 
 async function main() {

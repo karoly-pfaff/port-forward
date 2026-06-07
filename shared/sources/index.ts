@@ -120,6 +120,30 @@ export interface ImportResult {
   errors: string[];
 }
 
+export type DiagnosticStatus = "pass" | "warn" | "fail" | "skip";
+
+export interface DiagnosticCheck {
+  id: string;
+  label: string;
+  status: DiagnosticStatus;
+  message: string;
+  details?: Record<string, string | number | boolean | null>;
+}
+
+export interface DiagnosticSummary {
+  status: "pass" | "warn" | "fail";
+  message: string;
+}
+
+export interface RuleDiagnosticsResult {
+  ruleId: string;
+  ruleName: string;
+  protocol: ForwardProtocol;
+  summary: DiagnosticSummary;
+  checks: DiagnosticCheck[];
+  diagnosedAt: string;
+}
+
 export interface ValidationResult<T> {
   valid: boolean;
   value?: T;

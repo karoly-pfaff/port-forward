@@ -42,6 +42,10 @@ export class ForwardManager {
     return [...this.rules.values()];
   }
 
+  getRule(ruleId: string): ForwardRule | undefined {
+    return this.rules.get(ruleId);
+  }
+
   listStatus(): ForwardStatus[] {
     return this.listRules().map((rule) => this.getStatus(rule.id));
   }
