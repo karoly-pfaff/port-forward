@@ -1,12 +1,20 @@
-import { useRef, useState, type ReactElement, type ChangeEvent } from "react";
-import type { ExportedConfig, ForwardRuleResponse, ImportMode } from "@portier/shared";
+import { useRef, useState, useEffect, type ReactElement, type ChangeEvent } from "react";
+import type { ExportedConfig, ForwardRuleResponse, ImportMode, RuntimeInfo } from "@portier/shared";
 import {
   PORTIER_DEFAULT_HOST,
   PORTIER_DEFAULT_PORT,
   PORTIER_RECOMMENDED_FORWARD_PORT_MAX,
   PORTIER_RECOMMENDED_FORWARD_PORT_MIN
 } from "@portier/shared";
-import { exportConfig, importConfig } from "../../api/portierApi.js";
+import { exportConfig, importConfig, fetchRuntimeInfo } from "../../api/portierApi.js";
+
+function formatUptime(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}
 
 interface SettingsViewProps {
   onRulesUpdated: (rules: ForwardRuleResponse[]) => void;
@@ -31,6 +39,21 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null);
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [runtimeUnavailable, setRuntimeUnavailable] = useState(false);
+
+  useEffect(() => {
+    fetchRuntimeInfo()
+      .then((info) => {
+        setRuntimeInfo(info);
+        setRuntimeLoading(false);
+      })
+      .catch(() => {
+        setRuntimeUnavailable(true);
+        setRuntimeLoading(false);
+      });
+  }, []);
 
   async function handleExport(): Promise<void> {
     setExporting(true);
@@ -282,17 +305,58 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
               </div>
             </div>
 
+            {/* Runtime / Environment */}
+            <div className="settings-section">
+              <div className="settings-section-title">Runtime / Environment</div>
+              {runtimeLoading ? (
+                <p className="settings-desc">Loading runtime info…</p>
+              ) : runtimeUnavailable ? (
+                <p className="settings-desc settings-unavailable">Runtime information is unavailable from this backend.</p>
+              ) : runtimeInfo ? (
+                <>
+                  <div className="settings-row">
+                    <span className="settings-label">Runtime</span>
+                    <code className="settings-value">{runtimeInfo.runtime === "go" ? "Go service" : "Node server"}</code>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">Version</span>
+                    <code className="settings-value">{runtimeInfo.version}</code>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">Platform</span>
+                    <code className="settings-value">{runtimeInfo.platform} / {runtimeInfo.arch}</code>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">Uptime</span>
+                    <span className="settings-value">{formatUptime(runtimeInfo.uptimeSeconds)}</span>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">Management</span>
+                    <code className="settings-value">{runtimeInfo.managementHost}:{runtimeInfo.managementPort}</code>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">Config path</span>
+                    <code className="settings-value settings-value-path">{runtimeInfo.configPath}</code>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">Static dir</span>
+                    <code className="settings-value settings-value-path">{runtimeInfo.staticDir}</code>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">Service mode</span>
+                    <span className="settings-value">{runtimeInfo.serviceMode ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="settings-row">
+                    <span className="settings-label">PID</span>
+                    <code className="settings-value">{runtimeInfo.pid}</code>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
             {/* About */}
             <div className="settings-section">
               <div className="settings-section-title">About Portier</div>
-              <div className="settings-row">
-                <span className="settings-label">Version</span>
-                <code className="settings-value">1.0.0</code>
-              </div>
-              <div className="settings-row">
-                <span className="settings-label">Management default</span>
-                <code className="settings-value">{PORTIER_DEFAULT_HOST}:{PORTIER_DEFAULT_PORT}</code>
-              </div>
               <p className="settings-desc">
                 Portier is a local TCP/UDP port forwarding manager. Activity logs are in-memory only and reset on server restart.
                 Rules are persisted to an external JSON file.

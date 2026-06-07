@@ -186,6 +186,43 @@ Events are returned newest first.
 - The store is bounded to the latest 500 events.
 - UDP packet events are throttled to at most one log entry per second per rule to avoid flooding.
 
+## `GET /api/runtime`
+
+Purpose: expose runtime environment details for the local management UI. Added in v1.2.
+
+Both runtimes implement this endpoint with the same response shape.
+
+This endpoint is local-admin oriented — it exposes file paths, process info, and runtime config, which is intentional for operational transparency in a local management tool.
+
+Response:
+
+```json
+{
+  "name": "Portier",
+  "version": "1.1.0",
+  "runtime": "node" | "go",
+  "platform": "windows" | "macos" | "linux" | "unknown",
+  "arch": "x64" | "arm64" | "unknown",
+  "uptimeSeconds": 123,
+  "startedAt": "2026-01-01T00:00:00Z",
+  "managementHost": "127.0.0.1",
+  "managementPort": 47831,
+  "configPath": "/path/to/rules.json",
+  "staticDir": "/path/to/web",
+  "serviceMode": false,
+  "pid": 12345
+}
+```
+
+Field notes:
+- `version`: read from the server `package.json` (TypeScript) or injected at build time via `-ldflags` (Go; defaults to `"dev"` for development builds).
+- `runtime`: `"node"` for the TypeScript server, `"go"` for the native Go service.
+- `platform`: normalized from `process.platform` / `runtime.GOOS`.
+- `arch`: normalized from `process.arch` / `runtime.GOARCH`; `"x64"` maps from `amd64`.
+- `uptimeSeconds`: computed on each request from startup time.
+- `startedAt`: ISO 8601 / RFC 3339 string of service startup time.
+- `serviceMode`: reflects the `--service` flag / headless mode.
+
 ## `GET /api/health`
 
 Purpose: lightweight health probe for the native Go service.
@@ -235,4 +272,5 @@ The client should import these from `@portier/shared`:
 - `ExportedConfig`
 - `ImportMode`
 - `ImportResult`
+- `RuntimeInfo`
 - port constants and advisory helpers

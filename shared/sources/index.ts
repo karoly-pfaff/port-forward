@@ -92,6 +92,22 @@ export type ForwardRuleResponse = ForwardRule & { advisories: PortAdvisory[] };
 
 export type ImportMode = "replace" | "merge";
 
+export interface RuntimeInfo {
+  name: string;
+  version: string;
+  runtime: "node" | "go";
+  platform: "windows" | "macos" | "linux" | "unknown";
+  arch: "x64" | "arm64" | "unknown";
+  uptimeSeconds: number;
+  startedAt: string;
+  managementHost: string;
+  managementPort: number;
+  configPath: string;
+  staticDir: string;
+  serviceMode: boolean;
+  pid: number;
+}
+
 export interface ExportedConfig {
   version: "1";
   exportedAt: string;

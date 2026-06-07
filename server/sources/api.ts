@@ -9,20 +9,33 @@ import type {
   ActivityEventType,
   ActivitySeverity
 } from "@portier/shared";
-import { getPortAdvisories } from "@portier/shared";
+import { getPortAdvisories, PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT } from "@portier/shared";
 import type { ForwardManager } from "./forward-manager.js";
 import { ConflictError, NotFoundError, ValidationError } from "./forward-manager.js";
 import type { ActivityStore } from "./activity/activity-store.js";
 
+export interface RuntimeInfoOptions {
+  version: string;
+  managementHost: string;
+  managementPort: number;
+  configPath: string;
+  staticDir: string;
+  serviceMode: boolean;
+  startedAt: Date;
+}
+
 export interface AppOptions {
   staticClientDir?: string;
   activity?: ActivityStore;
+  runtimeInfo?: RuntimeInfoOptions;
 }
 
 export function createApp(manager: ForwardManager, options: AppOptions = {}): express.Express {
   const app = express();
   app.use(cors());
   app.use(express.json());
+
+  const runtimeStartedAt = options.runtimeInfo?.startedAt ?? new Date();
 
   // ── Forward rules CRUD ──────────────────────────────────────────────────────
 
@@ -89,6 +102,27 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
 
   app.get("/api/status", (_request, response) => {
     response.json(manager.listStatus());
+  });
+
+  // ── Runtime info ──────────────────────────────────────────────────────────────
+
+  app.get("/api/runtime", (_request, response) => {
+    const info = options.runtimeInfo;
+    response.json({
+      name: "Portier",
+      version: info?.version ?? "unknown",
+      runtime: "node",
+      platform: normalizePlatform(process.platform),
+      arch: normalizeArch(process.arch),
+      uptimeSeconds: Math.floor((Date.now() - runtimeStartedAt.getTime()) / 1000),
+      startedAt: runtimeStartedAt.toISOString(),
+      managementHost: info?.managementHost ?? PORTIER_DEFAULT_HOST,
+      managementPort: info?.managementPort ?? PORTIER_DEFAULT_PORT,
+      configPath: info?.configPath ?? "",
+      staticDir: info?.staticDir ?? "",
+      serviceMode: info?.serviceMode ?? false,
+      pid: process.pid
+    });
   });
 
   // ── Activity ─────────────────────────────────────────────────────────────────
@@ -197,6 +231,19 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
 
 export function hasStaticClient(staticClientDir: string): boolean {
   return existsSync(join(staticClientDir, "index.html"));
+}
+
+function normalizePlatform(platform: string): "windows" | "macos" | "linux" | "unknown" {
+  if (platform === "win32") return "windows";
+  if (platform === "darwin") return "macos";
+  if (platform === "linux") return "linux";
+  return "unknown";
+}
+
+function normalizeArch(arch: string): "x64" | "arm64" | "unknown" {
+  if (arch === "x64") return "x64";
+  if (arch === "arm64") return "arm64";
+  return "unknown";
 }
 
 function toRuleResponse(rule: ForwardRule): ForwardRuleResponse {

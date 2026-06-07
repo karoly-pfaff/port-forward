@@ -1,4 +1,7 @@
 import http from "node:http";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Socket } from "node:net";
 import { createApp, hasStaticClient } from "./api.js";
 import { ConfigStore } from "./config-store.js";
@@ -6,6 +9,16 @@ import { ForwardManager } from "./forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
 import { createConsoleLogger, errorFields } from "./logger.js";
 import { resolveServerOptions } from "./server-options.js";
+
+function readServerVersion(): string {
+  try {
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
+    return typeof pkg.version === "string" ? pkg.version : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 const logger = createConsoleLogger();
 
@@ -25,13 +38,24 @@ void main().catch((error: unknown) => {
 });
 
 async function main(): Promise<void> {
+  const startedAt = new Date();
   const options = resolveServerOptions();
   const store = new ConfigStore(options.configPath);
   const activity = new ActivityStore();
   const manager = new ForwardManager(store, activity);
   const startedForwardRuleCount = await manager.loadAndStartEnabled();
 
-  const app = createApp(manager, { staticClientDir: options.staticClientDir, activity });
+  const runtimeInfo = {
+    version: readServerVersion(),
+    managementHost: options.host,
+    managementPort: options.port,
+    configPath: options.configPath,
+    staticDir: options.staticClientDir,
+    serviceMode: options.service,
+    startedAt
+  };
+
+  const app = createApp(manager, { staticClientDir: options.staticClientDir, activity, runtimeInfo });
   const server = http.createServer(app);
   const httpSockets = new Set<Socket>();
 

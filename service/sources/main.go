@@ -20,6 +20,7 @@ import (
 	"portier/service/sources/options"
 	"portier/service/sources/platform"
 	"portier/service/sources/static"
+	"portier/service/sources/version"
 )
 
 const windowsServiceName = "Portier"
@@ -60,6 +61,7 @@ func main() {
 }
 
 func runPortier(ctx context.Context, opts options.Options, log *slog.Logger) error {
+	startedAt := time.Now()
 	staticAvailable := static.HasClient(opts.StaticDir)
 	logStartup(log, opts, staticAvailable)
 
@@ -86,8 +88,14 @@ func runPortier(ctx context.Context, opts options.Options, log *slog.Logger) err
 	log.Info("Loaded forwarding rules", "count", len(forwardManager.ListRules()), "started", startedCount)
 
 	server := &http.Server{
-		Addr:              net.JoinHostPort(opts.Host, strconv.Itoa(opts.Port)),
-		Handler:           api.NewHandler(api.Options{StaticDir: opts.StaticDir, Manager: forwardManager}),
+		Addr: net.JoinHostPort(opts.Host, strconv.Itoa(opts.Port)),
+		Handler: api.NewHandler(api.Options{
+			StaticDir:      opts.StaticDir,
+			Manager:        forwardManager,
+			StartedAt:      startedAt,
+			ServiceOptions: opts,
+			Version:        version.Version,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

@@ -150,6 +150,38 @@ async function runScenarios(baseUrl, runtime) {
     delete: (path) => httpMethod("DELETE", `${baseUrl}${path}`),
   };
 
+  // GET /api/runtime — RuntimeInfo shape
+  {
+    const res = await api.get("/api/runtime");
+    if (res.status === 200) {
+      const data = res.json();
+      const required = ["name", "version", "runtime", "platform", "arch", "uptimeSeconds", "startedAt", "managementHost", "managementPort", "configPath", "staticDir", "serviceMode", "pid"];
+      const missing = required.filter((f) => !(f in data));
+      if (missing.length === 0) {
+        pass("GET /api/runtime → 200 with all required fields");
+      } else {
+        fail(`GET /api/runtime → 200 but missing fields: ${missing.join(", ")}`);
+      }
+      if (typeof data.uptimeSeconds === "number" && data.uptimeSeconds >= 0) {
+        pass("GET /api/runtime → uptimeSeconds is a non-negative number");
+      } else {
+        fail(`GET /api/runtime → uptimeSeconds invalid: ${data.uptimeSeconds}`);
+      }
+      if (typeof data.startedAt === "string" && !isNaN(new Date(data.startedAt).getTime())) {
+        pass("GET /api/runtime → startedAt is a parseable timestamp");
+      } else {
+        fail(`GET /api/runtime → startedAt not parseable: ${data.startedAt}`);
+      }
+      if (data.runtime === runtime.toLowerCase() || (runtime === "TypeScript" && data.runtime === "node") || (runtime === "Go" && data.runtime === "go")) {
+        pass(`GET /api/runtime → runtime="${data.runtime}" matches ${runtime}`);
+      } else {
+        fail(`GET /api/runtime → runtime="${data.runtime}" does not match expected for ${runtime}`);
+      }
+    } else {
+      fail(`GET /api/runtime → expected 200, got ${res.status}`);
+    }
+  }
+
   // GET /api/forwards — initially empty
   {
     const res = await api.get("/api/forwards");

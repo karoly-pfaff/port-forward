@@ -119,7 +119,7 @@ Possible API direction:
 
 ### Suggested Implementation Slices
 
-1. **Runtime info endpoint and UI display** — `GET /api/runtime` in both runtimes, display in Settings view
+1. ~~**Runtime info endpoint and UI display**~~ — ✓ Complete. `GET /api/runtime` in both runtimes, Settings Runtime/Environment section, shared `RuntimeInfo` type, contract validator updated.
 2. **Rule diagnostics API** — `POST /api/forwards/:id/diagnose` in both runtimes, structured pass/warn/fail result
 3. **Rule diagnostics UI** — Diagnose button, results panel in the rules view or edit drawer
 4. **Activity Log polish** — per-rule filter, clear button, export, throttle display improvements

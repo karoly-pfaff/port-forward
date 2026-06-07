@@ -5,40 +5,62 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"portier/service/sources/activity"
 	"portier/service/sources/advisory"
 	"portier/service/sources/domain"
 	"portier/service/sources/manager"
+	"portier/service/sources/options"
 	"portier/service/sources/static"
 	"portier/service/sources/validation"
+	"portier/service/sources/version"
 )
 
 const notFoundMessage = "API route was not found."
 
 type Options struct {
-	StaticDir string
-	Manager   *manager.Manager
+	StaticDir      string
+	Manager        *manager.Manager
+	StartedAt      time.Time
+	ServiceOptions options.Options
+	Version        string
 }
 
 type Handler struct {
 	staticDir       string
 	staticAvailable bool
 	manager         *manager.Manager
+	startedAt       time.Time
+	serviceOpts     options.Options
+	version         string
 }
 
-func NewHandler(options Options) *Handler {
-	requestManager := options.Manager
+func NewHandler(opts Options) *Handler {
+	requestManager := opts.Manager
 	if requestManager == nil {
 		requestManager, _ = manager.New(nil)
 	}
+	startedAt := opts.StartedAt
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
+	ver := opts.Version
+	if ver == "" {
+		ver = version.Version
+	}
 
 	return &Handler{
-		staticDir:       options.StaticDir,
-		staticAvailable: static.HasClient(options.StaticDir),
+		staticDir:       opts.StaticDir,
+		staticAvailable: static.HasClient(opts.StaticDir),
 		manager:         requestManager,
+		startedAt:       startedAt,
+		serviceOpts:     opts.ServiceOptions,
+		version:         ver,
 	}
 }
 
@@ -67,6 +89,11 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			"server": "go",
 			"name":   "Portier",
 		})
+		return
+	}
+
+	if r.Method == http.MethodGet && r.URL.Path == "/api/runtime" {
+		h.serveRuntimeInfo(w)
 		return
 	}
 
@@ -352,6 +379,49 @@ func toRuleResponse(rule domain.ForwardRule) domain.ForwardRuleResponse {
 			ListenHost: rule.ListenHost,
 			Purpose:    advisory.PurposeForward,
 		}),
+	}
+}
+
+func (h *Handler) serveRuntimeInfo(w http.ResponseWriter) {
+	uptimeSeconds := int64(time.Since(h.startedAt).Seconds())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name":           "Portier",
+		"version":        h.version,
+		"runtime":        "go",
+		"platform":       normalizePlatform(),
+		"arch":           normalizeArch(),
+		"uptimeSeconds":  uptimeSeconds,
+		"startedAt":      h.startedAt.UTC().Format(time.RFC3339),
+		"managementHost": h.serviceOpts.Host,
+		"managementPort": h.serviceOpts.Port,
+		"configPath":     h.serviceOpts.ConfigPath,
+		"staticDir":      h.serviceOpts.StaticDir,
+		"serviceMode":    h.serviceOpts.Service,
+		"pid":            os.Getpid(),
+	})
+}
+
+func normalizePlatform() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "windows"
+	case "darwin":
+		return "macos"
+	case "linux":
+		return "linux"
+	default:
+		return "unknown"
+	}
+}
+
+func normalizeArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x64"
+	case "arm64":
+		return "arm64"
+	default:
+		return "unknown"
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"portier/service/sources/activity"
 	"portier/service/sources/manager"
+	"portier/service/sources/options"
 )
 
 func TestHealthEndpoint(t *testing.T) {
@@ -791,7 +792,71 @@ func newTestHandler(t *testing.T, staticDir string, configPath string) *Handler 
 		t.Fatalf("create manager: %v", err)
 	}
 	testManager.SetActivityStore(&activity.Store{})
-	return NewHandler(Options{StaticDir: staticDir, Manager: testManager})
+	return NewHandler(Options{
+		StaticDir: staticDir,
+		Manager:   testManager,
+		StartedAt: time.Now(),
+		ServiceOptions: options.Options{
+			Host:       "127.0.0.1",
+			Port:       47831,
+			ConfigPath: configPath,
+			StaticDir:  staticDir,
+		},
+		Version: "test",
+	})
+}
+
+func TestRuntimeEndpoint(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/runtime")
+	if err != nil {
+		t.Fatalf("GET /api/runtime failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if body["runtime"] != "go" {
+		t.Fatalf("runtime = %v, want go", body["runtime"])
+	}
+	if body["name"] != "Portier" {
+		t.Fatalf("name = %v, want Portier", body["name"])
+	}
+	if _, ok := body["version"].(string); !ok {
+		t.Fatalf("version should be a string, got %T", body["version"])
+	}
+	if _, ok := body["configPath"].(string); !ok {
+		t.Fatalf("configPath should be a string, got %T", body["configPath"])
+	}
+	if _, ok := body["staticDir"].(string); !ok {
+		t.Fatalf("staticDir should be a string, got %T", body["staticDir"])
+	}
+	uptimeSeconds, ok := body["uptimeSeconds"].(float64)
+	if !ok {
+		t.Fatalf("uptimeSeconds should be a number, got %T", body["uptimeSeconds"])
+	}
+	if uptimeSeconds < 0 {
+		t.Fatalf("uptimeSeconds = %v, want >= 0", uptimeSeconds)
+	}
+	startedAt, ok := body["startedAt"].(string)
+	if !ok || startedAt == "" {
+		t.Fatalf("startedAt should be a non-empty string, got %v", body["startedAt"])
+	}
+	if _, err := time.Parse(time.RFC3339, startedAt); err != nil {
+		t.Fatalf("startedAt is not valid RFC3339: %v", err)
+	}
+	if _, ok := body["pid"].(float64); !ok {
+		t.Fatalf("pid should be a number, got %T", body["pid"])
+	}
 }
 
 func TestActivityEndpointEventsAfterRuleCreate(t *testing.T) {

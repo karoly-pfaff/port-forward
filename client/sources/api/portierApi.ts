@@ -9,7 +9,8 @@ import type {
   ForwardStatus,
   ImportMode,
   ImportResult,
-  PortAdvisory
+  PortAdvisory,
+  RuntimeInfo
 } from "@portier/shared";
 
 export async function fetchForwardRules(): Promise<ForwardRuleResponse[]> {
@@ -93,6 +94,12 @@ export async function fetchActivity(params: FetchActivityParams = {}): Promise<A
   await ensureOk(response);
   const body = (await response.json()) as { events: ActivityEvent[] };
   return body.events;
+}
+
+export async function fetchRuntimeInfo(): Promise<RuntimeInfo> {
+  const response = await fetch("/api/runtime");
+  await ensureOk(response);
+  return (await response.json()) as RuntimeInfo;
 }
 
 export async function exportConfig(): Promise<ExportedConfig> {

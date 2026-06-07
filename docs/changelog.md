@@ -8,6 +8,15 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (v1.2 Slice 1 — runtime info)
+
+- `GET /api/runtime` endpoint on both the TypeScript server and Go service: returns name, version, runtime (`"node"`/`"go"`), platform, arch, uptimeSeconds, startedAt, managementHost/Port, configPath, staticDir, serviceMode, and pid.
+- `RuntimeInfo` type exported from `@portier/shared`.
+- `fetchRuntimeInfo()` API helper in the client.
+- Settings view — **Runtime / Environment** section: shows live runtime info (runtime, version, platform/arch, uptime, management URL, config path, static dir, service mode, PID). Gracefully shows "Runtime information is unavailable from this backend." for older backends.
+- Go service version package (`service/sources/version/version.go`): default `"dev"`, injectable at build time via `-ldflags`.
+- `validate:contract` updated to verify GET /api/runtime shape and runtime field for both runtimes.
+
 ### Added (post-v1.1, pre-v1.2)
 
 - Config compatibility fixtures (`tests/fixtures/config/`): 8 valid and 8 invalid `rules.json` fixtures covering TCP, all UDP modes, both config shapes (raw array and Go wrapper), and all field-level error categories.

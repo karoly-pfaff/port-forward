@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import type { ForwardRule } from "@portier/shared";
-import { createApp } from "./api.js";
+import { createApp, type RuntimeInfoOptions } from "./api.js";
 import { ForwardManager, type RuleStore } from "./forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
 import { getFreeTcpPort } from "./test-helpers.js";
@@ -25,6 +25,7 @@ interface WithServerOptions {
   activity?: ActivityStore;
   rules?: ForwardRule[];
   staticClientDir?: string;
+  runtimeInfo?: RuntimeInfoOptions;
 }
 
 async function withServer(
@@ -38,7 +39,8 @@ async function withServer(
   }
   const app = createApp(manager, {
     activity: options?.activity,
-    staticClientDir: options?.staticClientDir
+    staticClientDir: options?.staticClientDir,
+    runtimeInfo: options?.runtimeInfo
   });
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -600,5 +602,82 @@ describe("static file serving", () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("GET /api/runtime", () => {
+  const testRuntimeInfo: RuntimeInfoOptions = {
+    version: "1.1.0-test",
+    managementHost: "127.0.0.1",
+    managementPort: 47831,
+    configPath: "/test/data/forwards.json",
+    staticDir: "/test/web",
+    serviceMode: false,
+    startedAt: new Date("2026-01-01T00:00:00.000Z")
+  };
+
+  it("returns 200 with runtime info", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/runtime`);
+      expect(response.status).toBe(200);
+    }, { runtimeInfo: testRuntimeInfo });
+  });
+
+  it("runtime field is 'node'", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/runtime`);
+      const body = (await response.json()) as { runtime: string };
+      expect(body.runtime).toBe("node");
+    }, { runtimeInfo: testRuntimeInfo });
+  });
+
+  it("version reflects the provided info", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/runtime`);
+      const body = (await response.json()) as { version: string };
+      expect(typeof body.version).toBe("string");
+      expect(body.version).toBe("1.1.0-test");
+    }, { runtimeInfo: testRuntimeInfo });
+  });
+
+  it("configPath and staticDir are present strings", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/runtime`);
+      const body = (await response.json()) as { configPath: string; staticDir: string };
+      expect(typeof body.configPath).toBe("string");
+      expect(typeof body.staticDir).toBe("string");
+      expect(body.configPath).toBe("/test/data/forwards.json");
+      expect(body.staticDir).toBe("/test/web");
+    }, { runtimeInfo: testRuntimeInfo });
+  });
+
+  it("uptimeSeconds is a non-negative number", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/runtime`);
+      const body = (await response.json()) as { uptimeSeconds: number };
+      expect(typeof body.uptimeSeconds).toBe("number");
+      expect(body.uptimeSeconds).toBeGreaterThanOrEqual(0);
+    }, { runtimeInfo: testRuntimeInfo });
+  });
+
+  it("startedAt is a parseable ISO timestamp", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/runtime`);
+      const body = (await response.json()) as { startedAt: string };
+      expect(typeof body.startedAt).toBe("string");
+      expect(() => new Date(body.startedAt)).not.toThrow();
+      expect(new Date(body.startedAt).toISOString()).toBe("2026-01-01T00:00:00.000Z");
+    }, { runtimeInfo: testRuntimeInfo });
+  });
+
+  it("returns runtime info even without explicit runtimeInfo option", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/runtime`);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { runtime: string; name: string; pid: number };
+      expect(body.runtime).toBe("node");
+      expect(body.name).toBe("Portier");
+      expect(typeof body.pid).toBe("number");
+    });
   });
 });

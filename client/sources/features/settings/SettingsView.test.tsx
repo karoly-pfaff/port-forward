@@ -1,13 +1,31 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RuntimeInfo } from "@portier/shared";
 import { SettingsView } from "./SettingsView.js";
 import * as portierApi from "../../api/portierApi.js";
 
 vi.mock("../../api/portierApi.js", () => ({
   exportConfig: vi.fn(),
-  importConfig: vi.fn()
+  importConfig: vi.fn(),
+  fetchRuntimeInfo: vi.fn().mockRejectedValue(new Error("unavailable"))
 }));
+
+const testRuntimeInfo: RuntimeInfo = {
+  name: "Portier",
+  version: "1.1.0",
+  runtime: "go",
+  platform: "windows",
+  arch: "x64",
+  uptimeSeconds: 120,
+  startedAt: "2026-01-01T00:00:00.000Z",
+  managementHost: "127.0.0.1",
+  managementPort: 47831,
+  configPath: "C:\\ProgramData\\Portier\\rules.json",
+  staticDir: "C:\\Program Files\\Portier\\web",
+  serviceMode: true,
+  pid: 1234
+};
 
 describe("SettingsView", () => {
   it("renders the Management Endpoint section with default address", () => {
@@ -36,10 +54,14 @@ describe("SettingsView", () => {
     expect(screen.getByLabelText("Select config file")).toBeInTheDocument();
   });
 
-  it("renders the About section with version number", () => {
+  it("renders the About section", () => {
     render(<SettingsView onRulesUpdated={vi.fn()} />);
     expect(screen.getByText("About Portier")).toBeInTheDocument();
-    expect(screen.getByText("1.0.0")).toBeInTheDocument();
+  });
+
+  it("renders the Runtime / Environment section", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText("Runtime / Environment")).toBeInTheDocument();
   });
 
   it("explains that management UI is localhost-only by default", () => {
@@ -50,6 +72,46 @@ describe("SettingsView", () => {
   it("explains that import is atomic (all-or-nothing)", () => {
     render(<SettingsView onRulesUpdated={vi.fn()} />);
     expect(screen.getByText(/atomic/)).toBeInTheDocument();
+  });
+});
+
+describe("SettingsView runtime info", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows loading state initially", () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockReturnValue(new Promise(() => {}));
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText(/Loading runtime info/)).toBeInTheDocument();
+  });
+
+  it("shows unavailable message when fetch fails", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockRejectedValue(new Error("unavailable"));
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByText(/Runtime information is unavailable from this backend/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows runtime info when fetch succeeds", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByText("Go service")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1.1.0")).toBeInTheDocument();
+    expect(screen.getByText(/windows \/ x64/)).toBeInTheDocument();
+    expect(screen.getByText("2m 0s")).toBeInTheDocument();
+  });
+
+  it("shows config path and static dir when fetch succeeds", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByText(testRuntimeInfo.configPath)).toBeInTheDocument();
+    });
+    expect(screen.getByText(testRuntimeInfo.staticDir)).toBeInTheDocument();
   });
 });
 
