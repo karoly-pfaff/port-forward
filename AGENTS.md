@@ -332,7 +332,11 @@ v1.1 focuses on distribution and native OS service installers. The v1.1 scope, p
 
 ## Roadmap
 
-v1.2 targets diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export. See `docs/roadmap.md`.
+v1.2 delivered diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export.
+
+v1.3 targets native CLI and automation: a Go-based `portier` CLI that talks to the existing management API for terminal and script workflows.
+
+v1.4 targets live connection and session visibility: a read-only Live Connection Inspector for active TCP connections and UDP sessions. See `docs/roadmap.md`.
 
 ## Coding Guidelines
 

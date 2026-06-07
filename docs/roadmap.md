@@ -6,6 +6,8 @@
 - **v1.1** — Made Portier easier to install and distribute: native OS service installers, release artifacts, service and package validation, cross-platform polish.
 - **post-v1.1** — Config compatibility fixtures (`tests/fixtures/config/`), `validate:config` runner, and Settings import/export E2E (`settings.spec.ts`) added as pre-v1.2 groundwork.
 - **v1.2** — Improve operational confidence: diagnostics, visibility, safer networking UX, and runtime transparency.
+- **v1.3** — Make Portier automatable: native Go CLI for terminal and script workflows, talking to the existing management API.
+- **v1.4** — Make live forwarding traffic visible: read-only TCP connection and UDP session inspector.
 
 ---
 
@@ -146,3 +148,340 @@ The following are explicitly out of scope for v1.2:
 - Telemetry of any kind
 - New forwarding protocols
 - Large UI redesign or component framework swap
+
+---
+
+## Portier v1.3 — Native CLI & Automation
+
+**Core theme: Make Portier automatable from the terminal and scripts.**
+
+v1.0 proved the core forwarding runtime. v1.1 made Portier installable and distributable. v1.2 added diagnostics and operational visibility. v1.3 adds a Go-based `portier` CLI that gives script-friendly access to runtime info, rules, status, activity, diagnostics, and config operations without replacing the web UI.
+
+### CLI Principles
+
+- Implemented in Go; distributed as a small native binary alongside the Go service.
+- An API client — talks to the existing local management API. Not another Portier runtime.
+- Default management URL: `http://127.0.0.1:47831`
+- Works with both runtimes because both expose the same API contract:
+  - Go service (`service` / `service.exe`)
+  - TypeScript server (`server.js`)
+- Does not replace the web UI.
+- Does not duplicate forwarding engine logic.
+- Does not directly edit `rules.json` in the first release.
+- Does not manage OS service install/uninstall in the first release.
+
+### Initial Command Set
+
+**Read-only:**
+
+```
+portier runtime
+portier list
+portier status
+portier activity
+```
+
+**Lifecycle and diagnostics:**
+
+```
+portier start <id|name>
+portier stop <id|name>
+portier diagnose <id|name>
+```
+
+**Config:**
+
+```
+portier config export --out rules.json
+portier config import rules.json --mode merge
+portier config import rules.json --mode replace --yes
+```
+
+**Diagnostics export:**
+
+```
+portier diagnostics export --out portier-diagnostics.json
+```
+
+### Connection and Output
+
+**Connection options:**
+
+- `--url` — full management URL override
+- `--host` — management host
+- `--port` — management port
+- `PORTIER_URL` — environment variable override
+
+**Output modes:**
+
+- Human-readable table/text by default
+- `--json` for scripting
+
+**Exit codes:**
+
+- `0` — success
+- Non-zero for: API error, invalid arguments, connection failure, ambiguous rule name, destructive command missing confirmation
+
+**Rule lookup:**
+
+- Exact ID match first, then exact name match
+- Ambiguous name → fail and list matching rules
+- No fuzzy matching in the first version
+
+### Implementation Structure
+
+Preferred Go module layout:
+
+```text
+cli/
+  go.mod
+  readme.md
+  sources/
+    main.go
+    client/
+    commands/
+    output/
+```
+
+- A separate `cli/` Go module is preferred initially for clear boundaries.
+- Reuse shared concepts from the Go service where practical.
+- Avoid tightly coupling the CLI to service internals.
+- HTTP request/response handling must stay aligned with `docs/api-contract.md`.
+- The CLI is an API client — it does not run a forwarding engine or expose its own API.
+
+### Packaging Direction
+
+Runtime and release artifacts may eventually include:
+
+```text
+<install-dir>/
+  portier          (or portier.exe)    # CLI
+  service          (or service.exe)    # background service
+  server.js                            # Node fallback
+  web/
+  readme.txt
+```
+
+Notes:
+- If the CLI binary is named `portier`, keep the service binary named `service` or `portier-service` consistently to avoid naming confusion.
+- PATH integration is decided later.
+- Windows installer could eventually offer "Add Portier CLI to PATH".
+- Portable archives should include the CLI once implemented.
+- Installer behavior (PATH, shell completion, separate download vs. bundled) is decided during Slice 7.
+
+### Suggested Implementation Slices
+
+1. CLI strategy and command design
+2. Go CLI skeleton and API client
+3. Read-only commands: `runtime`, `list`, `status`, `activity`
+4. Lifecycle commands: `start`, `stop`, `diagnose`
+5. Config commands: `config export` / `config import`
+6. Diagnostics export command
+7. CLI packaging into runtime/release artifacts
+8. CLI validation, documentation, readiness audit, version bump, tag
+
+### Non-Goals for v1.3
+
+- TUI
+- Tray app
+- Remote authentication
+- Multi-user management
+- Cloud sync
+- Auto-update
+- Firewall management
+- OS service installer control
+- Direct config file editing without the API
+- Replacing the web UI
+- Shell completion unless explicitly added later
+
+---
+
+## Portier v1.4 — Live Connection Inspector
+
+**Core theme: Make live forwarding traffic visible and understandable.**
+
+v1.0 proved the core forwarding runtime. v1.1 made Portier installable. v1.2 added diagnostics and operational visibility. v1.3 is planned to make Portier automatable from the CLI. v1.4 should make live forwarding traffic visible in real time — answering who is connected, which rules are carrying traffic, and how much data has passed.
+
+### Product Value
+
+Simple rule-set profiles would mostly reorganize existing rules. The Live Connection Inspector answers operational questions that have no answer today:
+
+- Who is connected right now?
+- Which rule is carrying traffic?
+- How long has this connection or session been active?
+- How many bytes and packets have passed?
+- When was this UDP client last seen?
+- Is a rule idle or actively being used?
+
+This provides debugging, observability, and safety value. It complements v1.2 diagnostics: diagnostics explain whether a rule *can* work; the live inspector shows what is happening *right now*.
+
+### Proposed API Direction
+
+**Primary endpoint:**
+
+```
+GET /api/connections
+```
+
+**Optional rule-scoped endpoint:**
+
+```
+GET /api/forwards/:id/connections
+```
+
+Notes:
+- Endpoint naming should be finalized during Slice 1.
+- Both TypeScript server and Go service must expose the same response shape.
+- Read-only first. Closing or killing active connections is explicitly out of scope for the first version unless promoted later.
+
+**Suggested response shape:**
+
+```json
+{
+  "connections": [
+    {
+      "id": "string",
+      "ruleId": "string",
+      "ruleName": "string",
+      "protocol": "tcp",
+      "clientAddress": "127.0.0.1",
+      "clientPort": 52344,
+      "targetAddress": "127.0.0.1",
+      "targetPort": 5432,
+      "startedAt": "ISO string",
+      "durationSeconds": 42,
+      "bytesIn": 1024,
+      "bytesOut": 4096,
+      "status": "active"
+    }
+  ],
+  "udpSessions": [
+    {
+      "id": "string",
+      "ruleId": "string",
+      "ruleName": "string",
+      "protocol": "udp",
+      "mode": "one-way | bidirectional-last-client | bidirectional-multi-client",
+      "clientAddress": "192.168.1.25",
+      "clientPort": 51000,
+      "targetAddress": "1.1.1.1",
+      "targetPort": 53,
+      "startedAt": "ISO string",
+      "lastSeenAt": "ISO string",
+      "idleSeconds": 12,
+      "packetsIn": 5,
+      "packetsOut": 5,
+      "bytesIn": 300,
+      "bytesOut": 420,
+      "status": "active | idle"
+    }
+  ],
+  "generatedAt": "ISO string"
+}
+```
+
+Exact shape should be finalized before implementation. Field names should align with existing status/stat naming where practical. Connection IDs need to be stable for display during a session but do not need to persist across restarts.
+
+### Data Model Considerations
+
+**TCP connections:**
+- Track active TCP connections per rule: client address/port, target address/port, start time, bytes in/out, status.
+- Remove a connection from the active list when both sockets close.
+- Avoid double-counting on close/error events.
+- Do not store long-term connection history in this slice.
+
+**UDP sessions:**
+- Expose active UDP sessions, especially for `bidirectional-multi-client` mode.
+- Include client address/port, target address/port, first seen/last seen, packets/bytes in/out, idle seconds.
+- `one-way` UDP may have limited per-client session data; document limitations clearly.
+- `bidirectional-last-client` may expose only the most recent client summary.
+- Keep existing UDP forwarding behavior unchanged.
+
+**Privacy and safety:**
+- This is local management visibility only.
+- Client IP and port information is operationally necessary but must not be uploaded or sent anywhere.
+- Diagnostics export may eventually include a live session snapshot only if user-triggered.
+
+### UI Direction
+
+**Possible locations:**
+- Dedicated "Connections" or "Live" sidebar view
+- Subtab within the Activity view
+- Forward Rules row expansion or rule detail panel
+- Dashboard widget
+
+**Preferred first UI:**
+A dedicated compact Live Connections view or Activity subtab. Table-based, no charts initially.
+
+**Table columns:**
+- Protocol, rule name, client address, target address, duration, bytes in/out, packets in/out (UDP), last seen, status
+
+**Filters:** by rule, by protocol
+
+**Refresh:** manual refresh button and optional auto-refresh toggle
+
+Do not add charts or graphs in the first version.
+
+### Rule Row Live Summary
+
+A later or same-release enhancement: rule rows show a compact live traffic summary using the same connection/session data.
+
+Possible fields per row:
+- TCP active connections count
+- UDP active sessions count
+- Last traffic age
+- Bytes transferred since start
+
+Keep it subtle — the primary rule state remains start/stop status.
+
+### CLI Direction (v1.4 additions for the v1.3 CLI)
+
+If the v1.3 CLI exists, v1.4 may add:
+
+```
+portier connections
+portier connections --rule <id|name>
+portier connections --json
+portier sessions
+portier sessions --rule <id|name>
+```
+
+Do not expand v1.3 CLI scope prematurely. These are recorded here for planning only.
+
+### Diagnostics Export Integration
+
+The diagnostics export/support bundle introduced in v1.2 may eventually include:
+- Current live TCP connections
+- Current UDP sessions
+- A `generatedAt` timestamp for the session snapshot
+- A note that this is a user-triggered local export
+
+Decide during Slice 9 whether to include this in v1.4 or defer to a later release.
+
+### Suggested Implementation Slices
+
+1. Connection/session API strategy and shared contract
+2. TCP active connection tracking
+3. UDP session visibility polish
+4. `GET /api/connections` implementation in TypeScript server and Go service
+5. Contract validation and API Docs update
+6. Live Connections UI
+7. Rule row live traffic summary
+8. CLI commands for live connections, if v1.3 CLI exists
+9. Diagnostics export integration, if desired
+10. v1.4 readiness audit, version bump, changelog, tag
+
+### Non-Goals for v1.4
+
+- Closing or killing active connections
+- Traffic graphs or charts
+- Packet capture
+- Payload inspection
+- Deep protocol analysis
+- Long-term traffic history
+- Remote monitoring
+- Telemetry or cloud upload
+- Authentication or multi-user management
+- Firewall management
+- IDS or security scanning
+- Profiles or rule-set management as the primary theme

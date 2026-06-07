@@ -151,6 +151,42 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 - macOS `.app` bundle or Homebrew formula.
 - Linux hardening beyond the example systemd unit.
 
+## v1.4 Roadmap
+
+v1.4 targets live connection and session visibility: a read-only Live Connection Inspector showing active TCP connections and UDP sessions with duration, bytes, and client address. See `docs/roadmap.md` for API direction, data model, UI direction, slices, and non-goals.
+
+Checklist items to add per slice as work proceeds:
+
+- [ ] **Slice 1** — Connection/session API strategy: response shape finalized, `GET /api/connections` vs. `/api/forwards/:id/connections` decided, shared types added to `@portier/shared`, `docs/api-contract.md` updated draft.
+- [ ] **Slice 2** — TCP active connection tracking: per-rule connection registry in both runtimes, client/target address, start time, bytes in/out, clean removal on socket close, no double-count on error.
+- [ ] **Slice 3** — UDP session visibility polish: active session registry for `bidirectional-multi-client`, first seen/last seen, packets/bytes, idle seconds; document limitations for `one-way` and `bidirectional-last-client`.
+- [ ] **Slice 4** — `GET /api/connections` in TypeScript server and Go service: same response shape, generatedAt, 200 even when no connections.
+- [ ] **Slice 5** — Contract validation and API Docs: `validate:contract` updated, `docs/api-contract.md` finalized, client in-app API Docs view updated, `ApiDocsView.test.tsx` updated.
+- [ ] **Slice 6** — Live Connections UI: dedicated view or Activity subtab; table-based (protocol, rule, client, target, duration, bytes, packets, status); rule/protocol filters; auto-refresh toggle.
+- [ ] **Slice 7** — Rule row live traffic summary: compact active connections/sessions count and last-traffic age per rule row, using `GET /api/connections` data.
+- [ ] **Slice 8** — CLI commands for live connections, if v1.3 CLI exists: `portier connections`, `portier sessions`, `--rule` filter, `--json`.
+- [ ] **Slice 9** — Diagnostics export integration: decide whether to include live session snapshot in the support bundle.
+- [ ] **Slice 10** — v1.4 readiness audit, version bump, changelog finalized, tag created.
+
+---
+
+## v1.3 Roadmap
+
+v1.3 targets native CLI and automation: a Go-based `portier` CLI that talks to the existing management API. See `docs/roadmap.md` for principles, command set, implementation structure, packaging direction, slices, and non-goals.
+
+Checklist items to add per slice as work proceeds:
+
+- [ ] **Slice 1** — CLI strategy and command design: command set, rule lookup behavior, output modes, exit code contract, and module layout confirmed.
+- [ ] **Slice 2** — Go CLI skeleton and API client: `cli/` module scaffolded, HTTP client for management API, `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, structured error output.
+- [ ] **Slice 3** — Read-only commands: `portier runtime`, `portier list`, `portier status`, `portier activity`; human-readable and `--json` output; exit codes; tests.
+- [ ] **Slice 4** — Lifecycle commands: `portier start <id|name>`, `portier stop <id|name>`, `portier diagnose <id|name>`; exact ID/name lookup; ambiguous name handling; tests.
+- [ ] **Slice 5** — Config commands: `portier config export --out <file>`, `portier config import <file> --mode merge|replace [--yes]`; tests.
+- [ ] **Slice 6** — Diagnostics export: `portier diagnostics export --out <file>`; tests.
+- [ ] **Slice 7** — CLI packaging: CLI binary included in `build/portier/`, portable archives, and optionally Windows installer; binary naming (`portier`/`portier.exe`) confirmed alongside `service`/`service.exe`.
+- [ ] **Slice 8** — v1.3 readiness audit, version bump, changelog finalized, tag created.
+
+---
+
 ## v1.2 Roadmap
 
 v1.2 focuses on diagnostics and operational polish. See `docs/roadmap.md` for goals, slices, and non-goals.

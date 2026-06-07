@@ -548,7 +548,7 @@ Current version: **1.2.0**
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; future work tracked there.
+- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 plans a Go-based CLI; v1.4 plans a live connection inspector; future work tracked there.
 
 ## Agent Workflow
 
