@@ -237,6 +237,10 @@ button.nav-item--active svg {
   margin-top: 2px;
 }
 
+.sidebar-footer-version {
+  font-size: 0.72rem;
+}
+
 .sidebar-footer-dot {
   width: 7px;
   height: 7px;
@@ -1842,16 +1846,23 @@ select[aria-invalid="true"] {
 }
 
 .settings-mode-option {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: block;
   font-size: 0.82rem;
   color: var(--text-secondary);
   cursor: pointer;
 }
 
 .settings-mode-option input[type="radio"] {
+  width: auto;
+  min-height: auto;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  vertical-align: text-top;
+  margin-right: 4px;
   accent-color: var(--blue);
+  flex-shrink: 0;
 }
 
 .settings-error {
@@ -1886,6 +1897,43 @@ select[aria-invalid="true"] {
   font-size: 0.82rem;
   color: var(--red);
   margin: 0;
+}
+
+.settings-row-copyable {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.settings-value-path {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-copy-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-control);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.settings-copy-btn:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.settings-import-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* ==============================================

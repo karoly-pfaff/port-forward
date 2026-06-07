@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT } from "@portier/shared";
+import { PORTIER_APP_VERSION, PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT } from "@portier/shared";
 import { type AppView, NAV_ITEMS } from "./NavItem.js";
 
 interface SidebarProps {
@@ -28,7 +28,7 @@ export function Sidebar({ open, currentView, onNavClick }: SidebarProps): ReactE
       <div className="sidebar-footer">
         <span className="sidebar-footer-dot" aria-hidden="true" />
         <span>
-          Portier is running
+          Portier <span className="sidebar-footer-version">v{PORTIER_APP_VERSION}</span>
           <span className="sidebar-footer-host">{PORTIER_DEFAULT_HOST}:{PORTIER_DEFAULT_PORT}</span>
         </span>
       </div>

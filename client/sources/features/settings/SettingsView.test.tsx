@@ -48,6 +48,11 @@ describe("SettingsView", () => {
     expect(screen.getByRole("button", { name: /Download/ })).toBeInTheDocument();
   });
 
+  it("export button mentions Activity Log is not included", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText(/Activity Log is not included/)).toBeInTheDocument();
+  });
+
   it("renders the Import Config section with a file picker", () => {
     render(<SettingsView onRulesUpdated={vi.fn()} />);
     expect(screen.getByText("Import Config")).toBeInTheDocument();
@@ -72,6 +77,22 @@ describe("SettingsView", () => {
   it("explains that import is atomic (all-or-nothing)", () => {
     render(<SettingsView onRulesUpdated={vi.fn()} />);
     expect(screen.getByText(/atomic/)).toBeInTheDocument();
+  });
+
+  it("import mode radios are visible without selecting a file", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByRole("radio", { name: /Merge/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Replace/ })).toBeInTheDocument();
+  });
+
+  it("merge mode explanation is visible", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText(/skips rules with conflicting listen port/)).toBeInTheDocument();
+  });
+
+  it("replace mode explanation mentions deleting current rules", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText(/stops and deletes all current rules/)).toBeInTheDocument();
   });
 });
 
@@ -112,6 +133,112 @@ describe("SettingsView runtime info", () => {
       expect(screen.getByText(testRuntimeInfo.configPath)).toBeInTheDocument();
     });
     expect(screen.getByText(testRuntimeInfo.staticDir)).toBeInTheDocument();
+  });
+
+  it("shows copy buttons for config path, static dir, and management URL", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByText("Go service")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Copy config path" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy static dir" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy management URL" })).toBeInTheDocument();
+  });
+
+  it("copy config path calls clipboard with correct value", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Go service")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy config path" }));
+    expect(writeText).toHaveBeenCalledWith(testRuntimeInfo.configPath);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Copy config path" })).toHaveTextContent("Copied!");
+    });
+  });
+
+  it("copy static dir calls clipboard with correct value", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Go service")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy static dir" }));
+    expect(writeText).toHaveBeenCalledWith(testRuntimeInfo.staticDir);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Copy static dir" })).toHaveTextContent("Copied!");
+    });
+  });
+
+  it("copy management URL calls clipboard with host:port", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Go service")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy management URL" }));
+    expect(writeText).toHaveBeenCalledWith("127.0.0.1:47831");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Copy management URL" })).toHaveTextContent("Copied!");
+    });
+  });
+
+  it("clipboard failure shows Failed feedback without crashing", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntimeInfo);
+    const writeText = vi.fn().mockRejectedValue(new Error("denied"));
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await waitFor(() => expect(screen.getByText("Go service")).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy config path" }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Copy config path" })).toHaveTextContent("Failed");
+    });
+  });
+});
+
+describe("SettingsView export", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("export success shows confirmation message", async () => {
+    vi.mocked(portierApi.exportConfig).mockResolvedValue({
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: []
+    });
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    // Prevent jsdom navigation warning from anchor.click()
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Config exported successfully.")).toBeInTheDocument();
+    });
+  });
+
+  it("export failure shows error message", async () => {
+    vi.mocked(portierApi.exportConfig).mockRejectedValue(new Error("network error"));
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /Download/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("network error");
+    });
   });
 });
 
@@ -214,6 +341,22 @@ describe("SettingsView import flow", () => {
     );
   });
 
+  it("replace confirm dialog shows export backup button", async () => {
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+
+    const file = new File([configJson], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+
+    await screen.findByText("File preview");
+    await userEvent.click(screen.getByRole("radio", { name: /Replace/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Replace All Rules/ }));
+
+    expect(screen.getByRole("button", { name: /Export current config as backup/ })).toBeInTheDocument();
+  });
+
   it("invalid JSON shows parse error and does not call import API", async () => {
     stubFileReader("{ not valid json {{{{");
 
@@ -240,5 +383,11 @@ describe("SettingsView import flow", () => {
 
     await screen.findByRole("alert");
     expect(portierApi.importConfig).not.toHaveBeenCalled();
+  });
+
+  it("import button not present until a valid file is selected", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /Import Rules/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Replace All Rules/ })).not.toBeInTheDocument();
   });
 });

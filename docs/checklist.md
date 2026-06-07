@@ -156,11 +156,11 @@ v1.2 focuses on diagnostics and operational polish. See `docs/roadmap.md` for go
 
 Checklist items to add per slice as work proceeds:
 
-- [ ] **Slice 1** — Runtime info endpoint and UI display
+- [x] **Slice 1** — Runtime info endpoint and UI display: `GET /api/runtime` in both runtimes, Settings Runtime/Environment section, shared `RuntimeInfo` type, contract validator updated.
 - [x] **Slice 2** — Rule diagnostics API: `POST /api/forwards/:id/diagnose` in both runtimes; `docs/api-contract.md` updated; client in-app API Docs updated; API Docs tests updated.
 - [x] **Slice 3** — Rule diagnostics UI: Diagnose button per rule row, inline diagnostics panel, all check states, clear on close/delete; tests added; API Docs updated.
 - [x] **Slice 4** — Activity Log polish: View Activity button per rule row, filter banner, type filter, clear filters, `DELETE /api/activity` on both runtimes, Export JSON, Clear Log, packet throttle note; `docs/api-contract.md` updated; client in-app API Docs updated; contract validator updated; tests added.
-- [ ] **Slice 5** — Settings / runtime / config polish
+- [x] **Slice 5** — Settings / runtime / config polish: copy buttons (config path, static dir, management URL), datetime export filename, export note excludes Activity Log, export success/error feedback, import mode with descriptions above file picker, replace confirm backup export button, `PORTIER_APP_VERSION` constant, version in sidebar footer; 24 new tests.
 - [ ] **Slice 6** — Safer networking UX pass
 - [ ] **Slice 7** — Diagnostics export
 - [ ] **Slice 8** — v1.2 readiness audit, version bump, changelog, tag

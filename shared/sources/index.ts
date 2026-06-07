@@ -15,6 +15,8 @@ export const PORTIER_DEFAULT_PORT = 47831;
 export const PORTIER_RECOMMENDED_FORWARD_PORT_MIN = 48000;
 export const PORTIER_RECOMMENDED_FORWARD_PORT_MAX = 48999;
 
+export const PORTIER_APP_VERSION = "1.1.0";
+
 export type CommonPortInfo = {
   port: number;
   label: string;

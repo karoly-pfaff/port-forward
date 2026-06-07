@@ -8,6 +8,24 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (v1.2 Slice 5 — Settings / runtime / config polish)
+
+- **App version in sidebar footer**: Sidebar now shows `v{version}` below the management host. Sourced from new `PORTIER_APP_VERSION` constant in `@portier/shared`.
+- **Copy buttons in Runtime / Environment**: Config path, static dir, and management URL each have a small "Copy" button. Uses `navigator.clipboard.writeText`; shows "Copied!" on success, "Failed" on error, resets after 2 seconds. Gracefully handles environments where clipboard is unavailable.
+- **Export Config UX**:
+  - Filename is now datetime-stamped: `portier-config-YYYYMMDD-HHMMSS.json` (local time).
+  - Button renamed to "Download Config (JSON)" for clarity.
+  - Helper text now states "The Activity Log is not included" so users know what the export covers.
+  - Export shows a success confirmation message; errors are displayed inline instead of via `alert()`.
+- **Import Config UX**:
+  - Import mode (Merge / Replace) is now shown above the file picker with descriptive explanations, so users understand the difference before selecting a file.
+  - Merge description: "adds rules from the file; skips rules with conflicting listen port bindings."
+  - Replace description: "stops and deletes all current rules, then applies imported rules. Export a backup first if you want to keep your current rules."
+  - Replace confirmation dialog now includes an "Export current config as backup" button for a one-click safety exit.
+- **`PORTIER_APP_VERSION`** constant exported from `shared/sources/index.ts`.
+- **New tests** (SettingsView): import mode descriptions visible before file selection; import button absent until valid file loaded; replace confirm shows backup export button; copy config path/static dir/management URL; clipboard failure shows "Failed" feedback; export success/error feedback. 18 new test cases.
+- **New tests** (Sidebar): 6 tests covering render, nav click, open state, management host, and version footer.
+
 ### Added (v1.2 Slice 4 — Activity Log polish)
 
 - **View activity** button (Activity icon) added to every rule row in the Forward Rules table. Clicking it navigates to the Activity view and pre-filters to that rule.

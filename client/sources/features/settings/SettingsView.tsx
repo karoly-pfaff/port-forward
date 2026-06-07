@@ -16,6 +16,14 @@ function formatUptime(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
+function makeExportFilename(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const date = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const time = `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  return `portier-config-${date}-${time}.json`;
+}
+
 interface SettingsViewProps {
   onRulesUpdated: (rules: ForwardRuleResponse[]) => void;
 }
@@ -30,6 +38,8 @@ interface ParsedImport {
 
 export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElement {
   const [exporting, setExporting] = useState(false);
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("merge");
   const [parsedImport, setParsedImport] = useState<ParsedImport | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -38,6 +48,7 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [confirmReplace, setConfirmReplace] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(true);
@@ -55,21 +66,42 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
       });
   }, []);
 
+  async function copyToClipboard(text: string, key: string): Promise<void> {
+    try {
+      if (!navigator.clipboard) throw new Error("unavailable");
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
+    } catch {
+      setCopiedKey(`${key}:fail`);
+      setTimeout(() => setCopiedKey((k) => (k === `${key}:fail` ? null : k)), 2000);
+    }
+  }
+
+  function copyLabel(key: string): string {
+    if (copiedKey === key) return "Copied!";
+    if (copiedKey === `${key}:fail`) return "Failed";
+    return "Copy";
+  }
+
   async function handleExport(): Promise<void> {
     setExporting(true);
+    setExportSuccess(false);
+    setExportError(null);
     try {
       const config = await exportConfig();
       const json = JSON.stringify(config, null, 2);
-      const date = new Date().toISOString().slice(0, 10);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `portier-rules-${date}.json`;
+      a.download = makeExportFilename();
       a.click();
       URL.revokeObjectURL(url);
+      setExportSuccess(true);
+      setTimeout(() => setExportSuccess(false), 3000);
     } catch (error) {
-      alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+      setExportError(error instanceof Error ? error.message : "Export failed.");
     } finally {
       setExporting(false);
     }
@@ -146,7 +178,7 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
         <div className="rule-list-header">
           <div className="rule-list-title-group">
             <div className="rule-list-title">Settings</div>
-            <div className="rule-list-subtitle">Management endpoint, port range, config export/import, and about</div>
+            <div className="rule-list-subtitle">Management endpoint, port range, config export/import, and runtime</div>
           </div>
         </div>
         <div className="rule-list-body">
@@ -182,13 +214,19 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
             <div className="settings-section">
               <div className="settings-section-title">Export Config</div>
               <p className="settings-desc">
-                Download all current rules as a portable JSON file.
+                Downloads all current rules as a portable JSON file. The Activity Log is not included.
               </p>
               <div>
                 <button type="button" onClick={handleExport} disabled={exporting}>
-                  {exporting ? "Exporting…" : "Download rules.json"}
+                  {exporting ? "Exporting…" : "Download Config (JSON)"}
                 </button>
               </div>
+              {exportSuccess && (
+                <div className="settings-success" role="status">Config exported successfully.</div>
+              )}
+              {exportError && (
+                <div className="settings-error" role="alert">{exportError}</div>
+              )}
             </div>
 
             {/* Config import */}
@@ -198,6 +236,31 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
                 Import rules from a previously exported Portier config file.
                 All rules are validated before applying — the import is atomic (all-or-nothing).
               </p>
+
+              {/* Mode selection — shown above file picker */}
+              <div className="settings-import-mode">
+                <label className="settings-mode-option">
+                  <input
+                    type="radio"
+                    name="import-mode"
+                    value="merge"
+                    checked={importMode === "merge"}
+                    onChange={() => { setImportMode("merge"); setConfirmReplace(false); }}
+                  />
+                  <strong>Merge</strong> — adds rules from the file; skips rules with conflicting listen port bindings.
+                </label>
+                <label className="settings-mode-option">
+                  <input
+                    type="radio"
+                    name="import-mode"
+                    value="replace"
+                    checked={importMode === "replace"}
+                    onChange={() => { setImportMode("replace"); setConfirmReplace(false); }}
+                  />
+                  <strong>Replace</strong> — stops and deletes all current rules, then applies imported rules.
+                  Export a backup first if you want to keep your current rules.
+                </label>
+              </div>
 
               <div className="settings-import-controls">
                 <div className="settings-file-picker">
@@ -234,30 +297,6 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
                       <span>{parsedImport.enabledCount} enabled</span>
                     </div>
 
-                    <div className="settings-row settings-mode-row">
-                      <span className="settings-label">Mode</span>
-                      <label className="settings-mode-option">
-                        <input
-                          type="radio"
-                          name="import-mode"
-                          value="merge"
-                          checked={importMode === "merge"}
-                          onChange={() => { setImportMode("merge"); setConfirmReplace(false); }}
-                        />
-                        Merge (add rules, skip conflicts)
-                      </label>
-                      <label className="settings-mode-option">
-                        <input
-                          type="radio"
-                          name="import-mode"
-                          value="replace"
-                          checked={importMode === "replace"}
-                          onChange={() => { setImportMode("replace"); setConfirmReplace(false); }}
-                        />
-                        Replace (delete all existing rules first)
-                      </label>
-                    </div>
-
                     {importErrors.length > 0 && (
                       <div className="settings-error" role="alert">
                         {importErrors.map((e) => <p key={e}>{e}</p>)}
@@ -279,6 +318,13 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
                           This will delete all existing rules and replace them with the imported ones.
                           Running rules will be stopped. Are you sure?
                         </p>
+                        <button
+                          type="button"
+                          onClick={handleExport}
+                          disabled={importing || exporting}
+                        >
+                          {exporting ? "Exporting…" : "Export current config as backup"}
+                        </button>
                         <button
                           type="button"
                           className="danger"
@@ -330,17 +376,41 @@ export function SettingsView({ onRulesUpdated }: SettingsViewProps): ReactElemen
                     <span className="settings-label">Uptime</span>
                     <span className="settings-value">{formatUptime(runtimeInfo.uptimeSeconds)}</span>
                   </div>
-                  <div className="settings-row">
+                  <div className="settings-row settings-row-copyable">
                     <span className="settings-label">Management</span>
                     <code className="settings-value">{runtimeInfo.managementHost}:{runtimeInfo.managementPort}</code>
+                    <button
+                      type="button"
+                      className="settings-copy-btn"
+                      aria-label="Copy management URL"
+                      onClick={() => void copyToClipboard(`${runtimeInfo.managementHost}:${runtimeInfo.managementPort}`, "managementUrl")}
+                    >
+                      {copyLabel("managementUrl")}
+                    </button>
                   </div>
-                  <div className="settings-row">
+                  <div className="settings-row settings-row-copyable">
                     <span className="settings-label">Config path</span>
                     <code className="settings-value settings-value-path">{runtimeInfo.configPath}</code>
+                    <button
+                      type="button"
+                      className="settings-copy-btn"
+                      aria-label="Copy config path"
+                      onClick={() => void copyToClipboard(runtimeInfo.configPath, "configPath")}
+                    >
+                      {copyLabel("configPath")}
+                    </button>
                   </div>
-                  <div className="settings-row">
+                  <div className="settings-row settings-row-copyable">
                     <span className="settings-label">Static dir</span>
                     <code className="settings-value settings-value-path">{runtimeInfo.staticDir}</code>
+                    <button
+                      type="button"
+                      className="settings-copy-btn"
+                      aria-label="Copy static dir"
+                      onClick={() => void copyToClipboard(runtimeInfo.staticDir, "staticDir")}
+                    >
+                      {copyLabel("staticDir")}
+                    </button>
                   </div>
                   <div className="settings-row">
                     <span className="settings-label">Service mode</span>

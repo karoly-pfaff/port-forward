@@ -28,8 +28,8 @@ describe("App", () => {
 
     render(<App />);
 
-    // Brand name appears in the sidebar
-    expect(screen.getByText("Portier")).toBeInTheDocument();
+    // Brand name appears in the header title
+    expect(screen.getByText("Portier", { selector: ".app-header-title" })).toBeInTheDocument();
     // Subtitle appears in the header
     expect(
       screen.getByText(/TCP\/UDP port forwarding for local development/)
