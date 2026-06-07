@@ -133,6 +133,53 @@ describe("GET /api/activity", () => {
   });
 });
 
+describe("DELETE /api/activity", () => {
+  it("returns 204 with no activity store", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/activity`, { method: "DELETE" });
+      expect(response.status).toBe(204);
+    });
+  });
+
+  it("clears the activity store and returns 204", async () => {
+    const activity = new ActivityStore();
+    activity.add({ type: "rule.started", severity: "success", message: "Started." });
+
+    await withServer(
+      async (port) => {
+        const before = await fetch(`http://127.0.0.1:${port}/api/activity`);
+        const beforeBody = (await before.json()) as { events: unknown[] };
+        expect(beforeBody.events).toHaveLength(1);
+
+        const del = await fetch(`http://127.0.0.1:${port}/api/activity`, { method: "DELETE" });
+        expect(del.status).toBe(204);
+
+        const after = await fetch(`http://127.0.0.1:${port}/api/activity`);
+        const afterBody = (await after.json()) as { events: unknown[] };
+        expect(afterBody.events).toHaveLength(0);
+      },
+      { activity }
+    );
+  });
+
+  it("does not affect forwarding rules", async () => {
+    const activity = new ActivityStore();
+    activity.add({ type: "rule.created", severity: "info", message: "Created." });
+
+    await withServer(
+      async (port) => {
+        await fetch(`http://127.0.0.1:${port}/api/activity`, { method: "DELETE" });
+
+        const rules = await fetch(`http://127.0.0.1:${port}/api/forwards`);
+        expect(rules.status).toBe(200);
+        const body = (await rules.json()) as unknown[];
+        expect(Array.isArray(body)).toBe(true);
+      },
+      { activity }
+    );
+  });
+});
+
 describe("port advisory API", () => {
   it("returns advisories for a requested port, host, and purpose", async () => {
     const manager = new ForwardManager(new MemoryStore());

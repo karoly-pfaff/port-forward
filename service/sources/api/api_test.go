@@ -1115,6 +1115,118 @@ func TestActivityEndpointUnknownTypeFilterReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestClearActivityReturns204(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodDelete, server.URL+"/api/activity", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE /api/activity failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
+	}
+}
+
+func TestClearActivityEmptiesStore(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	createBody := `{"name":"Clear Test","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49920,"targetHost":"127.0.0.1","targetPort":49921,"enabled":false}`
+	createResp, err := http.Post(server.URL+"/api/forwards", "application/json", strings.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("POST /api/forwards failed: %v", err)
+	}
+	createResp.Body.Close()
+
+	beforeResp, err := http.Get(server.URL + "/api/activity")
+	if err != nil {
+		t.Fatalf("GET /api/activity failed: %v", err)
+	}
+	defer beforeResp.Body.Close()
+	var before struct {
+		Events []any `json:"events"`
+	}
+	if err := json.NewDecoder(beforeResp.Body).Decode(&before); err != nil {
+		t.Fatalf("decode before: %v", err)
+	}
+	if len(before.Events) == 0 {
+		t.Fatal("expected events before clear")
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, server.URL+"/api/activity", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	delResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE /api/activity failed: %v", err)
+	}
+	delResp.Body.Close()
+	if delResp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE status = %d, want %d", delResp.StatusCode, http.StatusNoContent)
+	}
+
+	afterResp, err := http.Get(server.URL + "/api/activity")
+	if err != nil {
+		t.Fatalf("GET /api/activity after clear failed: %v", err)
+	}
+	defer afterResp.Body.Close()
+	var after struct {
+		Events []any `json:"events"`
+	}
+	if err := json.NewDecoder(afterResp.Body).Decode(&after); err != nil {
+		t.Fatalf("decode after: %v", err)
+	}
+	if len(after.Events) != 0 {
+		t.Fatalf("expected empty events after clear, got %d", len(after.Events))
+	}
+}
+
+func TestClearActivityDoesNotAffectRules(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	createBody := `{"name":"Persist Rule","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49922,"targetHost":"127.0.0.1","targetPort":49923,"enabled":false}`
+	createResp, err := http.Post(server.URL+"/api/forwards", "application/json", strings.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("POST /api/forwards failed: %v", err)
+	}
+	createResp.Body.Close()
+
+	req, err := http.NewRequest(http.MethodDelete, server.URL+"/api/activity", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	delResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE /api/activity failed: %v", err)
+	}
+	delResp.Body.Close()
+
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	if rulesResp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/forwards status = %d, want 200", rulesResp.StatusCode)
+	}
+	var rules []any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) == 0 {
+		t.Fatal("expected rule to still exist after activity clear")
+	}
+}
+
 func writeTestConfig(t *testing.T, content string) string {
 	t.Helper()
 	configPath := filepath.Join(t.TempDir(), "forwards.json")

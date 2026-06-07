@@ -467,6 +467,31 @@ async function runScenarios(baseUrl, runtime) {
     }
   }
 
+  // DELETE /api/activity — clears the log, returns 204
+  {
+    const res = await api.delete("/api/activity");
+    if (res.status === 204) {
+      pass("DELETE /api/activity → 204 No Content");
+    } else {
+      fail(`DELETE /api/activity → expected 204, got ${res.status}`);
+    }
+  }
+
+  // GET /api/activity after clear — events array is empty
+  {
+    const res = await api.get("/api/activity");
+    if (res.status === 200) {
+      const data = res.json();
+      if (data && typeof data === "object" && Array.isArray(data.events) && data.events.length === 0) {
+        pass("GET /api/activity after DELETE → events array is empty");
+      } else {
+        fail(`GET /api/activity after DELETE → expected empty events, got: ${JSON.stringify(data)}`);
+      }
+    } else {
+      fail(`GET /api/activity after DELETE → expected 200, got ${res.status}`);
+    }
+  }
+
   // GET /api/config/export — {version:"1", exportedAt, rules:[...]}
   let exportedConfig = null;
   {

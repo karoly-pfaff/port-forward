@@ -186,6 +186,14 @@ Events are returned newest first.
 - The store is bounded to the latest 500 events.
 - UDP packet events are throttled to at most one log entry per second per rule to avoid flooding.
 
+## `DELETE /api/activity`
+
+Purpose: clear the in-memory activity log. Added in v1.2.
+
+Both runtimes implement this endpoint. Does not affect forwarding rules or runtime state.
+
+Response: `204 No Content`
+
 ## `GET /api/runtime`
 
 Purpose: expose runtime environment details for the local management UI. Added in v1.2.

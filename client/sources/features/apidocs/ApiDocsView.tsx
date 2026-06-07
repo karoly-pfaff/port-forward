@@ -87,6 +87,12 @@ const ENDPOINTS: EndpointDoc[] = [
     response: "{ events: ActivityEvent[] } — newest first"
   },
   {
+    method: "DELETE",
+    path: "/api/activity",
+    purpose: "Clear the in-memory activity log. Does not affect rules or forwarding state.",
+    response: "204 No Content"
+  },
+  {
     method: "GET",
     path: "/api/config/export",
     purpose: "Export current rules as a portable JSON config.",

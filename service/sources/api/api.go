@@ -137,9 +137,15 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodGet && r.URL.Path == "/api/activity" {
-		h.listActivity(w, r)
-		return
+	if r.URL.Path == "/api/activity" {
+		if r.Method == http.MethodGet {
+			h.listActivity(w, r)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			h.clearActivity(w)
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusNotFound, map[string][]string{
@@ -168,6 +174,11 @@ func (h *Handler) listActivity(w http.ResponseWriter, r *http.Request) {
 
 	events := h.manager.ListActivity(params)
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
+}
+
+func (h *Handler) clearActivity(w http.ResponseWriter) {
+	h.manager.ClearActivity()
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) createForward(w http.ResponseWriter, r *http.Request) {

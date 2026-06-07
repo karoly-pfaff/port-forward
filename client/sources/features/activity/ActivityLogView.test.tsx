@@ -1,12 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ActivityEvent } from "@portier/shared";
+import type { ActivityEvent, ForwardRuleResponse } from "@portier/shared";
 import { ActivityLogView } from "./ActivityLogView.js";
 import * as portierApi from "../../api/portierApi.js";
 
 vi.mock("../../api/portierApi.js", () => ({
-  fetchActivity: vi.fn()
+  fetchActivity: vi.fn(),
+  clearActivity: vi.fn()
 }));
 
 const sampleEvent: ActivityEvent = {
@@ -18,6 +19,18 @@ const sampleEvent: ActivityEvent = {
   ruleName: "My Rule",
   protocol: "tcp",
   message: 'Rule "My Rule" started.'
+};
+
+const sampleRule: ForwardRuleResponse = {
+  id: "r1",
+  name: "My Rule",
+  protocol: "tcp",
+  listenHost: "127.0.0.1",
+  listenPort: 48001,
+  targetHost: "127.0.0.1",
+  targetPort: 3000,
+  enabled: true,
+  advisories: []
 };
 
 describe("ActivityLogView", () => {
@@ -114,5 +127,132 @@ describe("ActivityLogView", () => {
     render(<ActivityLogView />);
 
     await screen.findByText("TCP");
+  });
+
+  it("shows type filter select with all-types option", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView />);
+
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Filter by type" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "All types" })).toBeInTheDocument();
+  });
+
+  it("passes type param to fetchActivity when type filter is changed", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView />);
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by type" }),
+      "rule.started"
+    );
+
+    await waitFor(() => {
+      expect(portierApi.fetchActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "rule.started" })
+      );
+    });
+  });
+
+  it("shows filter banner with rule name when ruleId prop is set", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView rules={[sampleRule]} ruleId="r1" />);
+
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    // Banner contains the rule name in a <strong> element
+    expect(screen.getByRole("status").textContent).toContain("My Rule");
+  });
+
+  it("shows filter banner with raw id when rule is not in rules list", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView rules={[]} ruleId="unknown-id" />);
+
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(screen.getByText("unknown-id")).toBeInTheDocument();
+  });
+
+  it("calls onClearRuleFilter and hides banner when clear is clicked in banner", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+    const onClearRuleFilter = vi.fn();
+
+    render(<ActivityLogView rules={[sampleRule]} ruleId="r1" onClearRuleFilter={onClearRuleFilter} />);
+
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+
+    const bannerClearButtons = screen.getAllByRole("button", { name: /clear/i });
+    // Click the first "Clear" button in the banner (not "Clear filters")
+    const bannerClear = bannerClearButtons.find((btn) => btn.textContent === "Clear");
+    expect(bannerClear).toBeTruthy();
+    await userEvent.click(bannerClear!);
+
+    expect(onClearRuleFilter).toHaveBeenCalled();
+  });
+
+  it("shows Clear filters button when any filter is active", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView rules={[sampleRule]} ruleId="r1" />);
+
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Clear all filters" })).toBeInTheDocument();
+  });
+
+  it("clear activity button calls clearActivity and empties events", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([sampleEvent]);
+    vi.mocked(portierApi.clearActivity).mockResolvedValue(undefined);
+
+    render(<ActivityLogView />);
+    await screen.findByText(/Rule "My Rule" started/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear activity log" }));
+
+    await waitFor(() => expect(portierApi.clearActivity).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+  });
+
+  it("shows error when clearActivity rejects", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([sampleEvent]);
+    vi.mocked(portierApi.clearActivity).mockRejectedValue(new Error("Clear failed"));
+
+    render(<ActivityLogView />);
+    await screen.findByText(/Rule "My Rule" started/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear activity log" }));
+
+    await screen.findByText("Clear failed");
+  });
+
+  it("export button is disabled when no events are loaded", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView />);
+
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Export activity as JSON" })).toBeDisabled();
+  });
+
+  it("export button is enabled when events are present", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([sampleEvent]);
+
+    render(<ActivityLogView />);
+
+    await screen.findByText(/Rule "My Rule" started/);
+    expect(screen.getByRole("button", { name: "Export activity as JSON" })).not.toBeDisabled();
+  });
+
+  it("shows throttle note", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView />);
+
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByText(/High-frequency packet events/)).toBeInTheDocument();
   });
 });

@@ -497,3 +497,57 @@ describe("ForwardRuleList diagnostics", () => {
     expect(screen.queryByText("Running diagnostics…")).not.toBeInTheDocument();
   });
 });
+
+describe("ForwardRuleList activity navigation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows View activity button for each rule when onGoToActivity is provided", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onGoToActivity: noop,
+    });
+    expect(screen.getByRole("button", { name: "View activity" })).toBeInTheDocument();
+  });
+
+  it("does not show View activity button when onGoToActivity is not provided", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+    });
+    expect(screen.queryByRole("button", { name: "View activity" })).not.toBeInTheDocument();
+  });
+
+  it("calls onGoToActivity with the rule id when View activity is clicked", async () => {
+    const user = userEvent.setup();
+    const onGoToActivity = vi.fn();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onGoToActivity,
+    });
+    await user.click(screen.getByRole("button", { name: "View activity" }));
+    expect(onGoToActivity).toHaveBeenCalledWith("r1");
+  });
+
+  it("shows a View activity button for each rule when multiple rules are present", () => {
+    const secondRule: ForwardRuleResponse = { ...tcpRule, id: "r3", name: "Another Rule" };
+    const secondStatus: ForwardStatus = { ruleId: "r3", running: false, bytesIn: 0, bytesOut: 0 };
+    renderList({
+      rules: [tcpRule, secondRule],
+      statusMap: makeMap(stoppedStatus, secondStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onGoToActivity: noop,
+    });
+    expect(screen.getAllByRole("button", { name: "View activity" })).toHaveLength(2);
+  });
+});

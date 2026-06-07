@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import type { ActivityEvent, ActivitySeverity, ForwardRuleResponse } from "@portier/shared";
-import { fetchActivity } from "../../api/portierApi.js";
+import type { ActivityEvent, ActivityEventType, ActivitySeverity, ForwardRuleResponse } from "@portier/shared";
+import { clearActivity, fetchActivity } from "../../api/portierApi.js";
 import { formatTimestamp } from "../../utils/format.js";
 
 const SEVERITY_OPTIONS: { value: "" | ActivitySeverity; label: string }[] = [
@@ -9,6 +9,27 @@ const SEVERITY_OPTIONS: { value: "" | ActivitySeverity; label: string }[] = [
   { value: "success", label: "Success" },
   { value: "warning", label: "Warning" },
   { value: "error", label: "Error" }
+];
+
+const TYPE_OPTIONS: { value: "" | ActivityEventType; label: string }[] = [
+  { value: "", label: "All types" },
+  { value: "rule.created", label: "Rule created" },
+  { value: "rule.updated", label: "Rule updated" },
+  { value: "rule.deleted", label: "Rule deleted" },
+  { value: "rule.started", label: "Rule started" },
+  { value: "rule.stopped", label: "Rule stopped" },
+  { value: "rule.error", label: "Rule error" },
+  { value: "tcp.connection.opened", label: "TCP connection opened" },
+  { value: "tcp.connection.closed", label: "TCP connection closed" },
+  { value: "tcp.connection.error", label: "TCP connection error" },
+  { value: "udp.packet.forwarded", label: "UDP packet forwarded" },
+  { value: "udp.packet.returned", label: "UDP packet returned" },
+  { value: "udp.packet.error", label: "UDP packet error" },
+  { value: "udp.session.opened", label: "UDP session opened" },
+  { value: "udp.session.closed", label: "UDP session closed" },
+  { value: "config.exported", label: "Config exported" },
+  { value: "config.imported", label: "Config imported" },
+  { value: "config.import.failed", label: "Config import failed" }
 ];
 
 const LIMIT_OPTIONS = [25, 50, 100, 200, 500];
@@ -28,6 +49,14 @@ function typeLabel(type: string): string {
   return type.replace(/\./g, " · ");
 }
 
+function buildExportFilename(): string {
+  const now = new Date();
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const date = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  return `portier-activity-${date}-${time}.json`;
+}
+
 interface ActivityLogViewProps {
   rules?: ForwardRuleResponse[];
   ruleId?: string;
@@ -38,8 +67,10 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [clearError, setClearError] = useState<string | null>(null);
   const [limit, setLimit] = useState(100);
   const [severity, setSeverity] = useState<"" | ActivitySeverity>("");
+  const [type, setType] = useState<"" | ActivityEventType>("");
   const [ruleIdFilter, setRuleIdFilter] = useState(ruleId ?? "");
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5);
@@ -49,7 +80,12 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
     setRuleIdFilter(ruleId ?? "");
   }, [ruleId]);
 
-  async function load(opts: { limit: number; severity: "" | ActivitySeverity; ruleId: string }): Promise<void> {
+  async function load(opts: {
+    limit: number;
+    severity: "" | ActivitySeverity;
+    type: "" | ActivityEventType;
+    ruleId: string;
+  }): Promise<void> {
     if (fetchInFlightRef.current) return;
     fetchInFlightRef.current = true;
     setError(null);
@@ -57,6 +93,7 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
       const result = await fetchActivity({
         limit: opts.limit,
         severity: opts.severity || undefined,
+        type: opts.type || undefined,
         ruleId: opts.ruleId || undefined
       });
       setEvents(result);
@@ -70,19 +107,19 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
 
   useEffect(() => {
     setLoading(true);
-    void load({ limit, severity, ruleId: ruleIdFilter });
-  }, [limit, severity, ruleIdFilter]);
+    void load({ limit, severity, type, ruleId: ruleIdFilter });
+  }, [limit, severity, type, ruleIdFilter]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(() => {
-      void load({ limit, severity, ruleId: ruleIdFilter });
+      void load({ limit, severity, type, ruleId: ruleIdFilter });
     }, autoRefreshInterval * 1000);
     return () => clearInterval(id);
-  }, [autoRefresh, autoRefreshInterval, limit, severity, ruleIdFilter]);
+  }, [autoRefresh, autoRefreshInterval, limit, severity, type, ruleIdFilter]);
 
   function handleRefresh(): void {
-    void load({ limit, severity, ruleId: ruleIdFilter });
+    void load({ limit, severity, type, ruleId: ruleIdFilter });
   }
 
   function handleRuleChange(e: React.ChangeEvent<HTMLSelectElement>): void {
@@ -90,6 +127,44 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
     setRuleIdFilter(val);
     if (!val) onClearRuleFilter?.();
   }
+
+  async function handleClearActivity(): Promise<void> {
+    setClearError(null);
+    try {
+      await clearActivity();
+      setEvents([]);
+    } catch (err) {
+      setClearError(err instanceof Error ? err.message : "Failed to clear activity.");
+    }
+  }
+
+  function handleExport(): void {
+    const activeFilters: Record<string, string | number> = {};
+    if (ruleIdFilter) activeFilters.ruleId = ruleIdFilter;
+    if (severity) activeFilters.severity = severity;
+    if (type) activeFilters.type = type;
+    activeFilters.limit = limit;
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      filters: activeFilters,
+      events
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = buildExportFilename();
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const activeRuleName = ruleIdFilter
+    ? (rules?.find((r) => r.id === ruleIdFilter)?.name ?? ruleIdFilter)
+    : null;
+
+  const hasActiveFilters = !!(ruleIdFilter || severity || type);
 
   return (
     <div className="rule-list-section">
@@ -124,6 +199,16 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
           </select>
           <select
             className="filter-select"
+            value={type}
+            onChange={(e) => setType(e.target.value as "" | ActivityEventType)}
+            aria-label="Filter by type"
+          >
+            {TYPE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <select
+            className="filter-select"
             value={limit}
             onChange={(e) => setLimit(Number(e.target.value))}
             aria-label="Event limit"
@@ -132,13 +217,51 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
               <option key={n} value={n}>Last {n}</option>
             ))}
           </select>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              className="btn-text"
+              onClick={() => {
+                setRuleIdFilter("");
+                setSeverity("");
+                setType("");
+                onClearRuleFilter?.();
+              }}
+              aria-label="Clear all filters"
+              title="Clear all filters"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       </div>
+
+      {activeRuleName && (
+        <div className="activity-filter-banner" role="status">
+          <span>Filtered to rule: <strong>{activeRuleName}</strong></span>
+          <button
+            type="button"
+            className="btn-text"
+            onClick={() => {
+              setRuleIdFilter("");
+              onClearRuleFilter?.();
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       <div className="rule-list-body">
         {error && (
           <div className="activity-error" role="alert">
             <p>{error}</p>
+          </div>
+        )}
+
+        {clearError && (
+          <div className="activity-error" role="alert">
+            <p>{clearError}</p>
           </div>
         )}
 
@@ -181,11 +304,34 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
             ))}
           </ol>
         )}
+
+        <p className="activity-throttle-note">
+          High-frequency packet events may be summarized or throttled; counters remain exact in rule status.
+        </p>
       </div>
 
       <div className="rule-list-footer">
         <span>{loading ? "Loading…" : `${events.length} event${events.length !== 1 ? "s" : ""} shown`}</span>
         <div className="rule-list-footer-right">
+          <button
+            type="button"
+            className="btn-text"
+            onClick={handleExport}
+            disabled={events.length === 0}
+            title="Export visible events as JSON"
+            aria-label="Export activity as JSON"
+          >
+            Export JSON
+          </button>
+          <button
+            type="button"
+            className="btn-text btn-text--danger"
+            onClick={() => { void handleClearActivity(); }}
+            title="Clear all activity events"
+            aria-label="Clear activity log"
+          >
+            Clear Log
+          </button>
           <label className="auto-refresh-toggle" title="Auto-refresh">
             <input
               type="checkbox"

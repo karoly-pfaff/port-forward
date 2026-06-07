@@ -86,6 +86,13 @@ func (s *Store) List(params ListParams) []ActivityEvent {
 	return result
 }
 
+// Clear removes all events from the store.
+func (s *Store) Clear() {
+	s.mu.Lock()
+	s.events = s.events[:0]
+	s.mu.Unlock()
+}
+
 func randomEventID() string {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {

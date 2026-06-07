@@ -8,6 +8,25 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (v1.2 Slice 4 — Activity Log polish)
+
+- **View activity** button (Activity icon) added to every rule row in the Forward Rules table. Clicking it navigates to the Activity view and pre-filters to that rule.
+- Activity view **filter banner**: when navigating from a rule row, a status banner shows "Filtered to rule: [name]" with a Clear button. Handles deleted/missing rule names gracefully by displaying the raw rule ID.
+- Activity view **type filter**: new dropdown lets users filter events by event type (rule lifecycle, connection, packet, session, config events). Type is passed as a query param to `GET /api/activity`.
+- **Clear filters** button appears in the Activity header when any filter (rule, severity, type) is active.
+- **Export JSON** button in the Activity footer exports currently loaded/filtered events as a JSON file. Filename format: `portier-activity-YYYYMMDD-HHMMSS.json`. Payload includes `exportedAt`, `filters`, and `events`. Client-side only; no backend endpoint.
+- **Clear Log** button in the Activity footer calls `DELETE /api/activity` and empties the displayed list.
+- Packet event **throttle note**: small explanatory text in the Activity body — "High-frequency packet events may be summarized or throttled; counters remain exact in rule status."
+- `DELETE /api/activity` endpoint on both the TypeScript server and Go service: clears the in-memory activity log and returns `204 No Content`. Does not affect rules or forwarding state.
+- `clearActivity()` API helper added to `client/sources/api/portierApi.ts`.
+- `Store.Clear()` method added to `service/sources/activity/store.go` (Go).
+- `Manager.ClearActivity()` method added to `service/sources/manager/manager.go` (Go).
+- `docs/api-contract.md` updated with `DELETE /api/activity` section.
+- Client in-app API Docs view updated with `DELETE /api/activity` entry.
+- 18 new `ActivityLogView` component tests (21 total); 4 new `ForwardRuleList` activity navigation tests; 2 new `ApiDocsView` tests.
+- 3 new TypeScript server API tests for `DELETE /api/activity`; 3 new Go API tests.
+- `validate:contract` updated with `DELETE /api/activity` scenario and post-clear empty-array verification.
+
 ### Added (v1.2 Slice 3 — rule diagnostics UI)
 
 - **Diagnose** action button (stethoscope icon) added to every rule row in the Forward Rules table.

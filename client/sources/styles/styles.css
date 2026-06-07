@@ -2145,6 +2145,52 @@ select[aria-invalid="true"] {
   margin: 0;
 }
 
+.activity-filter-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+
+.activity-throttle-note {
+  margin: 8px 20px 4px;
+  font-size: 0.775rem;
+  color: var(--fg-muted);
+  opacity: 0.7;
+}
+
+.btn-text {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.btn-text:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.btn-text:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-text--danger {
+  color: var(--red);
+}
+
+.btn-text--danger:hover {
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+}
+
 /* ==============================================
    Responsive
    ============================================== */

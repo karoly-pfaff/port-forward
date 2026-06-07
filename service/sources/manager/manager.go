@@ -108,6 +108,13 @@ func (m *Manager) ListActivity(params activity.ListParams) []activity.ActivityEv
 	return m.activity.List(params)
 }
 
+// ClearActivity clears the in-memory activity log. No-op when no store is set.
+func (m *Manager) ClearActivity() {
+	if m.activity != nil {
+		m.activity.Clear()
+	}
+}
+
 func (m *Manager) ExportConfig() domain.ExportedConfig {
 	rules := m.ListRules()
 	cfg := domain.ExportedConfig{

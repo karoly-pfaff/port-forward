@@ -24,9 +24,14 @@ describe("ApiDocsView", () => {
     expect(screen.getByText("/api/status")).toBeInTheDocument();
   });
 
-  it("lists the GET /api/activity endpoint", () => {
+  it("lists both GET and DELETE /api/activity endpoints", () => {
     render(<ApiDocsView />);
-    expect(screen.getByText("/api/activity")).toBeInTheDocument();
+    expect(screen.getAllByText("/api/activity").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("describes DELETE /api/activity as clearing the log", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText(/Clear the in-memory activity log/)).toBeInTheDocument();
   });
 
   it("lists the config export and import endpoints", () => {

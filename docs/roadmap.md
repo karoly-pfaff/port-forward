@@ -122,7 +122,7 @@ Possible API direction:
 1. ~~**Runtime info endpoint and UI display**~~ — ✓ Complete. `GET /api/runtime` in both runtimes, Settings Runtime/Environment section, shared `RuntimeInfo` type, contract validator updated.
 2. ~~**Rule diagnostics API**~~ — ✓ Complete. `POST /api/forwards/:id/diagnose` in both runtimes, shared `RuleDiagnosticsResult` type, structured pass/warn/fail/skip checks, contract validator updated, `docs/api-contract.md` updated, client in-app API Docs updated, API Docs tests added.
 3. ~~**Rule diagnostics UI**~~ — ✓ Complete. Diagnose button (stethoscope icon) in every rule row; inline collapsible diagnostics panel with pass/warn/fail/skip display; loading, error, and clear states; duplicate-click prevention; delete clears diagnosis. 133 client tests passing.
-4. **Activity Log polish** — per-rule filter, clear button, export, throttle display improvements
+4. ~~**Activity Log polish**~~ — ✓ Complete. View Activity button per rule row, rule filter banner, type filter, clear filters, `DELETE /api/activity` on both runtimes, Export JSON (client-side), Clear Log button, packet throttle note, `docs/api-contract.md` updated, client in-app API Docs updated, contract validator updated.
 5. **Settings / runtime / config polish** — config path display, copy button, runtime info, import/export UX improvements
 6. **Safer networking UX pass** — stronger LAN warnings, presets, better conflict messages, Windows Firewall note
 7. **Diagnostics export** — `GET /api/diagnostics` or client-side bundle, download as JSON

@@ -1,5 +1,5 @@
 import { useState, useRef, Fragment, type ReactElement } from "react";
-import { Pencil, Stethoscope } from "lucide-react";
+import { Activity, Pencil, Stethoscope } from "lucide-react";
 import type { ForwardRule, ForwardRuleResponse, ForwardStatus, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
@@ -301,6 +301,17 @@ export function ForwardRuleList({
                             >
                               {isDiagPending ? "…" : <Stethoscope size={14} aria-hidden="true" />}
                             </button>
+                            {onGoToActivity && (
+                              <button
+                                type="button"
+                                className="btn-icon"
+                                aria-label="View activity"
+                                title="View activity"
+                                onClick={() => onGoToActivity(rule.id)}
+                              >
+                                <Activity size={14} aria-hidden="true" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>

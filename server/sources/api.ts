@@ -159,6 +159,14 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
     response.json({ events });
   });
 
+  app.delete("/api/activity", (_request, response) => {
+    const store = options.activity;
+    if (store) {
+      store.clear();
+    }
+    response.status(204).end();
+  });
+
   // ── Config import/export ─────────────────────────────────────────────────────
 
   app.get("/api/config/export", (_request, response) => {

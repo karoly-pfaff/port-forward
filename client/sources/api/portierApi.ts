@@ -97,6 +97,11 @@ export async function fetchActivity(params: FetchActivityParams = {}): Promise<A
   return body.events;
 }
 
+export async function clearActivity(): Promise<void> {
+  const response = await fetch("/api/activity", { method: "DELETE" });
+  await ensureOk(response);
+}
+
 export async function diagnoseForwardRule(ruleId: string): Promise<RuleDiagnosticsResult> {
   const response = await fetch(`/api/forwards/${ruleId}/diagnose`, { method: "POST" });
   await ensureOk(response);
