@@ -8,6 +8,16 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (v1.2 Slice 6 — Safer networking UX)
+
+- **Listen host presets** in the Add/Edit Rule drawer: "Local only" (127.0.0.1) and "LAN exposed" (0.0.0.0) quick-select buttons. Active preset is highlighted; manual host entry remains fully supported.
+- **Inline LAN warning** in the rule form: when listenHost is `0.0.0.0`, a warning block appears directly below the listen host/port row stating that the rule listens on all interfaces and that Portier does not create firewall rules automatically.
+- **Listen host hint text**: "Only this computer can connect" shown for 127.0.0.1; "Other devices on your network may be able to connect if firewall rules allow it" shown for 0.0.0.0.
+- **Firewall note advisory card**: shown in the advisory section when listenHost is `0.0.0.0`. Platform-aware: shows a Windows-specific message if `runtimePlatform="windows"` is provided, otherwise a generic OS note. `ForwardRuleForm` now accepts an optional `runtimePlatform` prop.
+- **Friendly conflict error copy**: when a save fails because the listen binding is already in use, the form shows "Another rule is already using this protocol, listen host, and listen port. Choose a different listen port, or stop/remove the conflicting rule." instead of the raw server error.
+- **Improved LAN_EXPOSURE advisory message** (shared): updated to "Listening on 0.0.0.0 exposes this forwarded port on all interfaces. Other LAN devices may be able to connect if firewall settings allow it."
+- **New tests** (ForwardRuleForm): Local only / LAN exposed presets set correct host; custom host entry still works; LAN warning visible for 0.0.0.0; LAN warning absent for 127.0.0.1; generic and Windows-specific firewall notes; save not blocked by LAN warning; friendly conflict error shown; privileged port advisory. 17 new/updated test cases.
+
 ### Added (v1.2 Slice 5 — Settings / runtime / config polish)
 
 - **App version in sidebar footer**: Sidebar now shows `v{version}` below the management host. Sourced from new `PORTIER_APP_VERSION` constant in `@portier/shared`.

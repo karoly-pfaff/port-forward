@@ -201,7 +201,7 @@ describe("port advisory API", () => {
         {
           code: "LAN_EXPOSURE",
           severity: "warning",
-          message: "Listening on 0.0.0.0 exposes this forwarded port on the LAN."
+          message: "Listening on 0.0.0.0 exposes this forwarded port on all interfaces. Other LAN devices may be able to connect if firewall settings allow it."
         }
       ]);
     } finally {

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactElement } from "react";
-import type { ForwardProtocol, ForwardRule, ForwardRuleInput, UdpMode } from "@portier/shared";
+import type { ForwardProtocol, ForwardRule, ForwardRuleInput, RuntimeInfo, UdpMode } from "@portier/shared";
 import {
   PORTIER_RECOMMENDED_FORWARD_PORT_MAX,
   PORTIER_RECOMMENDED_FORWARD_PORT_MIN,
@@ -12,9 +12,21 @@ const ADVISORY_TITLES: Record<string, string> = {
   COMMON_PORT: "Common Port",
   PRIVILEGED_PORT: "Privileged Port",
   OUTSIDE_RECOMMENDED_RANGE: "Outside Recommended Range",
-  LAN_EXPOSURE: "LAN Exposure",
   MANAGEMENT_LAN_EXPOSURE: "Management LAN Exposure",
 };
+
+function friendlyErrorMessage(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("already listening") ||
+    lower.includes("duplicate") ||
+    lower.includes("already in use") ||
+    (lower.includes("conflict") && (lower.includes("listen") || lower.includes("binding")))
+  ) {
+    return "Another rule is already using this protocol, listen host, and listen port. Choose a different listen port, or stop/remove the conflicting rule.";
+  }
+  return raw;
+}
 
 // IPv4 | hostname (including dotted labels) | simplified IPv6
 const HOST_PATTERN =
@@ -27,6 +39,7 @@ interface ForwardRuleFormProps {
   onCancel: () => void;
   onDelete?: (rule: ForwardRule) => void;
   saving: boolean;
+  runtimePlatform?: RuntimeInfo["platform"];
 }
 
 export function ForwardRuleForm({
@@ -36,6 +49,7 @@ export function ForwardRuleForm({
   onCancel,
   onDelete,
   saving,
+  runtimePlatform,
 }: ForwardRuleFormProps): ReactElement {
   const [form, setForm] = useState<RuleFormState>(() =>
     editingRule ? ruleToForm(editingRule) : emptyForm
@@ -107,7 +121,8 @@ export function ForwardRuleForm({
     try {
       await onSave(form.id, payload);
     } catch (error) {
-      setFormErrors([error instanceof Error ? error.message : "Save failed."]);
+      const raw = error instanceof Error ? error.message : "Save failed.";
+      setFormErrors([friendlyErrorMessage(raw)]);
     }
   }
 
@@ -217,8 +232,25 @@ export function ForwardRuleForm({
           <div className="form-row">
             <label htmlFor="rule-listen-host">
               Listen Host
+              <div className="listen-host-presets" role="group" aria-label="Listen host presets">
+                <button
+                  type="button"
+                  className={`preset-btn${form.listenHost === "127.0.0.1" ? " preset-btn--active" : ""}`}
+                  onClick={() => setField("listenHost", "127.0.0.1")}
+                >
+                  Local only
+                </button>
+                <button
+                  type="button"
+                  className={`preset-btn${form.listenHost === "0.0.0.0" ? " preset-btn--active" : ""}`}
+                  onClick={() => setField("listenHost", "0.0.0.0")}
+                >
+                  LAN exposed
+                </button>
+              </div>
               <input
                 id="rule-listen-host"
+                aria-label="Listen Host"
                 value={form.listenHost}
                 onChange={(e) => setField("listenHost", e.target.value)}
                 autoComplete="off"
@@ -229,6 +261,12 @@ export function ForwardRuleForm({
                 <span id="listen-host-error" className="field-error" role="alert">
                   Must be a valid IP or hostname
                 </span>
+              )}
+              {!showListenHostError && form.listenHost === "127.0.0.1" && (
+                <span className="label-hint">Only this computer can connect to this forwarded port.</span>
+              )}
+              {!showListenHostError && form.listenHost === "0.0.0.0" && (
+                <span className="label-hint">Other devices on your network may be able to connect if firewall rules allow it.</span>
               )}
             </label>
 
@@ -251,6 +289,17 @@ export function ForwardRuleForm({
               )}
             </label>
           </div>
+
+          {form.listenHost === "0.0.0.0" && (
+            <div className="advisory-card advisory-card--warning" role="alert">
+              <div>
+                <span className="advisory-card-title">LAN Exposure</span>
+                This rule listens on all network interfaces. Devices on your LAN may reach it
+                if firewall settings allow the connection. Portier does not create firewall rules
+                automatically. Use 127.0.0.1 for local-only access.
+              </div>
+            </div>
+          )}
 
           <div className="form-row">
             <label htmlFor="rule-target-host">
@@ -312,19 +361,31 @@ export function ForwardRuleForm({
               For best results, use ports in {PORTIER_RECOMMENDED_FORWARD_PORT_MIN}–{PORTIER_RECOMMENDED_FORWARD_PORT_MAX}.
             </div>
           </div>
-          {formAdvisories.map((advisory) => (
-            <div
-              key={`${advisory.code}-${advisory.message}`}
-              className={`advisory-card advisory-card--${advisory.severity}`}
-            >
+          {form.listenHost === "0.0.0.0" && (
+            <div className="advisory-card advisory-card--info">
               <div>
-                {ADVISORY_TITLES[advisory.code] && (
-                  <span className="advisory-card-title">{ADVISORY_TITLES[advisory.code]}</span>
-                )}
-                {advisory.message}
+                <span className="advisory-card-title">Firewall note</span>
+                {runtimePlatform === "windows"
+                  ? "Windows may ask for firewall permission the first time Portier opens a listening port. Portier does not create firewall rules automatically."
+                  : "Your operating system firewall may still block LAN connections. Portier does not create firewall rules automatically."}
               </div>
             </div>
-          ))}
+          )}
+          {formAdvisories
+            .filter((a) => a.code !== "LAN_EXPOSURE")
+            .map((advisory) => (
+              <div
+                key={`${advisory.code}-${advisory.message}`}
+                className={`advisory-card advisory-card--${advisory.severity}`}
+              >
+                <div>
+                  {ADVISORY_TITLES[advisory.code] && (
+                    <span className="advisory-card-title">{ADVISORY_TITLES[advisory.code]}</span>
+                  )}
+                  {advisory.message}
+                </div>
+              </div>
+            ))}
         </div>
       </div>
 

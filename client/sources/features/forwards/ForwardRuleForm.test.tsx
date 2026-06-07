@@ -138,7 +138,7 @@ describe("ForwardRuleForm", () => {
     expect(screen.getByRole("combobox", { name: /UDP Mode/ })).toBeEnabled();
   });
 
-  it("shows LAN exposure advisory when listenHost is 0.0.0.0", async () => {
+  it("shows LAN exposure warning when listenHost is 0.0.0.0", async () => {
     const user = userEvent.setup();
     render(
       <ForwardRuleForm
@@ -153,8 +153,183 @@ describe("ForwardRuleForm", () => {
     await user.type(hostInput, "0.0.0.0");
 
     expect(
-      screen.getByText(/exposes this forwarded port on the LAN/)
+      screen.getByText(/listens on all network interfaces/)
     ).toBeInTheDocument();
+  });
+
+  it("does not show LAN warning when listenHost is 127.0.0.1", () => {
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    expect(screen.queryByText(/listens on all network interfaces/)).not.toBeInTheDocument();
+  });
+
+  it("sets listenHost to 127.0.0.1 when Local only preset is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    const hostInput = screen.getByRole("textbox", { name: "Listen Host" });
+    await user.clear(hostInput);
+    await user.type(hostInput, "0.0.0.0");
+
+    await user.click(screen.getByRole("button", { name: "Local only" }));
+    expect(hostInput).toHaveValue("127.0.0.1");
+  });
+
+  it("sets listenHost to 0.0.0.0 when LAN exposed preset is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "LAN exposed" }));
+    expect(screen.getByRole("textbox", { name: "Listen Host" })).toHaveValue("0.0.0.0");
+  });
+
+  it("allows manual entry of a custom listen host", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    const hostInput = screen.getByRole("textbox", { name: "Listen Host" });
+    await user.clear(hostInput);
+    await user.type(hostInput, "192.168.1.10");
+    expect(hostInput).toHaveValue("192.168.1.10");
+    expect(screen.queryByText(/listens on all network interfaces/)).not.toBeInTheDocument();
+  });
+
+  it("shows LAN hint text when 0.0.0.0 is entered", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "LAN exposed" }));
+    expect(
+      screen.getByText(/Other devices on your network may be able to connect/)
+    ).toBeInTheDocument();
+  });
+
+  it("shows local only hint text when 127.0.0.1 is selected", () => {
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    expect(
+      screen.getByText(/Only this computer can connect/)
+    ).toBeInTheDocument();
+  });
+
+  it("shows generic firewall note when listenHost is 0.0.0.0 and no platform provided", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "LAN exposed" }));
+    expect(
+      screen.getByText(/operating system firewall may still block LAN connections/)
+    ).toBeInTheDocument();
+  });
+
+  it("shows Windows-specific firewall note when platform is windows", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+        runtimePlatform="windows"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "LAN exposed" }));
+    expect(
+      screen.getByText(/Windows may ask for firewall permission/)
+    ).toBeInTheDocument();
+  });
+
+  it("shows generic firewall note when platform is linux", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+        runtimePlatform="linux"
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "LAN exposed" }));
+    expect(
+      screen.getByText(/operating system firewall may still block LAN connections/)
+    ).toBeInTheDocument();
+  });
+
+  it("does not block save when listenHost is 0.0.0.0", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.click(screen.getByRole("button", { name: "LAN exposed" }));
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "LAN Rule");
+    await user.click(screen.getByRole("button", { name: "Add Rule" }));
+    expect(onSave).toHaveBeenCalled();
+  });
+
+  it("shows a privileged port advisory for ports below 1024", async () => {
+    const user = userEvent.setup();
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    const portInput = screen.getByRole("spinbutton", { name: /Listen Port/ });
+    await user.clear(portInput);
+    await user.type(portInput, "80");
+
+    expect(screen.getByText(/may require elevated permissions/i)).toBeInTheDocument();
   });
 
   it("shows a common port advisory for a well-known port", async () => {
@@ -235,9 +410,9 @@ describe("ForwardRuleForm", () => {
     expect(screen.getByRole("button", { name: "Add Rule" })).toBeDisabled();
   });
 
-  it("shows save error when onSave rejects", async () => {
+  it("shows save error when onSave rejects with a non-conflict error", async () => {
     const user = userEvent.setup();
-    const onSave = vi.fn().mockRejectedValue(new Error("Conflict: duplicate binding"));
+    const onSave = vi.fn().mockRejectedValue(new Error("Internal server error"));
     render(
       <ForwardRuleForm
         editingRule={undefined}
@@ -249,7 +424,26 @@ describe("ForwardRuleForm", () => {
     await user.type(screen.getByRole("textbox", { name: "Name" }), "My App");
     await user.click(screen.getByRole("button", { name: "Add Rule" }));
 
-    expect(await screen.findByText(/Conflict: duplicate binding/)).toBeInTheDocument();
+    expect(await screen.findByText(/Internal server error/)).toBeInTheDocument();
+  });
+
+  it("shows friendly conflict message when save fails with a duplicate binding error", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockRejectedValue(new Error("A TCP rule is already listening on 127.0.0.1:48000."));
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "My App");
+    await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+    expect(
+      await screen.findByText(/Another rule is already using this protocol/)
+    ).toBeInTheDocument();
   });
 
   it("shows Delete Rule button in edit mode when onDelete is provided", () => {
