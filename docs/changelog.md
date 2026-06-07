@@ -8,6 +8,11 @@ All notable changes to Portier are documented here.
 
 See `docs/roadmap.md` for the v1.2 plan. Focused on diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and a diagnostics export.
 
+### Added (post-v1.1, pre-v1.2)
+
+- Config compatibility fixtures (`tests/fixtures/config/`): 8 valid and 8 invalid `rules.json` fixtures covering TCP, all UDP modes, both config shapes (raw array and Go wrapper), and all field-level error categories.
+- `npm run validate:config` — fixture-based compatibility runner (`scripts/validate-config.js`): validates config load, HTTP API import/export, UDP mode defaults, duplicate binding rejection, and invalid fixture rejection against the TypeScript runtime and the Go service when binary is available. Never reads or writes the user's real `rules.json`.
+
 ---
 
 ## [1.1.0] - 2026-06-06

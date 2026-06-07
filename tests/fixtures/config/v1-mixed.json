@@ -1,0 +1,45 @@
+[
+  {
+    "id": "fixture-mixed-tcp-01",
+    "name": "Mixed TCP",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48111,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48211,
+    "enabled": true
+  },
+  {
+    "id": "fixture-mixed-udp-one-01",
+    "name": "Mixed UDP One-Way",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48112,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48212,
+    "enabled": true,
+    "udpMode": "one-way"
+  },
+  {
+    "id": "fixture-mixed-udp-last-01",
+    "name": "Mixed UDP Last Client",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48113,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48213,
+    "enabled": false,
+    "udpMode": "bidirectional-last-client"
+  },
+  {
+    "id": "fixture-mixed-udp-multi-01",
+    "name": "Mixed UDP Multi-Client",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48114,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48214,
+    "enabled": false,
+    "udpMode": "bidirectional-multi-client"
+  }
+]

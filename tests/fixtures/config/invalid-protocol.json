@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fixture-bad-proto-01",
+    "name": "Invalid Protocol",
+    "protocol": "quic",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48153,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48253,
+    "enabled": false
+  }
+]

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fixture-port-high-01",
+    "name": "Port Too High",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 65536,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48242,
+    "enabled": false
+  }
+]

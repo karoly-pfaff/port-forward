@@ -420,6 +420,13 @@ Artifacts (screenshots, traces, videos) are written to `test-results/` only on f
 - Mobile sidebar: hamburger opens sidebar, navigation closes it
 - Dashboard: stat cards render
 
+*Settings import/export flows (`tests/e2e/settings.spec.ts`):*
+- Replace-mode import using `v1-mixed.json` fixture: preview counts (4 rules, 1 TCP/3 UDP), confirm dialog, success message, all four rules visible in Forward Rules, pre-existing rule gone
+- Invalid JSON import: client-side parse error alert, no preview or import button, existing rules untouched
+- Export download: filename matches `portier-rules-YYYY-MM-DD.json`, `ExportedConfig` shape valid (`version`, `exportedAt`, `rules`), created rule present in export
+
+Config fixtures reused from `tests/fixtures/config/`. E2E intentionally does not repeat the full fixture matrix — `validate:config` owns exhaustive TS/Go parity.
+
 *Protocol forwarding (`tests/e2e/tcp.spec.ts`, `tests/e2e/udp.spec.ts`):*
 - TCP real forwarding: data passes end-to-end through a live forwarder to an in-process echo server
 - UDP one-way: packet delivered to receiver with no response path
@@ -445,12 +452,14 @@ These scripts use test-specific service names, ports, and temp directories. They
 **Additional validation suites (explicit, not part of `npm run check`):**
 
 ```powershell
+npm run validate:config            # config compatibility: fixture-based rules.json validation
 npm run validate:contract          # API contract parity: TypeScript + Go service if binary present
 npm run validate:binary            # runtime binary behavior: 5 behavioral tests against build/portier/
 npm run validate:runtime:behavior  # alias for validate:binary (fits validate:runtime:* namespace)
 npm run validate:scripts           # installer static analysis + dry-run on current platform
 ```
 
+- `validate:config` — loads every fixture from `tests/fixtures/config/` and validates config compatibility: valid fixtures load and import correctly, invalid fixtures are rejected, duplicate bindings are caught, UDP mode defaults are applied, and both config shapes (raw array and Go-only wrapper) behave as documented. TypeScript runtime is always checked; Go runtime is checked when the binary is available. Pass `--skip-go` to force skip. No real `rules.json` is used.
 - `validate:contract` — runs all API scenarios (CRUD, start/stop, activity, config export/import, port advisory, error shapes) against the TypeScript server; if Go binary is built, runs the same suite against it and compares results. Skips Go parity with a clear message if the binary is absent. Pass `--skip-go` to force skip.
 - `validate:binary` — builds `build/portier/` then tests: health, static serving, missing-static-dir fallback, invalid-config exit, and clean shutdown. Pass `--no-build` to reuse an existing build.
 - `validate:scripts` — static analysis of all platform install and validate scripts (no firewall commands, test names in validate scripts, production path defaults, path quoting); plus dry-run execution on the current platform.
@@ -458,6 +467,7 @@ npm run validate:scripts           # installer static analysis + dry-run on curr
 Naming convention:
 - `npm run test` = unit/integration test runner (Vitest + Go test)
 - `npm run test:e2e` = Playwright browser E2E tests
+- `npm run validate:config` = fixture-based rules.json compatibility validation
 - `npm run validate:contract` = TS/Go API parity validation
 - `npm run validate:binary` / `validate:runtime:behavior` = packaged binary behavioral validation
 - `npm run validate:scripts` = installer/service script static + dry-run validation
@@ -470,6 +480,7 @@ Naming convention:
 
 - Package build and layout: `npm run validate:runtime:smoke`
 - OS service install/start/stop/uninstall: `npm run validate:service:*`
+- Config compatibility: `npm run validate:config`
 - API contract parity: `npm run validate:contract`
 - Runtime binary behavior: `npm run validate:binary`
 - Installer script analysis: `npm run validate:scripts`

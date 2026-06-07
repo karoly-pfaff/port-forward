@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fixture-empty-host-01",
+    "name": "Empty Host",
+    "protocol": "tcp",
+    "listenHost": "",
+    "listenPort": 48152,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48252,
+    "enabled": false
+  }
+]

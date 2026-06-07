@@ -85,7 +85,8 @@ E2E server binds to `127.0.0.1:47890`. Do not include `test:e2e` in `npm run tes
 
 Files:
 - `playwright.config.ts` — webServer, browser, reporter config
-- `tests/e2e/portier.spec.ts` — UI flow tests
+- `tests/e2e/portier.spec.ts` — UI flow tests (app load, CRUD, start/stop, merge import, activity, mobile)
+- `tests/e2e/settings.spec.ts` — Settings import/export: replace-mode fixture import, invalid-JSON rejection, export download shape
 - `tests/e2e/tcp.spec.ts` — TCP real forwarding E2E
 - `tests/e2e/udp.spec.ts` — UDP one-way, last-client, multi-client E2E; activity assertions
 - `tests/e2e/helpers/port.ts` — `getFreePort`, `getFreeTcpPort`, `getFreeUdpPort`
@@ -94,12 +95,22 @@ Files:
 - `tests/e2e/helpers/api.ts` — `clearAllRules`, `createRule`, `startRule`, `stopRule`
 - `tests/e2e/helpers/setup.ts` — creates temp config before server starts
 - `tests/tsconfig.json` — TypeScript config for E2E files
+- `tests/fixtures/config/` — config compatibility fixtures (valid and invalid `rules.json` samples)
 
 **Protocol automation coverage:**
 - TCP forwarding: automated E2E via `tcp.spec.ts`
 - UDP one-way: automated E2E via `udp.spec.ts`
 - UDP bidirectional-last-client: automated E2E via `udp.spec.ts`
 - UDP bidirectional-multi-client: automated E2E via `udp.spec.ts`
+
+**Settings import/export E2E coverage (`settings.spec.ts`):**
+- Replace-mode import using `v1-mixed.json` fixture: preview counts, confirm dialog, success message, all 4 rules visible in Forward Rules, pre-existing rule gone
+- Invalid JSON import: parse error alert, no preview/import button, existing rule preserved
+- Export download: file downloaded with correct filename pattern, `ExportedConfig` shape (`version`, `exportedAt`, `rules`), created rule present
+
+**Config compatibility coverage (`validate:config` — not E2E, not manual):**
+- Exhaustive fixture-based validation of all 16 fixtures: valid config load, import/export via API, UDP mode defaults, duplicate binding rejection, invalid field rejection, malformed JSON rejection, Go/TS parity
+- E2E intentionally does not run the full fixture matrix — `validate:config` owns that
 
 **OS service install validation (run explicitly on the target platform, not part of `npm run check`):**
 - Windows scheduled task (no admin): `npm run validate:service:windows:user`
@@ -241,11 +252,21 @@ Release service validation: `npm run validate:service:current` (or per-platform 
 Run explicitly — not part of `npm run check`. Slower or platform-sensitive.
 
 ```powershell
+npm run validate:config            # fixture-based config compatibility validation
 npm run validate:contract          # API contract parity (TypeScript + Go if available)
 npm run validate:binary            # runtime binary behavior (build:runtime + 5 behavioral tests)
 npm run validate:runtime:behavior  # alias for validate:binary (fits validate:runtime:* namespace)
 npm run validate:scripts           # installer script static analysis + dry-run on current platform
 ```
+
+**`validate:config`** — Loads every fixture from `tests/fixtures/config/` (17 fixtures: 8 valid, 8 invalid, 1 malformed JSON) and runs:
+1. Static JSON parsing — valid fixtures parse; malformed-json fixture does not.
+2. Config file loading — starts the TypeScript server (and Go service if available) with each valid fixture as `rules.json`; verifies rule count. The `{rules:[...]}` wrapper shape is tested against the Go service only (TypeScript config requires a raw array).
+3. HTTP API import/export — imports each valid fixture via `POST /api/config/import`, verifies rule counts and UDP mode defaults, checks export shape stability.
+4. Invalid fixture rejection — each invalid-field rule is posted via `POST /api/forwards` and must return 400 with `errors[]`.
+5. Duplicate binding — posting a second rule with the same listen key must return 409.
+
+TypeScript runtime is always checked. Go runtime is checked when `build/portier/service[.exe]` or `service/build/portier-service[.exe]` is present. Pass `--skip-go` to force skip. No real `rules.json` is used.
 
 **`validate:contract`** — Starts the TypeScript server (and the Go binary if present) and runs all API scenarios: CRUD forwards, start/stop, status, activity, config export/import, port advisory, error shapes, duplicate binding, unknown-ID 404s. Skips Go parity with a clear message if the binary is not built. Use `--skip-go` to force skip.
 
@@ -269,6 +290,7 @@ Pass `--no-build` to reuse an existing `build/portier/`.
 Naming convention:
 - `npm run test` = unit/integration test runner (Vitest + Go test)
 - `npm run test:e2e` = Playwright browser E2E tests
+- `npm run validate:config` = fixture-based rules.json compatibility validation
 - `npm run validate:contract` = TS/Go API parity validation runner
 - `npm run validate:binary` / `validate:runtime:behavior` = packaged binary behavior validation
 - `npm run validate:scripts` = installer script static analysis + dry-run validation

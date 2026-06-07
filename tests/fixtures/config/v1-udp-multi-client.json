@@ -1,0 +1,13 @@
+[
+  {
+    "id": "fixture-udp-multi-01",
+    "name": "UDP Bidirectional Multi-Client",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48104,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48204,
+    "enabled": false,
+    "udpMode": "bidirectional-multi-client"
+  }
+]

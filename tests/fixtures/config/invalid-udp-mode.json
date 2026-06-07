@@ -1,0 +1,13 @@
+[
+  {
+    "id": "fixture-bad-mode-01",
+    "name": "Invalid UDP Mode",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48154,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48254,
+    "enabled": false,
+    "udpMode": "roundtrip"
+  }
+]

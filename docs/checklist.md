@@ -20,6 +20,7 @@ Run these before tagging:
 
 Run explicitly — not part of `npm run check`. Slower or platform-sensitive.
 
+- [ ] `npm run validate:config` — Config compatibility: loads every fixture from `tests/fixtures/config/`, verifies valid fixtures load and import correctly, invalid fixtures are rejected with appropriate errors, duplicate bindings are caught, UDP mode defaults are applied, and the export shape is stable. TypeScript runtime always checked; Go runtime checked when binary is available. (`scripts/validate-config.js`)
 - [ ] `npm run validate:contract` — API contract parity: runs all API scenarios against TypeScript server; if Go binary available, runs same scenarios against Go service and compares response shapes, status codes, field names, and error shapes. (`scripts/validate-contract.js`)
 - [ ] `npm run validate:binary` (or `validate:runtime:behavior`) — Runtime binary behavior: starts `build/portier/service[.exe]`, verifies health, static serving, missing-static-dir handling, invalid-config failure, and clean shutdown. Runs `build:runtime` first unless `--no-build` is passed. (`scripts/validate-binary.js`)
 - [ ] `npm run validate:scripts` — Installer script analysis: static analysis of all platform install and validation scripts (no firewall commands, test-specific names in validate scripts, production path defaults in install scripts, quoting correctness); plus dry-run execution on the current platform. (`scripts/validate-scripts.js`)
@@ -67,13 +68,27 @@ Playwright E2E coverage:
 - [ ] App load
 - [ ] Add/edit/delete rule flows
 - [ ] Start/stop rule flow
-- [ ] Settings config import
+- [ ] Settings config import (merge — 1 TCP rule)
+- [ ] Settings config import (replace — v1-mixed fixture, 4 rules; verify Forward Rules view)
+- [ ] Settings config import (invalid JSON — parse error, state preserved)
+- [ ] Settings config export (download shape: version, exportedAt, rules array, rule present)
 - [ ] Mobile sidebar behavior
 - [ ] TCP real forwarding
 - [ ] UDP one-way real forwarding
 - [ ] UDP bidirectional-last-client real forwarding
 - [ ] UDP bidirectional-multi-client real forwarding
 - [ ] TCP and UDP activity assertions
+
+Config compatibility coverage (`validate:config` — not manual QA):
+
+- [ ] Valid fixture config load (raw array — all protocols and UDP modes)
+- [ ] Valid fixture config load (Go wrapper shape)
+- [ ] Valid fixture import via HTTP API (all 8 valid fixtures)
+- [ ] UDP default mode normalization (no udpMode → one-way)
+- [ ] Export shape stability (version, exportedAt, rules[])
+- [ ] Duplicate binding rejection (409)
+- [ ] Invalid field rejection — port out of range, missing name, empty host, bad protocol, bad udpMode (400)
+- [ ] Malformed JSON rejection (server exit)
 
 Go service coverage:
 

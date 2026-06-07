@@ -1,0 +1,13 @@
+[
+  {
+    "id": "fixture-udp-last-01",
+    "name": "UDP Bidirectional Last Client",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48103,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48203,
+    "enabled": true,
+    "udpMode": "bidirectional-last-client"
+  }
+]

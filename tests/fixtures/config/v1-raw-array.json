@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fixture-raw-udp-01",
+    "name": "UDP No Explicit Mode",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48122,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48222,
+    "enabled": true
+  }
+]

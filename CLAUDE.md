@@ -94,15 +94,25 @@ E2E install (one-time): `npm run test:e2e:install`
 
 Do not add `test:e2e` to `npm run test` or `npm run check`. E2E is a separate step.
 
+E2E spec files:
+- `tests/e2e/portier.spec.ts` — app load, CRUD, start/stop, merge import, mobile
+- `tests/e2e/settings.spec.ts` — replace-mode import (v1-mixed), invalid-JSON rejection, export shape
+- `tests/e2e/tcp.spec.ts` — TCP real forwarding
+- `tests/e2e/udp.spec.ts` — UDP one-way, last-client, multi-client
+
+Settings E2E intentionally does not run the full fixture matrix. `validate:config` owns exhaustive TS/Go parity testing.
+
 **Additional validation suites (run explicitly — slower/platform-sensitive, not part of `npm run check`):**
 
 ```powershell
+npm run validate:config            # fixture-based rules.json compatibility validation
 npm run validate:contract          # API contract parity: TypeScript server + Go service if available
 npm run validate:binary            # runtime binary behavior: build:runtime then 5 behavioral tests
 npm run validate:runtime:behavior  # alias for validate:binary (fits validate:runtime:* namespace)
 npm run validate:scripts           # installer script static analysis + dry-run on current platform
 ```
 
+- `validate:config`: loads fixtures from `tests/fixtures/config/`; checks load, import, export, rejection, duplicate bindings, UDP defaults; TypeScript always checked, Go checked when binary present; `--skip-go` to force skip. Uses temp dirs and free ports; never reads real `rules.json`.
 - `validate:contract`: skips Go parity clearly if binary not present; `--skip-go` to force skip.
 - `validate:binary`: runs `build:runtime` first; use `--no-build` to reuse existing `build/portier/`.
 - `validate:scripts`: always runs static analysis; dynamic dry-run only on current platform.
@@ -112,6 +122,7 @@ Do not add these to `npm run test` or `npm run check`.
 Naming convention:
 - `npm run test` = unit/integration test runner (Vitest + Go test)
 - `npm run test:e2e` = Playwright browser E2E tests
+- `npm run validate:config` = fixture-based rules.json compatibility validation
 - `npm run validate:contract` = TS/Go API parity validation
 - `npm run validate:binary` / `validate:runtime:behavior` = packaged service binary behavior validation
 - `npm run validate:scripts` = installer/service script static + dry-run validation

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fixture-no-name-01",
+    "name": "",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48151,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48251,
+    "enabled": false
+  }
+]

@@ -1,0 +1,103 @@
+{
+  "v1-empty.json": {
+    "valid": true,
+    "ruleCount": 0,
+    "shape": "array",
+    "description": "Empty config — raw array with no rules"
+  },
+  "v1-tcp.json": {
+    "valid": true,
+    "ruleCount": 1,
+    "shape": "array",
+    "protocols": ["tcp"],
+    "description": "Single enabled TCP rule"
+  },
+  "v1-udp-one-way.json": {
+    "valid": true,
+    "ruleCount": 1,
+    "shape": "array",
+    "protocols": ["udp"],
+    "udpModes": ["one-way"],
+    "description": "Single UDP one-way rule"
+  },
+  "v1-udp-last-client.json": {
+    "valid": true,
+    "ruleCount": 1,
+    "shape": "array",
+    "protocols": ["udp"],
+    "udpModes": ["bidirectional-last-client"],
+    "description": "Single UDP bidirectional-last-client rule"
+  },
+  "v1-udp-multi-client.json": {
+    "valid": true,
+    "ruleCount": 1,
+    "shape": "array",
+    "protocols": ["udp"],
+    "udpModes": ["bidirectional-multi-client"],
+    "description": "Single UDP bidirectional-multi-client rule (disabled)"
+  },
+  "v1-mixed.json": {
+    "valid": true,
+    "ruleCount": 4,
+    "shape": "array",
+    "protocols": ["tcp", "udp"],
+    "udpModes": ["one-way", "bidirectional-last-client", "bidirectional-multi-client"],
+    "description": "Mixed config: TCP plus all three UDP modes"
+  },
+  "v1-wrapper-rules.json": {
+    "valid": true,
+    "ruleCount": 1,
+    "shape": "wrapper",
+    "protocols": ["tcp"],
+    "description": "Wrapper shape {rules:[...]} — supported by Go service config; TypeScript config requires raw array"
+  },
+  "v1-raw-array.json": {
+    "valid": true,
+    "ruleCount": 1,
+    "shape": "array",
+    "protocols": ["udp"],
+    "udpModes": ["one-way"],
+    "udpDefaultMode": true,
+    "description": "UDP rule without explicit udpMode — both runtimes must default to one-way"
+  },
+  "invalid-duplicate-binding.json": {
+    "valid": false,
+    "errorCategory": "duplicate-binding",
+    "description": "Two rules sharing the same protocol+listenHost+listenPort — duplicate binding must be rejected"
+  },
+  "invalid-port-zero.json": {
+    "valid": false,
+    "errorCategory": "invalid-field",
+    "description": "listenPort: 0 — below the valid minimum of 1"
+  },
+  "invalid-port-too-high.json": {
+    "valid": false,
+    "errorCategory": "invalid-field",
+    "description": "listenPort: 65536 — above the valid maximum of 65535"
+  },
+  "invalid-missing-name.json": {
+    "valid": false,
+    "errorCategory": "invalid-field",
+    "description": "Empty string name — name is required"
+  },
+  "invalid-empty-host.json": {
+    "valid": false,
+    "errorCategory": "invalid-field",
+    "description": "Empty string listenHost — listenHost is required"
+  },
+  "invalid-protocol.json": {
+    "valid": false,
+    "errorCategory": "invalid-field",
+    "description": "protocol: quic — only tcp and udp are accepted"
+  },
+  "invalid-udp-mode.json": {
+    "valid": false,
+    "errorCategory": "invalid-field",
+    "description": "udpMode: roundtrip — only one-way, bidirectional-last-client, bidirectional-multi-client are accepted"
+  },
+  "invalid-json.json": {
+    "valid": false,
+    "errorCategory": "malformed-json",
+    "description": "Malformed JSON — must not be parsed or loaded"
+  }
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "id": "fixture-tcp-01",
+    "name": "Local TCP Forward",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48101,
+    "targetHost": "127.0.0.1",
+    "targetPort": 48201,
+    "enabled": true
+  }
+]
