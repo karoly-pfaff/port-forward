@@ -1,6 +1,7 @@
 import net from "node:net";
 import type { ForwardRule, ForwardStatus, ActivityEventInput } from "@portier/shared";
 import type { Forwarder } from "./types.js";
+import type { TcpConnectionRegistry } from "../connections/tcp-connection-registry.js";
 
 export class TcpForwarder implements Forwarder {
   private server?: net.Server;
@@ -9,7 +10,8 @@ export class TcpForwarder implements Forwarder {
 
   constructor(
     private readonly rule: ForwardRule,
-    private readonly onEvent?: (event: ActivityEventInput) => void
+    private readonly onEvent?: (event: ActivityEventInput) => void,
+    private readonly registry?: TcpConnectionRegistry
   ) {
     this.status = {
       ruleId: rule.id,
@@ -58,6 +60,7 @@ export class TcpForwarder implements Forwarder {
       socket.destroy();
     }
     this.sockets.clear();
+    this.registry?.closeConnectionsForRule(this.rule.id);
 
     if (server) {
       await new Promise<void>((resolve, reject) => {
@@ -93,6 +96,15 @@ export class TcpForwarder implements Forwarder {
     const remoteAddress = clientSocket.remoteAddress ?? "unknown";
     const remotePort = clientSocket.remotePort ?? 0;
 
+    const connId = this.registry?.openConnection({
+      ruleId: this.rule.id,
+      ruleName: this.rule.name,
+      clientAddress: remoteAddress,
+      clientPort: remotePort,
+      targetAddress: this.rule.targetHost,
+      targetPort: this.rule.targetPort
+    });
+
     this.onEvent?.({
       type: "tcp.connection.opened",
       severity: "info",
@@ -110,9 +122,11 @@ export class TcpForwarder implements Forwarder {
 
     clientSocket.on("data", (chunk) => {
       this.status.bytesIn += chunk.length;
+      if (connId) this.registry?.addBytesIn(connId, chunk.length);
     });
     targetSocket.on("data", (chunk) => {
       this.status.bytesOut += chunk.length;
+      if (connId) this.registry?.addBytesOut(connId, chunk.length);
     });
 
     clientSocket.pipe(targetSocket);
@@ -123,6 +137,7 @@ export class TcpForwarder implements Forwarder {
       if (error && !loggedError) {
         loggedError = true;
         this.status.lastError = error.message;
+        if (connId) this.registry?.closeConnection(connId);
         this.onEvent?.({
           type: "tcp.connection.error",
           severity: "error",
@@ -147,6 +162,7 @@ export class TcpForwarder implements Forwarder {
       if (!countedClosed) {
         countedClosed = true;
         this.status.activeConnections = Math.max(0, (this.status.activeConnections ?? 0) - 1);
+        if (connId) this.registry?.closeConnection(connId);
         if (!loggedError) {
           this.onEvent?.({
             type: "tcp.connection.closed",

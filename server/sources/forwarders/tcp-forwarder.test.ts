@@ -2,6 +2,7 @@ import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ActivityEventInput, ForwardRule } from "@portier/shared";
 import { TcpForwarder } from "./tcp-forwarder.js";
+import { TcpConnectionRegistry } from "../connections/tcp-connection-registry.js";
 import { getFreeTcpPort } from "../test-helpers.js";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -214,5 +215,226 @@ describe("TcpForwarder – stop with active connections", () => {
     await forwarder.stop();
     expect(forwarder.getStatus().running).toBe(false);
     expect(forwarder.getStatus().activeConnections).toBe(0);
+  });
+});
+
+describe("TcpForwarder – live tracking integration", () => {
+  async function makeEchoTarget(): Promise<{ port: number; close: () => Promise<void> }> {
+    const port = await getFreeTcpPort();
+    const server = net.createServer((socket) => {
+      socket.on("data", (data) => {
+        socket.write(Buffer.from(`echo:${data.toString()}`));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+    return { port, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+  }
+
+  it("opening a TCP client creates a live connection entry", async () => {
+    const target = await makeEchoTarget();
+    cleanup.push(target.close);
+    const listenPort = await getFreeTcpPort();
+    const registry = new TcpConnectionRegistry();
+
+    let openedResolve!: () => void;
+    const openedPromise = new Promise<void>((r) => { openedResolve = r; });
+
+    const forwarder = new TcpForwarder(
+      makeRule({ listenPort, targetPort: target.port }),
+      (e) => { if (e.type === "tcp.connection.opened") openedResolve(); },
+      registry
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = net.createConnection({ host: "127.0.0.1", port: listenPort });
+    client.on("error", () => {});
+    cleanup.push(() => new Promise<void>((resolve) => { client.destroy(); resolve(); }));
+
+    await openedPromise;
+    const snap = registry.snapshot();
+    expect(snap).toHaveLength(1);
+    expect(snap[0].ruleId).toBe("tcp-test");
+    expect(snap[0].protocol).toBe("tcp");
+    expect(snap[0].status).toBe("active");
+  });
+
+  it("client → target bytes update bytesIn, target → client bytes update bytesOut", async () => {
+    const target = await makeEchoTarget();
+    cleanup.push(target.close);
+    const listenPort = await getFreeTcpPort();
+    const registry = new TcpConnectionRegistry();
+
+    const forwarder = new TcpForwarder(
+      makeRule({ listenPort, targetPort: target.port }),
+      undefined,
+      registry
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const response = await new Promise<string>((resolve, reject) => {
+      const client = net.createConnection({ host: "127.0.0.1", port: listenPort }, () => {
+        client.write("hello");
+      });
+      client.once("data", (data) => {
+        resolve(data.toString());
+        client.end();
+      });
+      client.once("error", reject);
+    });
+
+    expect(response).toBe("echo:hello");
+    const snap = registry.snapshot();
+    expect(snap[0].bytesIn).toBe(5);   // "hello"
+    expect(snap[0].bytesOut).toBe(10); // "echo:hello"
+  });
+
+  it("connection close removes live connection from registry", async () => {
+    const target = await makeEchoTarget();
+    cleanup.push(target.close);
+    const listenPort = await getFreeTcpPort();
+    const registry = new TcpConnectionRegistry();
+
+    let closedResolve!: () => void;
+    const closedPromise = new Promise<void>((r) => { closedResolve = r; });
+
+    const forwarder = new TcpForwarder(
+      makeRule({ listenPort, targetPort: target.port }),
+      (e) => { if (e.type === "tcp.connection.closed") closedResolve(); },
+      registry
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = net.createConnection({ host: "127.0.0.1", port: listenPort });
+    client.on("error", () => {});
+
+    // wait for connection to appear
+    await new Promise<void>((resolve) => {
+      const poll = setInterval(() => {
+        if (registry.snapshot().length > 0) { clearInterval(poll); resolve(); }
+      }, 5);
+    });
+    expect(registry.snapshot()).toHaveLength(1);
+
+    client.destroy();
+    await closedPromise;
+    expect(registry.snapshot()).toHaveLength(0);
+  });
+
+  it("failed target connection does not leak a live connection entry", async () => {
+    const unusedPort = await getFreeTcpPort(); // nothing listening
+    const listenPort = await getFreeTcpPort();
+    const registry = new TcpConnectionRegistry();
+
+    let errorResolve!: () => void;
+    const errorPromise = new Promise<void>((r) => { errorResolve = r; });
+
+    const forwarder = new TcpForwarder(
+      makeRule({ listenPort, targetPort: unusedPort }),
+      (e) => { if (e.type === "tcp.connection.error") errorResolve(); },
+      registry
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = net.createConnection({ host: "127.0.0.1", port: listenPort });
+    client.on("error", () => {});
+    cleanup.push(() => new Promise<void>((resolve) => { client.destroy(); resolve(); }));
+
+    await errorPromise;
+    // after error, connection should be cleaned up
+    expect(registry.snapshot()).toHaveLength(0);
+  });
+
+  it("stop() clears live connections synchronously", async () => {
+    const target = await makeEchoTarget();
+    cleanup.push(target.close);
+    const listenPort = await getFreeTcpPort();
+    const registry = new TcpConnectionRegistry();
+
+    let openedResolve!: () => void;
+    const openedPromise = new Promise<void>((r) => { openedResolve = r; });
+
+    const forwarder = new TcpForwarder(
+      makeRule({ listenPort, targetPort: target.port }),
+      (e) => { if (e.type === "tcp.connection.opened") openedResolve(); },
+      registry
+    );
+    await forwarder.start();
+
+    const client = net.createConnection({ host: "127.0.0.1", port: listenPort });
+    client.on("error", () => {});
+    cleanup.push(() => new Promise<void>((resolve) => { client.destroy(); resolve(); }));
+
+    await openedPromise;
+    expect(registry.snapshot()).toHaveLength(1);
+
+    await forwarder.stop();
+    expect(registry.snapshot()).toHaveLength(0);
+  });
+
+  it("multiple simultaneous connections are tracked separately", async () => {
+    const target = await makeEchoTarget();
+    cleanup.push(target.close);
+    const listenPort = await getFreeTcpPort();
+    const registry = new TcpConnectionRegistry();
+
+    let opened = 0;
+    let openedResolve!: () => void;
+    const twoOpened = new Promise<void>((r) => { openedResolve = r; });
+
+    const forwarder = new TcpForwarder(
+      makeRule({ listenPort, targetPort: target.port }),
+      (e) => { if (e.type === "tcp.connection.opened" && ++opened === 2) openedResolve(); },
+      registry
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client1 = net.createConnection({ host: "127.0.0.1", port: listenPort });
+    const client2 = net.createConnection({ host: "127.0.0.1", port: listenPort });
+    client1.on("error", () => {});
+    client2.on("error", () => {});
+    cleanup.push(() => new Promise<void>((resolve) => { client1.destroy(); resolve(); }));
+    cleanup.push(() => new Promise<void>((resolve) => { client2.destroy(); resolve(); }));
+
+    await twoOpened;
+    const snap = registry.snapshot();
+    expect(snap).toHaveLength(2);
+    expect(snap[0].id).not.toBe(snap[1].id);
+  });
+
+  it("snapshot contains no payload fields beyond the defined shape", async () => {
+    const target = await makeEchoTarget();
+    cleanup.push(target.close);
+    const listenPort = await getFreeTcpPort();
+    const registry = new TcpConnectionRegistry();
+
+    let openedResolve!: () => void;
+    const openedPromise = new Promise<void>((r) => { openedResolve = r; });
+
+    const forwarder = new TcpForwarder(
+      makeRule({ listenPort, targetPort: target.port }),
+      (e) => { if (e.type === "tcp.connection.opened") openedResolve(); },
+      registry
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = net.createConnection({ host: "127.0.0.1", port: listenPort });
+    client.on("error", () => {});
+    cleanup.push(() => new Promise<void>((resolve) => { client.destroy(); resolve(); }));
+
+    await openedPromise;
+    const snap = registry.snapshot();
+    const keys = Object.keys(snap[0]).sort();
+    const expected = [
+      "bytesIn", "bytesOut", "clientAddress", "clientPort",
+      "durationMs", "id", "protocol", "ruleId", "ruleName",
+      "startedAt", "status", "targetAddress", "targetPort"
+    ];
+    expect(keys).toEqual(expected);
   });
 });

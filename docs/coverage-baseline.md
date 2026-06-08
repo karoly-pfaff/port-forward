@@ -10,7 +10,7 @@ Measured at v1.3.0 (2026-06-08). This is the pre-v1.4 baseline.
 | client        |      89.2% |  87.6% |     74.0% |     none | vitest + @vitest/coverage-v8      |
 | service       |      79.7% |      — |         — |     none | `go test -coverpkg`               |
 | shared        |      82.1% |  53.6% |     88.9% |     none | vitest + @vitest/coverage-v8      |
-| server        |      79.6% |  83.8% |     97.3% |     none | vitest + @vitest/coverage-v8      |
+| server        |      80.55% |  84.74% |    96.47% |     none | vitest + @vitest/coverage-v8      |
 | scripts       |        N/M |      — |         — |     none | not yet measured                  |
 
 Coverage commands:
@@ -71,35 +71,36 @@ No coverage gate. Tooling added: vitest.config.ts updated with coverage config, 
 
 ---
 
-## server — 79.6% statements, 83.8% branch, 97.3% functions
+## server — 80.55% statements, 84.74% branch, 96.47% functions
 
-Updated at v1.4 Slice 1 (2026-06-08). Previous baseline (v1.3.0): 71.9% stmts, 80.1% branch, 93.3% funcs.
+Updated at v1.4 Slice 3 (2026-06-08). Previous: 79.6% stmts (Slice 1). Baseline (v1.3.0): 71.9% stmts.
 
-"All files" figure from `npm run coverage:server`. The weighted total includes `sources/activity/` (100%), `sources/forwarders/` (89.7%), and the `types.ts` interface file (0%) and `index.ts` bootstrap (0%).
+"All files" figure from `npm run coverage:server`.
 
-| File                                       | Stmts  | Branch | Funcs  | Notes                                            |
-| ------------------------------------------ | -----: | -----: | -----: | ------------------------------------------------ |
-| sources/index.ts                           |     0% |      0%|      0%| app entry/wiring, not unit-tested                |
-| sources/logger.ts                          |     0% |   100% |   100% | logging wrapper, real gap                        |
-| sources/forwarders/types.ts                |     0% |      — |      — | interface-only file, no executable code          |
-| sources/forwarders/tcp-forwarder.ts        |   100% |  88.2% |   100% | v1.4 Slice 1: up from 68.5%/68.0%/83.3%         |
-| sources/forwarders/udp-forwarder.ts        |  84.3% |  82.0% |   100% | v1.4 Slice 1: up from 57.7%/64.7%/90.9%         |
-| sources/diagnose.ts                        |  84.8% |  83.0% |   100% |                                                  |
-| sources/forward-manager.ts                 |  88.0% |  76.5% |  95.8% |                                                  |
-| sources/api.ts                             |  91.0% |  86.0% |   100% |                                                  |
-| sources/server-options.ts                  |  96.7% |  93.5% |   100% |                                                  |
-| sources/config-store.ts                    |  94.1% |  92.9% |   100% |                                                  |
-| sources/activity/activity-store.ts         |   100% |   100% |   100% |                                                  |
+| File                                                  | Stmts  | Branch | Funcs  | Notes                                            |
+| ----------------------------------------------------- | -----: | -----: | -----: | ------------------------------------------------ |
+| sources/index.ts                                      |     0% |      0%|      0%| app entry/wiring, not unit-tested                |
+| sources/logger.ts                                     |     0% |   100% |   100% | logging wrapper, real gap                        |
+| sources/forwarders/types.ts                           |     0% |      — |      — | interface-only file, no executable code          |
+| sources/connections/tcp-connection-registry.ts        |   100% |   100% |   100% | v1.4 Slice 3: new module, 100% meaningful        |
+| sources/forwarders/tcp-forwarder.ts                   |   100% |    90% |   100% | v1.4 Slice 3: wired registry; branch gap = optional registry param |
+| sources/forwarders/udp-forwarder.ts                   |  84.3% |  82.0% |   100% | v1.4 Slice 1: up from 57.7%/64.7%/90.9%         |
+| sources/diagnose.ts                                   |  84.8% |  83.0% |   100% |                                                  |
+| sources/forward-manager.ts                            |  87.6% |  76.5% |    92% |                                                  |
+| sources/api.ts                                        |  91.0% |  86.0% |   100% |                                                  |
+| sources/server-options.ts                             |  96.7% |  93.5% |   100% |                                                  |
+| sources/config-store.ts                               |  94.1% |  92.9% |   100% |                                                  |
+| sources/activity/activity-store.ts                    |   100% |   100% |   100% |                                                  |
 
 No coverage gate. Tooling added: vitest.config.ts created, `coverage` script added.
 
 Notes:
 - `index.ts` bootstrap is integration-tested via E2E and `validate:contract`; 0% here is expected.
 - `logger.ts` contains `createConsoleLogger` and `errorFields` — genuinely not covered, low-risk but a real gap.
-- Forwarder coverage significantly improved in v1.4 Slice 1 (see below).
+- Forwarder coverage improved in v1.4 Slice 1; TCP registry added at 100% in Slice 3.
 
-**tcp-forwarder.ts remaining branch gap (11.8%):**
-Lines 91–94 and 149 are `??` nullish-coalescing operators (`remoteAddress ?? "unknown"`, `remotePort ?? 0`, `activeConnections ?? 0`). The right-hand side is never reached at runtime — these are defensive guards against optional TypeScript types. Not meaningful to test.
+**tcp-forwarder.ts remaining branch gap (10%):**
+Lines 94–97 and 164 are optional-registry guard branches (`if (connId)`). When `registry` is not passed to the constructor, `connId` is `undefined` and the right-hand side of these conditions is never reached. This is a by-design optional API path, not a meaningful test gap.
 
 **udp-forwarder.ts remaining gaps (15.7% stmts):**
 - Multi-client response error callback: `listenSocket.send()` failure inside the per-session targetSocket `message` handler.

@@ -1,10 +1,11 @@
 import crypto from "node:crypto";
-import type { ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, ImportMode, ImportResult } from "@portier/shared";
+import type { ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, ImportMode, ImportResult, TcpConnectionInfo } from "@portier/shared";
 import { listenKey, validateForwardRule, validateForwardRulePatch } from "@portier/shared";
 import type { Forwarder } from "./forwarders/types.js";
 import { TcpForwarder } from "./forwarders/tcp-forwarder.js";
 import { UdpForwarder } from "./forwarders/udp-forwarder.js";
 import type { ActivityStore } from "./activity/activity-store.js";
+import { TcpConnectionRegistry } from "./connections/tcp-connection-registry.js";
 
 export interface RuleStore {
   load(): Promise<ForwardRule[]>;
@@ -14,11 +15,16 @@ export interface RuleStore {
 export class ForwardManager {
   private rules = new Map<string, ForwardRule>();
   private forwarders = new Map<string, Forwarder>();
+  private readonly tcpRegistry = new TcpConnectionRegistry();
 
   constructor(
     private readonly store: RuleStore,
     private readonly activity?: ActivityStore
   ) {}
+
+  getLiveTcpConnections(): TcpConnectionInfo[] {
+    return this.tcpRegistry.snapshot();
+  }
 
   async loadAndStartEnabled(): Promise<number> {
     const rules = await this.store.load();
@@ -177,7 +183,7 @@ export class ForwardManager {
 
     const forwarder =
       rule.protocol === "tcp"
-        ? new TcpForwarder(rule, onEvent)
+        ? new TcpForwarder(rule, onEvent, this.tcpRegistry)
         : new UdpForwarder(rule, onEvent);
     this.forwarders.set(ruleId, forwarder);
 
