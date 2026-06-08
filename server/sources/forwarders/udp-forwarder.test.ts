@@ -1,6 +1,6 @@
 import dgram from "node:dgram";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ForwardRule } from "@portier/shared";
+import type { ActivityEventInput, ForwardRule } from "@portier/shared";
 import { UdpForwarder } from "./udp-forwarder.js";
 import { getFreeUdpPort } from "../test-helpers.js";
 
@@ -186,5 +186,327 @@ describe("UdpForwarder bidirectional-last-client mode", () => {
     sendPacket(client, "hello", listenPort);
 
     await expect(response).resolves.toBe("echo:hello");
+  });
+});
+
+describe("UdpForwarder – lifecycle", () => {
+  it("start() is a no-op when already running", async () => {
+    const listenPort = await getFreeUdpPort();
+    const forwarder = new UdpForwarder(makeRule({ listenPort }));
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+    await expect(forwarder.start()).resolves.toBeUndefined();
+    expect(forwarder.getStatus().running).toBe(true);
+  });
+
+  it("start() rejects when port is already bound", async () => {
+    const port = await getFreeUdpPort();
+    const blocker = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => blocker.bind(port, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => blocker.close(() => resolve())));
+
+    const forwarder = new UdpForwarder(makeRule({ listenPort: port }));
+    cleanup.push(() => forwarder.stop().catch(() => {}));
+    await expect(forwarder.start()).rejects.toThrow();
+    expect(forwarder.getStatus().running).toBe(false);
+  });
+
+  it("stop() resolves immediately when forwarder was never started", async () => {
+    const forwarder = new UdpForwarder(makeRule());
+    await expect(forwarder.stop()).resolves.toBeUndefined();
+    expect(forwarder.getStatus().running).toBe(false);
+  });
+});
+
+describe("UdpForwarder one-way – events", () => {
+  it("emits udp.packet.forwarded event via onEvent", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => targetSocket.close(() => resolve())));
+
+    let forwardedResolve!: () => void;
+    const forwardedPromise = new Promise<void>((r) => { forwardedResolve = r; });
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort }),
+      (e: ActivityEventInput) => {
+        if (e.type === "udp.packet.forwarded") forwardedResolve();
+      }
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+    sendPacket(client, "hello", listenPort);
+
+    await forwardedPromise;
+  });
+
+  it("rate-limits repeated forwarded events within 1s window", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => targetSocket.close(() => resolve())));
+
+    let forwardedCount = 0;
+    let bothReceived!: () => void;
+    const bothReceivedPromise = new Promise<void>((r) => { bothReceived = r; });
+    let receiveCount = 0;
+    targetSocket.on("message", () => {
+      if (++receiveCount === 2) bothReceived();
+    });
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort }),
+      (e: ActivityEventInput) => { if (e.type === "udp.packet.forwarded") forwardedCount++; }
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+    sendPacket(client, "p1", listenPort);
+    sendPacket(client, "p2", listenPort);
+
+    await bothReceivedPromise;
+    // Give send callbacks a tick to complete
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(forwardedCount).toBe(1);
+  });
+});
+
+describe("UdpForwarder bidirectional-last-client – stats and events", () => {
+  it("tracks bytesOut and packetsOut for reply packets", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => targetSocket.close(() => resolve())));
+
+    targetSocket.on("message", (msg, rinfo) => {
+      targetSocket.send(Buffer.from(`reply:${msg.toString()}`), rinfo.port, rinfo.address);
+    });
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-last-client" })
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => client.bind(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+
+    const response = receiveOne(client);
+    sendPacket(client, "hi", listenPort);
+    await response;
+
+    const status = forwarder.getStatus();
+    expect(status.bytesOut).toBeGreaterThan(0);
+    expect(status.packetsOut).toBe(1);
+  });
+
+  it("emits udp.packet.returned event via onEvent", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => targetSocket.close(() => resolve())));
+
+    targetSocket.on("message", (msg, rinfo) => {
+      targetSocket.send(Buffer.from("pong"), rinfo.port, rinfo.address);
+    });
+
+    let returnedResolve!: () => void;
+    const returnedPromise = new Promise<void>((r) => { returnedResolve = r; });
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-last-client" }),
+      (e: ActivityEventInput) => {
+        if (e.type === "udp.packet.returned") returnedResolve();
+      }
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => client.bind(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+
+    sendPacket(client, "ping", listenPort);
+    await returnedPromise;
+  });
+});
+
+describe("UdpForwarder bidirectional-multi-client – session management", () => {
+  it("resets idle timer on second packet from same client", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => targetSocket.close(() => resolve())));
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-multi-client" }),
+      undefined,
+      80 // 80ms idle timeout
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => client.bind(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+
+    sendPacket(client, "first", listenPort);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(forwarder.getStatus().activeUdpSessions).toBe(1);
+
+    // Reset the timer: second packet arrives before the 80ms window expires
+    sendPacket(client, "second", listenPort);
+    await new Promise<void>((resolve) => setTimeout(resolve, 60));
+    // The original timer would have fired by now, but it was reset; session still alive
+    expect(forwarder.getStatus().activeUdpSessions).toBe(1);
+
+    // Wait past the reset timeout (80ms from second packet)
+    await new Promise<void>((resolve) => setTimeout(resolve, 60));
+    expect(forwarder.getStatus().activeUdpSessions).toBe(0);
+  });
+
+  it("emits udp.session.opened and udp.session.closed events via onEvent", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => targetSocket.close(() => resolve())));
+
+    const events: string[] = [];
+    let openedResolve!: () => void;
+    let closedResolve!: () => void;
+    const openedPromise = new Promise<void>((r) => { openedResolve = r; });
+    const closedPromise = new Promise<void>((r) => { closedResolve = r; });
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-multi-client" }),
+      (e: ActivityEventInput) => {
+        events.push(e.type);
+        if (e.type === "udp.session.opened") openedResolve();
+        if (e.type === "udp.session.closed") closedResolve();
+      },
+      50 // 50ms idle timeout
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => client.bind(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+
+    sendPacket(client, "hello", listenPort);
+    await openedPromise;
+    expect(events).toContain("udp.session.opened");
+
+    await closedPromise;
+    expect(events).toContain("udp.session.closed");
+  });
+
+  it("rate-limits udp.packet.forwarded event in multi-client mode", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => targetSocket.close(() => resolve())));
+
+    let forwardedCount = 0;
+    let bothArrived!: () => void;
+    const bothArrivedPromise = new Promise<void>((r) => { bothArrived = r; });
+    let receiveCount = 0;
+    targetSocket.on("message", () => {
+      if (++receiveCount === 2) bothArrived();
+    });
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-multi-client" }),
+      (e: ActivityEventInput) => { if (e.type === "udp.packet.forwarded") forwardedCount++; },
+      5000
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => client.bind(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+
+    sendPacket(client, "p1", listenPort);
+    sendPacket(client, "p2", listenPort);
+
+    await bothArrivedPromise;
+    expect(forwardedCount).toBe(1);
+  });
+});
+
+describe("UdpForwarder – error handling", () => {
+  it("records listen socket error in lastError", async () => {
+    const listenPort = await getFreeUdpPort();
+    const forwarder = new UdpForwarder(makeRule({ listenPort }));
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    (forwarder as any).listenSocket.emit("error", new Error("listen error"));
+
+    expect(forwarder.getStatus().lastError).toBe("listen error");
+  });
+
+  it("records one-way target socket error in lastError", async () => {
+    const listenPort = await getFreeUdpPort();
+    const forwarder = new UdpForwarder(makeRule({ listenPort }));
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    (forwarder as any).targetSocket.emit("error", new Error("target error"));
+
+    expect(forwarder.getStatus().lastError).toBe("target error");
+  });
+
+  it("records multi-client session target socket error in lastError", async () => {
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const tgt = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => tgt.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => tgt.close(() => resolve())));
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-multi-client" }),
+      undefined,
+      5000
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => client.bind(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => client.close(() => resolve())));
+
+    sendPacket(client, "hi", listenPort);
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+
+    const sessionKey = `127.0.0.1:${client.address().port}`;
+    const session = (forwarder as any).sessions.get(sessionKey);
+    expect(session).toBeDefined();
+
+    session.targetSocket.emit("error", new Error("session error"));
+    expect(forwarder.getStatus().lastError).toBe("session error");
   });
 });

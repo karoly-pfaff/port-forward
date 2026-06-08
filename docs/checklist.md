@@ -65,6 +65,7 @@ Shared and TypeScript coverage:
 - [ ] Rule diagnostics UI: Diagnose button, loading state, pass/warn/fail/skip panel, error display, duplicate prevention, clear on close/delete
 - [ ] Diagnostics export: Download Diagnostics JSON button in Settings, bundle structure (schemaVersion, runtime, rules, statuses, activity, diagnostics, metadata), partial-failure errors array, empty-diagnostics note, filename pattern, disabled-while-generating
 - [ ] **API documentation rule:** when an API endpoint is added, removed, or changed — both `docs/api-contract.md` and the client in-app API Docs view (`client/sources/features/apidocs/ApiDocsView.tsx`) must be updated, along with `ApiDocsView.test.tsx`.
+- [x] **TypeScript server forwarder coverage hardening (v1.4 Slice 1)** — tcp-forwarder.ts raised to 100% statements/functions; udp-forwarder.ts raised to 84.3% statements/100% functions. 7 new TCP tests + 13 new UDP tests. Remaining UDP gaps (multi-client send/return error callbacks, race guard) documented in `docs/coverage-baseline.md`. Server overall: 71.9% → 79.6% stmts.
 
 Playwright E2E coverage:
 
