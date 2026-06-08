@@ -32,6 +32,7 @@ Commands:
   start <id|name>      Start a forwarding rule
   stop <id|name>       Stop a forwarding rule
   diagnose <id|name>   Run diagnostics against a forwarding rule
+  config               Manage config: validate, export, import (run 'portier config help')
   version              Show CLI version
   help                 Show this help message
 
@@ -40,7 +41,7 @@ Rule identity:
   If multiple rules share the same name, use the rule ID to avoid ambiguity.
 
 More commands are planned for v1.3:
-  config export/import, diagnostics export
+  diagnostics export
 
 Exit codes:
   0  Success

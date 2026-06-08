@@ -108,6 +108,14 @@ func run(args []string) int {
 		}
 		c := client.New(managementURL)
 		return commands.RunDiagnose(c, *flagJSON, remaining[1:], os.Stdout, os.Stderr)
+	case "config":
+		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 2
+		}
+		c := client.New(managementURL)
+		return commands.RunConfig(c, *flagJSON, remaining[1:], os.Stdout, os.Stderr)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command %q\n\n", remaining[0])
 		commands.PrintHelp(os.Stderr)

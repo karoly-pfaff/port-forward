@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -220,6 +221,103 @@ type RuleDiagnosticsResult struct {
 	Summary     DiagnosticSummary `json:"summary"`
 	Checks      []DiagnosticCheck `json:"checks"`
 	DiagnosedAt string            `json:"diagnosedAt"`
+}
+
+// ConfigRule is a forwarding rule as stored in a Portier config file.
+type ConfigRule struct {
+	ID         string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	Protocol   string `json:"protocol"`
+	ListenHost string `json:"listenHost"`
+	ListenPort int    `json:"listenPort"`
+	TargetHost string `json:"targetHost"`
+	TargetPort int    `json:"targetPort"`
+	Enabled    bool   `json:"enabled"`
+	UDPMode    string `json:"udpMode,omitempty"`
+}
+
+// ConfigExportResponse mirrors the response from GET /api/config/export.
+type ConfigExportResponse struct {
+	Version    string       `json:"version"`
+	ExportedAt string       `json:"exportedAt"`
+	Rules      []ConfigRule `json:"rules"`
+}
+
+// ConfigImportRequest is the request body for POST /api/config/import.
+type ConfigImportRequest struct {
+	Mode   string               `json:"mode"`
+	Config ConfigExportResponse `json:"config"`
+}
+
+// ImportResult mirrors the result field from a successful config import response.
+type ImportResult struct {
+	Imported int      `json:"imported"`
+	Skipped  int      `json:"skipped"`
+	Errors   []string `json:"errors"`
+}
+
+// ConfigImportResponse mirrors the response from POST /api/config/import.
+type ConfigImportResponse struct {
+	Result ImportResult          `json:"result"`
+	Rules  []ForwardRuleResponse `json:"rules"`
+}
+
+// doWithBody executes an HTTP request with a JSON body and unmarshals the response into out.
+// If out is nil the response body is checked for errors but not parsed.
+func (c *Client) doWithBody(method, path string, body any, out any) error {
+	b, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encoding request body: %w", err)
+	}
+	reqURL := c.baseURL + path
+	req, err := http.NewRequest(method, reqURL, bytes.NewReader(b))
+	if err != nil {
+		return fmt.Errorf("invalid request URL: %w", err)
+	}
+	req.Header.Set("User-Agent", "PortierCLI/"+version.Version)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return &ConnectionError{URL: c.baseURL, Err: err}
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading response: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errBody apiErrorBody
+		_ = json.Unmarshal(respBody, &errBody)
+		return &APIError{StatusCode: resp.StatusCode, Messages: errBody.Errors}
+	}
+
+	if out != nil {
+		if err := json.Unmarshal(respBody, out); err != nil {
+			return fmt.Errorf("parsing response JSON: %w", err)
+		}
+	}
+	return nil
+}
+
+// ExportConfig calls GET /api/config/export and returns the current config.
+func (c *Client) ExportConfig() (*ConfigExportResponse, error) {
+	var cfg ConfigExportResponse
+	if err := c.get("/api/config/export", &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+// ImportConfig calls POST /api/config/import with the given request body.
+func (c *Client) ImportConfig(req ConfigImportRequest) (*ConfigImportResponse, error) {
+	var resp ConfigImportResponse
+	if err := c.doWithBody(http.MethodPost, "/api/config/import", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // StartForward calls POST /api/forwards/:id/start to start a forwarding rule.

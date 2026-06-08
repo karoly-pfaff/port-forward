@@ -497,7 +497,7 @@ npm run build:cli
 
 Output: `tools/cli/build/portier` (or `portier.exe` on Windows).
 
-**Commands (Slices 2–4):**
+**Commands (Slices 2–5):**
 
 ```
 portier list              # list configured forwarding rules
@@ -506,6 +506,9 @@ portier activity          # show recent activity events (--limit, --rule, --type
 portier start <id|name>   # start a rule (exact ID or unique name)
 portier stop <id|name>    # stop a rule
 portier diagnose <id|name># run diagnostics (pass/warn/fail/skip per check)
+portier config validate <file>                    # validate a local config file (no API call)
+portier config export --out <file>                # export current rules to a file
+portier config import --mode merge|replace <file> # import rules (--yes required for replace)
 portier runtime           # show runtime info from GET /api/runtime
 portier version           # show CLI version
 portier help              # show help
@@ -602,7 +605,7 @@ Current version: **1.2.0** (v1.3 in progress)
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 is adding a Go-based `portier` CLI under `tools/cli/` (Slices 2–3 complete: skeleton, API client, `runtime`/`list`/`status`/`activity` commands, 59 tests, npm scripts); v1.4 plans a live connection inspector; future work tracked there.
+- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 is adding a Go-based `portier` CLI under `tools/cli/` (Slices 2–5 complete: skeleton, API client, `runtime`/`list`/`status`/`activity`/`start`/`stop`/`diagnose`/`config` commands, 132 tests, npm scripts); v1.4 plans a live connection inspector; future work tracked there.
 
 ## Agent Workflow
 

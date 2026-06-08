@@ -144,6 +144,70 @@ Human output: summary status and message, followed by a CHECK/STATUS/MESSAGE tab
 
 With `--json`: prints the raw `RuleDiagnosticsResult` from the API.
 
+### `portier config validate <file>`
+
+Validate a local config file without importing it or contacting the service.
+
+```
+portier config validate <file> [--json]
+```
+
+Accepted file shapes:
+- Raw JSON array: `[{ "name": "...", ... }, ...]`
+- Wrapper object: `{ "rules": [...] }`
+- Exported config: `{ "version": "1", "exportedAt": "...", "rules": [...] }`
+
+Validates: non-empty name, valid protocol (`tcp`/`udp`), non-empty listen/target hosts, ports in range 1–65535, valid `udpMode` if present, no duplicate listen bindings.
+
+Human output: `Config is valid.` with rule count, or `Config is invalid.` with a list of errors.
+
+With `--json`: prints `{ "valid": true|false, "ruleCount": N, "tcpCount": N, "udpCount": N, "errors": [] }`.
+
+Exit codes: `0` valid, `1` invalid or unreadable, `2` missing file path argument.
+
+### `portier config export --out <file>`
+
+Export the current rules from the running service to a file.
+
+```
+portier config export --out <file>
+portier --json config export                # print raw config JSON to stdout
+portier --json config export --out <file>   # write file + print result object
+```
+
+Calls `GET /api/config/export`. Writes a pretty-printed JSON config file. The file is only written after a successful API response.
+
+Human output (with `--out`): `Exported N rules to <file>`.
+
+With `--json` and `--out`: prints `{ "ok": true, "path": "...", "ruleCount": N }`.
+
+With `--json` and no `--out`: prints the raw exported config JSON to stdout.
+
+Without `--json` and no `--out`: exits with error code `2` (use `--out` or add `--json` to print to stdout).
+
+### `portier config import <file> --mode merge|replace [--yes]`
+
+Import rules from a local config file into the running service.
+
+```
+portier config import --mode merge <file>
+portier config import --mode replace --yes <file>
+```
+
+The file is validated locally before any API call is made. Invalid files are rejected without contacting the service.
+
+Calls `POST /api/config/import` with the given mode.
+
+Modes:
+- `merge` — add rules from the file; existing rules are preserved; ID conflicts generate new IDs; listen-binding conflicts abort the import
+- `replace` — remove all existing rules and replace with the imported set; requires `--yes` to confirm
+
+The `--yes` flag is required for `--mode replace`. Without it the command exits with code `2` and displays a clear warning. No interactive prompts.
+
+Human output: `Imported config using merge mode.` / `Imported config using replace mode.`
+
+With `--json`: prints `{ "ok": true, "mode": "merge"|"replace" }`.
+
 ### Rule identity
 
 All commands that target a rule accept:
@@ -219,8 +283,6 @@ Runs tests then builds. Fails clearly if Go is unavailable.
 
 Future slices will add:
 
-- `portier config export --out <file>` — export rules config
-- `portier config import <file> --mode merge|replace` — import rules config
 - `portier diagnostics export --out <file>` — export diagnostics bundle
 
 ## Module structure

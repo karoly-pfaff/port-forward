@@ -593,3 +593,213 @@ func TestDiagnoseForward_ConnectionError(t *testing.T) {
 		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
 	}
 }
+
+// --- ExportConfig ---
+
+func exportConfigFixture() map[string]any {
+	return map[string]any{
+		"version":    "1",
+		"exportedAt": "2026-01-01T12:00:00Z",
+		"rules": []map[string]any{
+			{
+				"id": "rule-1", "name": "Dev API", "protocol": "tcp",
+				"listenHost": "127.0.0.1", "listenPort": 48000,
+				"targetHost": "192.168.1.10", "targetPort": 8080, "enabled": true,
+			},
+		},
+	}
+}
+
+func TestExportConfig_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("method = %q, want GET", r.Method)
+		}
+		if r.URL.Path != "/api/config/export" {
+			t.Errorf("path = %q, want /api/config/export", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(exportConfigFixture())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	cfg, err := c.ExportConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Version != "1" {
+		t.Errorf("version = %q, want %q", cfg.Version, "1")
+	}
+	if len(cfg.Rules) != 1 {
+		t.Fatalf("len(rules) = %d, want 1", len(cfg.Rules))
+	}
+	if cfg.Rules[0].Name != "Dev API" {
+		t.Errorf("rules[0].name = %q, want %q", cfg.Rules[0].Name, "Dev API")
+	}
+	if cfg.Rules[0].ListenPort != 48000 {
+		t.Errorf("rules[0].listenPort = %d, want 48000", cfg.Rules[0].ListenPort)
+	}
+}
+
+func TestExportConfig_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string][]string{"errors": {"internal error"}})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	_, err := c.ExportConfig()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 500 {
+		t.Errorf("status = %d, want 500", apiErr.StatusCode)
+	}
+}
+
+func TestExportConfig_ConnectionError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+
+	c := client.New(addr)
+	_, err := c.ExportConfig()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var connErr *client.ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
+	}
+}
+
+// --- ImportConfig ---
+
+func importConfigFixture() map[string]any {
+	return map[string]any{
+		"result": map[string]any{"imported": 1, "skipped": 0, "errors": []any{}},
+		"rules": []map[string]any{
+			{
+				"id": "rule-1", "name": "Dev API", "protocol": "tcp",
+				"listenHost": "127.0.0.1", "listenPort": 48000,
+				"targetHost": "192.168.1.10", "targetPort": 8080, "enabled": true,
+				"advisories": []any{},
+			},
+		},
+	}
+}
+
+func TestImportConfig_MergeSuccess(t *testing.T) {
+	var gotMode string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/config/import" {
+			t.Errorf("path = %q, want /api/config/import", r.URL.Path)
+		}
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		gotMode, _ = body["mode"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(importConfigFixture())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigImportRequest{
+		Mode:   "merge",
+		Config: client.ConfigExportResponse{Version: "1", Rules: []client.ConfigRule{{Name: "Dev API", Protocol: "tcp", ListenHost: "127.0.0.1", ListenPort: 48000, TargetHost: "192.168.1.10", TargetPort: 8080}}},
+	}
+	resp, err := c.ImportConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMode != "merge" {
+		t.Errorf("mode sent = %q, want %q", gotMode, "merge")
+	}
+	if resp.Result.Imported != 1 {
+		t.Errorf("imported = %d, want 1", resp.Result.Imported)
+	}
+	if len(resp.Rules) != 1 {
+		t.Errorf("len(rules) = %d, want 1", len(resp.Rules))
+	}
+}
+
+func TestImportConfig_ReplaceSuccess(t *testing.T) {
+	var gotMode string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		gotMode, _ = body["mode"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(importConfigFixture())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigImportRequest{
+		Mode:   "replace",
+		Config: client.ConfigExportResponse{Version: "1", Rules: []client.ConfigRule{}},
+	}
+	_, err := c.ImportConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMode != "replace" {
+		t.Errorf("mode sent = %q, want %q", gotMode, "replace")
+	}
+}
+
+func TestImportConfig_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		json.NewEncoder(w).Encode(map[string]any{"errors": []string{"listenPort: 0 is invalid"}})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigImportRequest{
+		Mode:   "merge",
+		Config: client.ConfigExportResponse{Version: "1", Rules: []client.ConfigRule{}},
+	}
+	_, err := c.ImportConfig(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want %d", apiErr.StatusCode, http.StatusUnprocessableEntity)
+	}
+}
+
+func TestImportConfig_ConnectionError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+
+	c := client.New(addr)
+	req := client.ConfigImportRequest{
+		Mode:   "merge",
+		Config: client.ConfigExportResponse{Version: "1", Rules: []client.ConfigRule{}},
+	}
+	_, err := c.ImportConfig(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var connErr *client.ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
+	}
+}

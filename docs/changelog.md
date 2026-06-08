@@ -6,6 +6,17 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.3 in progress
 
+### Added (v1.3 Slice 5 — Config commands: validate, export, import)
+
+- **`portier config validate <file>`** — validates a local config file without importing it or contacting the service; accepts raw JSON arrays, `{"rules":[...]}` wrapper objects, and full export objects `{"version":"1","exportedAt":"...","rules":[...]}`. Checks: non-empty name, valid protocol, non-empty hosts, ports in range, valid `udpMode`, no duplicate listen bindings. Human output: `Config is valid.` / `Config is invalid.` with errors listed. `--json` output: `{"valid":true,"ruleCount":N,"tcpCount":N,"udpCount":N,"errors":[]}`. Exit 0 valid, exit 1 invalid/unreadable.
+- **`portier config export --out <file>`** — exports current rules from the running service to a JSON file via `GET /api/config/export`; file is written only after a successful API response (no partial writes). `--json` + `--out`: prints `{"ok":true,"path":"...","ruleCount":N}`. `--json` without `--out`: prints raw config JSON to stdout (useful for piping). Human mode without `--out`: exits with code 2 (requires `--out`).
+- **`portier config import --mode merge|replace [--yes] <file>`** — reads and validates a local config file, then calls `POST /api/config/import`. Invalid files are rejected locally without contacting the service. Replace mode requires `--yes` — without it exits with code 2 and shows a clear warning. No interactive prompts. Human output: `Imported config using merge|replace mode.`; `--json`: `{"ok":true,"mode":"merge"|"replace"}`.
+- **Config subcommand routing** (`RunConfig`): `portier config help` / `portier config <unknown>` handled cleanly.
+- **New API client types**: `ConfigRule`, `ConfigExportResponse`, `ConfigImportRequest`, `ImportResult`, `ConfigImportResponse` mirroring `GET /api/config/export` and `POST /api/config/import` response shapes.
+- **New API client methods**: `ExportConfig()`, `ImportConfig(req)` using a new `doWithBody` helper for POST with a JSON body.
+- **Tests**: 132 CLI tests total (was 89); new tests cover `ExportConfig`/`ImportConfig` client methods, all validation cases (valid shapes, malformed JSON, invalid protocol/port/udpMode/host/name/duplicate binding), all export cases (writes file, JSON output, stdout mode, API error leaves no file, connection failure), all import cases (merge/replace modes, `--yes` requirement, local validation blocks API, bad mode, connection failure), and config dispatch.
+- **Help text updated**: `config` listed in `portier help`; `portier config help` shows subcommand list; each subcommand shows usage and flags.
+
 ### Added (v1.3 Slice 4 — Lifecycle and diagnostics commands: start, stop, diagnose)
 
 - **`portier start <id|name>`** — resolves rule by exact ID or exact name, calls `POST /api/forwards/:id/start`; human output shows `Started <name>  (<listen> → <target>)`; `--json` prints `{"ok": true, "action": "start", "ruleId": "..."}`.
