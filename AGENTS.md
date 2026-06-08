@@ -13,6 +13,7 @@
 - `client/sources` = React TypeScript web UI
 - `shared/sources` = shared types, validation, constants, port advisory utilities
 - `scripts` = executable automation scripts; platform subdirs contain `release/` (artifact builders), `service/` (OS service lifecycle), and platform-specific docs/templates
+- `tools` = user-facing and developer-facing project tools (v1.3: `tools/cli/` — the portier CLI)
 - `build` = generated build output
 
 ## Server Runtimes
@@ -334,7 +335,7 @@ v1.1 focuses on distribution and native OS service installers. The v1.1 scope, p
 
 v1.2 delivered diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export.
 
-v1.3 targets native CLI and automation: a Go-based `portier` CLI that talks to the existing management API for terminal and script workflows.
+v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper.
 
 v1.4 targets live connection and session visibility: a read-only Live Connection Inspector for active TCP connections and UDP sessions. See `docs/roadmap.md`.
 
@@ -411,6 +412,7 @@ Do not consider an API slice complete until both documentation surfaces and thei
 - Use `sources/` for TypeScript source directories.
 - Use `build/` for generated build outputs.
 - Keep executable automation scripts under `scripts/`, with `release/` (artifact builders), `service/` (OS service lifecycle), and platform docs/templates under `scripts/windows/`, `scripts/macos/`, and `scripts/linux/`.
+- Use `tools/` for user-facing or developer-facing project tools that are not repo automation. `tools/cli/` is the v1.3 portier CLI. Future possible tools: `tools/bench/` (benchmarking), `tools/replay/` (scenario replay). Do not mix tools into `scripts/` or `service/`.
 - Normal documentation filenames are lowercase, such as `docs/architecture.md` and `docs/checklist.md`. The root `README.md` is uppercase.
 - Keep tool-required files uppercase: `AGENTS.md`, `CLAUDE.md`, and `SKILL.md` in Codex/Claude skill directories.
 - React component and view files under `client/sources/` use **CamelCase** filenames (e.g., `ForwardRuleList.tsx`, `StatCard.tsx`). Non-component files use the existing repo convention (e.g., `format.ts`, `nav.ts`).

@@ -24,6 +24,7 @@
 - `client/sources` handles the React UI only.
 - `shared/sources` owns types, validation, port constants, and port advisory logic.
 - `scripts` contains executable scripts; each platform subdir (`windows/`, `macos/`, `linux/`) also contains its platform docs and templates.
+- `tools` contains user-facing and developer-facing project tools. `tools/cli/` is the v1.3 portier CLI (a Go-based API client for the management API). Future possible tools: `tools/bench/`, `tools/replay/`. Do not place tools in `scripts/` or `service/`.
 
 ## Coding Rules
 

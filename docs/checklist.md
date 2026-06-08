@@ -177,7 +177,7 @@ v1.3 targets native CLI and automation: a Go-based `portier` CLI that talks to t
 Checklist items to add per slice as work proceeds:
 
 - [ ] **Slice 1** — CLI strategy and command design: command set, rule lookup behavior, output modes, exit code contract, and module layout confirmed.
-- [ ] **Slice 2** — Go CLI skeleton and API client: `cli/` module scaffolded, HTTP client for management API, `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, structured error output.
+- [ ] **Slice 2** — Go CLI skeleton and API client: `tools/cli/` module scaffolded, HTTP client for management API, `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, structured error output.
 - [ ] **Slice 3** — Read-only commands: `portier runtime`, `portier list`, `portier status`, `portier activity`; human-readable and `--json` output; exit codes; tests.
 - [ ] **Slice 4** — Lifecycle commands: `portier start <id|name>`, `portier stop <id|name>`, `portier diagnose <id|name>`; exact ID/name lookup; ambiguous name handling; tests.
 - [ ] **Slice 5** — Config commands: `portier config export --out <file>`, `portier config import <file> --mode merge|replace [--yes]`; tests.

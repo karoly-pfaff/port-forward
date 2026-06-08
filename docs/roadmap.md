@@ -233,21 +233,69 @@ portier diagnostics export --out portier-diagnostics.json
 Preferred Go module layout:
 
 ```text
-cli/
-  go.mod
-  readme.md
-  sources/
-    main.go
-    client/
-    commands/
-    output/
+tools/
+  cli/
+    go.mod
+    readme.md
+    sources/
+      main.go
+      client/
+      commands/
+      output/
 ```
 
-- A separate `cli/` Go module is preferred initially for clear boundaries.
+- The CLI lives under `tools/cli/` — it is a user-facing tool, not the background runtime.
+  - Not under `service/` — the CLI must remain an API client, not part of service internals.
+  - Not under `scripts/` — `scripts/` is for repo build, release, and service automation, not user-facing programs.
+  - Not top-level `cli/` — `tools/` leaves room for future tools without cluttering the repo root.
+- A separate Go module (`tools/cli/go.mod`) is preferred initially for clear boundaries.
 - Reuse shared concepts from the Go service where practical.
 - Avoid tightly coupling the CLI to service internals.
 - HTTP request/response handling must stay aligned with `docs/api-contract.md`.
 - The CLI is an API client — it does not run a forwarding engine or expose its own API.
+
+### Tools Directory
+
+The `tools/` directory holds user-facing or developer-facing project tools — programs that interact with Portier or its artifacts but are not the background runtime itself.
+
+**Current (v1.3):**
+
+```text
+tools/
+  cli/    — the portier CLI (API client for the local management API)
+```
+
+**Possible future tools (not part of v1.3 unless explicitly promoted):**
+
+```text
+tools/bench/    — future lightweight forwarding benchmark / load-smoke helper
+tools/replay/   — future scenario/activity replay helper
+```
+
+**`tools/bench/` — future benchmarking helper:**
+- Lightweight forwarding benchmark or load-smoke helper.
+- Possible uses: TCP connection smoke/load, UDP packet smoke/load, counter/stat sanity checks, release confidence testing.
+- Should not be included in normal user installers by default.
+- Not part of v1.3 unless explicitly promoted.
+
+**`tools/replay/` — future scenario replay helper:**
+- Scenario or activity replay helper.
+- Possible uses: replay activity snapshots, run scripted forwarding scenarios, demo and debug reproducible scenarios.
+- Should stay clearly separated from the main CLI until the use case is real.
+- Not part of v1.3 unless explicitly promoted.
+
+**Tools vs. scripts and runtimes — boundary table:**
+
+| Path | Role |
+|---|---|
+| `tools/cli/` | User-facing CLI — talks to the management API |
+| `tools/bench/` | Future benchmarking/load-smoke helper |
+| `tools/replay/` | Future scenario replay helper |
+| `scripts/build-runtime.js` | Repo build automation — not a user-facing tool |
+| `scripts/windows/service/` | OS service helper scripts — not CLI commands |
+| `service/` | Background runtime — not a tool, not a CLI |
+| `server/` | TypeScript reference/fallback runtime — not a tool |
+| `client/` | Web UI — not a CLI tool |
 
 ### Packaging Direction
 
