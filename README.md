@@ -497,12 +497,15 @@ npm run build:cli
 
 Output: `tools/cli/build/portier` (or `portier.exe` on Windows).
 
-**Commands (Slices 2–3):**
+**Commands (Slices 2–4):**
 
 ```
 portier list              # list configured forwarding rules
 portier status            # show rule runtime status
 portier activity          # show recent activity events (--limit, --rule, --type, --severity)
+portier start <id|name>   # start a rule (exact ID or unique name)
+portier stop <id|name>    # stop a rule
+portier diagnose <id|name># run diagnostics (pass/warn/fail/skip per check)
 portier runtime           # show runtime info from GET /api/runtime
 portier version           # show CLI version
 portier help              # show help

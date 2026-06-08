@@ -25,15 +25,22 @@ Environment:
   PORTIER_URL     Default management URL (overridden by --url / --host / --port)
 
 Commands:
-  runtime         Show runtime info for the running Portier service
-  list            List configured forwarding rules
-  status          Show runtime status for forwarding rules
-  activity        Show recent activity events (--limit, --rule, --type, --severity)
-  version         Show CLI version
-  help            Show this help message
+  runtime              Show runtime info for the running Portier service
+  list                 List configured forwarding rules
+  status               Show runtime status for forwarding rules
+  activity             Show recent activity events (--limit, --rule, --type, --severity)
+  start <id|name>      Start a forwarding rule
+  stop <id|name>       Stop a forwarding rule
+  diagnose <id|name>   Run diagnostics against a forwarding rule
+  version              Show CLI version
+  help                 Show this help message
+
+Rule identity:
+  Commands that target a rule accept an exact rule ID or an exact rule name.
+  If multiple rules share the same name, use the rule ID to avoid ambiguity.
 
 More commands are planned for v1.3:
-  start, stop, diagnose, config export/import, diagnostics export
+  config export/import, diagnostics export
 
 Exit codes:
   0  Success

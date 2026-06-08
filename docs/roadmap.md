@@ -322,7 +322,7 @@ Notes:
 1. ~~**CLI strategy and command design**~~ — ✓ Complete. Command set, rule lookup behavior, output modes, exit code contract, module layout, and tools/ boundary confirmed. Documented in `docs/roadmap.md`.
 2. ~~**Go CLI skeleton and API client**~~ — ✓ Complete. `tools/cli/` module scaffolded; HTTP client with `ConnectionError`/`APIError` types; `--url`/`--host`/`--port`/`PORTIER_URL` connection options; `--json` flag; `runtime` command (human + JSON output); structured error output; 22+ tests using `httptest`; `build:cli`, `test:cli`, `validate:cli` npm scripts.
 3. ~~**Read-only commands: `list`, `status`, `activity`**~~ — ✓ Complete. `portier list` (calls `GET /api/forwards`, human table + JSON), `portier status` (calls `GET /api/status`, joins rule names for human output), `portier activity` (calls `GET /api/activity`, `--limit`/`--rule`/`--type`/`--severity` filters, raw event array JSON); output helpers (`FormatBool`, `FormatBytes`, `FormatTimestamp`, `PrintTable`); 59 CLI tests total.
-4. Lifecycle commands: `start`, `stop`, `diagnose`
+4. ~~**Lifecycle commands: `start`, `stop`, `diagnose`**~~ — ✓ Complete. `portier start <id|name>` (resolves rule, calls `POST /api/forwards/:id/start`), `portier stop <id|name>` (calls `POST /api/forwards/:id/stop`), `portier diagnose <id|name>` (calls `POST /api/forwards/:id/diagnose`, human summary + checks table); safe rule resolver (exact ID wins, exact name match, ambiguous-name error with ID list, not-found); stable `{"ok", "action", "ruleId"}` JSON for start/stop; raw `RuleDiagnosticsResult` JSON for diagnose; 89 CLI tests total.
 5. Config commands: `config export` / `config import`
 6. Diagnostics export command
 7. CLI packaging into runtime/release artifacts

@@ -144,7 +144,9 @@ Global flags: `--url`, `--host`, `--port`, `--json`, `--version`, `-h`/`--help`.
 Environment: `PORTIER_URL`. Default URL: `http://127.0.0.1:47831`.  
 Exit codes: `0` success, `1` API error, `2` invalid args, `3` connection failure.
 
-Implemented commands: `list`, `status`, `activity` (with `--limit`/`--rule`/`--type`/`--severity`), `runtime`, `version`, `help`.
+Implemented commands: `list`, `status`, `activity` (with `--limit`/`--rule`/`--type`/`--severity`), `start <id|name>`, `stop <id|name>`, `diagnose <id|name>`, `runtime`, `version`, `help`.
+
+Rule-targeting commands (`start`, `stop`, `diagnose`) accept an exact rule ID or an exact rule name. Duplicate names produce exit 2 with an ID disambiguation table on stderr.
 
 ## Packaging Commands
 
@@ -351,7 +353,7 @@ v1.1 focuses on distribution and native OS service installers. The v1.1 scope, p
 
 v1.2 delivered diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export.
 
-v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper. Slices 2–3 complete: `tools/cli/` module scaffolded, HTTP client (`ConnectionError`/`APIError`), connection options (`--url`/`--host`/`--port`/`PORTIER_URL`), `--json` flag, `runtime`/`list`/`status`/`activity` commands, 59 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts.
+v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper. Slices 2–4 complete: `tools/cli/` module scaffolded, HTTP client (`ConnectionError`/`APIError`), connection options (`--url`/`--host`/`--port`/`PORTIER_URL`), `--json` flag, `runtime`/`list`/`status`/`activity`/`start`/`stop`/`diagnose` commands, safe rule resolver (exact ID wins, unique name match, ambiguous-name error), 89 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts.
 
 v1.4 targets live connection and session visibility: a read-only Live Connection Inspector for active TCP connections and UDP sessions. See `docs/roadmap.md`.
 

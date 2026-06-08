@@ -401,3 +401,195 @@ func TestGetActivity_Empty(t *testing.T) {
 		t.Errorf("len(events) = %d, want 0", len(events))
 	}
 }
+
+// --- StartForward ---
+
+func TestStartForward_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/forwards/rule-1/start" {
+			t.Errorf("path = %q, want /api/forwards/rule-1/start", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	if err := c.StartForward("rule-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestStartForward_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string][]string{"errors": {"rule already running"}})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	err := c.StartForward("rule-1")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusConflict {
+		t.Errorf("status = %d, want %d", apiErr.StatusCode, http.StatusConflict)
+	}
+}
+
+func TestStartForward_ConnectionError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+
+	c := client.New(addr)
+	err := c.StartForward("rule-1")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var connErr *client.ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
+	}
+}
+
+// --- StopForward ---
+
+func TestStopForward_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/forwards/rule-1/stop" {
+			t.Errorf("path = %q, want /api/forwards/rule-1/stop", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	if err := c.StopForward("rule-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestStopForward_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string][]string{"errors": {"rule not found"}})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	err := c.StopForward("missing-id")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", apiErr.StatusCode, http.StatusNotFound)
+	}
+}
+
+// --- DiagnoseForward ---
+
+func diagnoseFixture() map[string]any {
+	return map[string]any{
+		"ruleId":   "rule-1",
+		"ruleName": "Dev API",
+		"protocol": "tcp",
+		"summary": map[string]any{
+			"status":  "pass",
+			"message": "All checks passed.",
+		},
+		"checks": []map[string]any{
+			{"id": "listen-host", "label": "Listen address", "status": "pass", "message": "Listening on loopback."},
+			{"id": "target-connect", "label": "Target connection", "status": "pass", "message": "Connected to 192.168.1.10:8080."},
+		},
+		"diagnosedAt": "2026-01-01T12:00:00Z",
+	}
+}
+
+func TestDiagnoseForward_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		if r.URL.Path != "/api/forwards/rule-1/diagnose" {
+			t.Errorf("path = %q, want /api/forwards/rule-1/diagnose", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(diagnoseFixture())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	result, err := c.DiagnoseForward("rule-1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RuleID != "rule-1" {
+		t.Errorf("ruleId = %q, want %q", result.RuleID, "rule-1")
+	}
+	if result.RuleName != "Dev API" {
+		t.Errorf("ruleName = %q, want %q", result.RuleName, "Dev API")
+	}
+	if result.Summary.Status != "pass" {
+		t.Errorf("summary.status = %q, want %q", result.Summary.Status, "pass")
+	}
+	if len(result.Checks) != 2 {
+		t.Errorf("len(checks) = %d, want 2", len(result.Checks))
+	}
+	if result.Checks[0].ID != "listen-host" {
+		t.Errorf("checks[0].id = %q, want %q", result.Checks[0].ID, "listen-host")
+	}
+}
+
+func TestDiagnoseForward_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string][]string{"errors": {"rule not found"}})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	_, err := c.DiagnoseForward("missing-id")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", apiErr.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestDiagnoseForward_ConnectionError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+
+	c := client.New(addr)
+	_, err := c.DiagnoseForward("rule-1")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var connErr *client.ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
+	}
+}

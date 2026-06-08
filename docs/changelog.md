@@ -6,6 +6,17 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.3 in progress
 
+### Added (v1.3 Slice 4 — Lifecycle and diagnostics commands: start, stop, diagnose)
+
+- **`portier start <id|name>`** — resolves rule by exact ID or exact name, calls `POST /api/forwards/:id/start`; human output shows `Started <name>  (<listen> → <target>)`; `--json` prints `{"ok": true, "action": "start", "ruleId": "..."}`.
+- **`portier stop <id|name>`** — resolves rule, calls `POST /api/forwards/:id/stop`; human output shows `Stopped <name>`; `--json` prints `{"ok": true, "action": "stop", "ruleId": "..."}`.
+- **`portier diagnose <id|name>`** — resolves rule, calls `POST /api/forwards/:id/diagnose`; human output shows summary status + message and a CHECK/STATUS/MESSAGE table; `--json` prints raw `RuleDiagnosticsResult`.
+- **Safe rule resolver** (`commands.ResolveRule`): exact ID match wins unconditionally; exact name match succeeds if unique; duplicate names produce exit code 2 with an ID/NAME/PROTO/LISTEN disambiguation table on stderr; no match exits 1.
+- **API client methods**: `StartForward(id)`, `StopForward(id)`, `DiagnoseForward(id)` added to the management API client; shared `do(method, path, out)` helper extracted to remove duplication between GET and POST paths.
+- **New types**: `DiagnosticCheck`, `DiagnosticSummary`, `RuleDiagnosticsResult` mirroring the `POST /api/forwards/:id/diagnose` response shape.
+- **Tests**: 89 CLI tests total (was 59); new tests cover `StartForward`/`StopForward`/`DiagnoseForward` client methods, all resolver cases (exact ID, exact name, ID wins over same-text name, duplicate ambiguity, not found, empty list), and all three command handlers (human output by ID and by name, JSON output, missing arg, ambiguity, connection failure, not found).
+- **Help text updated**: `start`, `stop`, `diagnose` listed in `portier help`; rule identity note added.
+
 ### Added (v1.3 Slice 3 — Read-only commands: list, status, activity)
 
 - **`portier list`** — calls `GET /api/forwards`; human-readable aligned table (NAME, PROTO, LISTEN, TARGET, ENABLED); `--json` prints raw `ForwardRuleResponse[]`. Empty state shows a friendly message. UDP mode shown compactly in PROTO column (`udp/1way`, `udp/lc`, `udp/mc`).

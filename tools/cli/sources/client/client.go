@@ -58,9 +58,11 @@ type apiErrorBody struct {
 	Errors []string `json:"errors"`
 }
 
-func (c *Client) get(path string, out any) error {
+// do executes an HTTP request and unmarshals the JSON response into out.
+// If out is nil the response body is read and checked for errors but not parsed.
+func (c *Client) do(method, path string, out any) error {
 	reqURL := c.baseURL + path
-	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	req, err := http.NewRequest(method, reqURL, nil)
 	if err != nil {
 		return fmt.Errorf("invalid request URL: %w", err)
 	}
@@ -83,10 +85,16 @@ func (c *Client) get(path string, out any) error {
 		return &APIError{StatusCode: resp.StatusCode, Messages: errBody.Errors}
 	}
 
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("parsing response JSON: %w", err)
+	if out != nil {
+		if err := json.Unmarshal(body, out); err != nil {
+			return fmt.Errorf("parsing response JSON: %w", err)
+		}
 	}
 	return nil
+}
+
+func (c *Client) get(path string, out any) error {
+	return c.do(http.MethodGet, path, out)
 }
 
 // RuntimeInfo mirrors the response from GET /api/runtime.
@@ -187,6 +195,50 @@ func (c *Client) GetStatus() ([]ForwardStatus, error) {
 		return nil, err
 	}
 	return statuses, nil
+}
+
+// DiagnosticCheck mirrors a single check result from POST /api/forwards/:id/diagnose.
+type DiagnosticCheck struct {
+	ID      string         `json:"id"`
+	Label   string         `json:"label"`
+	Status  string         `json:"status"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
+}
+
+// DiagnosticSummary mirrors the summary field from POST /api/forwards/:id/diagnose.
+type DiagnosticSummary struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+// RuleDiagnosticsResult mirrors the response from POST /api/forwards/:id/diagnose.
+type RuleDiagnosticsResult struct {
+	RuleID      string            `json:"ruleId"`
+	RuleName    string            `json:"ruleName"`
+	Protocol    string            `json:"protocol"`
+	Summary     DiagnosticSummary `json:"summary"`
+	Checks      []DiagnosticCheck `json:"checks"`
+	DiagnosedAt string            `json:"diagnosedAt"`
+}
+
+// StartForward calls POST /api/forwards/:id/start to start a forwarding rule.
+func (c *Client) StartForward(id string) error {
+	return c.do(http.MethodPost, "/api/forwards/"+id+"/start", nil)
+}
+
+// StopForward calls POST /api/forwards/:id/stop to stop a forwarding rule.
+func (c *Client) StopForward(id string) error {
+	return c.do(http.MethodPost, "/api/forwards/"+id+"/stop", nil)
+}
+
+// DiagnoseForward calls POST /api/forwards/:id/diagnose and returns the result.
+func (c *Client) DiagnoseForward(id string) (*RuleDiagnosticsResult, error) {
+	var result RuleDiagnosticsResult
+	if err := c.do(http.MethodPost, "/api/forwards/"+id+"/diagnose", &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
 // GetActivity calls GET /api/activity with optional filters and returns events.

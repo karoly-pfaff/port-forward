@@ -96,6 +96,62 @@ With `--json`: prints a raw `ActivityEvent[]` array (not the `{"events":[...]}` 
 
 Invalid `--limit` (outside 1–500) exits with code `2`.
 
+### `portier start <id|name>`
+
+Start a forwarding rule.
+
+```
+portier start <id|name> [--json]
+```
+
+Resolves the rule by exact ID or exact name. If multiple rules share the same name, use the rule ID.
+
+Calls `POST /api/forwards/:id/start`.
+
+Human output: `Started <name>  (<listen> → <target>)`.
+
+With `--json`: prints `{"ok": true, "action": "start", "ruleId": "..."}`.
+
+### `portier stop <id|name>`
+
+Stop a forwarding rule.
+
+```
+portier stop <id|name> [--json]
+```
+
+Resolves the rule by exact ID or exact name.
+
+Calls `POST /api/forwards/:id/stop`.
+
+Human output: `Stopped <name>`.
+
+With `--json`: prints `{"ok": true, "action": "stop", "ruleId": "..."}`.
+
+### `portier diagnose <id|name>`
+
+Run diagnostic checks against a forwarding rule without changing its state.
+
+```
+portier diagnose <id|name> [--json]
+```
+
+Resolves the rule by exact ID or exact name.
+
+Calls `POST /api/forwards/:id/diagnose`. No rule state is mutated.
+
+Human output: summary status and message, followed by a CHECK/STATUS/MESSAGE table for all checks.
+
+With `--json`: prints the raw `RuleDiagnosticsResult` from the API.
+
+### Rule identity
+
+All commands that target a rule accept:
+- An exact rule ID (preferred; always unambiguous)
+- An exact rule name (succeeds only if the name is unique across all rules)
+
+If multiple rules share the same name, the command exits with code 2 and lists the matching IDs on stderr. Use the rule ID in that case.
+
 ### `portier runtime`
 
 Show runtime info for the running Portier service.
@@ -163,9 +219,6 @@ Runs tests then builds. Fails clearly if Go is unavailable.
 
 Future slices will add:
 
-- `portier start <id|name>` — start a rule
-- `portier stop <id|name>` — stop a rule
-- `portier diagnose <id|name>` — run diagnostics
 - `portier config export --out <file>` — export rules config
 - `portier config import <file> --mode merge|replace` — import rules config
 - `portier diagnostics export --out <file>` — export diagnostics bundle
