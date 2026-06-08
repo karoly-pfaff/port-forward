@@ -8,6 +8,8 @@ All notable changes to Portier are documented here.
 
 ### Planning
 
+- Planned v1.4 as Live Connection Inspector: read-only live TCP connection and UDP session visibility, per-rule live summaries, `GET /api/connections` endpoint in both runtimes, Live Connections UI view, and CLI `portier connections` command. API contract shape recorded in `docs/api-contract.md`. See `docs/roadmap.md` for goals, data model, UI direction, 14-slice plan, and non-goals.
+- Recorded v1.4 coverage strategy: all newly added or materially changed implementation areas target 100% meaningful coverage with explicit gates. Covers TCP and UDP live tracking models (both runtimes), `GET /api/connections` handler, API contract validation, UI helpers, CLI connections command, and diagnostics export integration if changed.
 - Planned v1.6 as Architecture, Quality & Maintainability Audit: a dedicated audit and hardening release with structured multi-angle inspection across architecture, runtime parity, forwarding correctness, API contract, CLI, UI, test quality, security posture, packaging, and documentation consistency. See `docs/roadmap.md`.
 - Clarified that the v1.4/v1.5 100% meaningful coverage target is a deliberate prerequisite for the v1.6 audit: high meaningful coverage creates the safety net needed to refactor and harden confidently without silently breaking forwarding behavior, API parity, or CLI workflows.
 - Planned v1.5 as Declarative Config & Drift Control: plan/diff/apply workflows for comparing desired config files with the running configuration and applying changes safely. See `docs/roadmap.md`.

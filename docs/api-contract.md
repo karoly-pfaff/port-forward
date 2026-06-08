@@ -292,6 +292,93 @@ If the rule is currently running, its own listener already occupies the port. Th
 
 UDP reachability cannot be proven without a protocol-specific response from the target. The `target-connect` check is always `skip` for UDP rules. This is by design, not an omission.
 
+## `GET /api/connections` [Planned — v1.4]
+
+Purpose: return a read-only snapshot of active TCP connections and UDP sessions for all running forwarding rules, along with per-rule live traffic summaries.
+
+This endpoint is planned for v1.4 (Live Connection Inspector). It is not yet implemented. Both runtimes must expose the same response shape.
+
+Request body: none.
+
+Response: `LiveConnectionsResponse`.
+
+```json
+{
+  "generatedAt": "2026-06-08T12:00:00.000Z",
+  "tcpConnections": [
+    {
+      "id": "string",
+      "ruleId": "string",
+      "ruleName": "string",
+      "protocol": "tcp",
+      "clientAddress": "127.0.0.1",
+      "clientPort": 54321,
+      "targetAddress": "127.0.0.1",
+      "targetPort": 5432,
+      "startedAt": "2026-06-08T12:00:00.000Z",
+      "durationMs": 12000,
+      "bytesIn": 1024,
+      "bytesOut": 2048,
+      "status": "active"
+    }
+  ],
+  "udpSessions": [
+    {
+      "id": "string",
+      "ruleId": "string",
+      "ruleName": "string",
+      "protocol": "udp",
+      "mode": "one-way | bidirectional-last-client | bidirectional-multi-client",
+      "clientAddress": "127.0.0.1",
+      "clientPort": 53000,
+      "targetAddress": "1.1.1.1",
+      "targetPort": 53,
+      "startedAt": "2026-06-08T12:00:00.000Z",
+      "lastSeenAt": "2026-06-08T12:00:05.000Z",
+      "idleMs": 5000,
+      "packetsIn": 10,
+      "packetsOut": 8,
+      "bytesIn": 1200,
+      "bytesOut": 900,
+      "status": "active | idle"
+    }
+  ],
+  "ruleSummaries": [
+    {
+      "ruleId": "string",
+      "ruleName": "string",
+      "protocol": "tcp | udp",
+      "activeTcpConnections": 1,
+      "activeUdpSessions": 0,
+      "bytesIn": 1024,
+      "bytesOut": 2048,
+      "packetsIn": 0,
+      "packetsOut": 0,
+      "lastTrafficAt": "2026-06-08T12:00:05.000Z"
+    }
+  ]
+}
+```
+
+Field notes:
+- `generatedAt`: ISO 8601 timestamp of when the snapshot was generated.
+- `tcpConnections`: active TCP forwarding connections. Empty array when none are active.
+- `udpSessions`: active and recently-idle UDP sessions. Empty array when none are tracked.
+- `ruleSummaries`: per-rule aggregation of live traffic state. Includes all running rules, even those with no active connections.
+- `id` values are stable for display during the process lifetime but do not persist across restarts.
+- `ruleName`: included for display convenience; empty string when the name cannot be resolved.
+- `durationMs`: milliseconds since the TCP connection was accepted.
+- `idleMs`: milliseconds since the last UDP packet was seen for the session.
+- TCP `status`: `"active"` while both sockets are open.
+- UDP `status`: `"active"` while traffic is being seen; `"idle"` after 30 seconds of no traffic. Sessions are retained up to 5 minutes after becoming idle.
+- `lastTrafficAt`: most recent traffic timestamp for the rule across all connections/sessions. May be absent for rules with no traffic since start.
+- Data is operational metadata only. Payload contents are never exposed.
+
+**Limitations:**
+- Live state is in-memory only. Data resets on service restart.
+- UDP `one-way` mode: per-client session metadata may be limited; see UDP mode notes.
+- UDP `bidirectional-last-client` mode: only the most recent client session is available.
+
 ## `GET /api/health`
 
 Purpose: lightweight health probe for the native Go service.
@@ -347,3 +434,12 @@ The client should import these from `@portier/shared`:
 - `DiagnosticSummary`
 - `RuleDiagnosticsResult`
 - port constants and advisory helpers
+
+### Planned for v1.4 (not yet implemented)
+
+- `LiveConnectionsResponse`
+- `TcpConnectionInfo`
+- `UdpSessionInfo`
+- `RuleLiveSummary`
+- `LiveConnectionStatus`
+- `UdpSessionStatus`

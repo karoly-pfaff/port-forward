@@ -350,7 +350,7 @@ Notes:
 
 **Core theme: Make live forwarding traffic visible and understandable.**
 
-v1.0 proved the core forwarding runtime. v1.1 made Portier installable. v1.2 added diagnostics and operational visibility. v1.3 is planned to make Portier automatable from the CLI. v1.4 should make live forwarding traffic visible in real time — answering who is connected, which rules are carrying traffic, and how much data has passed.
+v1.0 proved the core forwarding runtime. v1.1 made Portier installable. v1.2 added diagnostics and operational visibility. v1.3 added a native Go CLI for terminal and script workflows. v1.4 makes live forwarding traffic visible in real time — answering who is connected, which rules are carrying traffic, and how much data has passed.
 
 ### Product Value
 
@@ -388,20 +388,21 @@ Notes:
 
 ```json
 {
-  "connections": [
+  "generatedAt": "2026-06-08T12:00:00.000Z",
+  "tcpConnections": [
     {
       "id": "string",
       "ruleId": "string",
       "ruleName": "string",
       "protocol": "tcp",
       "clientAddress": "127.0.0.1",
-      "clientPort": 52344,
+      "clientPort": 54321,
       "targetAddress": "127.0.0.1",
       "targetPort": 5432,
-      "startedAt": "ISO string",
-      "durationSeconds": 42,
+      "startedAt": "2026-06-08T12:00:00.000Z",
+      "durationMs": 12000,
       "bytesIn": 1024,
-      "bytesOut": 4096,
+      "bytesOut": 2048,
       "status": "active"
     }
   ],
@@ -412,25 +413,38 @@ Notes:
       "ruleName": "string",
       "protocol": "udp",
       "mode": "one-way | bidirectional-last-client | bidirectional-multi-client",
-      "clientAddress": "192.168.1.25",
-      "clientPort": 51000,
+      "clientAddress": "127.0.0.1",
+      "clientPort": 53000,
       "targetAddress": "1.1.1.1",
       "targetPort": 53,
-      "startedAt": "ISO string",
-      "lastSeenAt": "ISO string",
-      "idleSeconds": 12,
-      "packetsIn": 5,
-      "packetsOut": 5,
-      "bytesIn": 300,
-      "bytesOut": 420,
+      "startedAt": "2026-06-08T12:00:00.000Z",
+      "lastSeenAt": "2026-06-08T12:00:05.000Z",
+      "idleMs": 5000,
+      "packetsIn": 10,
+      "packetsOut": 8,
+      "bytesIn": 1200,
+      "bytesOut": 900,
       "status": "active | idle"
     }
   ],
-  "generatedAt": "ISO string"
+  "ruleSummaries": [
+    {
+      "ruleId": "string",
+      "ruleName": "string",
+      "protocol": "tcp | udp",
+      "activeTcpConnections": 1,
+      "activeUdpSessions": 0,
+      "bytesIn": 1024,
+      "bytesOut": 2048,
+      "packetsIn": 0,
+      "packetsOut": 0,
+      "lastTrafficAt": "2026-06-08T12:00:05.000Z"
+    }
+  ]
 }
 ```
 
-Exact shape should be finalized before implementation. Field names should align with existing status/stat naming where practical. Connection IDs need to be stable for display during a session but do not need to persist across restarts.
+Field names should align with existing status/stat naming where practical. Connection IDs need to be stable for display during the process lifetime but do not persist across restarts. All data is operational metadata; payload contents are never exposed. `ruleName` is included for display convenience; use empty string when a name cannot be resolved. The exact response shape is finalized during Slice 1 and must be identical across both runtimes.
 
 ### Data Model Considerations
 
@@ -447,10 +461,30 @@ Exact shape should be finalized before implementation. Field names should align 
 - `bidirectional-last-client` may expose only the most recent client summary.
 - Keep existing UDP forwarding behavior unchanged.
 
+**Retention and expiry:**
+- v1.4 keeps in-memory live state only. No connection or session data is persisted to disk.
+- TCP connections are removed immediately when both sockets close.
+- UDP sessions are retained briefly after becoming idle, so they remain visible in the UI for a short time after traffic stops.
+- Proposed defaults: idle after 30 seconds of no traffic; expire/remove from memory after 5 minutes of idle.
+- These thresholds must be named constants so they are testable and the tests make the policy explicit.
+
 **Privacy and safety:**
 - This is local management visibility only.
 - Client IP and port information is operationally necessary but must not be uploaded or sent anywhere.
 - Diagnostics export may eventually include a live session snapshot only if user-triggered.
+
+### Shared TypeScript Types
+
+The following types are planned for `@portier/shared` in v1.4 Slice 2. Naming is recorded here for planning only — do not implement until Slice 2.
+
+- `LiveConnectionsResponse` — top-level response for `GET /api/connections`
+- `TcpConnectionInfo` — individual TCP connection record
+- `UdpSessionInfo` — individual UDP session record
+- `RuleLiveSummary` — per-rule aggregated live traffic summary
+- `LiveConnectionStatus` — `"active"`
+- `UdpSessionStatus` — `"active" | "idle"`
+
+Field names should align with existing `@portier/shared` conventions. CLI and contract validator types mirror these shapes using Go structs.
 
 ### UI Direction
 
@@ -486,17 +520,25 @@ Keep it subtle — the primary rule state remains start/stop status.
 
 ### CLI Direction (v1.4 additions for the v1.3 CLI)
 
-If the v1.3 CLI exists, v1.4 may add:
+v1.3 shipped the Go CLI. v1.4 adds a `portier connections` command:
 
 ```
 portier connections
 portier connections --rule <id|name>
+portier connections --protocol tcp|udp
 portier connections --json
-portier sessions
-portier sessions --rule <id|name>
 ```
 
-Do not expand v1.3 CLI scope prematurely. These are recorded here for planning only.
+Behavior:
+- Read-only; calls `GET /api/connections`.
+- `--rule` accepts an exact rule ID or unique name; reuses the existing safe rule resolver.
+- `--protocol` filters to `tcp` or `udp` connections/sessions; filtering is client-side initially.
+- Human output: aligned table with protocol, rule, client, target, duration/idle, bytes in, bytes out, packets (UDP), status.
+- `--json`: prints raw `LiveConnectionsResponse` or a stable filtered subset.
+- Empty state shows a friendly message.
+- A separate `portier sessions` command is deferred; `portier connections --protocol udp` covers the UDP session use case.
+
+Do not implement in this planning task.
 
 ### Diagnostics Export Integration
 
@@ -510,22 +552,47 @@ Decide during Slice 9 whether to include this in v1.4 or defer to a later releas
 
 ### Suggested Implementation Slices
 
-1. Connection/session API strategy and shared contract
-2. TCP active connection tracking
-3. UDP session visibility polish
-4. `GET /api/connections` implementation in TypeScript server and Go service
-5. Contract validation and API Docs update
-6. Live Connections UI
-7. Rule row live traffic summary
-8. CLI commands for live connections, if v1.3 CLI exists
-9. Diagnostics export integration, if desired
-10. v1.4 readiness audit, version bump, changelog, tag
+1. **Live Connection Inspector contract and coverage strategy** — finalize `GET /api/connections` response shape (`tcpConnections`, `udpSessions`, `ruleSummaries`, `generatedAt`); decide whether to add `GET /api/forwards/:id/connections` now or later; record shared type names and coverage gates; update `docs/api-contract.md` draft and `docs/checklist.md`.
+2. **Shared types and API contract validation** — add `LiveConnectionsResponse`, `TcpConnectionInfo`, `UdpSessionInfo`, `RuleLiveSummary`, `LiveConnectionStatus`, `UdpSessionStatus` to `@portier/shared`; update `validate:contract` with `GET /api/connections` scenarios; finalize `docs/api-contract.md`; update client in-app API Docs view and `ApiDocsView.test.tsx`.
+3. **TypeScript server TCP live tracking** — per-rule TCP connection registry; create entry on accept, remove on full close; count bytes in/out; no double-counting on error/close race; no payload capture; 100% meaningful coverage of the tracking module.
+4. **TypeScript server UDP session tracking** — active session registry for all UDP modes; track client endpoint, target endpoint, startedAt, lastSeenAt, packets/bytes; named idle/expiry constants (30s idle, 5min expire); 100% meaningful coverage including idle/expiry edge cases.
+5. **Go service TCP live tracking** — same behavior as TypeScript server TCP tracking; cleanup on rule stop, service shutdown, and error paths; no goroutine leaks; no double-count on close race; 100% meaningful coverage.
+6. **Go service UDP session tracking** — same behavior as TypeScript server UDP tracking; named idle/expiry constants; idle detection and expiry with clean goroutine/ticker lifecycle; 100% meaningful coverage.
+7. **`GET /api/connections` parity across runtimes** — both runtimes expose the endpoint with identical response shape; returns 200 with empty arrays when no connections are active; `ruleSummaries` covers all running rules; `validate:contract` checks parity across TypeScript and Go runtimes.
+8. **Client API and Live Connections UI** — `fetchLiveConnections()` API helper; dedicated Live Connections view (table with protocol, rule, client, target, duration/idle, bytes in/out, packets, status); rule/protocol/status filters; manual refresh and auto-refresh toggle; empty state and loading/error handling; 100% meaningful coverage of helpers and display logic.
+9. **Rule row live activity summary** — compact active connections/sessions count and last-traffic age per rule row, using `GET /api/connections` data; subtle display; tests added.
+10. **CLI `portier connections`** — calls `GET /api/connections`; human aligned table; `--rule`, `--protocol`, `--json` flags; safe rule resolver reused for `--rule`; 100% meaningful coverage; `validate:cli:coverage` threshold maintained or raised.
+11. **Diagnostics export integration** — decide whether to include live session snapshot in the CLI support bundle and UI Download Diagnostics JSON; implement if promoted; update relevant tests and `validate:contract`.
+12. **Coverage gates and readiness audit** — verify all coverage targets met; TypeScript server coverage gate for new live tracking modules finalized; Go service coverage gate added or extended; no known gaps in lifecycle edge cases (close race, idle expiry, empty state, both runtimes).
+13. **v1.4 version bump, changelog, release/tag** — bump version to 1.4.0; finalize changelog entry; tag; run full validation suite (`lint`, `typecheck`, `test`, `build`, `test:e2e`, `validate:cli`, `validate:contract`, `validate:runtime:smoke`).
+14. **Update docs** — `docs/roadmap.md`, `docs/checklist.md`, `docs/api-contract.md`, `docs/changelog.md`, `README.md`, `tools/cli/readme.md`; keep details in roadmap/checklist/contract; keep README and CLI readme focused on delivered behavior.
 
 ### Quality Target for v1.4
 
-All newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This includes CLI additions, Go service changes, TypeScript server changes, shared types, contract validators, and client-side logic introduced by the release. Coverage should reflect real behavior and edge cases, not mechanical execution-only tests.
+All newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. Coverage should reflect real behavior and edge cases, not mechanical execution-only tests.
 
-The CLI already has a coverage gate from v1.3 (`validate:cli:coverage`, threshold 88%, actual 90.1%). v1.4 should raise or maintain this gate and extend the same discipline to Go service changes and any new TypeScript server/client logic.
+**Areas requiring 100% meaningful coverage:**
+- TCP live connection tracking model (both runtimes)
+- UDP session tracking model, including idle/expiry behavior (both runtimes)
+- `GET /api/connections` handler (both runtimes)
+- API contract validation scenarios for the new endpoint
+- UI data-mapping and display-logic helpers for the Live Connections view
+- CLI `portier connections` command
+- Diagnostics export integration if changed in v1.4
+
+**Edge cases to cover explicitly:**
+- TCP close/error race: double-close, partial close, failed target connection
+- UDP idle detection and expiry constant boundaries
+- Empty state: no running rules, no active connections
+- Both runtimes independently
+- Cleanup on rule stop, service shutdown, and error paths
+
+**Coverage gates:**
+- CLI: `validate:cli:coverage` threshold maintained at 88% minimum; raise if v1.4 additions warrant it.
+- Go service: add or extend a coverage gate for new live tracking modules; use `validate:cli:coverage` as the model for the gate runner.
+- TypeScript server: coverage for new modules tracked by Vitest; explicit gate decision made in Slice 12.
+
+The CLI already has a coverage gate from v1.3 (`validate:cli:coverage`, threshold 88%, actual 90.1%). v1.4 should raise or maintain this gate and extend the same discipline to Go service changes and TypeScript server additions.
 
 If a tiny branch is genuinely untestable (main entry point guard, platform-specific path never reachable in CI), document the exception explicitly rather than excluding the file.
 

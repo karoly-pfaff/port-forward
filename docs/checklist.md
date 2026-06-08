@@ -188,20 +188,24 @@ v1.4 targets live connection and session visibility: a read-only Live Connection
 
 Quality target: all newly added or materially changed code in v1.4 should reach 100% meaningful test coverage, with explicit coverage gates where practical. This covers CLI additions, Go service changes, TypeScript server changes, shared types, contract validators, and client-side logic.
 
-- [ ] 100% meaningful coverage target/gate tracked for new v1.4 Live Connection Inspector code (CLI, Go service, TypeScript server, shared types, contract validator, client UI logic)
+- [ ] 100% meaningful coverage target/gate tracked for all new v1.4 Live Connection Inspector code (TCP tracking, UDP tracking, `GET /api/connections` handler, contract validator, UI helpers, CLI connections command — both runtimes)
 
 Checklist items to add per slice as work proceeds:
 
-- [ ] **Slice 1** — Connection/session API strategy: response shape finalized, `GET /api/connections` vs. `/api/forwards/:id/connections` decided, shared types added to `@portier/shared`, `docs/api-contract.md` updated draft.
-- [ ] **Slice 2** — TCP active connection tracking: per-rule connection registry in both runtimes, client/target address, start time, bytes in/out, clean removal on socket close, no double-count on error.
-- [ ] **Slice 3** — UDP session visibility polish: active session registry for `bidirectional-multi-client`, first seen/last seen, packets/bytes, idle seconds; document limitations for `one-way` and `bidirectional-last-client`.
-- [ ] **Slice 4** — `GET /api/connections` in TypeScript server and Go service: same response shape, generatedAt, 200 even when no connections.
-- [ ] **Slice 5** — Contract validation and API Docs: `validate:contract` updated, `docs/api-contract.md` finalized, client in-app API Docs view updated, `ApiDocsView.test.tsx` updated.
-- [ ] **Slice 6** — Live Connections UI: dedicated view or Activity subtab; table-based (protocol, rule, client, target, duration, bytes, packets, status); rule/protocol filters; auto-refresh toggle.
-- [ ] **Slice 7** — Rule row live traffic summary: compact active connections/sessions count and last-traffic age per rule row, using `GET /api/connections` data.
-- [ ] **Slice 8** — CLI commands for live connections, if v1.3 CLI exists: `portier connections`, `portier sessions`, `--rule` filter, `--json`.
-- [ ] **Slice 9** — Diagnostics export integration: decide whether to include live session snapshot in the support bundle.
-- [ ] **Slice 10** — v1.4 readiness audit, version bump, changelog finalized, tag created.
+- [ ] **Slice 1** — Live Connection Inspector contract and coverage strategy: `GET /api/connections` response shape finalized (`tcpConnections`, `udpSessions`, `ruleSummaries`, `generatedAt`); coverage gate plan recorded; `docs/api-contract.md` draft updated; `docs/checklist.md` updated.
+- [ ] **Slice 2** — Shared types and API contract validation: `LiveConnectionsResponse`, `TcpConnectionInfo`, `UdpSessionInfo`, `RuleLiveSummary`, `LiveConnectionStatus`, `UdpSessionStatus` added to `@portier/shared`; `validate:contract` scenarios added for `GET /api/connections`; `docs/api-contract.md` finalized; client in-app API Docs view updated; `ApiDocsView.test.tsx` updated.
+- [ ] **Slice 3** — TypeScript server TCP live tracking: per-rule connection registry; create entry on accept, remove on full close; bytes in/out; no double-counting on error/close race; no payload capture; 100% meaningful coverage of the tracking module.
+- [ ] **Slice 4** — TypeScript server UDP session tracking: active session registry for all UDP modes; startedAt, lastSeenAt, packets/bytes; named idle/expiry constants (30s idle, 5min expire); 100% meaningful coverage including idle/expiry edge cases.
+- [ ] **Slice 5** — Go service TCP live tracking: per-rule connection registry; create on accept, remove on full close; bytes in/out; no double-counting on close/error race; no goroutine leaks; 100% meaningful coverage.
+- [ ] **Slice 6** — Go service UDP session tracking: active session registry for all UDP modes; named idle/expiry constants; idle detection and expiry with clean goroutine/ticker lifecycle; 100% meaningful coverage.
+- [ ] **Slice 7** — `GET /api/connections` parity: both runtimes return identical response shape; 200 with empty arrays when no connections active; `ruleSummaries` covers all running rules; `validate:contract` checks parity.
+- [ ] **Slice 8** — Client API and Live Connections UI: `fetchLiveConnections()` API helper; Live Connections view (table with protocol, rule, client, target, duration/idle, bytes in/out, packets, status); rule/protocol/status filters; manual refresh and auto-refresh toggle; empty state; loading/error handling; 100% meaningful coverage of helpers and display logic.
+- [ ] **Slice 9** — Rule row live activity summary: compact active connections/sessions count and last-traffic age per rule row, using `GET /api/connections` data; subtle display; tests added.
+- [ ] **Slice 10** — CLI `portier connections`: calls `GET /api/connections`; human aligned table; `--rule`, `--protocol`, `--json` flags; safe rule resolver reused; 100% meaningful coverage; `validate:cli:coverage` threshold maintained or raised.
+- [ ] **Slice 11** — Diagnostics export integration: decide whether to include live session snapshot in CLI and UI support bundle; implement if promoted; update tests and contract if changed.
+- [ ] **Slice 12** — Coverage gates and readiness audit: all coverage targets verified; TypeScript server coverage gate for new live tracking modules finalized; Go service coverage gate added or extended; no known lifecycle edge-case gaps.
+- [ ] **Slice 13** — v1.4 version bump, changelog finalized, tag created, full validation suite passed (`lint`, `typecheck`, `test`, `build`, `test:e2e`, `validate:cli`, `validate:contract`, `validate:runtime:smoke`).
+- [ ] **Slice 14** — Docs update: `docs/roadmap.md`, `docs/api-contract.md`, `docs/changelog.md`, `README.md`, `tools/cli/readme.md` all reflect delivered v1.4 behavior.
 
 ---
 
