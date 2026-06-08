@@ -228,6 +228,21 @@ function checkReadmeContent(archivePath, rawEntries) {
   } else {
     warn("readme.txt does not mention that portable archive does not install OS services");
   }
+  if (/portier(\.exe)?\s+runtime/i.test(content)) {
+    pass("readme.txt mentions CLI command: portier runtime");
+  } else {
+    fail("readme.txt does not mention CLI command: portier runtime");
+  }
+  if (/portier(\.exe)?\s+list/i.test(content)) {
+    pass("readme.txt mentions CLI command: portier list");
+  } else {
+    fail("readme.txt does not mention CLI command: portier list");
+  }
+  if (/portier(\.exe)?\s+diagnostics export/i.test(content)) {
+    pass("readme.txt mentions CLI command: portier diagnostics export");
+  } else {
+    fail("readme.txt does not mention CLI command: portier diagnostics export");
+  }
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -273,8 +288,10 @@ if (!rawEntries) {
 } else {
   const entries = normalizeEntries(rawEntries);
   const serviceBin = platformLabel === "windows" ? "service.exe" : "service";
+  const cliBin = platformLabel === "windows" ? "portier.exe" : "portier";
 
-  checkRequired(entries, serviceBin, `${serviceBin} (native Go binary)`);
+  checkRequired(entries, cliBin, `${cliBin} (CLI binary)`);
+  checkRequired(entries, serviceBin, `${serviceBin} (native Go service binary)`);
   checkRequired(entries, "server.js", "server.js (Node/TypeScript fallback)");
   checkRequired(entries, "readme.txt", "readme.txt");
   checkRequired(entries, "web/index.html", "web/index.html");

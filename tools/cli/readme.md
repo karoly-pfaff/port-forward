@@ -318,13 +318,36 @@ portier -h
 | `2` | Invalid arguments or usage error |
 | `3` | Connection failure — Portier service unreachable |
 
+## Runtime Package
+
+The CLI binary is included in the Portier runtime package and release artifacts alongside the service binary:
+
+```
+<install-dir>/
+  portier          (or portier.exe on Windows)   # this CLI
+  service          (or service.exe on Windows)   # background service
+  server.js                                      # Node.js fallback
+  web/                                           # React management UI
+  readme.txt
+```
+
+The `readme.txt` in the runtime package documents basic CLI usage for each platform.
+
+The CLI is not added to PATH by the installer in v1.3. To use it from any directory, add `<install-dir>` to your PATH manually, or invoke it with the full path:
+
+- Windows: `C:\Program Files\Portier\portier.exe runtime`
+- macOS: `~/Applications/Portier/portier runtime`
+- Linux: `/opt/portier/portier runtime`
+
 ## Building
 
 ```powershell
 npm run build:cli
 ```
 
-Output: `tools/cli/build/portier` (or `portier.exe` on Windows).
+Output: `tools/cli/build/portier-cli` (or `portier-cli` without `.exe` on all platforms when using this standalone command).
+
+The runtime build (`npm run build:runtime`) builds the CLI directly into `build/portier/portier[.exe]`.
 
 ## Testing
 

@@ -47,6 +47,11 @@ pushd "$REPO_ROOT/service" > /dev/null
 GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o "$OUTPUT_DIR/service" ./sources
 popd > /dev/null
 
+echo "Building Go CLI for macOS (darwin/amd64)..."
+pushd "$REPO_ROOT/tools/cli" > /dev/null
+GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -o "$OUTPUT_DIR/portier" ./sources
+popd > /dev/null
+
 echo "Copying web UI..."
 rm -rf "$OUTPUT_DIR/web"
 cp -r "$REPO_ROOT/client/build" "$OUTPUT_DIR/web"
@@ -58,6 +63,24 @@ Portier macOS Portable Package
 This portable archive contains the Portier runtime files only. It does not
 install OS services. Use the install scripts from the Portier repository to
 set up a macOS LaunchAgent.
+
+Files in this package:
+  portier     CLI -- control a running Portier service from the terminal
+  service     Native Go runtime (preferred; start as LaunchAgent)
+  server.js   Node.js fallback runtime (requires Node.js)
+  web/        Built React management UI
+  readme.txt  This file
+
+CLI usage (requires a running Portier service):
+  ./portier runtime
+  ./portier list
+  ./portier status
+  ./portier diagnose <id|name>
+  ./portier config export --out rules.json
+  ./portier diagnostics export --out diagnostics.json
+
+  The CLI does not start or install the service by itself.
+  Default management URL: http://127.0.0.1:47831
 
 Native service (preferred):
   ./service --service --config ~/Library/Application\ Support/Portier/rules.json --host 127.0.0.1 --port 47831 --static-dir ./web
@@ -84,14 +107,15 @@ LaunchAgent install (no sudo required):
   See scripts/macos/readme.md for full options.
 
 Forwarded listen ports may need macOS Firewall rules.
-Unsigned — macOS Gatekeeper may quarantine downloaded binaries.
-  Clear quarantine: xattr -cr ./service
+Unsigned -- macOS Gatekeeper may quarantine downloaded binaries.
+  Clear quarantine: xattr -cr ./service ./portier
 EOF
 
 rm -rf "$BUNDLE_WORK"
 
 echo ""
 echo "macOS package created at $OUTPUT_DIR"
+echo "  CLI        : $OUTPUT_DIR/portier"
 echo "  Go service : $OUTPUT_DIR/service"
 echo "  Node server: $OUTPUT_DIR/server.js"
 echo "  Web UI     : $OUTPUT_DIR/web"

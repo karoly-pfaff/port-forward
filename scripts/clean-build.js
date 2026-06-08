@@ -12,6 +12,7 @@ const targets = [
   "build/macos",
   "build/linux",
   "build/releases",
+  "tools/cli/build",
 ];
 
 for (const rel of targets) {

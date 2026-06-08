@@ -228,24 +228,27 @@ Production/install layout for all platforms:
 
 ```text
 <install-dir>/
-  service          (or service.exe on Windows)
+  portier          (or portier.exe on Windows)   — CLI
+  service          (or service.exe on Windows)   — background service
   server.js        (Node fallback — requires Node.js)
   web/
     index.html
     assets/
+  readme.txt
 ```
 
+- `portier` / `portier.exe` = CLI binary (talks to management API; does not start the service)
 - `service` / `service.exe` = native Go runtime; default static dir is `web`
 - `server.js` = bundled Node/TypeScript fallback
 - `web/` = built React client UI (external; not baked into binary)
 - `rules.json` = always external; never packaged
 
-Dev build output (repo-internal, not distributed): `service/build/portier-service`, `server/build/`, `client/build/`.
+Dev build output (repo-internal, not distributed): `service/build/portier-service`, `server/build/`, `client/build/`, `tools/cli/build/portier-cli`.
 
 Packaging scripts:
-- `build:runtime` → `build/portier/` (cross-platform, primary generic output)
+- `build:runtime` → `build/portier/` (cross-platform, primary generic output; builds CLI + service)
 - `build:runtime:windows` → `build/windows/`, `build:runtime:macos` → `build/macos/`, `build:runtime:linux` → `build/linux/`
-- `build:clean` removes `build/portier/`, all platform package output dirs, and `build/releases/`
+- `build:clean` removes `build/portier/`, all platform package output dirs, `build/releases/`, and `tools/cli/build/`
 
 Validation scripts:
 - `validate:runtime` → validates `build/portier/` layout
@@ -265,7 +268,7 @@ v1.1 is complete: distribution, installers, release artifacts, service and packa
 
 v1.2 is complete: runtime info endpoint, rule diagnostics API and UI, Activity Log polish, safer networking UX, settings/config polish, and diagnostics export. Tagged 1.2.0. See `docs/roadmap.md` for goals, slices, and non-goals.
 
-v1.3 is in progress: Go CLI under `tools/cli/`. Slices 2–6 complete: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime`/`list`/`status`/`activity` commands (activity supports `--limit`/`--rule`/`--type`/`--severity`), `start`/`stop`/`diagnose` lifecycle and diagnostics commands (accept exact rule ID or unique name; duplicate names → exit 2 with ID disambiguation), `config validate`/`config export`/`config import` commands (local validation before API, replace requires `--yes`), `diagnostics export --out <file>` (builds JSON support bundle; `--run-diagnostics`; `--activity-limit` 1–500; partial-failure tolerant with `errors[]`), output helpers (`FormatBool`/`FormatBytes`/`FormatTimestamp`/`PrintTable`), safe rule resolver (`ResolveRule`), `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, 153 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts. The CLI talks to the management API; it does not replace the web UI or any runtime. CLI binary: `portier`/`portier.exe`. See `tools/cli/readme.md` and `docs/roadmap.md`.
+v1.3 is in progress: Go CLI under `tools/cli/`. Slices 2–7 complete: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime`/`list`/`status`/`activity` commands (activity supports `--limit`/`--rule`/`--type`/`--severity`), `start`/`stop`/`diagnose` lifecycle and diagnostics commands (accept exact rule ID or unique name; duplicate names → exit 2 with ID disambiguation), `config validate`/`config export`/`config import` commands (local validation before API, replace requires `--yes`), `diagnostics export --out <file>` (builds JSON support bundle; `--run-diagnostics`; `--activity-limit` 1–500; partial-failure tolerant with `errors[]`), output helpers (`FormatBool`/`FormatBytes`/`FormatTimestamp`/`PrintTable`), safe rule resolver (`ResolveRule`), `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, 153 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts; CLI binary (`portier`/`portier.exe`) now built into `build/portier/` by all platform build scripts and included in release artifacts; Windows installer includes `portier.exe`; no PATH integration in v1.3. The CLI talks to the management API; it does not replace the web UI or any runtime. See `tools/cli/readme.md` and `docs/roadmap.md`.
 
 Release artifact commands:
 - `npm run build:release:current` — portable archive + installer for current platform

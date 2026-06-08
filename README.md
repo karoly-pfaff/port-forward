@@ -495,9 +495,9 @@ The `portier` CLI is a Go-based command-line tool for managing the local Portier
 npm run build:cli
 ```
 
-Output: `tools/cli/build/portier` (or `portier.exe` on Windows).
+Output: `tools/cli/build/portier-cli`. The runtime build (`npm run build:runtime`) also builds the CLI directly into `build/portier/portier[.exe]` as part of the runtime package.
 
-**Commands (Slices 2–6):**
+**Commands (Slices 2–7):**
 
 ```
 portier list              # list configured forwarding rules
@@ -606,7 +606,7 @@ Current version: **1.2.0** (v1.3 in progress)
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 is adding a Go-based `portier` CLI under `tools/cli/` (Slices 2–6 complete: skeleton, API client, `runtime`/`list`/`status`/`activity`/`start`/`stop`/`diagnose`/`config`/`diagnostics` commands, 153 tests, npm scripts); v1.4 plans a live connection inspector; future work tracked there.
+- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 is adding a Go-based `portier` CLI under `tools/cli/` (Slices 2–7 complete: skeleton, API client, all commands, 153 tests, npm scripts, CLI binary now included in runtime package and release artifacts); v1.4 plans a live connection inspector; future work tracked there.
 
 ## Agent Workflow
 

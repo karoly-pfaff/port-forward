@@ -6,6 +6,17 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.3 in progress
 
+### Added (v1.3 Slice 7 — CLI packaging into runtime and release artifacts)
+
+- **CLI binary included in runtime package** — `portier`/`portier.exe` is now built and included in `build/portier/` alongside `service`/`service.exe`, `server.js`, `web/`, and `readme.txt`.
+- **Platform build scripts updated** — `scripts/windows/build-runtime.ps1`, `scripts/macos/build-runtime.sh`, and `scripts/linux/build-runtime.sh` each build the CLI from `tools/cli/` directly into the output directory as part of the normal `npm run build:runtime` step.
+- **Runtime validation updated** — `scripts/validate-runtime.js` now requires the CLI binary (`portier`/`portier.exe`), verifies it is non-empty, verifies CLI and service binaries have different names, and checks that `readme.txt` mentions `portier runtime`, `portier list`, and `portier diagnostics export`.
+- **Release archive validation updated** — `scripts/validate-release.js` now requires the CLI binary in portable archives and validates `readme.txt` CLI command references.
+- **Windows installer updated** — `scripts/windows/release/portier.iss` now includes `portier.exe` in the installed files under `{app}`.
+- **`readme.txt` updated** — all three platform readme.txt templates now list the files in the package, document CLI usage (six key commands), and note that the CLI requires a running service and does not start the service by itself.
+- **`build:clean` updated** — `scripts/clean-build.js` now removes `tools/cli/build/` alongside the other build output directories.
+- **No PATH integration in v1.3** — the installer does not add `portier` to PATH; users invoke the CLI by full path or add the install directory to PATH manually.
+
 ### Added (v1.3 Slice 6 — Diagnostics export command)
 
 - **`portier diagnostics export --out <file>`** — builds a local JSON diagnostics bundle from the running Portier service. Fetches runtime info, rules, statuses, and recent activity independently; partial failures are recorded in `errors[]` rather than aborting the export. Bundle is always written as long as the file write succeeds.

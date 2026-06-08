@@ -23,6 +23,7 @@ const repoRoot = resolve(scriptDir, "..");
 const packageDir = join(repoRoot, "build", "portier");
 const isWindows = process.platform === "win32";
 const serviceBinary = isWindows ? "service.exe" : "service";
+const cliBinary = isWindows ? "portier.exe" : "portier";
 const npmCommand = isWindows ? "npm.cmd" : "npm";
 
 const args = process.argv.slice(2);
@@ -215,9 +216,17 @@ async function main() {
   pass("build/portier/ exists");
 
   console.log("\nRequired files:");
+  checkFile(cliBinary);
   checkFile(serviceBinary);
   checkFile("server.js");
   checkFile("readme.txt");
+
+  console.log("\nBinary separation:");
+  if (cliBinary !== serviceBinary) {
+    pass(`CLI (${cliBinary}) and service (${serviceBinary}) are separate binaries`);
+  } else {
+    fail(`CLI and service binaries must have different names`);
+  }
 
   console.log("\nRequired web UI:");
   checkDir("web");
@@ -237,6 +246,21 @@ async function main() {
       pass("readme.txt mentions config path");
     } else {
       fail("readme.txt does not mention config path");
+    }
+    if (/portier(\.exe)?\s+runtime/i.test(text)) {
+      pass("readme.txt mentions CLI command: portier runtime");
+    } else {
+      fail("readme.txt does not mention CLI command: portier runtime");
+    }
+    if (/portier(\.exe)?\s+list/i.test(text)) {
+      pass("readme.txt mentions CLI command: portier list");
+    } else {
+      fail("readme.txt does not mention CLI command: portier list");
+    }
+    if (/portier(\.exe)?\s+diagnostics export/i.test(text)) {
+      pass("readme.txt mentions CLI command: portier diagnostics export");
+    } else {
+      fail("readme.txt does not mention CLI command: portier diagnostics export");
     }
     if (/install|scripts\//i.test(text)) {
       pass("readme.txt references install scripts or docs");

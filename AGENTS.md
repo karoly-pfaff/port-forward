@@ -26,11 +26,13 @@
 
 ```text
 <install-dir>/
-  service          (or service.exe on Windows)
+  portier          (or portier.exe on Windows)   — CLI
+  service          (or service.exe on Windows)   — background service
   server.js        (Node fallback — requires Node.js)
   web/
     index.html
     assets/
+  readme.txt
 ```
 
 Development build output (not distributed):
@@ -39,6 +41,7 @@ Development build output (not distributed):
 service/build/portier-service
 server/build/
 client/build/
+tools/cli/build/portier-cli
 ```
 
 ## Setup Commands
@@ -151,6 +154,8 @@ Rule-targeting commands (`start`, `stop`, `diagnose`) accept an exact rule ID or
 `portier config validate` validates a local file without contacting the service. `portier config export/import` use `GET /api/config/export` and `POST /api/config/import`. Import validates locally first — invalid files are rejected without an API call. Replace mode requires `--yes`.
 
 `portier diagnostics export` builds a local JSON support bundle (schemaVersion, runtime, rules, statuses, activity, diagnostics, metadata) from independent API calls. Partial source failures are recorded in `errors[]` rather than aborting. `--run-diagnostics` adds per-rule diagnose results. `--activity-limit` (1–500, default 100). 153 CLI tests.
+
+The CLI binary (`portier`/`portier.exe`) is included in the runtime package (`build/portier/`) and release artifacts. It is not added to PATH by the installer in v1.3.
 
 ## Packaging Commands
 
@@ -357,7 +362,7 @@ v1.1 focuses on distribution and native OS service installers. The v1.1 scope, p
 
 v1.2 delivered diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export.
 
-v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper. Slices 2–6 complete: `tools/cli/` module scaffolded, HTTP client (`ConnectionError`/`APIError`), connection options (`--url`/`--host`/`--port`/`PORTIER_URL`), `--json` flag, `runtime`/`list`/`status`/`activity`/`start`/`stop`/`diagnose`/`config`/`diagnostics` commands, safe rule resolver, local config validation, `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, diagnostics bundle builder (partial-failure tolerant, `--run-diagnostics`, `--activity-limit`), 153 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts.
+v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper. Slices 2–7 complete: `tools/cli/` module scaffolded, HTTP client (`ConnectionError`/`APIError`), connection options (`--url`/`--host`/`--port`/`PORTIER_URL`), `--json` flag, `runtime`/`list`/`status`/`activity`/`start`/`stop`/`diagnose`/`config`/`diagnostics` commands, safe rule resolver, local config validation, `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, diagnostics bundle builder (partial-failure tolerant, `--run-diagnostics`, `--activity-limit`), 153 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts; CLI binary now included in runtime package and release artifacts.
 
 v1.4 targets live connection and session visibility: a read-only Live Connection Inspector for active TCP connections and UDP sessions. See `docs/roadmap.md`.
 

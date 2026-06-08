@@ -75,6 +75,7 @@ Name: "installservice"; \
 ; ============================================================
 [Files]
 ; Runtime binaries
+Source: "{#SourceDir}\portier.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\service.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\server.js";   DestDir: "{app}"; Flags: ignoreversion
 

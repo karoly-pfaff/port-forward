@@ -15,6 +15,7 @@ $outputPath = [System.IO.Path]::GetFullPath($outputPath)
 
 $serverJsPath = Join-Path $outputPath "server.js"
 $serviceExePath = Join-Path $outputPath "service.exe"
+$cliExePath = Join-Path $outputPath "portier.exe"
 $webOutputPath = Join-Path $outputPath "web"
 $bundleWorkPath = Join-Path $outputPath "_bundle"
 $bundleCjsPath = Join-Path $bundleWorkPath "server.cjs"
@@ -92,6 +93,23 @@ try {
   Pop-Location
 }
 
+Write-Host "Building Go CLI for Windows..."
+Push-Location (Join-Path $repoRoot "tools\cli")
+try {
+  $env:GOOS = "windows"
+  $env:GOARCH = "amd64"
+  $env:CGO_ENABLED = "0"
+  & go build -o $cliExePath ./sources
+  if ($LASTEXITCODE -ne 0) {
+    throw "Go CLI build failed with exit code $LASTEXITCODE"
+  }
+} finally {
+  Remove-Item Env:\GOOS -ErrorAction SilentlyContinue
+  Remove-Item Env:\GOARCH -ErrorAction SilentlyContinue
+  Remove-Item Env:\CGO_ENABLED -ErrorAction SilentlyContinue
+  Pop-Location
+}
+
 Write-Host "Copying web UI..."
 if (Test-Path $webOutputPath) {
   Remove-Item -LiteralPath $webOutputPath -Recurse -Force
@@ -105,6 +123,24 @@ Portier Windows Portable Package
 This portable archive contains the Portier runtime files only. It does not
 install OS services. Use the Inno Setup installer or the install scripts from
 the Portier repository to set up a Windows Service or scheduled task.
+
+Files in this package:
+  portier.exe   CLI -- control a running Portier service from the terminal
+  service.exe   Native Go runtime (preferred; start as Windows Service)
+  server.js     Node.js fallback runtime (requires Node.js)
+  web\          Built React management UI
+  readme.txt    This file
+
+CLI usage (requires a running Portier service):
+  .\portier.exe runtime
+  .\portier.exe list
+  .\portier.exe status
+  .\portier.exe diagnose <id|name>
+  .\portier.exe config export --out rules.json
+  .\portier.exe diagnostics export --out diagnostics.json
+
+  The CLI does not start or install the service by itself.
+  Default management URL: http://127.0.0.1:47831
 
 Native service (preferred):
   .\service.exe --service --config "C:\path\to\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
@@ -139,6 +175,7 @@ Do not run both a Machine and User install on the same port at the same time.
 Remove-Item -LiteralPath $bundleWorkPath -Recurse -Force
 
 Write-Host "Windows package created at $outputPath"
+Write-Host "  CLI        : $cliExePath"
 Write-Host "  Go service : $serviceExePath"
 Write-Host "  Node server: $serverJsPath"
 Write-Host "  Web UI     : $webOutputPath"

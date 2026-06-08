@@ -311,11 +311,11 @@ Runtime and release artifacts may eventually include:
 ```
 
 Notes:
-- If the CLI binary is named `portier`, keep the service binary named `service` or `portier-service` consistently to avoid naming confusion.
-- PATH integration is decided later.
-- Windows installer could eventually offer "Add Portier CLI to PATH".
-- Portable archives should include the CLI once implemented.
-- Installer behavior (PATH, shell completion, separate download vs. bundled) is decided during Slice 7.
+- CLI binary is `portier`/`portier.exe`; service binary remains `service`/`service.exe`.
+- PATH integration is not included in v1.3. Users invoke the CLI with a full path or add the install directory to PATH manually.
+- Windows installer (`portier.iss`) includes `portier.exe` in the installed files.
+- Shell completion deferred to a future release.
+- This layout is implemented as of Slice 7.
 
 ### Suggested Implementation Slices
 
@@ -325,7 +325,7 @@ Notes:
 4. ~~**Lifecycle commands: `start`, `stop`, `diagnose`**~~ — ✓ Complete. `portier start <id|name>` (resolves rule, calls `POST /api/forwards/:id/start`), `portier stop <id|name>` (calls `POST /api/forwards/:id/stop`), `portier diagnose <id|name>` (calls `POST /api/forwards/:id/diagnose`, human summary + checks table); safe rule resolver (exact ID wins, exact name match, ambiguous-name error with ID list, not-found); stable `{"ok", "action", "ruleId"}` JSON for start/stop; raw `RuleDiagnosticsResult` JSON for diagnose; 89 CLI tests total.
 5. ~~**Config commands: `config validate`, `config export`, `config import`**~~ — ✓ Complete. `portier config validate <file>` (local validation, no API, all three config shapes); `portier config export --out <file>` (calls `GET /api/config/export`, writes file, stdout JSON mode); `portier config import --mode merge|replace [--yes] <file>` (local validate then `POST /api/config/import`, replace requires `--yes`); `doWithBody` helper; `ConfigRule`/`ConfigExportResponse`/`ConfigImportRequest`/`ImportResult`/`ConfigImportResponse` types; 132 CLI tests total.
 6. ~~**Diagnostics export command**~~ — ✓ Complete. `portier diagnostics export --out <file>` (builds local JSON bundle from runtime/rules/statuses/activity; `--run-diagnostics` adds per-rule diagnostics; `--activity-limit` 1–500; partial failures recorded in `errors[]`, bundle still written; human output shows counts and "with warnings" on errors; JSON result object or raw bundle to stdout; `diagnosticsBundle` schema with `schemaVersion`/`metadata.source`/`errors`); 153 CLI tests total.
-7. CLI packaging into runtime/release artifacts
+7. ~~**CLI packaging into runtime/release artifacts**~~ — ✓ Complete. `portier`/`portier.exe` built and included in `build/portier/` alongside `service`/`service.exe`; all three platform build scripts (`build-runtime.ps1`, `build-runtime.sh` macOS/Linux) build the CLI from `tools/cli/` directly into the output directory; runtime validation requires CLI binary (non-empty, separate from service); release archive validation requires CLI binary; Windows installer (`portier.iss`) includes `portier.exe`; `build:clean` removes `tools/cli/build/`; `readme.txt` in the runtime package documents CLI usage and all six key commands; no PATH integration in v1.3.
 8. CLI validation, documentation, readiness audit, version bump, tag
 
 ### Non-Goals for v1.3
