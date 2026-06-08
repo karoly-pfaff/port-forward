@@ -216,6 +216,69 @@ All commands that target a rule accept:
 
 If multiple rules share the same name, the command exits with code 2 and lists the matching IDs on stderr. Use the rule ID in that case.
 
+### `portier diagnostics export`
+
+Build a JSON diagnostics bundle from the running Portier service.
+
+```
+portier diagnostics export --out <file>
+portier diagnostics export --out <file> --run-diagnostics
+portier diagnostics export --out <file> --activity-limit <n>
+portier --json diagnostics export --out <file>
+portier --json diagnostics export              # print bundle to stdout
+```
+
+Fetches runtime info, rules, statuses, and recent activity from the management API and writes a pretty-printed JSON support bundle. The bundle is built from independent sources — partial failures are recorded in `errors[]` rather than aborting the export.
+
+Flags:
+- `--out <file>` — output file path. Required in human mode; omit with `--json` to print to stdout.
+- `--run-diagnostics` — run `POST /api/forwards/:id/diagnose` for each rule and include results.
+- `--activity-limit <n>` — maximum activity events to include (1–500, default: 100). Exits code `2` if out of range.
+
+**Bundle schema:**
+
+```json
+{
+  "schemaVersion": "1",
+  "exportedAt": "ISO 8601",
+  "app": { "name": "Portier", "version": "..." },
+  "runtime": { ... } | null,
+  "rules": [ ... ],
+  "statuses": [ ... ],
+  "diagnostics": { "<ruleId>": { ... } },
+  "diagnosticsNote": "...",
+  "activity": { "included": true, "events": [...], "note": "..." },
+  "metadata": { "managementUrl": "...", "source": "cli", "generatedBy": "portier diagnostics export" },
+  "errors": [ { "source": "...", "message": "..." } ]
+}
+```
+
+Included data sources:
+- `GET /api/runtime` → `runtime`
+- `GET /api/forwards` → `rules`
+- `GET /api/status` → `statuses`
+- `GET /api/activity?limit=<n>` → `activity.events`
+- `POST /api/forwards/:id/diagnose` → `diagnostics` (only with `--run-diagnostics`)
+
+Not included: logs, environment variables, OS usernames, home directory paths beyond those already in `runtime`, raw disk files.
+
+Human output (with `--out`): `Exported diagnostics to <file>` with rule/status/activity counts.
+With partial failures: `Exported diagnostics with warnings to <file>`.
+
+With `--json` and `--out`: prints `{ "ok": true, "path": "...", "ruleCount": N, "statusCount": N, "activityCount": N, "diagnosticCount": N }`.
+With `--json` and no `--out`: prints the full diagnostics bundle to stdout.
+
+If `--out` is omitted in human mode, exits with code `2`.
+If the output file cannot be written, exits nonzero.
+
+**Partial failure behavior:**
+- Each data source is fetched independently.
+- Failures are recorded in `errors[]` with a `source` field (`runtime`, `rules`, `statuses`, `activity`, `diagnostics:<ruleId>`).
+- If `rules` fetch fails, per-rule diagnostics are skipped entirely.
+- The bundle is always written as long as the file write succeeds.
+- Human output says "with warnings" when errors are present.
+- JSON result includes `"warningCount": N` when errors are present.
+
 ### `portier runtime`
 
 Show runtime info for the running Portier service.
@@ -278,12 +341,6 @@ npm run validate:cli
 ```
 
 Runs tests then builds. Fails clearly if Go is unavailable.
-
-## Planned commands (not yet implemented)
-
-Future slices will add:
-
-- `portier diagnostics export --out <file>` — export diagnostics bundle
 
 ## Module structure
 

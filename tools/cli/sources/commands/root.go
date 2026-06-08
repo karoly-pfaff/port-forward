@@ -33,15 +33,13 @@ Commands:
   stop <id|name>       Stop a forwarding rule
   diagnose <id|name>   Run diagnostics against a forwarding rule
   config               Manage config: validate, export, import (run 'portier config help')
+  diagnostics          Build diagnostics support bundles (run 'portier diagnostics help')
   version              Show CLI version
   help                 Show this help message
 
 Rule identity:
   Commands that target a rule accept an exact rule ID or an exact rule name.
   If multiple rules share the same name, use the rule ID to avoid ambiguity.
-
-More commands are planned for v1.3:
-  diagnostics export
 
 Exit codes:
   0  Success

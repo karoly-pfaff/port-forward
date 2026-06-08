@@ -339,6 +339,11 @@ func (c *Client) DiagnoseForward(id string) (*RuleDiagnosticsResult, error) {
 	return &result, nil
 }
 
+// BaseURL returns the management API base URL used by this client.
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
 // GetActivity calls GET /api/activity with optional filters and returns events.
 func (c *Client) GetActivity(q ActivityQuery) ([]ActivityEvent, error) {
 	params := url.Values{}

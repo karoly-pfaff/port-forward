@@ -6,6 +6,20 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.3 in progress
 
+### Added (v1.3 Slice 6 — Diagnostics export command)
+
+- **`portier diagnostics export --out <file>`** — builds a local JSON diagnostics bundle from the running Portier service. Fetches runtime info, rules, statuses, and recent activity independently; partial failures are recorded in `errors[]` rather than aborting the export. Bundle is always written as long as the file write succeeds.
+- **`--run-diagnostics` flag** — when present, runs `POST /api/forwards/:id/diagnose` for each rule sequentially and includes results in `diagnostics.<ruleId>`. If the rules list could not be fetched, per-rule diagnostics are skipped entirely. Per-rule failures are recorded in `errors[]` with source `diagnostics:<ruleId>`.
+- **`--activity-limit <n>` flag** — controls how many activity events are included (1–500, default: 100). Exits code `2` if out of range.
+- **Bundle schema** (`schemaVersion: "1"`): `app`, `runtime`, `rules`, `statuses`, `diagnostics`, `diagnosticsNote`, `activity` (with `included`/`events`/`note`), `metadata` (`managementUrl`, `source: "cli"`, `generatedBy`), `errors[]`. Does not include logs, environment variables, OS usernames, or raw disk files.
+- **Human output**: `Exported diagnostics to <file>` with rule/status/activity counts; with partial failures: `Exported diagnostics with warnings to <file>`.
+- **JSON output** (with `--out`): `{"ok":true,"path":"...","ruleCount":N,"statusCount":N,"activityCount":N,"diagnosticCount":N}`; with warnings adds `"warningCount":N`. Without `--out`: prints full bundle to stdout.
+- **Human mode without `--out`**: exits code `2` with clear message.
+- **Diagnostics subcommand routing** (`RunDiagnostics`): `portier diagnostics help` / `portier diagnostics <unknown>` handled cleanly.
+- **`BaseURL()` method** added to API client for embedding the management URL in the bundle metadata.
+- **Tests**: 153 CLI tests total (was 132); new tests cover dispatch, usage validation (missing `--out`, invalid `--activity-limit`), happy path (writes file, human/JSON output), partial failure (still writes bundle, "with warnings"), `--run-diagnostics` calls diagnose per rule, activity limit passed to API, rules failure skips diagnostics, write failure exits nonzero, bundle content (schemaVersion, metadata.source, diagnosticsNote, counts), no forbidden fields.
+- **Help text updated**: `diagnostics` listed in `portier help`; `portier diagnostics help` shows subcommand list and options.
+
 ### Added (v1.3 Slice 5 — Config commands: validate, export, import)
 
 - **`portier config validate <file>`** — validates a local config file without importing it or contacting the service; accepts raw JSON arrays, `{"rules":[...]}` wrapper objects, and full export objects `{"version":"1","exportedAt":"...","rules":[...]}`. Checks: non-empty name, valid protocol, non-empty hosts, ports in range, valid `udpMode`, no duplicate listen bindings. Human output: `Config is valid.` / `Config is invalid.` with errors listed. `--json` output: `{"valid":true,"ruleCount":N,"tcpCount":N,"udpCount":N,"errors":[]}`. Exit 0 valid, exit 1 invalid/unreadable.
