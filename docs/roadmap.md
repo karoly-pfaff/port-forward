@@ -553,6 +553,7 @@ Decide during Slice 9 whether to include this in v1.4 or defer to a later releas
 
 ### Suggested Implementation Slices
 
+0. ~~**Coverage baseline**~~ — ✓ Complete. Pre-v1.4 baselines measured and documented: tools/cli 92.7% (gate 92%), client 89.2%, service 79.7%, shared 82.1%, server 71.9%. Coverage tooling added to all TypeScript workspaces. `npm run coverage:baseline` aggregates all. See `docs/coverage-baseline.md` and `docs/checklist.md`.
 1. **Live Connection Inspector contract and coverage strategy** — finalize `GET /api/connections` response shape (`tcpConnections`, `udpSessions`, `ruleSummaries`, `generatedAt`); decide whether to add `GET /api/forwards/:id/connections` now or later; record shared type names and coverage gates; update `docs/api-contract.md` draft and `docs/checklist.md`.
 2. **Shared types and API contract validation** — add `LiveConnectionsResponse`, `TcpConnectionInfo`, `UdpSessionInfo`, `RuleLiveSummary`, `LiveConnectionStatus`, `UdpSessionStatus` to `@portier/shared`; update `validate:contract` with `GET /api/connections` scenarios; finalize `docs/api-contract.md`; update client in-app API Docs view and `ApiDocsView.test.tsx`.
 3. **TypeScript server TCP live tracking** — per-rule TCP connection registry; create entry on accept, remove on full close; count bytes in/out; no double-counting on error/close race; no payload capture; 100% meaningful coverage of the tracking module.

@@ -369,7 +369,7 @@ Runs tests, builds, and checks coverage. Fails clearly if Go is unavailable.
 npm run validate:cli:coverage
 ```
 
-Coverage gate: runs `go test` with cross-package instrumentation and fails if total statement coverage falls below 88%. Genuinely untestable branches (main entry point, http.NewRequest errors, json.Marshal errors) are documented in `scripts/validate-cli-coverage.js`.
+Coverage gate: runs `go test` with cross-package instrumentation and fails if total statement coverage falls below 92%. Genuinely untestable branches (main entry point, http.NewRequest errors, json.Marshal errors) are documented in `scripts/validate-coverage.js`.
 
 ## Module structure
 

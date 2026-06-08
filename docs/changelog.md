@@ -6,6 +6,12 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Coverage baseline measured** — pre-v1.4 statement coverage: tools/cli 92.7% (gate 92%), client 89.2%, service 79.7%, shared 82.1%, server 71.9%. Scripts not yet measured. Full per-file breakdown and ratchet plan in `docs/coverage-baseline.md`.
+- **Coverage tooling added** — `@vitest/coverage-v8` installed; vitest.config.ts files added/updated in all three TypeScript workspaces (client, server, shared) with coverage include/exclude settings; `coverage` script added to each workspace; `npm run coverage:shared/server/client/service/cli/baseline` scripts added to root `package.json`; `scripts/coverage-service.js` and `scripts/coverage-cli.js` added for Go combined coverage reporting; `scripts/validate-coverage.js` added as unified coverage validator with `--only <component>` support, replacing `scripts/validate-cli-coverage.js`; `validate:cli:coverage` now delegates to `validate-coverage.js --only cli`.
+- **`waitForTestCondition` timeout raised** — `service/sources/forwarders/tcp_test.go` timeout increased from 2s to 5s to eliminate a flaky failure under cross-package coverage instrumentation with sequential (`-p 1`) test execution.
+
 ### Planning
 
 - Planned v1.4 as Live Connection Inspector: read-only live TCP connection and UDP session visibility, per-rule live summaries, `GET /api/connections` endpoint in both runtimes, Live Connections UI view, and CLI `portier connections` command. API contract shape recorded in `docs/api-contract.md`. See `docs/roadmap.md` for goals, data model, UI direction, 14-slice plan, and non-goals.

@@ -1,0 +1,210 @@
+#!/usr/bin/env node
+/* global console, process */
+/**
+ * Aggregate coverage validator for all Portier components.
+ *
+ * Runs coverage for every component via npm scripts, then reads the
+ * coverage-summary.json that each script writes to coverage/{component}/.
+ * All five components — shared, server, client (TypeScript vitest) and
+ * service, cli (Go) — produce the same json-summary format after running
+ * their respective coverage scripts.
+ *
+ * Usage:
+ *   node scripts/validate-coverage.js [--only <component>]
+ *
+ * Options:
+ *   --only <component>   Run and check a single component only.
+ *                        Valid values: shared, server, client, service, cli
+ *
+ * Exit codes:
+ *   0  All gates passed (or no gate is defined for a component).
+ *   1  One or more gates failed, or a coverage run failed.
+ *
+ * Gates (update here when ratcheting):
+ *   cli: 92%  — enforced
+ *   others: none — baselines only, not yet gated
+ *
+ * Known untestable CLI branches (documented here, not counted against coverage):
+ *   - main() calls os.Exit() — cannot be tested without spawning a subprocess;
+ *     the run() function it delegates to IS tested directly.
+ *   - http.NewRequest() error in client.do() / client.doWithBody() — requires an
+ *     invalid method string containing a newline, which Go rejects at compile time
+ *     for string literals.
+ *   - json.Marshal() error in client.doWithBody() — requires a value that cannot
+ *     be marshalled; none of the API request types contain such values.
+ *   - json.MarshalIndent() error in configcmd.writePrettyJSON() — same reason.
+ *   - json.NewEncoder(stdout).Encode() errors in RunRuntime, RunList, RunStart,
+ *     RunStop, and related commands — require a broken stdout writer; not possible
+ *     in unit tests without replacing os.Stdout.
+ *   - Repeated validateURL-error branches across commands — structurally identical
+ *     to the runtime branch that IS tested; exercising all copies adds noise.
+ */
+
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptDir, "..");
+const coverDir = join(repoRoot, "coverage");
+
+// ── Gates ─────────────────────────────────────────────────────────────────────
+// null = reporting only, no enforcement
+const GATES = {
+  shared:  null,
+  server:  null,
+  client:  null,
+  service: null,
+  cli:     92,
+};
+
+const ALL_COMPONENTS = Object.keys(GATES);
+
+// ── Argument parsing ──────────────────────────────────────────────────────────
+
+const args = process.argv.slice(2);
+const onlyIdx = args.indexOf("--only");
+const onlyComponent = onlyIdx >= 0 ? args[onlyIdx + 1] : null;
+
+if (onlyComponent !== null && !ALL_COMPONENTS.includes(onlyComponent)) {
+  console.error(
+    `[validate-coverage] Unknown component: "${onlyComponent}". ` +
+    `Valid values: ${ALL_COMPONENTS.join(", ")}`
+  );
+  process.exit(1);
+}
+
+const activeComponents = onlyComponent ? [onlyComponent] : ALL_COMPONENTS;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function ensureCoverDir() {
+  if (!existsSync(coverDir)) mkdirSync(coverDir, { recursive: true });
+}
+
+/** Run an npm workspace coverage command; show output live; return ok/fail. */
+function runNpmCoverage(workspace) {
+  console.log(`\n${"─".repeat(60)}`);
+  console.log(`[validate-coverage] Running coverage:${workspace}...`);
+  console.log(`${"─".repeat(60)}\n`);
+
+  const result = spawnSync(
+    "npm",
+    ["run", `coverage:${workspace}`],
+    { cwd: repoRoot, stdio: "inherit", encoding: "utf8", shell: true }
+  );
+
+  return (result.status ?? 1) === 0;
+}
+
+/**
+ * Read statements/branches/functions from a coverage-summary.json.
+ * Works for both vitest (numbers) and Go (statements+functions are numbers,
+ * branches may be "Unknown"). Returns null if the file is missing or unparseable.
+ */
+function readSummary(workspace) {
+  const summaryPath = join(coverDir, workspace, "coverage-summary.json");
+  if (!existsSync(summaryPath)) {
+    console.error(`[validate-coverage] Summary not found: ${summaryPath}`);
+    return null;
+  }
+  try {
+    const data = JSON.parse(readFileSync(summaryPath, "utf8"));
+    return {
+      statements: toNum(data.total?.statements?.pct),
+      branches:   toNum(data.total?.branches?.pct),
+      functions:  toNum(data.total?.functions?.pct),
+    };
+  } catch (e) {
+    console.error(`[validate-coverage] Failed to parse ${summaryPath}: ${e.message}`);
+    return null;
+  }
+}
+
+/** Return v if it is a finite number, otherwise null. */
+function toNum(v) {
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
+
+// ── Run coverage for active components ───────────────────────────────────────
+
+ensureCoverDir();
+
+const results = {};
+let anyRunFailed = false;
+
+for (const component of activeComponents) {
+  const ok = runNpmCoverage(component);
+  if (!ok) {
+    console.error(`[validate-coverage] Coverage run failed for ${component}.`);
+    anyRunFailed = true;
+    results[component] = null;
+    continue;
+  }
+  const data = readSummary(component);
+  if (!data) anyRunFailed = true;
+  results[component] = data;
+}
+
+// ── Summary table ─────────────────────────────────────────────────────────────
+
+console.log(`\n${"═".repeat(68)}`);
+console.log(" Coverage Summary");
+console.log(`${"═".repeat(68)}`);
+console.log(
+  " Component".padEnd(12) +
+  "Statements".padStart(12) +
+  "  Branch".padStart(10) +
+  "  Functions".padStart(12) +
+  "  Gate".padStart(8) +
+  "  Status".padStart(10)
+);
+console.log(`${"─".repeat(68)}`);
+
+let anyGateFailed = false;
+
+for (const [component, data] of Object.entries(results)) {
+  const gate = GATES[component];
+  let status = "—";
+
+  if (data === null) {
+    status = "FAILED";
+    anyGateFailed = true;
+  } else if (gate !== null) {
+    if (data.statements < gate) {
+      status = "FAIL";
+      anyGateFailed = true;
+    } else {
+      status = "PASS";
+    }
+  }
+
+  const stmts    = data         ? `${data.statements.toFixed(1)}%` : "—";
+  const branches = data?.branches  != null ? `${data.branches.toFixed(1)}%`  : "—";
+  const funcs    = data?.functions != null ? `${data.functions.toFixed(1)}%` : "—";
+  const gateStr  = gate !== null ? `${gate}%` : "none";
+
+  console.log(
+    ` ${component}`.padEnd(12) +
+    stmts.padStart(12) +
+    branches.padStart(10) +
+    funcs.padStart(12) +
+    gateStr.padStart(8) +
+    `  ${status}`.padStart(10)
+  );
+}
+
+console.log(`${"═".repeat(68)}\n`);
+
+if (anyRunFailed || anyGateFailed) {
+  if (anyRunFailed) {
+    console.error("[validate-coverage] One or more coverage runs failed. See output above.");
+  }
+  if (anyGateFailed) {
+    console.error("[validate-coverage] One or more coverage gates failed. See table above.");
+  }
+  process.exit(1);
+}
+
+console.log("[validate-coverage] All gates passed.\n");

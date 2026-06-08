@@ -133,6 +133,33 @@ Each script uses test-specific names, ports, and temp paths. Never touches produ
 - TCP/UDP protocol forwarding: `npm run test:e2e`
 - OS service install/start/stop/uninstall: `npm run validate:service:*`
 
+## Coverage Commands
+
+Run coverage for individual components, all at once, or validate all gates:
+
+```powershell
+npm run coverage:shared     # shared TypeScript (vitest + v8)
+npm run coverage:server     # server TypeScript (vitest + v8)
+npm run coverage:client     # client TypeScript/React (vitest + v8)
+npm run coverage:service    # Go service (go test -p 1 -coverpkg) — takes ~30s
+npm run coverage:cli        # Go CLI reporting only (scripts/coverage-cli.js)
+npm run coverage:baseline   # all five in sequence (reporting only)
+npm run validate:coverage   # runs all + enforces gates; exits 1 if any gate fails
+```
+
+Coverage outputs (gitignored):
+- `coverage/shared/`, `coverage/server/`, `coverage/client/` — vitest json-summary + text
+- `coverage/` — Go .out profiles (written and removed per run)
+
+Baseline (v1.3.0): cli 92.7% (gate 92%), client 89.2%, service 79.7%, shared 82.1%, server 71.9%.
+See `docs/coverage-baseline.md` for full breakdown and ratchet plan.
+
+Gates (in scripts/validate-coverage.js): cli=92%, others=none (ratchet in v1.4/v1.5).
+
+Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.4 and v1.5. Existing baselines ratcheted incrementally.
+
+---
+
 ## CLI Commands (v1.3)
 
 ```powershell

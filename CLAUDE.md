@@ -100,6 +100,24 @@ npm run validate:cli          # test:cli + build:cli + validate:cli:coverage
 npm run validate:cli:coverage # coverage gate: fails if total coverage < 92%
 ```
 
+For coverage (reporting and gate validation):
+
+```powershell
+npm run coverage:shared     # shared TypeScript (vitest + v8)
+npm run coverage:server     # server TypeScript (vitest + v8)
+npm run coverage:client     # client TypeScript/React (vitest + v8)
+npm run coverage:service    # Go service sequential coverage (~30s)
+npm run coverage:cli        # Go CLI reporting only (no gate)
+npm run coverage:baseline   # all five in sequence (reporting only)
+npm run validate:coverage   # runs all + enforces gates; exits 1 if any gate fails
+```
+
+Coverage outputs written to `coverage/` (gitignored). Vitest writes json-summary per workspace; Go profiles are written and removed per run. Gates are defined in `scripts/validate-coverage.js` (currently: cli=92%, others=none).
+
+Baseline (v1.3.0): cli 92.7% (gate 92%), client 89.2%, service 79.7%, shared 82.1%, server 71.9%. See `docs/coverage-baseline.md`.
+
+Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.4 and v1.5. Existing baselines ratcheted incrementally. Do not block unrelated work on legacy uncovered areas.
+
 E2E install (one-time): `npm run test:e2e:install`
 
 Do not add `test:e2e` to `npm run test` or `npm run check`. E2E is a separate step.

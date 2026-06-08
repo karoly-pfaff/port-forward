@@ -151,6 +151,33 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 - macOS `.app` bundle or Homebrew formula.
 - Linux hardening beyond the example systemd unit.
 
+## Coverage Baseline (pre-v1.4)
+
+Measured at v1.3.0. See `docs/coverage-baseline.md` for full per-file breakdown and ratchet plan.
+
+| Component  | Statements | Branch | Functions |    Gate | Run command                      |
+| ---------- | ---------: | -----: | --------: | ------: | -------------------------------- |
+| tools/cli  |      92.7% |      — |         — |     92% | `npm run coverage:cli`           |
+| client     |      89.2% |  87.6% |     74.0% |    none | `npm run coverage:client`        |
+| service    |      79.7% |      — |         — |    none | `npm run coverage:service`       |
+| shared     |      82.1% |  53.6% |     88.9% |    none | `npm run coverage:shared`        |
+| server     |      71.9% |  80.1% |     93.3% |    none | `npm run coverage:server`        |
+| scripts    |        N/M |      — |         — |    none | not yet measured                 |
+
+Run all (reporting): `npm run coverage:baseline`  
+Run all with gates: `npm run validate:coverage` (exits 1 on gate failure)
+
+Key gaps before v1.4:
+- `server/sources/forwarders/tcp-forwarder.ts`: 68.5% — v1.4 live tracking lands here
+- `server/sources/forwarders/udp-forwarder.ts`: 57.7% — same
+- `service/sources/api` (update/delete/reorder handlers): 50–54% — real gap
+- `shared/sources/index.ts` branch coverage: 52.9% — validation edge cases
+- `server/sources/logger.ts`: 0% — genuine gap, low-risk
+
+Coverage policy for v1.4 and v1.5: 100% meaningful coverage for all newly added or materially changed files. Existing baselines ratcheted incrementally; do not block unrelated work on legacy gaps.
+
+---
+
 ## v1.6 Planning
 
 v1.6 is a dedicated audit and hardening release targeting a structured multi-angle inspection of the codebase after v1.4 and v1.5 have raised test coverage. See `docs/roadmap.md` for audit dimensions, slice plan, and non-goals.

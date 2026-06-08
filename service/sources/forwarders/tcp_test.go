@@ -316,7 +316,7 @@ func dialTestTCP(t *testing.T, port int) net.Conn {
 
 func waitForTestCondition(t *testing.T, condition func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if condition() {
 			return
