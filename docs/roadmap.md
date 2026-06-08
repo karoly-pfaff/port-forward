@@ -321,7 +321,7 @@ Notes:
 
 1. ~~**CLI strategy and command design**~~ — ✓ Complete. Command set, rule lookup behavior, output modes, exit code contract, module layout, and tools/ boundary confirmed. Documented in `docs/roadmap.md`.
 2. ~~**Go CLI skeleton and API client**~~ — ✓ Complete. `tools/cli/` module scaffolded; HTTP client with `ConnectionError`/`APIError` types; `--url`/`--host`/`--port`/`PORTIER_URL` connection options; `--json` flag; `runtime` command (human + JSON output); structured error output; 22+ tests using `httptest`; `build:cli`, `test:cli`, `validate:cli` npm scripts.
-3. Read-only commands: `runtime`, `list`, `status`, `activity`
+3. ~~**Read-only commands: `list`, `status`, `activity`**~~ — ✓ Complete. `portier list` (calls `GET /api/forwards`, human table + JSON), `portier status` (calls `GET /api/status`, joins rule names for human output), `portier activity` (calls `GET /api/activity`, `--limit`/`--rule`/`--type`/`--severity` filters, raw event array JSON); output helpers (`FormatBool`, `FormatBytes`, `FormatTimestamp`, `PrintTable`); 59 CLI tests total.
 4. Lifecycle commands: `start`, `stop`, `diagnose`
 5. Config commands: `config export` / `config import`
 6. Diagnostics export command

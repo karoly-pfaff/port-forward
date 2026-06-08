@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
+	"portier/cli/sources/client"
 	"portier/cli/sources/version"
 )
 
@@ -24,12 +26,14 @@ Environment:
 
 Commands:
   runtime         Show runtime info for the running Portier service
+  list            List configured forwarding rules
+  status          Show runtime status for forwarding rules
+  activity        Show recent activity events (--limit, --rule, --type, --severity)
   version         Show CLI version
   help            Show this help message
 
 More commands are planned for v1.3:
-  list, status, activity, start, stop, diagnose, config export/import,
-  diagnostics export
+  start, stop, diagnose, config export/import, diagnostics export
 
 Exit codes:
   0  Success
@@ -46,4 +50,16 @@ func PrintHelp(w io.Writer) {
 // PrintVersion writes the CLI version line to w.
 func PrintVersion(w io.Writer) {
 	fmt.Fprintf(w, "Portier CLI %s\n", version.Version)
+}
+
+// exitWithError writes err to stderr and returns the appropriate exit code.
+func exitWithError(err error, stderr io.Writer) int {
+	var connErr *client.ConnectionError
+	if errors.As(err, &connErr) {
+		fmt.Fprintf(stderr, "Error: %s\n", connErr)
+		fmt.Fprintln(stderr, "Hint: Is the Portier service running?")
+		return 3
+	}
+	fmt.Fprintf(stderr, "Error: %v\n", err)
+	return 1
 }

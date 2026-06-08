@@ -178,7 +178,7 @@ Checklist items to add per slice as work proceeds:
 
 - [x] **Slice 1** — CLI strategy and command design: command set, rule lookup behavior, output modes, exit code contract, and module layout confirmed. Documented in `docs/roadmap.md`.
 - [x] **Slice 2** — Go CLI skeleton and API client: `tools/cli/` module scaffolded, HTTP client (`ConnectionError`/`APIError` types), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime` command (human + JSON output), structured error output, 22+ tests using `httptest`, `build:cli`/`test:cli`/`validate:cli` npm scripts.
-- [ ] **Slice 3** — Read-only commands: `portier runtime`, `portier list`, `portier status`, `portier activity`; human-readable and `--json` output; exit codes; tests.
+- [x] **Slice 3** — Read-only commands: `portier list`, `portier status`, `portier activity`; human table and `--json` output; `--limit`/`--rule`/`--type`/`--severity` filters for activity; output helpers (`FormatBool`, `FormatBytes`, `FormatTimestamp`, `PrintTable`); 59 CLI tests total.
 - [ ] **Slice 4** — Lifecycle commands: `portier start <id|name>`, `portier stop <id|name>`, `portier diagnose <id|name>`; exact ID/name lookup; ambiguous name handling; tests.
 - [ ] **Slice 5** — Config commands: `portier config export --out <file>`, `portier config import <file> --mode merge|replace [--yes]`; tests.
 - [ ] **Slice 6** — Diagnostics export: `portier diagnostics export --out <file>`; tests.

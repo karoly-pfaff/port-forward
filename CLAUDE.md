@@ -265,7 +265,7 @@ v1.1 is complete: distribution, installers, release artifacts, service and packa
 
 v1.2 is complete: runtime info endpoint, rule diagnostics API and UI, Activity Log polish, safer networking UX, settings/config polish, and diagnostics export. Tagged 1.2.0. See `docs/roadmap.md` for goals, slices, and non-goals.
 
-v1.3 is in progress: Go CLI under `tools/cli/`. Slice 2 complete: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime` command, `build:cli`/`test:cli`/`validate:cli` npm scripts. The CLI talks to the management API; it does not replace the web UI or any runtime. CLI binary: `portier`/`portier.exe`. See `tools/cli/readme.md` and `docs/roadmap.md`.
+v1.3 is in progress: Go CLI under `tools/cli/`. Slices 2–3 complete: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime`/`list`/`status`/`activity` commands (activity supports `--limit`/`--rule`/`--type`/`--severity`), output helpers (`FormatBool`/`FormatBytes`/`FormatTimestamp`/`PrintTable`), 59 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts. The CLI talks to the management API; it does not replace the web UI or any runtime. CLI binary: `portier`/`portier.exe`. See `tools/cli/readme.md` and `docs/roadmap.md`.
 
 Release artifact commands:
 - `npm run build:release:current` — portable archive + installer for current platform

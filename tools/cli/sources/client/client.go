@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,4 +113,106 @@ func (c *Client) GetRuntime() (*RuntimeInfo, error) {
 		return nil, err
 	}
 	return &info, nil
+}
+
+// PortAdvisory mirrors a port advisory from the API.
+type PortAdvisory struct {
+	Code     string `json:"code"`
+	Severity string `json:"severity"`
+	Message  string `json:"message"`
+}
+
+// ForwardRuleResponse mirrors the response from GET /api/forwards.
+type ForwardRuleResponse struct {
+	ID         string         `json:"id"`
+	Name       string         `json:"name"`
+	Protocol   string         `json:"protocol"`
+	ListenHost string         `json:"listenHost"`
+	ListenPort int            `json:"listenPort"`
+	TargetHost string         `json:"targetHost"`
+	TargetPort int            `json:"targetPort"`
+	Enabled    bool           `json:"enabled"`
+	UDPMode    string         `json:"udpMode,omitempty"`
+	Advisories []PortAdvisory `json:"advisories"`
+}
+
+// ForwardStatus mirrors the response from GET /api/status.
+type ForwardStatus struct {
+	RuleID            string `json:"ruleId"`
+	Running           bool   `json:"running"`
+	ActiveConnections *int   `json:"activeConnections,omitempty"`
+	BytesIn           int64  `json:"bytesIn"`
+	BytesOut          int64  `json:"bytesOut"`
+	PacketsIn         *int64 `json:"packetsIn,omitempty"`
+	PacketsOut        *int64 `json:"packetsOut,omitempty"`
+	ActiveUDPSessions *int   `json:"activeUdpSessions,omitempty"`
+	LastError         string `json:"lastError,omitempty"`
+	StartedAt         string `json:"startedAt,omitempty"`
+}
+
+// ActivityEvent mirrors an event from GET /api/activity.
+type ActivityEvent struct {
+	ID        string         `json:"id"`
+	Timestamp string         `json:"timestamp"`
+	Type      string         `json:"type"`
+	Severity  string         `json:"severity"`
+	RuleID    string         `json:"ruleId,omitempty"`
+	RuleName  string         `json:"ruleName,omitempty"`
+	Protocol  string         `json:"protocol,omitempty"`
+	Message   string         `json:"message"`
+	Details   map[string]any `json:"details,omitempty"`
+}
+
+// ActivityQuery holds optional filters for GetActivity.
+type ActivityQuery struct {
+	Limit    int
+	RuleID   string
+	Type     string
+	Severity string
+}
+
+// GetForwards calls GET /api/forwards and returns the list of rules.
+func (c *Client) GetForwards() ([]ForwardRuleResponse, error) {
+	var rules []ForwardRuleResponse
+	if err := c.get("/api/forwards", &rules); err != nil {
+		return nil, err
+	}
+	return rules, nil
+}
+
+// GetStatus calls GET /api/status and returns runtime status for all rules.
+func (c *Client) GetStatus() ([]ForwardStatus, error) {
+	var statuses []ForwardStatus
+	if err := c.get("/api/status", &statuses); err != nil {
+		return nil, err
+	}
+	return statuses, nil
+}
+
+// GetActivity calls GET /api/activity with optional filters and returns events.
+func (c *Client) GetActivity(q ActivityQuery) ([]ActivityEvent, error) {
+	params := url.Values{}
+	if q.Limit > 0 {
+		params.Set("limit", strconv.Itoa(q.Limit))
+	}
+	if q.RuleID != "" {
+		params.Set("ruleId", q.RuleID)
+	}
+	if q.Type != "" {
+		params.Set("type", q.Type)
+	}
+	if q.Severity != "" {
+		params.Set("severity", q.Severity)
+	}
+	path := "/api/activity"
+	if len(params) > 0 {
+		path += "?" + params.Encode()
+	}
+	var resp struct {
+		Events []ActivityEvent `json:"events"`
+	}
+	if err := c.get(path, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Events, nil
 }

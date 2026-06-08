@@ -50,6 +50,52 @@ portier [global flags] <command>
 
 ## Commands
 
+### `portier list`
+
+List configured forwarding rules.
+
+```
+portier list [--json]
+```
+
+Calls `GET /api/forwards`. Displays rule name, protocol, listen endpoint, target endpoint, and enabled state.
+
+Human output shows a compact aligned table. With `--json`: prints the raw `ForwardRuleResponse[]` array from the API.
+
+### `portier status`
+
+Show runtime status for all forwarding rules.
+
+```
+portier status [--json]
+```
+
+Calls `GET /api/status` (and `GET /api/forwards` for rule names in human mode). Displays name, protocol, running/stopped state, active connections, bytes in/out, and last error if present.
+
+With `--json`: prints the raw `ForwardStatus[]` array.
+
+### `portier activity`
+
+Show recent activity events (rule lifecycle, TCP connections, UDP packets).
+
+```
+portier activity [options]
+
+Options:
+  --limit int       Number of events to return, 1–500 (default 50)
+  --rule string     Filter by rule ID
+  --type string     Filter by event type (e.g. rule.started, tcp.connection.opened)
+  --severity string Filter by severity: info, success, warning, error
+```
+
+Calls `GET /api/activity`. Displays timestamp, severity, event type, rule name, and message.
+
+Events are returned newest first.
+
+With `--json`: prints a raw `ActivityEvent[]` array (not the `{"events":[...]}` wrapper).
+
+Invalid `--limit` (outside 1–500) exits with code `2`.
+
 ### `portier runtime`
 
 Show runtime info for the running Portier service.
@@ -61,10 +107,6 @@ portier runtime [--json]
 Calls `GET /api/runtime`. Displays name, version, runtime, platform/arch, uptime, management URL, config path, static dir, and service mode.
 
 With `--json`: prints the raw `RuntimeInfo` JSON from the API.
-
-Exit codes:
-- `0` — success
-- `3` — could not connect to the management API
 
 ### `portier version`
 
@@ -121,9 +163,6 @@ Runs tests then builds. Fails clearly if Go is unavailable.
 
 Future slices will add:
 
-- `portier list` — list all forwarding rules
-- `portier status` — show rule statuses
-- `portier activity` — show recent activity
 - `portier start <id|name>` — start a rule
 - `portier stop <id|name>` — stop a rule
 - `portier diagnose <id|name>` — run diagnostics

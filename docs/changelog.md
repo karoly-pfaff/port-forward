@@ -6,6 +6,15 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.3 in progress
 
+### Added (v1.3 Slice 3 — Read-only commands: list, status, activity)
+
+- **`portier list`** — calls `GET /api/forwards`; human-readable aligned table (NAME, PROTO, LISTEN, TARGET, ENABLED); `--json` prints raw `ForwardRuleResponse[]`. Empty state shows a friendly message. UDP mode shown compactly in PROTO column (`udp/1way`, `udp/lc`, `udp/mc`).
+- **`portier status`** — calls `GET /api/status`; human output joins rule names and protocols via `GET /api/forwards` (falls back to ruleId if unavailable); shows NAME, PROTO, STATE, CONNS, BYTES IN, BYTES OUT, LAST ERROR; `--json` prints raw `ForwardStatus[]`.
+- **`portier activity`** — calls `GET /api/activity`; human output shows TIME, SEV, TYPE, RULE, MESSAGE; `--json` prints raw `ActivityEvent[]` (not the `{"events":[...]}` API wrapper). Filters: `--limit` (1–500, default 50), `--rule` (rule ID), `--type` (event type), `--severity`; invalid `--limit` exits with code 2.
+- **Output helpers** (`tools/cli/sources/output/`): `FormatBool`, `FormatBytes`, `FormatTimestamp`, `PrintTable` — used by all human-readable command output.
+- **`exitWithError` helper** in `commands` package — shared connection/API error handling across commands.
+- **Tests**: 59 Go CLI tests total (was 22+); new tests cover `GetForwards`, `GetStatus`, `GetActivity` client methods (success, error, query params, empty), plus all three command handlers (human output, JSON output, empty state, connection failure, API error, filter passing, limit validation, ruleId fallback).
+
 ### Added (v1.3 Slice 2 — Go CLI skeleton and API client)
 
 - **`tools/cli/` module** — new Go module (`portier/cli`) under `tools/cli/` for the Portier CLI. Separate from the Go service (`portier/service`); the CLI is an API client, not a second runtime.

@@ -497,9 +497,12 @@ npm run build:cli
 
 Output: `tools/cli/build/portier` (or `portier.exe` on Windows).
 
-**Commands implemented in Slice 2:**
+**Commands (Slices 2–3):**
 
 ```
+portier list              # list configured forwarding rules
+portier status            # show rule runtime status
+portier activity          # show recent activity events (--limit, --rule, --type, --severity)
 portier runtime           # show runtime info from GET /api/runtime
 portier version           # show CLI version
 portier help              # show help
@@ -596,7 +599,7 @@ Current version: **1.2.0** (v1.3 in progress)
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 is adding a Go-based `portier` CLI under `tools/cli/` (Slice 2 complete: skeleton, API client, `runtime` command, tests, npm scripts); v1.4 plans a live connection inspector; future work tracked there.
+- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 is adding a Go-based `portier` CLI under `tools/cli/` (Slices 2–3 complete: skeleton, API client, `runtime`/`list`/`status`/`activity` commands, 59 tests, npm scripts); v1.4 plans a live connection inspector; future work tracked there.
 
 ## Agent Workflow
 
