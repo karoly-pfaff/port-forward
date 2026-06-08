@@ -534,7 +534,7 @@ portier help              # show help
 ```powershell
 npm run test:cli              # go test ./... inside tools/cli
 npm run validate:cli          # test:cli + build:cli + coverage gate
-npm run validate:cli:coverage # CLI coverage gate (threshold: 88%, actual: 90.1%)
+npm run validate:cli:coverage # CLI coverage gate (threshold: 92%, actual: 92.7%)
 ```
 
 See [tools/cli/readme.md](tools/cli/readme.md) for full usage, exit codes, and planned commands.
@@ -577,7 +577,7 @@ npm run validate:release:portable         # validate portable archive only
 npm run build:cli                         # build CLI binary into tools/cli/build/portier[.exe]
 npm run test:cli                          # go test ./... inside tools/cli
 npm run validate:cli                      # test:cli + build:cli + coverage gate
-npm run validate:cli:coverage             # CLI coverage gate (threshold: 88%)
+npm run validate:cli:coverage             # CLI coverage gate (threshold: 92%)
 ```
 
 macOS LaunchAgent scripts (run on macOS):
@@ -608,7 +608,7 @@ Current version: **1.3.0**
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.3 delivered the Go `portier` CLI under `tools/cli/` (all commands, 153+ tests, coverage gate 90.1%, CLI binary in runtime package and release artifacts); v1.4 plans a Live Connection Inspector; v1.5 plans Declarative Config & Drift Control (plan/diff/apply workflows); v1.6 plans a dedicated Architecture, Quality & Maintainability Audit after v1.4/v1.5 coverage work creates the safety net.
+- [docs/roadmap.md](docs/roadmap.md) — v1.3 delivered the Go `portier` CLI under `tools/cli/` (all commands, 163+ tests, coverage gate 92.7%, CLI binary in runtime package and release artifacts); v1.4 plans a Live Connection Inspector; v1.5 plans Declarative Config & Drift Control (plan/diff/apply workflows); v1.6 plans a dedicated Architecture, Quality & Maintainability Audit after v1.4/v1.5 coverage work creates the safety net.
 
 ## Agent Workflow
 

@@ -55,7 +55,7 @@ const flagValue = (f) => {
 };
 
 const thresholdArg = flagValue("--threshold");
-const threshold = thresholdArg !== null ? parseFloat(thresholdArg) : 88;
+const threshold = thresholdArg !== null ? parseFloat(thresholdArg) : 92;
 
 if (isNaN(threshold) || threshold < 0 || threshold > 100) {
   console.error(`[validate-cli-coverage] Invalid --threshold value: ${thresholdArg}`);

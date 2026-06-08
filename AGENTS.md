@@ -139,7 +139,7 @@ Each script uses test-specific names, ports, and temp paths. Never touches produ
 npm run build:cli              # build tools/cli/sources → tools/cli/build/portier[.exe]
 npm run test:cli               # go test ./... inside tools/cli
 npm run validate:cli           # test:cli + build:cli + validate:cli:coverage
-npm run validate:cli:coverage  # coverage gate (fails below 88%; 90.1% actual)
+npm run validate:cli:coverage  # coverage gate (fails below 92%; 92.7% actual)
 ```
 
 CLI binary: `portier` / `portier.exe`. Background service remains `service` / `service.exe`.
@@ -154,7 +154,7 @@ Rule-targeting commands (`start`, `stop`, `diagnose`) accept an exact rule ID or
 
 `portier config validate` validates a local file without contacting the service. `portier config export/import` use `GET /api/config/export` and `POST /api/config/import`. Import validates locally first — invalid files are rejected without an API call. Replace mode requires `--yes`.
 
-`portier diagnostics export` builds a local JSON support bundle (schemaVersion, runtime, rules, statuses, activity, diagnostics, metadata) from independent API calls. Partial source failures are recorded in `errors[]` rather than aborting. `--run-diagnostics` adds per-rule diagnose results. `--activity-limit` (1–500, default 100). 153+ CLI tests. Coverage gate: 90.1% total, threshold 88%.
+`portier diagnostics export` builds a local JSON support bundle (schemaVersion, runtime, rules, statuses, activity, diagnostics, metadata) from independent API calls. Partial source failures are recorded in `errors[]` rather than aborting. `--run-diagnostics` adds per-rule diagnose results. `--activity-limit` (1–500, default 100). 163+ CLI tests. Coverage gate: 92.7% total, threshold 92%.
 
 The CLI binary (`portier`/`portier.exe`) is included in the runtime package (`build/portier/`) and release artifacts. It is not added to PATH by the installer in v1.3.
 

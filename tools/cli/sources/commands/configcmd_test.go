@@ -815,3 +815,90 @@ func TestRunConfigValidate_NullRules(t *testing.T) {
 			code, out.String(), errBuf.String())
 	}
 }
+
+// --- flag parse error paths (non-help) ---
+
+func TestRunConfigExport_UnknownFlag(t *testing.T) {
+	srv := makeConfigServer(t, exportFixture(), nil)
+	defer srv.Close()
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigExport(c, false, []string{"--unknown-flag"}, &out, &errBuf)
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errBuf.String(), "Error") {
+		t.Errorf("stderr should contain 'Error': %s", errBuf.String())
+	}
+}
+
+func TestRunConfigImport_UnknownFlag(t *testing.T) {
+	srv := makeImportServer(t, "")
+	defer srv.Close()
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigImport(c, false, []string{"--unknown-flag"}, &out, &errBuf)
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errBuf.String(), "Error") {
+		t.Errorf("stderr should contain 'Error': %s", errBuf.String())
+	}
+}
+
+func TestRunConfigValidate_UnknownFlag(t *testing.T) {
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{"--unknown-flag"}, &out, &errBuf)
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errBuf.String(), "Error") {
+		t.Errorf("stderr should contain 'Error': %s", errBuf.String())
+	}
+}
+
+// --- RunConfigExport write failure ---
+
+func TestRunConfigExport_WriteFailure(t *testing.T) {
+	srv := makeConfigServer(t, exportFixture(), nil)
+	defer srv.Close()
+	c := client.New(srv.URL)
+	// Non-existent subdirectory → os.WriteFile fails.
+	badPath := filepath.Join(t.TempDir(), "nonexistent", "export.json")
+	var out, errBuf strings.Builder
+	code := commands.RunConfigExport(c, false, []string{"--out", badPath}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1; stderr: %s", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "Error writing") {
+		t.Errorf("stderr missing 'Error writing': %s", errBuf.String())
+	}
+}
+
+// --- validateLocalConfig: empty targetHost / invalid targetPort ---
+
+func TestRunConfigValidate_EmptyTargetHost(t *testing.T) {
+	content := `[{"name":"Dev","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48000,"targetHost":"","targetPort":8080,"enabled":false}]`
+	file := writeTempConfig(t, content)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "targetHost is required") {
+		t.Errorf("output missing 'targetHost is required': %s", out.String())
+	}
+}
+
+func TestRunConfigValidate_InvalidTargetPort(t *testing.T) {
+	content := `[{"name":"Dev","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48000,"targetHost":"10.0.0.1","targetPort":0,"enabled":false}]`
+	file := writeTempConfig(t, content)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "targetPort") {
+		t.Errorf("output missing 'targetPort': %s", out.String())
+	}
+}

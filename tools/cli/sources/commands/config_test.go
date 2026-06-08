@@ -132,3 +132,13 @@ func TestResolveURL_MissingHost(t *testing.T) {
 		t.Fatal("expected error for URL missing host, got nil")
 	}
 }
+
+func TestResolveURL_URLParseError(t *testing.T) {
+	t.Setenv("PORTIER_URL", "")
+	// http://[::1 has an unclosed IPv6 bracket — url.Parse returns a parse error
+	// before the scheme or host checks, exercising the url.Parse error path.
+	_, err := commands.ResolveURL("http://[::1", "", 0)
+	if err == nil {
+		t.Fatal("expected error for URL with unclosed IPv6 bracket, got nil")
+	}
+}

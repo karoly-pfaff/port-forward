@@ -641,6 +641,46 @@ func TestRunDiagnosticsExport_JSONWithWarnings(t *testing.T) {
 	}
 }
 
+func TestRunDiagnosticsExport_UnknownFlag(t *testing.T) {
+	c := client.New("http://127.0.0.1:47831")
+	var out, errBuf strings.Builder
+	code := commands.RunDiagnosticsExport(c, false, []string{"--unknown-flag"}, &out, &errBuf)
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(errBuf.String(), "Error") {
+		t.Errorf("stderr should contain 'Error': %s", errBuf.String())
+	}
+}
+
+func TestRunDiagnosticsExport_StatusesFailure(t *testing.T) {
+	// GetStatus API error is recorded in bundle.Errors; bundle is still written.
+	srv := makeDiagSrv(t, diagSrvOpts{failStatuses: true})
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	outFile := filepath.Join(t.TempDir(), "bundle.json")
+	out := &strings.Builder{}
+	errOut := &strings.Builder{}
+
+	code := commands.RunDiagnostics(c, false, []string{"export", "--out", outFile}, out, errOut)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, errOut.String())
+	}
+	bundle := readBundleFile(t, outFile)
+	errs, _ := bundle["errors"].([]any)
+	found := false
+	for _, e := range errs {
+		em, _ := e.(map[string]any)
+		if em["source"] == "statuses" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("bundle errors should include source=statuses when GetStatus fails")
+	}
+}
+
 func TestRunDiagnosticsExport_NoForbiddenFields(t *testing.T) {
 	srv := makeDiagSrv(t, diagSrvOpts{})
 	defer srv.Close()

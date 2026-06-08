@@ -14,6 +14,7 @@ All notable changes to Portier are documented here.
 - Clarified that the v1.4/v1.5 100% meaningful coverage target is a deliberate prerequisite for the v1.6 audit: high meaningful coverage creates the safety net needed to refactor and harden confidently without silently breaking forwarding behavior, API parity, or CLI workflows.
 - Planned v1.5 as Declarative Config & Drift Control: plan/diff/apply workflows for comparing desired config files with the running configuration and applying changes safely. See `docs/roadmap.md`.
 - Recorded v1.4/v1.5 quality target: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. Covers CLI, Go service, TypeScript server, shared config/diff logic, contract validators, and client-side logic introduced by the release.
+- **CLI coverage gate raised to 92%** — `validate:cli:coverage` threshold raised from 88% to 92% (actual: 92.7%) as the first ratchet step toward the v1.4/v1.5 100% meaningful coverage target. Added 10 targeted tests covering: `validateURL` parse-error path, invalid-flag parse-error paths for `RunConfigExport`/`RunConfigImport`/`RunConfigValidate`/`RunDiagnosticsExport`, file-write failure in `RunConfigExport`, empty `targetHost` and out-of-range `targetPort` in `validateLocalConfig`, `DiagnoseForward` API error in `RunDiagnose`, and `GetStatus` failure in `buildDiagnosticsBundle`. Future v1.4/v1.5 slices should continue raising the gate as meaningful behavioral coverage is added.
 
 ---
 

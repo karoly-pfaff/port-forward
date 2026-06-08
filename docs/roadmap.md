@@ -329,6 +329,7 @@ Notes:
 6. ~~**Diagnostics export command**~~ — ✓ Complete. `portier diagnostics export --out <file>` (builds local JSON bundle from runtime/rules/statuses/activity; `--run-diagnostics` adds per-rule diagnostics; `--activity-limit` 1–500; partial failures recorded in `errors[]`, bundle still written; human output shows counts and "with warnings" on errors; JSON result object or raw bundle to stdout; `diagnosticsBundle` schema with `schemaVersion`/`metadata.source`/`errors`); 153 CLI tests total.
 7. ~~**CLI packaging into runtime/release artifacts**~~ — ✓ Complete. `portier`/`portier.exe` built and included in `build/portier/` alongside `service`/`service.exe`; all three platform build scripts (`build-runtime.ps1`, `build-runtime.sh` macOS/Linux) build the CLI from `tools/cli/` directly into the output directory; runtime validation requires CLI binary (non-empty, separate from service); release archive validation requires CLI binary; Windows installer (`portier.iss`) includes `portier.exe`; `build:clean` removes `tools/cli/build/`; `readme.txt` in the runtime package documents CLI usage and all six key commands; no PATH integration in v1.3.
 8. ~~**CLI validation, documentation, readiness audit, version bump, tag**~~ — ✓ Complete. Coverage gate (`validate:cli:coverage`, threshold 88%); coverage tests filling all meaningful gaps (90.1% total); version bumped to 1.3.0; changelog finalized; all validation suites passed.
+9. ~~**CLI coverage gate ratchet (post-v1.3)**~~ — ✓ Complete. Gate raised from 88% to 92% (actual: 92.7%); 10 targeted tests added covering parse-error paths, write-failure paths, `validateURL` parse error, `validateLocalConfig` target field errors, `RunDiagnose` API error, and `buildDiagnosticsBundle` GetStatus failure. First ratchet step toward the v1.4/v1.5 100% meaningful coverage target.
 
 ### Non-Goals for v1.3
 
@@ -588,11 +589,11 @@ All newly added or materially changed implementation areas should reach 100% mea
 - Cleanup on rule stop, service shutdown, and error paths
 
 **Coverage gates:**
-- CLI: `validate:cli:coverage` threshold maintained at 88% minimum; raise if v1.4 additions warrant it.
+- CLI: `validate:cli:coverage` threshold is now 92% (actual: 92.7%); continue raising as v1.4 coverage is added.
 - Go service: add or extend a coverage gate for new live tracking modules; use `validate:cli:coverage` as the model for the gate runner.
 - TypeScript server: coverage for new modules tracked by Vitest; explicit gate decision made in Slice 12.
 
-The CLI already has a coverage gate from v1.3 (`validate:cli:coverage`, threshold 88%, actual 90.1%). v1.4 should raise or maintain this gate and extend the same discipline to Go service changes and TypeScript server additions.
+The CLI coverage gate was raised to 92% (actual 92.7%) as the first ratchet step toward the v1.4/v1.5 100% meaningful coverage target. v1.4 should continue raising this gate and extend the same discipline to Go service changes and TypeScript server additions.
 
 If a tiny branch is genuinely untestable (main entry point guard, platform-specific path never reachable in CI), document the exception explicitly rather than excluding the file.
 
@@ -759,7 +760,7 @@ Starting the audit before that safety net is in place would make follow-up harde
 - Rule resolver safety: ID vs name precedence, ambiguity detection
 - Config, diff, plan, and apply command workflows (v1.5)
 - Diagnostics export data boundaries
-- Coverage gate value (88% minimum; opportunity to raise)
+- Coverage gate value (92% minimum as of post-v1.3 ratchet; continue raising through v1.4/v1.5)
 
 **Client/UI quality**
 

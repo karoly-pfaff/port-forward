@@ -189,6 +189,38 @@ func TestRunDiagnose_EmptyChecks(t *testing.T) {
 	}
 }
 
+func TestRunDiagnose_DiagnoseAPIError(t *testing.T) {
+	// ResolveRule succeeds but DiagnoseForward returns a non-connection API error.
+	rule := client.ForwardRuleResponse{
+		ID: "rule-1", Name: "API Rule", Protocol: "tcp",
+		ListenHost: "127.0.0.1", ListenPort: 48000,
+		TargetHost: "10.0.0.1", TargetPort: 8080, Enabled: true,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/forwards":
+			json.NewEncoder(w).Encode([]client.ForwardRuleResponse{rule})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/diagnose"):
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string][]string{"errors": {"service unavailable"}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunDiagnose(c, false, []string{"rule-1"}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1; stderr: %s", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "API error") {
+		t.Errorf("stderr should mention API error: %s", errBuf.String())
+	}
+}
+
 func TestRunDiagnose_ByNameHumanOutput(t *testing.T) {
 	rule := client.ForwardRuleResponse{
 		ID: "rule-1", Name: "Local Postgres", Protocol: "tcp",
