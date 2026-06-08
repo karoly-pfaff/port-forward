@@ -10,7 +10,7 @@ Measured at v1.3.0 (2026-06-08). This is the pre-v1.4 baseline.
 | client        |      89.2% |  87.6% |     74.0% |     none | vitest + @vitest/coverage-v8      |
 | service       |      79.7% |      — |         — |     none | `go test -coverpkg`               |
 | shared        |      82.1% |  53.6% |     88.9% |     none | vitest + @vitest/coverage-v8      |
-| server        |      80.55% |  84.74% |    96.47% |     none | vitest + @vitest/coverage-v8      |
+| server        |      82.21% |  85.96% |    95.83% |     none | vitest + @vitest/coverage-v8      |
 | scripts       |        N/M |      — |         — |     none | not yet measured                  |
 
 Coverage commands:
@@ -71,9 +71,9 @@ No coverage gate. Tooling added: vitest.config.ts updated with coverage config, 
 
 ---
 
-## server — 80.55% statements, 84.74% branch, 96.47% functions
+## server — 82.21% statements, 85.96% branch, 95.83% functions
 
-Updated at v1.4 Slice 3 (2026-06-08). Previous: 79.6% stmts (Slice 1). Baseline (v1.3.0): 71.9% stmts.
+Updated at v1.4 Slice 4 (2026-06-08). Previous: 80.55% stmts (Slice 3). Baseline (v1.3.0): 71.9% stmts.
 
 "All files" figure from `npm run coverage:server`.
 
@@ -83,8 +83,9 @@ Updated at v1.4 Slice 3 (2026-06-08). Previous: 79.6% stmts (Slice 1). Baseline 
 | sources/logger.ts                                     |     0% |   100% |   100% | logging wrapper, real gap                        |
 | sources/forwarders/types.ts                           |     0% |      — |      — | interface-only file, no executable code          |
 | sources/connections/tcp-connection-registry.ts        |   100% |   100% |   100% | v1.4 Slice 3: new module, 100% meaningful        |
+| sources/connections/udp-session-registry.ts           |   100% |   100% |   100% | v1.4 Slice 4: new module, 100% meaningful        |
 | sources/forwarders/tcp-forwarder.ts                   |   100% |    90% |   100% | v1.4 Slice 3: wired registry; branch gap = optional registry param |
-| sources/forwarders/udp-forwarder.ts                   |  84.3% |  82.0% |   100% | v1.4 Slice 1: up from 57.7%/64.7%/90.9%         |
+| sources/forwarders/udp-forwarder.ts                   |  86.3% |  84.0% |   100% | v1.4 Slice 4: up from 84.3%/82%/100% (Slice 1)  |
 | sources/diagnose.ts                                   |  84.8% |  83.0% |   100% |                                                  |
 | sources/forward-manager.ts                            |  87.6% |  76.5% |    92% |                                                  |
 | sources/api.ts                                        |  91.0% |  86.0% |   100% |                                                  |
@@ -97,16 +98,16 @@ No coverage gate. Tooling added: vitest.config.ts created, `coverage` script add
 Notes:
 - `index.ts` bootstrap is integration-tested via E2E and `validate:contract`; 0% here is expected.
 - `logger.ts` contains `createConsoleLogger` and `errorFields` — genuinely not covered, low-risk but a real gap.
-- Forwarder coverage improved in v1.4 Slice 1; TCP registry added at 100% in Slice 3.
+- Forwarder coverage improved in v1.4 Slice 1; TCP registry added at 100% in Slice 3; UDP registry added at 100% in Slice 4.
 
 **tcp-forwarder.ts remaining branch gap (10%):**
 Lines 94–97 and 164 are optional-registry guard branches (`if (connId)`). When `registry` is not passed to the constructor, `connId` is `undefined` and the right-hand side of these conditions is never reached. This is a by-design optional API path, not a meaningful test gap.
 
-**udp-forwarder.ts remaining gaps (15.7% stmts):**
+**udp-forwarder.ts remaining gaps (13.7% stmts):**
 - Multi-client response error callback: `listenSocket.send()` failure inside the per-session targetSocket `message` handler.
 - `if (!this.listenSocket) return` guard: requires a stop/receive race that cannot be reliably triggered without mocking.
 - Multi-client send error callback: `session.targetSocket.send()` failure.
-All three require mocking or specific timing; noted for v1.4 Slice 4 if a mocking approach is introduced.
+All three require mocking or specific timing and remain from Slice 1. The registry wiring added in Slice 4 is fully covered by the new integration tests.
 
 ---
 
@@ -236,15 +237,15 @@ Same policy: 100% meaningful for all new/materially changed files in plan/diff/a
 
 ### Existing baselines — incremental ratchet (non-blocking for unrelated work)
 
-| Component | Baseline (v1.3) | After Slice 1 | v1.4 target | v1.5 target | v1.6 target |
-| --------- | --------------: | ------------: | ----------: | ----------: | ----------: |
-| client    |           89.2% |         89.2% |       90%+  |       95%+  |        100% |
-| server    |           71.9% |     **79.6%** |       85%+  |       92%+  |        100% |
-| service   |           79.7% |         79.7% |       85%+* |       92%+  |        100% |
-| shared    |           82.1% |         82.1% |       90%+  |       95%+  |        100% |
+| Component | Baseline (v1.3) | After Slice 1 | After Slice 4 | v1.4 target | v1.5 target | v1.6 target |
+| --------- | --------------: | ------------: | ------------: | ----------: | ----------: | ----------: |
+| client    |           89.2% |         89.2% |         89.2% |       90%+  |       95%+  |        100% |
+| server    |           71.9% |     **79.6%** |     **82.2%** |       85%+  |       92%+  |        100% |
+| service   |           79.7% |         79.7% |         79.7% |       85%+* |       92%+  |        100% |
+| shared    |           82.1% |         82.1% |         82.1% |       90%+  |       95%+  |        100% |
 
 \* Service forwarder coverage improvement is part of v1.4 Slices 5–6 (Go live tracking).
 
-Server baseline already exceeds the 79.6% → 85%+ target from Slice 1 forwarder hardening. Live tracking modules (Slices 3–4) add new code requiring 100% coverage, which will pull the server total higher.
+Server is at 82.2% after Slices 3–4 added TCP and UDP live tracking modules at 100% coverage. The connections/ subfolder is 100% statements/branch/funcs for both registries. Further improvement expected when Go service tracking modules (Slices 5–6) are added.
 
 Do not block unrelated v1.4 work on legacy coverage gaps. Require 100% for newly added or materially changed files.

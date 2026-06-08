@@ -2,6 +2,7 @@ import dgram from "node:dgram";
 import type { RemoteInfo } from "node:dgram";
 import type { ForwardRule, ForwardStatus, ActivityEventInput } from "@portier/shared";
 import type { Forwarder } from "./types.js";
+import type { UdpSessionRegistry } from "../connections/udp-session-registry.js";
 
 const UDP_LOG_INTERVAL_MS = 1000;
 const DEFAULT_SESSION_TIMEOUT_MS = 60_000;
@@ -9,22 +10,27 @@ const DEFAULT_SESSION_TIMEOUT_MS = 60_000;
 interface UdpSession {
   targetSocket: dgram.Socket;
   timer: ReturnType<typeof setTimeout>;
+  registryId?: string;
 }
 
 export class UdpForwarder implements Forwarder {
   private listenSocket?: dgram.Socket;
   private targetSocket?: dgram.Socket; // shared socket for one-way / last-client modes
   private lastClient?: RemoteInfo;
+  private lastClientSessionId?: string;
   private sessions = new Map<string, UdpSession>();
   private status: ForwardStatus;
   private lastForwardLogAt = 0;
   private lastReturnLogAt = 0;
+  private readonly sessionTimeoutMs: number;
 
   constructor(
     private readonly rule: ForwardRule,
     private readonly onEvent?: (event: ActivityEventInput) => void,
-    private readonly sessionTimeoutMs: number = DEFAULT_SESSION_TIMEOUT_MS
+    sessionTimeoutMs?: number,
+    private readonly registry?: UdpSessionRegistry
   ) {
+    this.sessionTimeoutMs = sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
     this.status = {
       ruleId: rule.id,
       running: false,
@@ -55,9 +61,32 @@ export class UdpForwarder implements Forwarder {
       this.targetSocket = targetSocket;
 
       listenSocket.on("message", (message, remote) => {
+        // Detect last-client change: close previous session for new client
+        if (mode === "bidirectional-last-client" && this.registry) {
+          const prev = this.lastClient;
+          if (prev && (prev.address !== remote.address || prev.port !== remote.port)) {
+            if (this.lastClientSessionId) {
+              this.registry.closeSession(this.lastClientSessionId);
+              this.lastClientSessionId = undefined;
+            }
+          }
+        }
+
         this.lastClient = remote;
         this.status.bytesIn += message.length;
         this.status.packetsIn = (this.status.packetsIn ?? 0) + 1;
+
+        const sessionId = this.registry?.openOrTouchSession({
+          ruleId: this.rule.id,
+          ruleName: this.rule.name,
+          mode,
+          clientAddress: remote.address,
+          clientPort: remote.port,
+          targetAddress: this.rule.targetHost,
+          targetPort: this.rule.targetPort
+        });
+        if (mode === "bidirectional-last-client") this.lastClientSessionId = sessionId;
+        if (sessionId) this.registry?.recordInbound(sessionId, message.length);
 
         targetSocket.send(message, this.rule.targetPort, this.rule.targetHost, (error) => {
           if (error) {
@@ -103,6 +132,7 @@ export class UdpForwarder implements Forwarder {
           }
           this.status.bytesOut += message.length;
           this.status.packetsOut = (this.status.packetsOut ?? 0) + 1;
+          if (this.lastClientSessionId) this.registry?.recordOutbound(this.lastClientSessionId, message.length);
 
           const client = this.lastClient;
           listenSocket.send(message, client.port, client.address, (error) => {
@@ -180,8 +210,11 @@ export class UdpForwarder implements Forwarder {
     this.listenSocket = undefined;
     this.targetSocket = undefined;
     this.lastClient = undefined;
+    this.lastClientSessionId = undefined;
 
     await Promise.all([closeSocket(listenSocket), closeSocket(targetSocket)]);
+
+    this.registry?.closeSessionsForRule(this.rule.id);
 
     this.status.running = false;
     this.status.startedAt = undefined;
@@ -203,6 +236,16 @@ export class UdpForwarder implements Forwarder {
     this.status.bytesIn += message.length;
     this.status.packetsIn = (this.status.packetsIn ?? 0) + 1;
 
+    const registryId = this.registry?.openOrTouchSession({
+      ruleId: this.rule.id,
+      ruleName: this.rule.name,
+      mode: "bidirectional-multi-client",
+      clientAddress: remote.address,
+      clientPort: remote.port,
+      targetAddress: this.rule.targetHost,
+      targetPort: this.rule.targetPort
+    });
+
     let session = this.sessions.get(sessionKey);
 
     if (!session) {
@@ -212,6 +255,7 @@ export class UdpForwarder implements Forwarder {
         if (!this.listenSocket) return;
         this.status.bytesOut += response.length;
         this.status.packetsOut = (this.status.packetsOut ?? 0) + 1;
+        if (registryId) this.registry?.recordOutbound(registryId, response.length);
 
         listenSocket.send(response, remote.port, remote.address, (error) => {
           if (error) {
@@ -236,7 +280,7 @@ export class UdpForwarder implements Forwarder {
         this.closeSession(sessionKey, targetSocket, remote);
       }, this.sessionTimeoutMs);
 
-      session = { targetSocket, timer };
+      session = { targetSocket, timer, registryId };
       this.sessions.set(sessionKey, session);
       this.status.activeUdpSessions = this.sessions.size;
 
@@ -261,6 +305,8 @@ export class UdpForwarder implements Forwarder {
         this.closeSession(sessionKey, session!.targetSocket, remote);
       }, this.sessionTimeoutMs);
     }
+
+    if (registryId) this.registry?.recordInbound(registryId, message.length);
 
     const now = Date.now();
     if (now - this.lastForwardLogAt >= UDP_LOG_INTERVAL_MS) {
@@ -296,8 +342,10 @@ export class UdpForwarder implements Forwarder {
   }
 
   private closeSession(sessionKey: string, targetSocket: dgram.Socket, remote: RemoteInfo): void {
+    const session = this.sessions.get(sessionKey);
     this.sessions.delete(sessionKey);
     this.status.activeUdpSessions = this.sessions.size;
+    if (session?.registryId) this.registry?.closeSession(session.registryId);
     clearSocket(targetSocket);
 
     this.onEvent?.({
