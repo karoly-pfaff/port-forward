@@ -366,12 +366,16 @@ Field notes:
 - `udpSessions`: active and recently-idle UDP sessions. Empty array when none are tracked.
 - `ruleSummaries`: per-rule aggregation of live traffic state. Includes all running rules, even those with no active connections.
 - `id` values are stable for display during the process lifetime but do not persist across restarts.
-- `ruleName`: included for display convenience; empty string when the name cannot be resolved.
+- `ruleName`: included for display convenience; empty string (`""`) when the name cannot be resolved.
 - `durationMs`: milliseconds since the TCP connection was accepted.
 - `idleMs`: milliseconds since the last UDP packet was seen for the session.
+- `bytesIn`: bytes transferred from client to target.
+- `bytesOut`: bytes transferred from target to client.
+- `packetsIn` (UDP): packets received from the client and forwarded to the target.
+- `packetsOut` (UDP): packets received from the target and returned to the client.
 - TCP `status`: `"active"` while both sockets are open.
 - UDP `status`: `"active"` while traffic is being seen; `"idle"` after 30 seconds of no traffic. Sessions are retained up to 5 minutes after becoming idle.
-- `lastTrafficAt`: most recent traffic timestamp for the rule across all connections/sessions. May be absent for rules with no traffic since start.
+- `lastTrafficAt`: most recent traffic timestamp for the rule across all connections/sessions. `null` when no traffic has been seen since the rule started.
 - Data is operational metadata only. Payload contents are never exposed.
 
 **Limitations:**
@@ -435,11 +439,13 @@ The client should import these from `@portier/shared`:
 - `RuleDiagnosticsResult`
 - port constants and advisory helpers
 
-### Planned for v1.4 (not yet implemented)
+### Added in v1.4 Slice 2 (implementation pending)
 
-- `LiveConnectionsResponse`
-- `TcpConnectionInfo`
-- `UdpSessionInfo`
-- `RuleLiveSummary`
-- `LiveConnectionStatus`
-- `UdpSessionStatus`
+The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GET /api/connections` endpoint that returns them is not yet implemented in either runtime.
+
+- `LiveConnectionsResponse` — top-level response for `GET /api/connections`
+- `TcpConnectionInfo` — individual TCP connection record; `status: LiveConnectionStatus`
+- `UdpSessionInfo` — individual UDP session record; `status: UdpSessionStatus`; `mode` matches existing `UdpMode` values
+- `RuleLiveSummary` — per-rule aggregated live traffic summary; `lastTrafficAt` is `string | null`
+- `LiveConnectionStatus` — `"active"` (TCP connections are either active or gone)
+- `UdpSessionStatus` — `"active" | "idle"`

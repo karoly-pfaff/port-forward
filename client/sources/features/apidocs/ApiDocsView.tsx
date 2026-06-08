@@ -7,6 +7,7 @@ interface EndpointDoc {
   params?: string;
   response?: string;
   notes?: string;
+  planned?: string;
 }
 
 const ENDPOINTS: EndpointDoc[] = [
@@ -111,6 +112,17 @@ const ENDPOINTS: EndpointDoc[] = [
     purpose: "Get port advisory messages for a given port, host, and purpose.",
     params: "Query: port (1–65535), purpose (forward | management), listenHost (optional)",
     response: "PortAdvisory[]"
+  },
+  {
+    method: "GET",
+    path: "/api/connections",
+    purpose:
+      "Return a read-only snapshot of active TCP connections and UDP sessions for all running forwarding rules, along with per-rule live traffic summaries.",
+    response:
+      "LiveConnectionsResponse { generatedAt, tcpConnections[], udpSessions[], ruleSummaries[] }",
+    notes:
+      "tcpConnections, udpSessions, and ruleSummaries are always arrays; empty arrays when nothing is active. TCP status: active. UDP status: active | idle (idle after 30s, retained up to 5min). bytesIn = client-to-target; bytesOut = target-to-client. IDs are runtime-local and do not persist across restarts. Payload contents are never exposed.",
+    planned: "v1.4"
   }
 ];
 
@@ -143,6 +155,9 @@ export function ApiDocsView(): ReactElement {
                     {ep.method}
                   </span>
                   <code className="api-path">{ep.path}</code>
+                  {ep.planned && (
+                    <span className="api-planned-badge">Planned — {ep.planned}</span>
+                  )}
                 </div>
                 <p className="api-purpose">{ep.purpose}</p>
                 {ep.params && (

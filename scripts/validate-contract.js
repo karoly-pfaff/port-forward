@@ -687,6 +687,12 @@ async function runScenarios(baseUrl, runtime) {
     }
   }
 
+  // ── GET /api/connections [Planned — v1.4] ───────────────────────────────
+  // Shared types (LiveConnectionsResponse, TcpConnectionInfo, UdpSessionInfo,
+  // RuleLiveSummary, LiveConnectionStatus, UdpSessionStatus) are defined in
+  // @portier/shared as of Slice 2. Runtime implementation is pending.
+  skip("GET /api/connections → planned for v1.4; endpoint not yet implemented");
+
   // ── POST /api/forwards/:id/diagnose ─────────────────────────────────────
 
   // Unknown rule → 404 with errors[]

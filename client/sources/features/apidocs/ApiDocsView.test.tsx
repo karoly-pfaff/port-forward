@@ -105,4 +105,32 @@ describe("ApiDocsView", () => {
       expect(screen.queryAllByText(path).length).toBeGreaterThan(0);
     }
   });
+
+  it("lists the GET /api/connections endpoint as planned", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("/api/connections")).toBeInTheDocument();
+  });
+
+  it("marks GET /api/connections with a Planned — v1.4 badge", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("Planned — v1.4")).toBeInTheDocument();
+  });
+
+  it("describes GET /api/connections purpose", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText(/active TCP connections and UDP sessions/i)).toBeInTheDocument();
+  });
+
+  it("documents LiveConnectionsResponse fields for GET /api/connections", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/LiveConnectionsResponse/);
+    expect(container.textContent).toMatch(/tcpConnections/);
+    expect(container.textContent).toMatch(/udpSessions/);
+    expect(container.textContent).toMatch(/ruleSummaries/);
+  });
+
+  it("notes that GET /api/connections returns empty arrays when nothing is active", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/empty arrays when nothing is active/i);
+  });
 });

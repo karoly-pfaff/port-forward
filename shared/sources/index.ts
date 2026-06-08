@@ -5,6 +5,15 @@ export type {
   ActivitySeverity
 } from "./activity.js";
 
+export type {
+  LiveConnectionStatus,
+  UdpSessionStatus,
+  TcpConnectionInfo,
+  UdpSessionInfo,
+  RuleLiveSummary,
+  LiveConnectionsResponse
+} from "./connections.js";
+
 export type ForwardProtocol = "tcp" | "udp";
 
 export type UdpMode = "one-way" | "bidirectional-last-client" | "bidirectional-multi-client";
