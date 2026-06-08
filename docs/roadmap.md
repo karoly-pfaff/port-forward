@@ -8,6 +8,8 @@
 - **v1.2** — Improve operational confidence: diagnostics, visibility, safer networking UX, and runtime transparency.
 - **v1.3** — Make Portier automatable: native Go CLI for terminal and script workflows, talking to the existing management API.
 - **v1.4** — Make live forwarding traffic visible: read-only TCP connection and UDP session inspector.
+- **v1.5** — Make Portier configuration repeatable and reviewable: plan/diff/apply workflows for comparing desired config with the running state and applying changes safely.
+- **v1.6** — Dedicated audit and hardening release: structured multi-angle inspection of architecture, parity, forwarding correctness, API contract, CLI, UI, test quality, security posture, packaging, and documentation. The 100% meaningful coverage push in v1.4 and v1.5 is the prerequisite safety net for this work.
 
 ---
 
@@ -519,6 +521,16 @@ Decide during Slice 9 whether to include this in v1.4 or defer to a later releas
 9. Diagnostics export integration, if desired
 10. v1.4 readiness audit, version bump, changelog, tag
 
+### Quality Target for v1.4
+
+All newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This includes CLI additions, Go service changes, TypeScript server changes, shared types, contract validators, and client-side logic introduced by the release. Coverage should reflect real behavior and edge cases, not mechanical execution-only tests.
+
+The CLI already has a coverage gate from v1.3 (`validate:cli:coverage`, threshold 88%, actual 90.1%). v1.4 should raise or maintain this gate and extend the same discipline to Go service changes and any new TypeScript server/client logic.
+
+If a tiny branch is genuinely untestable (main entry point guard, platform-specific path never reachable in CI), document the exception explicitly rather than excluding the file.
+
+**Why this matters for v1.6:** The v1.4 and v1.5 coverage goals are a deliberate prerequisite for the v1.6 audit. High meaningful coverage creates the safety net needed to refactor, harden, and simplify confidently during the v1.6 audit phase without silently breaking forwarding behavior, API parity, or CLI workflows.
+
 ### Non-Goals for v1.4
 
 - Closing or killing active connections
@@ -533,3 +545,236 @@ Decide during Slice 9 whether to include this in v1.4 or defer to a later releas
 - Firewall management
 - IDS or security scanning
 - Profiles or rule-set management as the primary theme
+
+---
+
+## Portier v1.5 — Declarative Config & Drift Control
+
+**Core theme: Make Portier configuration repeatable, reviewable, and safely applicable.**
+
+v1.3 made Portier automatable from the CLI. v1.4 made live traffic visible. v1.5 adds plan/diff/apply workflows so users can compare desired config files with the currently running Portier configuration, preview changes safely, and apply them from the CLI or UI with explicit confirmation. This release makes Portier easier to automate in repeatable local workflows without adding remote management or cloud sync.
+
+### Goals
+
+- Compare desired config files with the running configuration.
+- Preview adds, updates, removes, and unchanged rules before applying changes.
+- Apply desired configuration safely with explicit confirmation.
+- Support JSON output for automation and CI-style workflows.
+- Detect drift between desired and running config.
+- Reuse/extend existing config validation.
+- Keep the workflow local-only and API-driven.
+
+### Planned CLI Commands
+
+```
+portier config diff desired.json
+portier config plan desired.json
+portier config apply desired.json --yes
+portier config apply desired.json --dry-run
+portier config apply desired.json --backup-out current-backup.json --yes
+portier --json config plan desired.json
+portier config plan desired.json --fail-on-drift
+```
+
+### Proposed Exit Code Addition
+
+- `4` = drift detected (for `--fail-on-drift` style workflows)
+
+### Proposed API Direction
+
+**Primary endpoint:**
+
+```
+POST /api/config/plan
+```
+
+Returns a structured diff: adds, updates, removes, and unchanged rules. Read-only — does not modify state.
+
+Notes:
+- Exact request and response shape to be finalized during Slice 1.
+- Both TypeScript server and Go service must expose the same response shape.
+- Applying the plan uses the existing `POST /api/config/import` with replace mode or a new dedicated apply endpoint, to be decided during Slice 1.
+
+### UI Direction
+
+**Settings / Config Import Preview:**
+
+- Show Add / Update / Remove / Unchanged counts before import/apply.
+- Make replace/apply behavior reviewable before confirmation.
+- Reuse existing import flow; extend the preview step.
+
+### Suggested Implementation Slices
+
+1. Config diff/plan strategy and contract
+2. Backend plan endpoint: `POST /api/config/plan` in TypeScript server
+3. Go service plan parity
+4. CLI `config plan` and `config diff` commands
+5. CLI `config apply` with `--yes`, `--dry-run`, `--backup-out`
+6. Settings import preview UI
+7. Contract/config validation and coverage gates
+8. v1.5 readiness audit, version bump, changelog, tag
+
+### Quality Target for v1.5
+
+All newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This includes CLI, Go service, TypeScript server, shared config/diff/plan logic, contract validators, and client-side logic introduced by the release. Coverage should reflect real behavior and edge cases, not mechanical execution-only tests.
+
+Prefer meaningful behavioral tests over superficial line execution. Do not exclude files just to game coverage. If a tiny branch is genuinely untestable, document the exception explicitly rather than excluding the file.
+
+The CLI coverage gate introduced in v1.3 (`validate:cli:coverage`) should be maintained and raised where practical. Extend equivalent coverage gates to new Go service and TypeScript server areas added in v1.5.
+
+### Non-Goals for v1.5
+
+- Authentication
+- Remote management
+- Cloud sync
+- Team sharing
+- Profiles/rule sets as the main feature
+- Scheduled rules
+- Firewall management
+- Service install management from CLI
+- Full rollback/history store
+- TUI
+- Traffic graphs
+
+---
+
+## Portier v1.6 — Architecture, Quality & Maintainability Audit
+
+**Core theme: Inspect the whole codebase with fresh eyes after v1.4 and v1.5 have raised coverage.**
+
+v1.6 is a dedicated audit and hardening release, not a feature release. It will perform a structured multi-angle inspection of architecture, runtime parity, forwarding correctness, API contract quality, CLI quality, client/UI quality, test quality, security posture, packaging, and documentation consistency. Any hardening or refactoring work identified by the audit will be done in this release where safe, or deferred to a tracked backlog with explicit rationale.
+
+### Why Coverage Comes First
+
+The v1.4 and v1.5 quality target of 100% meaningful test coverage for new and materially changed implementation areas is a deliberate prerequisite for v1.6. The audit may identify refactoring, simplification, and hardening work across multiple components. High meaningful coverage gives the project a safety net so those changes can be made confidently without silently breaking forwarding behavior, API parity, CLI workflows, config import/export, diagnostics, packaging, or UI behavior.
+
+Starting the audit before that safety net is in place would make follow-up hardening riskier. v1.4 and v1.5 build the net; v1.6 uses it.
+
+### Audit Dimensions
+
+**Architecture boundaries**
+
+- `client` vs `server` vs `service` vs `shared` vs `tools` vs `scripts` — boundaries are clean and respected
+- CLI remains an API client, not a runtime
+- `service/` remains the preferred native runtime
+- `server/` remains a supported reference and fallback runtime
+- `tools/cli/` does not contain service internals
+- `scripts/` contains only repo build and OS service automation, not user-facing programs
+
+**Runtime parity**
+
+- TypeScript server and Go service API behavior consistency
+- Contract validation coverage and correctness
+- Config import/export behavior in both runtimes
+- Diagnostics endpoint behavior in both runtimes
+- Activity, status, and runtime endpoints
+
+**Forwarding correctness**
+
+- TCP lifecycle: open, bidirectional pipe, close, error cleanup, no double-close
+- UDP modes: one-way, bidirectional-last-client, bidirectional-multi-client
+- Cleanup behavior on rule stop, service shutdown, and error paths
+- Edge cases: rapid start/stop, duplicate bindings, unreachable targets
+- Resource leaks: socket handles, goroutines, Node streams
+
+**API contract quality**
+
+- `docs/api-contract.md` accuracy and completeness
+- Client in-app API Docs (`ApiDocsView.tsx`) consistency with the contract
+- `validate:contract` coverage and correctness
+- Endpoint error shapes: consistent `errors[]` structure, appropriate status codes
+
+**CLI quality**
+
+- Command UX and flag naming consistency
+- Exit code contract accuracy (`0/1/2/3/4`)
+- JSON output stability and schema consistency
+- Rule resolver safety: ID vs name precedence, ambiguity detection
+- Config, diff, plan, and apply command workflows (v1.5)
+- Diagnostics export data boundaries
+- Coverage gate value (88% minimum; opportunity to raise)
+
+**Client/UI quality**
+
+- Component boundaries and state management
+- Error, empty, and loading state coverage
+- Accessibility basics: labels, keyboard navigation, focus management
+- Import preview and live inspector UX (v1.5/v1.4 additions)
+
+**Test quality**
+
+- Meaningful coverage vs. mechanical line execution
+- Edge-case coverage in forwarding, config, and API paths
+- Contract test accuracy against real runtime behavior
+- Fixture quality and completeness
+- E2E coverage: golden-path and key edge cases
+- No shallow coverage-gaming tests in the codebase
+
+**Complexity and maintainability**
+
+- Large files or functions without clear responsibility
+- Duplicated logic between runtimes, commands, or components
+- Unclear names or implicit coupling
+- Dead code or unused exports
+- Unnecessary abstractions
+- Refactor candidates identified and prioritized
+
+**Security and safety posture**
+
+- Management API bind behavior: localhost-only by default
+- LAN exposure warnings: present, accurate, and not suppressible
+- Config import safety: validation before API, replace confirmation
+- Diagnostics export data boundaries: no secrets, env vars, or OS-user info
+- No telemetry or upload behavior present or inadvertently added
+- No accidental secret/env/log inclusion in exports or bundles
+
+**Packaging and release quality**
+
+- Runtime layout correctness: `portier`, `service`, `server.js`, `web/`, `readme.txt`
+- Portable archive contents and forbidden-file checks
+- Installer contents and upgrade behavior
+- CLI and service binary separation
+- Validation script coverage and correctness
+- Platform docs accuracy
+
+**Documentation consistency**
+
+- `README.md` matches current behavior and feature set
+- `AGENTS.md` is accurate for agent workflows
+- `CLAUDE.md` guidance is current
+- `docs/roadmap.md` reflects delivered and planned work
+- `docs/checklist.md` is actionable and current
+- `docs/changelog.md` accurately reflects each release
+- `docs/api-contract.md` matches the live API in both runtimes
+- `tools/cli/readme.md` matches CLI behavior
+
+### Suggested Implementation Slices
+
+1. Audit plan and scoring rubric
+2. Architecture boundary audit
+3. Runtime/API parity audit
+4. Forwarding lifecycle and resource cleanup audit
+5. CLI and automation audit
+6. Client/UI quality and accessibility audit
+7. Test quality and coverage audit
+8. Security/safety and diagnostics data-boundary audit
+9. Packaging and release validation audit
+10. Hardening backlog and prioritized fix plan
+11. Small safe hardening fixes
+12. v1.6 readiness audit, version bump, changelog, tag
+
+Any major refactors identified by the audit that carry meaningful risk will be deferred to a separate version with a tracked rationale rather than folded into v1.6 under time pressure.
+
+### Non-Goals for v1.6
+
+- New large user-facing features
+- Remote management
+- Authentication
+- Cloud sync
+- Team sharing
+- Traffic graphing as a primary feature
+- TUI
+- Major architecture rewrite without an audit-backed plan
+- Removing or deprecating `server/`
+- Replacing the web UI framework
+- Changing the runtime/release layout unless the audit identifies a clear issue

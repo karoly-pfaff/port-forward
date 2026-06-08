@@ -151,9 +151,44 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 - macOS `.app` bundle or Homebrew formula.
 - Linux hardening beyond the example systemd unit.
 
+## v1.6 Planning
+
+v1.6 is a dedicated audit and hardening release targeting a structured multi-angle inspection of the codebase after v1.4 and v1.5 have raised test coverage. See `docs/roadmap.md` for audit dimensions, slice plan, and non-goals.
+
+Planning checklist:
+
+- [x] v1.6 roadmap added to `docs/roadmap.md` as Architecture, Quality & Maintainability Audit
+- [x] Audit dimensions recorded (architecture boundaries, runtime parity, forwarding correctness, API contract, CLI quality, client/UI quality, test quality, complexity/maintainability, security/safety, packaging, documentation consistency)
+- [x] Coverage prerequisite explained: v1.4/v1.5 100% meaningful coverage target is the safety net required before the v1.6 audit and hardening work
+- [x] Tentative audit slice plan recorded (12 slices)
+- [x] Non-goals recorded (no new large features, no server/ removal, no major architecture rewrite without audit-backed plan)
+- [x] v1.4/v1.5 coverage target linked to v1.6 audit safety net in `docs/roadmap.md`
+
+---
+
+## v1.5 Planning
+
+v1.5 targets declarative config and drift control: plan/diff/apply workflows for comparing desired config files with the running configuration and applying changes safely. See `docs/roadmap.md` for goals, CLI commands, UI direction, slices, and non-goals.
+
+Planning checklist:
+
+- [x] v1.5 roadmap added to `docs/roadmap.md`
+- [x] Diff/plan/apply scope recorded
+- [x] CLI commands recorded (`config diff`, `config plan`, `config apply --yes/--dry-run/--backup-out`, `--fail-on-drift`, `--json`)
+- [x] Proposed API direction recorded (`POST /api/config/plan`)
+- [x] UI import preview direction recorded (Settings / Config Import Preview: Add/Update/Remove/Unchanged counts before confirm)
+- [x] Non-goals recorded (auth, remote management, cloud sync, team sharing, scheduled rules, firewall management, service install from CLI, full rollback/history, TUI, traffic graphs)
+- [x] 100% meaningful coverage target recorded for v1.4 and v1.5
+
+---
+
 ## v1.4 Roadmap
 
 v1.4 targets live connection and session visibility: a read-only Live Connection Inspector showing active TCP connections and UDP sessions with duration, bytes, and client address. See `docs/roadmap.md` for API direction, data model, UI direction, slices, and non-goals.
+
+Quality target: all newly added or materially changed code in v1.4 should reach 100% meaningful test coverage, with explicit coverage gates where practical. This covers CLI additions, Go service changes, TypeScript server changes, shared types, contract validators, and client-side logic.
+
+- [ ] 100% meaningful coverage target/gate tracked for new v1.4 Live Connection Inspector code (CLI, Go service, TypeScript server, shared types, contract validator, client UI logic)
 
 Checklist items to add per slice as work proceeds:
 

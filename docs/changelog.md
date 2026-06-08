@@ -4,6 +4,17 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased]
+
+### Planning
+
+- Planned v1.6 as Architecture, Quality & Maintainability Audit: a dedicated audit and hardening release with structured multi-angle inspection across architecture, runtime parity, forwarding correctness, API contract, CLI, UI, test quality, security posture, packaging, and documentation consistency. See `docs/roadmap.md`.
+- Clarified that the v1.4/v1.5 100% meaningful coverage target is a deliberate prerequisite for the v1.6 audit: high meaningful coverage creates the safety net needed to refactor and harden confidently without silently breaking forwarding behavior, API parity, or CLI workflows.
+- Planned v1.5 as Declarative Config & Drift Control: plan/diff/apply workflows for comparing desired config files with the running configuration and applying changes safely. See `docs/roadmap.md`.
+- Recorded v1.4/v1.5 quality target: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. Covers CLI, Go service, TypeScript server, shared config/diff logic, contract validators, and client-side logic introduced by the release.
+
+---
+
 ## [1.3.0] — 2026-06-08
 
 ### Added (v1.3 Slice 8 — Readiness audit, coverage gate, version bump)

@@ -367,6 +367,12 @@ v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cl
 
 v1.4 targets live connection and session visibility: a read-only Live Connection Inspector for active TCP connections and UDP sessions. See `docs/roadmap.md`.
 
+v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. See `docs/roadmap.md`.
+
+Quality target for v1.4 and v1.5: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This coverage push is a deliberate prerequisite for v1.6.
+
+v1.6 is a dedicated Architecture, Quality & Maintainability Audit: a structured multi-angle inspection of architecture boundaries, runtime parity, forwarding correctness, API contract, CLI quality, UI quality, test quality, security/safety posture, packaging, and documentation consistency. The high coverage built in v1.4 and v1.5 is the safety net that makes v1.6 refactoring and hardening work safe to perform. Raw audit notes should not be dumped into `docs/`; durable audit outcomes belong in curated docs or a tracked backlog. See `docs/roadmap.md`.
+
 ## Coding Guidelines
 
 - Keep TypeScript simple and explicit.
