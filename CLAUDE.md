@@ -94,9 +94,10 @@ npm run test:e2e:fresh     # build:client + test:e2e combined
 For CLI (Go — tools/cli/):
 
 ```powershell
-npm run test:cli           # go test ./... inside tools/cli (uses httptest; no running service needed)
-npm run build:cli          # builds tools/cli/build/portier[.exe]
-npm run validate:cli       # test:cli + build:cli
+npm run test:cli              # go test ./... inside tools/cli (uses httptest; no running service needed)
+npm run build:cli             # builds tools/cli/build/portier[.exe]
+npm run validate:cli          # test:cli + build:cli + validate:cli:coverage
+npm run validate:cli:coverage # coverage gate: fails if total coverage < 88%
 ```
 
 E2E install (one-time): `npm run test:e2e:install`
@@ -268,7 +269,7 @@ v1.1 is complete: distribution, installers, release artifacts, service and packa
 
 v1.2 is complete: runtime info endpoint, rule diagnostics API and UI, Activity Log polish, safer networking UX, settings/config polish, and diagnostics export. Tagged 1.2.0. See `docs/roadmap.md` for goals, slices, and non-goals.
 
-v1.3 is in progress: Go CLI under `tools/cli/`. Slices 2–7 complete: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime`/`list`/`status`/`activity` commands (activity supports `--limit`/`--rule`/`--type`/`--severity`), `start`/`stop`/`diagnose` lifecycle and diagnostics commands (accept exact rule ID or unique name; duplicate names → exit 2 with ID disambiguation), `config validate`/`config export`/`config import` commands (local validation before API, replace requires `--yes`), `diagnostics export --out <file>` (builds JSON support bundle; `--run-diagnostics`; `--activity-limit` 1–500; partial-failure tolerant with `errors[]`), output helpers (`FormatBool`/`FormatBytes`/`FormatTimestamp`/`PrintTable`), safe rule resolver (`ResolveRule`), `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, 153 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts; CLI binary (`portier`/`portier.exe`) now built into `build/portier/` by all platform build scripts and included in release artifacts; Windows installer includes `portier.exe`; no PATH integration in v1.3. The CLI talks to the management API; it does not replace the web UI or any runtime. See `tools/cli/readme.md` and `docs/roadmap.md`.
+v1.3 is complete: Go CLI under `tools/cli/`. All 8 slices done: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime`/`list`/`status`/`activity` commands (activity supports `--limit`/`--rule`/`--type`/`--severity`), `start`/`stop`/`diagnose` lifecycle and diagnostics commands (accept exact rule ID or unique name; duplicate names → exit 2 with ID disambiguation), `config validate`/`config export`/`config import` commands (local validation before API, replace requires `--yes`), `diagnostics export --out <file>` (builds JSON support bundle; `--run-diagnostics`; `--activity-limit` 1–500; partial-failure tolerant with `errors[]`), output helpers (`FormatBool`/`FormatBytes`/`FormatTimestamp`/`PrintTable`), safe rule resolver (`ResolveRule`), `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, 153+ CLI tests, `build:cli`/`test:cli`/`validate:cli`/`validate:cli:coverage` npm scripts; CLI binary (`portier`/`portier.exe`) now built into `build/portier/` by all platform build scripts and included in release artifacts; Windows installer includes `portier.exe`; no PATH integration in v1.3; coverage gate enforces 88% threshold (90.1% actual). Tagged 1.3.0. The CLI talks to the management API; it does not replace the web UI or any runtime. See `tools/cli/readme.md` and `docs/roadmap.md`.
 
 Release artifact commands:
 - `npm run build:release:current` — portable archive + installer for current platform

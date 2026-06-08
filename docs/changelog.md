@@ -4,7 +4,14 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — v1.3 in progress
+## [1.3.0] — 2026-06-08
+
+### Added (v1.3 Slice 8 — Readiness audit, coverage gate, version bump)
+
+- **CLI test coverage gate** — `npm run validate:cli:coverage` runs Go tests with cross-package coverage instrumentation and fails if total statement coverage falls below 88%. `scripts/validate-cli-coverage.js` documents genuinely untestable branches (main entry point, http.NewRequest errors, json.Marshal errors). Coverage gate included in `validate:cli`.
+- **Coverage tests added** — new tests fill coverage gaps: `output/output_test.go` (FormatBytes MB/GB path, FormatTimestamp RFC3339Nano and invalid paths), `main_test.go` (run() full dispatch for all 9 commands + flag/help/version/unknown branches), and targeted additions to `list_test.go`, `activity_test.go`, `configcmd_test.go`, `status_test.go`, `diagnose_test.go`, `start_test.go`, `stop_test.go`, and `diagnosticscmd_test.go` covering formatProto all UDP modes, --help flags for all subcommands, RunConfig dispatch through all three subcommands, parseLocalConfig edge cases (empty file, invalid array, invalid object, missing rules field, rules not array, null rules), ActiveUDPSessions branch, empty Checks branch, non-connection API errors, per-rule diagnose errors, and JSON output with warningCount.
+- **Total CLI test coverage: 90.1%** across sources, client, commands, and output packages.
+- **Version bumped to 1.3.0** — `package.json` and `tools/cli/sources/version/version.go`.
 
 ### Added (v1.3 Slice 7 — CLI packaging into runtime and release artifacts)
 

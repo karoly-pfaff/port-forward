@@ -103,6 +103,12 @@ describe("SettingsView", () => {
 describe("SettingsView runtime info", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.runAllTimers();
+    vi.useRealTimers();
   });
 
   it("shows loading state initially", () => {

@@ -540,6 +540,107 @@ func TestRunDiagnosticsExport_JSONWithOutIncludesCounts(t *testing.T) {
 	}
 }
 
+func TestRunDiagnosticsExport_HelpFlag(t *testing.T) {
+	c := client.New("http://127.0.0.1:47831")
+	out := &strings.Builder{}
+	code := commands.RunDiagnostics(c, false, []string{"export", "--help"}, out, &strings.Builder{})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Usage: portier diagnostics export") {
+		t.Errorf("help output missing usage: %s", out.String())
+	}
+}
+
+func TestRunDiagnosticsExport_EmptyRulesRunDiagnostics(t *testing.T) {
+	// Empty rules list with --run-diagnostics → "No rules were available" note
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/runtime":
+			json.NewEncoder(w).Encode(diagRuntimeFixture())
+		case r.URL.Path == "/api/forwards":
+			json.NewEncoder(w).Encode([]any{})
+		case r.URL.Path == "/api/status":
+			json.NewEncoder(w).Encode([]any{})
+		case r.URL.Path == "/api/activity":
+			json.NewEncoder(w).Encode(map[string]any{"events": []any{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	outFile := filepath.Join(t.TempDir(), "bundle.json")
+
+	code := commands.RunDiagnostics(c, false, []string{"export", "--out", outFile, "--run-diagnostics"}, &strings.Builder{}, &strings.Builder{})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	bundle := readBundleFile(t, outFile)
+	note, _ := bundle["diagnosticsNote"].(string)
+	if !strings.Contains(note, "No rules") {
+		t.Errorf("diagnosticsNote should mention no rules, got: %s", note)
+	}
+}
+
+func TestRunDiagnosticsExport_PerRuleDiagnoseError(t *testing.T) {
+	// Per-rule diagnose fails → recorded in errors[], bundle still written
+	srv := makeDiagSrv(t, diagSrvOpts{
+		diagnoseFunc: func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]any{"errors": []string{"diagnose failed"}})
+		},
+	})
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	outFile := filepath.Join(t.TempDir(), "bundle.json")
+	errOut := &strings.Builder{}
+
+	code := commands.RunDiagnostics(c, false, []string{"export", "--out", outFile, "--run-diagnostics"}, &strings.Builder{}, errOut)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr: %s", code, errOut.String())
+	}
+	bundle := readBundleFile(t, outFile)
+	errs, _ := bundle["errors"].([]any)
+	found := false
+	for _, e := range errs {
+		em, _ := e.(map[string]any)
+		src, _ := em["source"].(string)
+		if strings.HasPrefix(src, "diagnostics:") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("bundle errors should include diagnostics: source entries for per-rule failures")
+	}
+}
+
+func TestRunDiagnosticsExport_JSONWithWarnings(t *testing.T) {
+	// JSON output + --out + partial failure → result includes warningCount
+	srv := makeDiagSrv(t, diagSrvOpts{failRuntime: true})
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	outFile := filepath.Join(t.TempDir(), "bundle.json")
+	out := &strings.Builder{}
+
+	code := commands.RunDiagnostics(c, true, []string{"export", "--out", outFile}, out, &strings.Builder{})
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var result map[string]any
+	if err := json.Unmarshal([]byte(out.String()), &result); err != nil {
+		t.Fatalf("parsing result: %v", err)
+	}
+	if _, ok := result["warningCount"]; !ok {
+		t.Error("result should include warningCount when partial failures occur")
+	}
+}
+
 func TestRunDiagnosticsExport_NoForbiddenFields(t *testing.T) {
 	srv := makeDiagSrv(t, diagSrvOpts{})
 	defer srv.Close()

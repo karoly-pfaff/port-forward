@@ -120,3 +120,64 @@ func TestRunList_APIError(t *testing.T) {
 		t.Errorf("exit code = %d, want 1", code)
 	}
 }
+
+func TestRunList_UDPOneWay(t *testing.T) {
+	rules := []client.ForwardRuleResponse{
+		{ID: "r1", Name: "Stream", Protocol: "udp", UDPMode: "one-way",
+			ListenHost: "127.0.0.1", ListenPort: 48002,
+			TargetHost: "10.0.0.1", TargetPort: 9001, Enabled: true},
+	}
+	srv := makeListServer(t, rules)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunList(c, false, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+	if !strings.Contains(out.String(), "udp/1way") {
+		t.Errorf("output should contain 'udp/1way': %s", out.String())
+	}
+}
+
+func TestRunList_UDPMultiClient(t *testing.T) {
+	rules := []client.ForwardRuleResponse{
+		{ID: "r1", Name: "Game", Protocol: "udp", UDPMode: "bidirectional-multi-client",
+			ListenHost: "127.0.0.1", ListenPort: 48003,
+			TargetHost: "10.0.0.1", TargetPort: 9002, Enabled: true},
+	}
+	srv := makeListServer(t, rules)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunList(c, false, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+	if !strings.Contains(out.String(), "udp/mc") {
+		t.Errorf("output should contain 'udp/mc': %s", out.String())
+	}
+}
+
+func TestRunList_UDPDefaultMode(t *testing.T) {
+	// No UDPMode set → formatProto default branch → "udp"
+	rules := []client.ForwardRuleResponse{
+		{ID: "r1", Name: "UDP", Protocol: "udp",
+			ListenHost: "127.0.0.1", ListenPort: 48004,
+			TargetHost: "10.0.0.1", TargetPort: 9003, Enabled: true},
+	}
+	srv := makeListServer(t, rules)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunList(c, false, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+	if strings.Contains(out.String(), "udp/") {
+		t.Errorf("output should not contain a UDP mode suffix when UDPMode is unset: %s", out.String())
+	}
+}

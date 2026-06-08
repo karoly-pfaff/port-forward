@@ -127,6 +127,29 @@ func TestRunStatus_FallsBackToRuleIDWhenForwardsFails(t *testing.T) {
 	}
 }
 
+func TestRunStatus_ActiveUDPSessions(t *testing.T) {
+	udpSessions := 3
+	statuses := []client.ForwardStatus{
+		{RuleID: "r1", Running: true, BytesIn: 0, BytesOut: 0, ActiveUDPSessions: &udpSessions},
+	}
+	rules := []client.ForwardRuleResponse{
+		{ID: "r1", Name: "UDP Rule", Protocol: "udp", ListenHost: "127.0.0.1", ListenPort: 48001,
+			TargetHost: "192.168.1.10", TargetPort: 9090, Enabled: true},
+	}
+	srv := makeStatusServer(t, statuses, rules)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunStatus(c, false, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+	if !strings.Contains(out.String(), "3") {
+		t.Errorf("output should show UDP session count (3): %s", out.String())
+	}
+}
+
 func TestRunStatus_ConnectionError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	addr := srv.URL

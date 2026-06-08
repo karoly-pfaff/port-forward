@@ -183,7 +183,7 @@ Checklist items to add per slice as work proceeds:
 - [x] **Slice 5** — Config commands: `portier config validate <file>` (local-only, all three shapes, field/binding validation); `portier config export --out <file>` (calls `GET /api/config/export`, stdout JSON mode, no partial writes); `portier config import --mode merge|replace [--yes] <file>` (local validate before API, replace requires `--yes`); `ConfigRule`/`ConfigExportResponse`/`ConfigImportRequest`/`ImportResult`/`ConfigImportResponse` types; `doWithBody` helper; 132 CLI tests total.
 - [x] **Slice 6** — Diagnostics export: `portier diagnostics export --out <file>` (bundle schema, partial failure, `--run-diagnostics`, `--activity-limit`, 153 tests total).
 - [x] **Slice 7** — CLI packaging: `portier`/`portier.exe` built into `build/portier/` by all platform build scripts; runtime and release validation require CLI binary; Windows installer includes `portier.exe`; `readme.txt` documents CLI usage; no PATH integration in v1.3.
-- [ ] **Slice 8** — v1.3 readiness audit, version bump, changelog finalized, tag created.
+- [x] **Slice 8** — v1.3 readiness audit, version bump, changelog finalized, tag created. Coverage gate added (`validate:cli:coverage`, 88% threshold, 90.1% actual); version bumped to 1.3.0; all validation suites passed.
 
 ---
 

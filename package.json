@@ -1,6 +1,6 @@
 {
   "name": "portier",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -51,7 +51,8 @@
     "validate:contract": "node scripts/validate-contract.js",
     "validate:binary": "node scripts/validate-binary.js",
     "validate:scripts": "node scripts/validate-scripts.js",
-    "validate:cli": "npm run test:cli && npm run build:cli",
+    "validate:cli": "npm run test:cli && npm run build:cli && npm run validate:cli:coverage",
+    "validate:cli:coverage": "node scripts/validate-cli-coverage.js",
     "build:release": "node scripts/build-release.js --current-platform",
     "build:release:current": "node scripts/build-release.js --current-platform",
     "build:release:portable": "node scripts/build-release.js --current-platform --portable-only",

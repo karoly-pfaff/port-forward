@@ -102,3 +102,33 @@ func TestRunStop_ConnectionError(t *testing.T) {
 		t.Errorf("exit code = %d, want 3", code)
 	}
 }
+
+func TestRunStop_APIError(t *testing.T) {
+	rule := client.ForwardRuleResponse{
+		ID: "rule-1", Name: "Dev API", Protocol: "tcp",
+		ListenHost: "127.0.0.1", ListenPort: 48000,
+		TargetHost: "192.168.1.10", TargetPort: 8080, Enabled: true,
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/forwards":
+			json.NewEncoder(w).Encode([]client.ForwardRuleResponse{rule})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/stop"):
+			// Non-connection API error (rule already stopped)
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string][]string{"errors": {"rule is already stopped"}})
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunStop(c, false, []string{"rule-1"}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 (API error)", code)
+	}
+}

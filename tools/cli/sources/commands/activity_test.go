@@ -147,6 +147,27 @@ func TestRunActivity_ConnectionError(t *testing.T) {
 	}
 }
 
+func TestRunActivity_HelpFlag(t *testing.T) {
+	c := client.New("http://127.0.0.1:47831")
+	var out, errBuf strings.Builder
+	code := commands.RunActivity(c, false, []string{"--help"}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Usage: portier activity") {
+		t.Errorf("help output missing usage: %s", out.String())
+	}
+}
+
+func TestRunActivity_UnknownFlag(t *testing.T) {
+	c := client.New("http://127.0.0.1:47831")
+	var out, errBuf strings.Builder
+	code := commands.RunActivity(c, false, []string{"--unknown-flag"}, &out, &errBuf)
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
 func TestRunActivity_RuleNameFallsBackToRuleID(t *testing.T) {
 	events := []client.ActivityEvent{
 		{ID: "e1", Timestamp: "2026-01-01T12:00:00Z", Type: "rule.error",

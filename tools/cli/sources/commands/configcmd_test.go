@@ -666,3 +666,152 @@ func TestRunConfigImport_MalformedJSONFile(t *testing.T) {
 		t.Error("expected non-zero exit code for malformed JSON")
 	}
 }
+
+// --- RunConfig dispatch tests ---
+
+func TestRunConfig_ExportDispatch(t *testing.T) {
+	srv := makeConfigServer(t, exportFixture(), nil)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	// --json + no --out → export prints config JSON to stdout
+	code := commands.RunConfig(c, true, []string{"export"}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+}
+
+func TestRunConfig_ValidateDispatch(t *testing.T) {
+	file := writeTempConfig(t, validConfigJSON())
+	srv := makeConfigServer(t, nil, nil)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunConfig(c, false, []string{"validate", file}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stdout: %s stderr: %s", code, out.String(), errBuf.String())
+	}
+}
+
+func TestRunConfig_ImportDispatch(t *testing.T) {
+	srv := makeImportServer(t, "merge")
+	defer srv.Close()
+
+	file := writeTempConfig(t, validConfigJSON())
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunConfig(c, false, []string{"import", "--mode", "merge", file}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+}
+
+// --- --help flag tests for subcommands ---
+
+func TestRunConfigExport_HelpFlag(t *testing.T) {
+	srv := makeConfigServer(t, nil, nil)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigExport(c, false, []string{"--help"}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Usage: portier config export") {
+		t.Errorf("help output missing usage: %s", out.String())
+	}
+}
+
+func TestRunConfigImport_HelpFlag(t *testing.T) {
+	srv := makeConfigServer(t, nil, nil)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigImport(c, false, []string{"--help"}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Usage: portier config import") {
+		t.Errorf("help output missing usage: %s", out.String())
+	}
+}
+
+func TestRunConfigValidate_HelpFlag(t *testing.T) {
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{"--help"}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Usage: portier config validate") {
+		t.Errorf("help output missing usage: %s", out.String())
+	}
+}
+
+// --- parseLocalConfig edge cases (via RunConfigValidate) ---
+
+func TestRunConfigValidate_EmptyFile(t *testing.T) {
+	file := writeTempConfig(t, "")
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "invalid") && !strings.Contains(errBuf.String(), "empty") {
+		t.Errorf("expected error about empty file; stdout: %s stderr: %s", out.String(), errBuf.String())
+	}
+}
+
+func TestRunConfigValidate_InvalidJSONArray(t *testing.T) {
+	// Starts with '[' but is invalid JSON
+	file := writeTempConfig(t, "[bad json")
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
+func TestRunConfigValidate_InvalidJSONObject(t *testing.T) {
+	// Starts with '{' but is invalid JSON
+	file := writeTempConfig(t, "{bad json")
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
+func TestRunConfigValidate_ObjectMissingRules(t *testing.T) {
+	// Valid JSON object but no "rules" field
+	file := writeTempConfig(t, `{"version":"1","exportedAt":"2026-01-01T00:00:00Z"}`)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
+func TestRunConfigValidate_RulesNotArray(t *testing.T) {
+	// "rules" is a string, not an array
+	file := writeTempConfig(t, `{"rules":"not-an-array"}`)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+}
+
+func TestRunConfigValidate_NullRules(t *testing.T) {
+	// "rules": null → treated as empty config (valid)
+	file := writeTempConfig(t, `{"rules":null}`)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0 (null rules = empty config); stdout: %s stderr: %s",
+			code, out.String(), errBuf.String())
+	}
+}

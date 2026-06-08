@@ -363,7 +363,13 @@ Runs `go test ./...` inside `tools/cli/`. Uses `httptest` for API client tests â
 npm run validate:cli
 ```
 
-Runs tests then builds. Fails clearly if Go is unavailable.
+Runs tests, builds, and checks coverage. Fails clearly if Go is unavailable.
+
+```powershell
+npm run validate:cli:coverage
+```
+
+Coverage gate: runs `go test` with cross-package instrumentation and fails if total statement coverage falls below 88%. Genuinely untestable branches (main entry point, http.NewRequest errors, json.Marshal errors) are documented in `scripts/validate-cli-coverage.js`.
 
 ## Module structure
 

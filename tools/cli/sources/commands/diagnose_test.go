@@ -156,6 +156,39 @@ func TestRunDiagnose_ConnectionError(t *testing.T) {
 	}
 }
 
+func TestRunDiagnose_EmptyChecks(t *testing.T) {
+	rule := client.ForwardRuleResponse{
+		ID: "rule-1", Name: "API", Protocol: "tcp",
+		ListenHost: "127.0.0.1", ListenPort: 48000,
+		TargetHost: "10.0.0.1", TargetPort: 8080, Enabled: true,
+	}
+	// Checks is nil → printDiagnoseHuman early-return branch
+	result := &client.RuleDiagnosticsResult{
+		RuleID:      "rule-1",
+		RuleName:    "API",
+		Protocol:    "tcp",
+		Summary:     client.DiagnosticSummary{Status: "pass", Message: "No checks run."},
+		Checks:      nil,
+		DiagnosedAt: "2026-01-01T00:00:00Z",
+	}
+	srv := makeDiagnoseServer(t, []client.ForwardRuleResponse{rule}, result)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	code := commands.RunDiagnose(c, false, []string{"rule-1"}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+	if !strings.Contains(out.String(), "API") {
+		t.Errorf("output should contain rule name: %s", out.String())
+	}
+	// No checks table when Checks is empty
+	if strings.Contains(out.String(), "CHECK") {
+		t.Errorf("output should not show checks table when Checks is empty: %s", out.String())
+	}
+}
+
 func TestRunDiagnose_ByNameHumanOutput(t *testing.T) {
 	rule := client.ForwardRuleResponse{
 		ID: "rule-1", Name: "Local Postgres", Protocol: "tcp",
