@@ -130,6 +130,22 @@ Each script uses test-specific names, ports, and temp paths. Never touches produ
 - TCP/UDP protocol forwarding: `npm run test:e2e`
 - OS service install/start/stop/uninstall: `npm run validate:service:*`
 
+## CLI Commands (v1.3)
+
+```powershell
+npm run build:cli       # build tools/cli/sources → tools/cli/build/portier[.exe]
+npm run test:cli        # go test ./... inside tools/cli
+npm run validate:cli    # test:cli + build:cli
+```
+
+CLI binary: `portier` / `portier.exe`. Background service remains `service` / `service.exe`.
+
+Global flags: `--url`, `--host`, `--port`, `--json`, `--version`, `-h`/`--help`.  
+Environment: `PORTIER_URL`. Default URL: `http://127.0.0.1:47831`.  
+Exit codes: `0` success, `1` API error, `2` invalid args, `3` connection failure.
+
+Implemented commands: `runtime`, `version`, `help`.
+
 ## Packaging Commands
 
 ```powershell
@@ -335,7 +351,7 @@ v1.1 focuses on distribution and native OS service installers. The v1.1 scope, p
 
 v1.2 delivered diagnostics and operational polish: runtime info endpoint, rule diagnostics, activity log improvements, safer networking UX, settings polish, and diagnostics export.
 
-v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper.
+v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper. Slice 2 is complete: `tools/cli/` module scaffolded, HTTP client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL`, `--json` flag, `runtime` command, 22+ tests, `build:cli`/`test:cli`/`validate:cli` npm scripts.
 
 v1.4 targets live connection and session visibility: a read-only Live Connection Inspector for active TCP connections and UDP sessions. See `docs/roadmap.md`.
 

@@ -319,8 +319,8 @@ Notes:
 
 ### Suggested Implementation Slices
 
-1. CLI strategy and command design
-2. Go CLI skeleton and API client
+1. ~~**CLI strategy and command design**~~ — ✓ Complete. Command set, rule lookup behavior, output modes, exit code contract, module layout, and tools/ boundary confirmed. Documented in `docs/roadmap.md`.
+2. ~~**Go CLI skeleton and API client**~~ — ✓ Complete. `tools/cli/` module scaffolded; HTTP client with `ConnectionError`/`APIError` types; `--url`/`--host`/`--port`/`PORTIER_URL` connection options; `--json` flag; `runtime` command (human + JSON output); structured error output; 22+ tests using `httptest`; `build:cli`, `test:cli`, `validate:cli` npm scripts.
 3. Read-only commands: `runtime`, `list`, `status`, `activity`
 4. Lifecycle commands: `start`, `stop`, `diagnose`
 5. Config commands: `config export` / `config import`

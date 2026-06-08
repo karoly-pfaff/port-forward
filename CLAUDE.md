@@ -91,6 +91,14 @@ npm run test:e2e           # runs Playwright against TypeScript server on port 4
 npm run test:e2e:fresh     # build:client + test:e2e combined
 ```
 
+For CLI (Go — tools/cli/):
+
+```powershell
+npm run test:cli           # go test ./... inside tools/cli (uses httptest; no running service needed)
+npm run build:cli          # builds tools/cli/build/portier[.exe]
+npm run validate:cli       # test:cli + build:cli
+```
+
 E2E install (one-time): `npm run test:e2e:install`
 
 Do not add `test:e2e` to `npm run test` or `npm run check`. E2E is a separate step.
@@ -256,6 +264,8 @@ Both runtimes are feature-complete. Package build correctness, OS service instal
 v1.1 is complete: distribution, installers, release artifacts, service and package validation, platform polish. Tagged 1.1.0. See `docs/installer-strategy.md` for scope and slice history.
 
 v1.2 is complete: runtime info endpoint, rule diagnostics API and UI, Activity Log polish, safer networking UX, settings/config polish, and diagnostics export. Tagged 1.2.0. See `docs/roadmap.md` for goals, slices, and non-goals.
+
+v1.3 is in progress: Go CLI under `tools/cli/`. Slice 2 complete: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime` command, `build:cli`/`test:cli`/`validate:cli` npm scripts. The CLI talks to the management API; it does not replace the web UI or any runtime. CLI binary: `portier`/`portier.exe`. See `tools/cli/readme.md` and `docs/roadmap.md`.
 
 Release artifact commands:
 - `npm run build:release:current` — portable archive + installer for current platform

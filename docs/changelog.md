@@ -4,6 +4,26 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — v1.3 in progress
+
+### Added (v1.3 Slice 2 — Go CLI skeleton and API client)
+
+- **`tools/cli/` module** — new Go module (`portier/cli`) under `tools/cli/` for the Portier CLI. Separate from the Go service (`portier/service`); the CLI is an API client, not a second runtime.
+- **CLI binary name**: `portier` (Linux/macOS) / `portier.exe` (Windows). Background service binary remains `service` / `service.exe`.
+- **`portier runtime` command** — calls `GET /api/runtime`; displays name, version, runtime, platform/arch, uptime, management URL, config path, static dir, service mode. Works with both the Go service and TypeScript server.
+- **`--json` flag** — prints machine-readable JSON from the API response; no decorative text around JSON output.
+- **Connection options** — `--url`, `--host`, `--port`, `PORTIER_URL` env var; precedence: `--url` > `--host`/`--port` > `PORTIER_URL` > default (`http://127.0.0.1:47831`).
+- **`portier help` / `--help` / `-h`** — shows purpose, default URL, global flags, available commands, planned commands, exit codes.
+- **`portier version` / `--version`** — shows `Portier CLI <version>`.
+- **Exit code policy**: `0` success, `1` general/API error, `2` invalid arguments/usage, `3` connection failure.
+- **`User-Agent` header**: `PortierCLI/<version>` on every API request.
+- **Structured error handling**: `ConnectionError` (maps to exit 3 + hint) and `APIError` (non-2xx response with `errors[]` shape).
+- **Tests**: 22+ Go tests using `httptest` covering URL resolution precedence, runtime human/JSON output, connection failure, API errors, User-Agent, invalid JSON, and error type unwrapping.
+- **npm scripts**: `build:cli`, `test:cli`, `validate:cli`.
+- **`tools/cli/readme.md`** — CLI usage, global flags, commands, exit codes, module structure, planned commands.
+
+---
+
 ## [1.2.0] - 2026-06-07
 
 ### Goal

@@ -485,6 +485,51 @@ Naming convention:
 - Runtime binary behavior: `npm run validate:binary`
 - Installer script analysis: `npm run validate:scripts`
 
+## Portier CLI (v1.3)
+
+The `portier` CLI is a Go-based command-line tool for managing the local Portier service from the terminal or scripts. It talks to the existing management API. It is not a second runtime.
+
+**Build:**
+
+```powershell
+npm run build:cli
+```
+
+Output: `tools/cli/build/portier` (or `portier.exe` on Windows).
+
+**Commands implemented in Slice 2:**
+
+```
+portier runtime           # show runtime info from GET /api/runtime
+portier version           # show CLI version
+portier help              # show help
+```
+
+**Global flags:**
+
+```
+--url string    Full management API URL (default: http://127.0.0.1:47831)
+--host string   Management host
+--port int      Management port
+--json          Machine-readable JSON output
+--version       Show CLI version
+```
+
+**Environment:** `PORTIER_URL` overrides the default URL.
+
+**Exit codes:** `0` success · `1` API error · `2` invalid args · `3` connection failure
+
+**Test:**
+
+```powershell
+npm run test:cli       # go test ./... inside tools/cli
+npm run validate:cli   # test:cli + build:cli
+```
+
+See [tools/cli/readme.md](tools/cli/readme.md) for full usage, exit codes, and planned commands.
+
+---
+
 ## Scripts
 
 ```powershell
@@ -518,6 +563,9 @@ npm run build:release:current             # portable archive + installer for cur
 npm run build:release:portable            # portable archive only (skip installer)
 npm run validate:release:current          # validate release artifacts for current platform
 npm run validate:release:portable         # validate portable archive only
+npm run build:cli                         # build CLI binary into tools/cli/build/portier[.exe]
+npm run test:cli                          # go test ./... inside tools/cli
+npm run validate:cli                      # test:cli + build:cli
 ```
 
 macOS LaunchAgent scripts (run on macOS):
@@ -544,11 +592,11 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 
 ## Release
 
-Current version: **1.2.0**
+Current version: **1.2.0** (v1.3 in progress)
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 plans a Go-based `portier` CLI under `tools/cli/` (API client, not a second runtime); v1.4 plans a live connection inspector; future work tracked there.
+- [docs/roadmap.md](docs/roadmap.md) — v1.2 delivered diagnostics and operational polish; v1.3 is adding a Go-based `portier` CLI under `tools/cli/` (Slice 2 complete: skeleton, API client, `runtime` command, tests, npm scripts); v1.4 plans a live connection inspector; future work tracked there.
 
 ## Agent Workflow
 
