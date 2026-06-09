@@ -1,6 +1,6 @@
 {
   "name": "portier",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -34,6 +34,7 @@
     "test:e2e:fresh": "npm run build:client && playwright test",
     "test:e2e:install": "playwright install chromium",
     "coverage": "npm run coverage:shared && npm run coverage:server && npm run coverage:client && npm run coverage:service && npm run coverage:cli",
+    "coverage:baseline": "npm run coverage:shared && npm run coverage:server && npm run coverage:client && npm run coverage:service && npm run coverage:cli",
     "coverage:shared": "npm run coverage -w shared",
     "coverage:server": "npm run coverage -w server",
     "coverage:client": "npm run coverage -w client",
@@ -45,6 +46,11 @@
     "build:runtime:linux": "bash scripts/linux/build-runtime.sh",
     "build:clean": "node scripts/clean-build.js",
     "validate:coverage": "node scripts/validate-coverage.js",
+    "validate:coverage:shared": "node scripts/validate-coverage.js --only shared",
+    "validate:coverage:server": "node scripts/validate-coverage.js --only server",
+    "validate:coverage:client": "node scripts/validate-coverage.js --only client",
+    "validate:coverage:service": "node scripts/validate-coverage.js --only service",
+    "validate:coverage:cli": "node scripts/validate-coverage.js --only cli",
     "validate:runtime": "node scripts/validate-runtime.js",
     "validate:runtime:build": "node scripts/validate-runtime.js --build",
     "validate:runtime:smoke": "node scripts/validate-runtime.js --build --smoke",

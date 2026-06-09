@@ -144,19 +144,29 @@ npm run coverage:client     # client TypeScript/React (vitest + v8)
 npm run coverage:service    # Go service (go test -p 1 -coverpkg) — takes ~30s
 npm run coverage:cli        # Go CLI reporting only (scripts/coverage-cli.js)
 npm run coverage:baseline   # all five in sequence (reporting only)
-npm run validate:coverage   # runs all + enforces gates; exits 1 if any gate fails
+npm run validate:coverage   # runs all + enforces all gates; exits 1 if any gate fails
+npm run validate:coverage:shared   # shared only
+npm run validate:coverage:server   # server only
+npm run validate:coverage:client   # client only
+npm run validate:coverage:service  # service only
+npm run validate:coverage:cli      # cli only
 ```
 
 Coverage outputs (gitignored):
 - `coverage/shared/`, `coverage/server/`, `coverage/client/` — vitest json-summary + text
 - `coverage/` — Go .out profiles (written and removed per run)
 
-Baseline (v1.3.0): cli 92.7% (gate 92%), client 89.2%, service 79.7%, shared 82.1%, server 71.9%.
+Baseline (v1.4.0): cli 92.7%, client 90.56%, service 82.5%, shared 82.1%, server 82.88%.
 See `docs/coverage-baseline.md` for full breakdown and ratchet plan.
 
-Gates (in scripts/validate-coverage.js): cli=92%, others=none (ratchet in v1.4/v1.5).
+Gates (in `scripts/validate-coverage.js`, set at v1.4.0):
+- cli: statements ≥ 92%
+- client: statements ≥ 90%, branches ≥ 89%, functions ≥ 76%
+- server: statements ≥ 82%, branches ≥ 86%, functions ≥ 97%
+- service: statements ≥ 82%
+- shared: statements ≥ 82%, branches ≥ 54%, functions ≥ 90%
 
-Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.4 and v1.5. Existing baselines ratcheted incrementally.
+Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.5 and v1.6. Existing baselines ratcheted incrementally. Do not lower gates without explicit rationale. Do not remove gates to make a release pass.
 
 ---
 
@@ -165,8 +175,8 @@ Coverage policy: require 100% meaningful coverage for all newly added or materia
 ```powershell
 npm run build:cli              # build tools/cli/sources → tools/cli/build/portier[.exe]
 npm run test:cli               # go test ./... inside tools/cli
-npm run validate:cli           # test:cli + build:cli + validate:cli:coverage
-npm run validate:cli:coverage  # coverage gate (fails below 92%; 92.7% actual)
+npm run validate:cli           # test:cli + build:cli
+npm run validate:coverage:cli  # cli coverage gate only (fails below 92%; 92.7% actual)
 ```
 
 CLI binary: `portier` / `portier.exe`. Background service remains `service` / `service.exe`.
@@ -392,7 +402,7 @@ v1.2 delivered diagnostics and operational polish: runtime info endpoint, rule d
 
 v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cli/` that talks to the existing management API for terminal and script workflows. The CLI is an API client — not a runtime, not a scripts/ helper. Slices 2–7 complete: `tools/cli/` module scaffolded, HTTP client (`ConnectionError`/`APIError`), connection options (`--url`/`--host`/`--port`/`PORTIER_URL`), `--json` flag, `runtime`/`list`/`status`/`activity`/`start`/`stop`/`diagnose`/`config`/`diagnostics` commands, safe rule resolver, local config validation, `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, diagnostics bundle builder (partial-failure tolerant, `--run-diagnostics`, `--activity-limit`), 153 CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts; CLI binary now included in runtime package and release artifacts.
 
-v1.4 targets live connection and session visibility: a read-only Live Connection Inspector for active TCP connections and UDP sessions. See `docs/roadmap.md`.
+v1.4 delivered the Live Connection Inspector: `GET /api/connections` in both runtimes, TCP and UDP session tracking, rule summaries, and a dedicated Live Connections UI view (TCP/UDP/Summary tabs, filters, auto-refresh). Coverage hardened before the feature was built; 116/116 contract checks pass. Tagged 1.4.0.
 
 v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. See `docs/roadmap.md`.
 

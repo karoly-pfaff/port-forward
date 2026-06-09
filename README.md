@@ -532,9 +532,10 @@ portier help              # show help
 **Test:**
 
 ```powershell
-npm run test:cli              # go test ./... inside tools/cli
-npm run validate:cli          # test:cli + build:cli + coverage gate
-npm run validate:cli:coverage # CLI coverage gate (threshold: 92%, actual: 92.7%)
+npm run test:cli                   # go test ./... inside tools/cli
+npm run validate:cli               # test:cli + build:cli
+npm run validate:coverage:cli      # CLI coverage gate only (threshold: 92%, actual: 92.7%)
+npm run validate:coverage          # all five components — coverage gates enforced
 ```
 
 See [tools/cli/readme.md](tools/cli/readme.md) for full usage, exit codes, and planned commands.
@@ -576,8 +577,9 @@ npm run validate:release:current          # validate release artifacts for curre
 npm run validate:release:portable         # validate portable archive only
 npm run build:cli                         # build CLI binary into tools/cli/build/portier[.exe]
 npm run test:cli                          # go test ./... inside tools/cli
-npm run validate:cli                      # test:cli + build:cli + coverage gate
-npm run validate:cli:coverage             # CLI coverage gate (threshold: 92%)
+npm run validate:cli                      # test:cli + build:cli
+npm run validate:coverage:cli             # CLI coverage gate only (threshold: 92%)
+npm run validate:coverage                 # all five components — coverage gates enforced
 ```
 
 macOS LaunchAgent scripts (run on macOS):
@@ -604,11 +606,11 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 
 ## Release
 
-Current version: **1.3.0**
+Current version: **1.4.0**
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.3 delivered the Go `portier` CLI under `tools/cli/` (all commands, 163+ tests, coverage gate 92.7%, CLI binary in runtime package and release artifacts); v1.4 plans a Live Connection Inspector; v1.5 plans Declarative Config & Drift Control (plan/diff/apply workflows); v1.6 plans a dedicated Architecture, Quality & Maintainability Audit after v1.4/v1.5 coverage work creates the safety net.
+- [docs/roadmap.md](docs/roadmap.md) — v1.4 delivered the Live Connection Inspector (`GET /api/connections`, TCP + UDP tracking in both runtimes, Live Connections UI, 116/116 contract checks); v1.5 plans Declarative Config & Drift Control (plan/diff/apply workflows); v1.6 plans a dedicated Architecture, Quality & Maintainability Audit after v1.4/v1.5 coverage work creates the safety net.
 
 ## Agent Workflow
 

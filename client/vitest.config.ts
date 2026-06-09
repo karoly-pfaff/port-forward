@@ -22,7 +22,7 @@ export default defineConfig({
       reporter: ["text", "json-summary"],
       reportsDirectory: "../coverage/client",
       include: ["sources/**/*.{ts,tsx}"],
-      exclude: ["sources/**/*.test.{ts,tsx}", "sources/test/**"]
+      exclude: ["sources/**/*.test.{ts,tsx}", "sources/test/**", "build/**", "*.config.ts"]
     }
   }
 });

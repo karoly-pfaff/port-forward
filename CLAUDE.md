@@ -96,8 +96,7 @@ For CLI (Go — tools/cli/):
 ```powershell
 npm run test:cli              # go test ./... inside tools/cli (uses httptest; no running service needed)
 npm run build:cli             # builds tools/cli/build/portier[.exe]
-npm run validate:cli          # test:cli + build:cli + validate:cli:coverage
-npm run validate:cli:coverage # coverage gate: fails if total coverage < 92%
+npm run validate:cli          # test:cli + build:cli
 ```
 
 For coverage (reporting and gate validation):
@@ -110,13 +109,20 @@ npm run coverage:service    # Go service sequential coverage (~30s)
 npm run coverage:cli        # Go CLI reporting only (no gate)
 npm run coverage:baseline   # all five in sequence (reporting only)
 npm run validate:coverage   # runs all + enforces gates; exits 1 if any gate fails
+npm run validate:coverage:shared   # shared only
+npm run validate:coverage:server   # server only
+npm run validate:coverage:client   # client only
+npm run validate:coverage:service  # service only
+npm run validate:coverage:cli      # cli only
 ```
 
-Coverage outputs written to `coverage/` (gitignored). Vitest writes json-summary per workspace; Go profiles are written and removed per run. Gates are defined in `scripts/validate-coverage.js` (currently: cli=92%, others=none).
+Coverage outputs written to `coverage/` (gitignored). Vitest writes json-summary per workspace; Go profiles are written and removed per run. Gates are defined in `scripts/validate-coverage.js`.
 
-Baseline (v1.3.0): cli 92.7% (gate 92%), client 89.2%, service 79.7%, shared 82.1%, server 71.9%. See `docs/coverage-baseline.md`.
+Baseline (v1.4.0): cli 92.7% (gate 92%), client 90.56% (gate 90%), service 82.5% (gate 82%), shared 82.1% (gate 82%), server 82.88% (gate 82%). See `docs/coverage-baseline.md`.
 
-Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.4 and v1.5. Existing baselines ratcheted incrementally. Do not block unrelated work on legacy uncovered areas.
+v1.4.0 gates: cli `{stmts:92}`, client `{stmts:90, branch:89, funcs:76}`, server `{stmts:82, branch:86, funcs:97}`, service `{stmts:82}`, shared `{stmts:82, branch:54, funcs:90}`.
+
+Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.5 and v1.6. Existing baselines ratcheted incrementally. Do not block unrelated work on legacy uncovered areas. Do not lower gates without explicit rationale.
 
 E2E install (one-time): `npm run test:e2e:install`
 
@@ -287,9 +293,9 @@ v1.1 is complete: distribution, installers, release artifacts, service and packa
 
 v1.2 is complete: runtime info endpoint, rule diagnostics API and UI, Activity Log polish, safer networking UX, settings/config polish, and diagnostics export. Tagged 1.2.0. See `docs/roadmap.md` for goals, slices, and non-goals.
 
-v1.3 is complete: Go CLI under `tools/cli/`. All 8 slices done: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime`/`list`/`status`/`activity` commands (activity supports `--limit`/`--rule`/`--type`/`--severity`), `start`/`stop`/`diagnose` lifecycle and diagnostics commands (accept exact rule ID or unique name; duplicate names → exit 2 with ID disambiguation), `config validate`/`config export`/`config import` commands (local validation before API, replace requires `--yes`), `diagnostics export --out <file>` (builds JSON support bundle; `--run-diagnostics`; `--activity-limit` 1–500; partial-failure tolerant with `errors[]`), output helpers (`FormatBool`/`FormatBytes`/`FormatTimestamp`/`PrintTable`), safe rule resolver (`ResolveRule`), `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, 153+ CLI tests, `build:cli`/`test:cli`/`validate:cli`/`validate:cli:coverage` npm scripts; CLI binary (`portier`/`portier.exe`) now built into `build/portier/` by all platform build scripts and included in release artifacts; Windows installer includes `portier.exe`; no PATH integration in v1.3; coverage gate enforces 92% threshold (92.7% actual after post-v1.3 ratchet). Tagged 1.3.0. The CLI talks to the management API; it does not replace the web UI or any runtime. See `tools/cli/readme.md` and `docs/roadmap.md`.
+v1.3 is complete: Go CLI under `tools/cli/`. All 8 slices done: `tools/cli/` module, HTTP API client (`ConnectionError`/`APIError`), `--url`/`--host`/`--port`/`PORTIER_URL` connection options, `--json` flag, `runtime`/`list`/`status`/`activity` commands (activity supports `--limit`/`--rule`/`--type`/`--severity`), `start`/`stop`/`diagnose` lifecycle and diagnostics commands (accept exact rule ID or unique name; duplicate names → exit 2 with ID disambiguation), `config validate`/`config export`/`config import` commands (local validation before API, replace requires `--yes`), `diagnostics export --out <file>` (builds JSON support bundle; `--run-diagnostics`; `--activity-limit` 1–500; partial-failure tolerant with `errors[]`), output helpers (`FormatBool`/`FormatBytes`/`FormatTimestamp`/`PrintTable`), safe rule resolver (`ResolveRule`), `ExportConfig`/`ImportConfig`/`BaseURL` API client additions, 153+ CLI tests, `build:cli`/`test:cli`/`validate:cli` npm scripts; CLI binary (`portier`/`portier.exe`) now built into `build/portier/` by all platform build scripts and included in release artifacts; Windows installer includes `portier.exe`; no PATH integration in v1.3; coverage gate enforces 92% threshold (92.7% actual after post-v1.3 ratchet). Tagged 1.3.0. The CLI talks to the management API; it does not replace the web UI or any runtime. See `tools/cli/readme.md` and `docs/roadmap.md`.
 
-v1.4 is planned: Live Connection Inspector — read-only view of active TCP connections and UDP sessions. See `docs/roadmap.md` for API direction, data model, UI direction, slices, and non-goals. Quality target: 100% meaningful coverage for all new/changed implementation areas.
+v1.4 is complete: Live Connection Inspector — read-only TCP connection and UDP session tracking in both runtimes, exposed via `GET /api/connections`, with a dedicated Live Connections view in the web UI. Coverage hardened across both runtimes before the feature was built. Shared live-connection types in `@portier/shared`, contract validation updated to 116/116, API Docs updated. Tagged 1.4.0. See `docs/roadmap.md` and `docs/changelog.md`.
 
 v1.5 is planned: Declarative Config & Drift Control — plan/diff/apply workflows for comparing desired config files with the running configuration, previewing changes, and applying them safely from the CLI or UI. See `docs/roadmap.md` for goals, CLI commands, API direction, UI direction, slices, and non-goals. Quality target: 100% meaningful coverage for all new/changed implementation areas.
 

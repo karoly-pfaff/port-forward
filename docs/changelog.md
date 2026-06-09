@@ -4,7 +4,11 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased]
+## [1.4.0] — 2026-06-09
+
+### Goal
+
+Portier v1.4 adds a read-only Live Connection Inspector: active TCP connections and UDP sessions are tracked in both runtimes, exposed via `GET /api/connections`, and visible in a dedicated Live Connections view in the web UI. Coverage was hardened across both runtimes before the feature was built.
 
 ### Added
 
@@ -27,16 +31,6 @@ All notable changes to Portier are documented here.
 - **Coverage baseline measured** — pre-v1.4 statement coverage: tools/cli 92.7% (gate 92%), client 89.2%, service 79.7%, shared 82.1%, server 71.9%. Scripts not yet measured. Full per-file breakdown and ratchet plan in `docs/coverage-baseline.md`.
 - **Coverage tooling added** — `@vitest/coverage-v8` installed; vitest.config.ts files added/updated in all three TypeScript workspaces (client, server, shared) with coverage include/exclude settings; `coverage` script added to each workspace; `npm run coverage:shared/server/client/service/cli/baseline` scripts added to root `package.json`; `scripts/coverage-service.js` and `scripts/coverage-cli.js` added for Go combined coverage reporting; `scripts/validate-coverage.js` added as unified coverage validator with `--only <component>` support, replacing `scripts/validate-cli-coverage.js`; `validate:cli:coverage` now delegates to `validate-coverage.js --only cli`.
 - **`waitForTestCondition` timeout raised** — `service/sources/forwarders/tcp_test.go` timeout increased from 2s to 5s to eliminate a flaky failure under cross-package coverage instrumentation with sequential (`-p 1`) test execution.
-
-### Planning
-
-- Planned v1.4 as Live Connection Inspector: read-only live TCP connection and UDP session visibility, per-rule live summaries, `GET /api/connections` endpoint in both runtimes, Live Connections UI view, and CLI `portier connections` command. API contract shape recorded in `docs/api-contract.md`. See `docs/roadmap.md` for goals, data model, UI direction, 14-slice plan, and non-goals.
-- Recorded v1.4 coverage strategy: all newly added or materially changed implementation areas target 100% meaningful coverage with explicit gates. Covers TCP and UDP live tracking models (both runtimes), `GET /api/connections` handler, API contract validation, UI helpers, CLI connections command, and diagnostics export integration if changed.
-- Planned v1.6 as Architecture, Quality & Maintainability Audit: a dedicated audit and hardening release with structured multi-angle inspection across architecture, runtime parity, forwarding correctness, API contract, CLI, UI, test quality, security posture, packaging, and documentation consistency. See `docs/roadmap.md`.
-- Clarified that the v1.4/v1.5 100% meaningful coverage target is a deliberate prerequisite for the v1.6 audit: high meaningful coverage creates the safety net needed to refactor and harden confidently without silently breaking forwarding behavior, API parity, or CLI workflows.
-- Planned v1.5 as Declarative Config & Drift Control: plan/diff/apply workflows for comparing desired config files with the running configuration and applying changes safely. See `docs/roadmap.md`.
-- Recorded v1.4/v1.5 quality target: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. Covers CLI, Go service, TypeScript server, shared config/diff logic, contract validators, and client-side logic introduced by the release.
-- **CLI coverage gate raised to 92%** — `validate:cli:coverage` threshold raised from 88% to 92% (actual: 92.7%) as the first ratchet step toward the v1.4/v1.5 100% meaningful coverage target. Added 10 targeted tests covering: `validateURL` parse-error path, invalid-flag parse-error paths for `RunConfigExport`/`RunConfigImport`/`RunConfigValidate`/`RunDiagnosticsExport`, file-write failure in `RunConfigExport`, empty `targetHost` and out-of-range `targetPort` in `validateLocalConfig`, `DiagnoseForward` API error in `RunDiagnose`, and `GetStatus` failure in `buildDiagnosticsBundle`. Future v1.4/v1.5 slices should continue raising the gate as meaningful behavioral coverage is added.
 
 ---
 

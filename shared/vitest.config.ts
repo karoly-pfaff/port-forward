@@ -8,7 +8,7 @@ export default defineConfig({
       reporter: ["text", "json-summary"],
       reportsDirectory: "../coverage/shared",
       include: ["sources/**/*.ts"],
-      exclude: ["sources/**/*.test.ts"]
+      exclude: ["sources/**/*.test.ts", "build/**", "*.config.ts"]
     }
   }
 });

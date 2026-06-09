@@ -366,10 +366,10 @@ npm run validate:cli
 Runs tests, builds, and checks coverage. Fails clearly if Go is unavailable.
 
 ```powershell
-npm run validate:cli:coverage
+npm run validate:coverage:cli
 ```
 
-Coverage gate: runs `go test` with cross-package instrumentation and fails if total statement coverage falls below 92%. Genuinely untestable branches (main entry point, http.NewRequest errors, json.Marshal errors) are documented in `scripts/validate-coverage.js`.
+Coverage gate: runs `go test` with cross-package instrumentation and fails if total statement coverage falls below 92%. Genuinely untestable branches (main entry point, http.NewRequest errors, json.Marshal errors) are documented in `scripts/validate-coverage.js`. Use `npm run validate:coverage` to run all five component gates at once.
 
 ## Module structure
 

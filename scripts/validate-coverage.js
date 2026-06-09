@@ -17,12 +17,16 @@
  *                        Valid values: shared, server, client, service, cli
  *
  * Exit codes:
- *   0  All gates passed (or no gate is defined for a component).
+ *   0  All gates passed.
  *   1  One or more gates failed, or a coverage run failed.
  *
  * Gates (update here when ratcheting):
- *   cli: 92%  — enforced
- *   others: none — baselines only, not yet gated
+ *   Each gate is an object: { statements?, branches?, functions? }
+ *   All specified thresholds must pass for the component to PASS.
+ *   Go components (service, cli) report statements and functions only;
+ *   branches are always "Unknown" from standard Go tooling.
+ *
+ *   Set at v1.4.0 (2026-06-09). Ratchet upward as coverage improves.
  *
  * Known untestable CLI branches (documented here, not counted against coverage):
  *   - main() calls os.Exit() — cannot be tested without spawning a subprocess;
@@ -50,13 +54,17 @@ const repoRoot = resolve(scriptDir, "..");
 const coverDir = join(repoRoot, "coverage");
 
 // ── Gates ─────────────────────────────────────────────────────────────────────
-// null = reporting only, no enforcement
+// Object: { statements?, branches?, functions? } — per-metric gates.
+// All specified thresholds must pass for the component to PASS.
+// Go components (service, cli): branches are "Unknown"; only gate statements.
+//
+// Set at v1.4.0 release (2026-06-09). Raise these when coverage improves.
 const GATES = {
-  shared:  null,
-  server:  null,
-  client:  null,
-  service: null,
-  cli:     92,
+  shared:  { statements: 82, branches: 54, functions: 90 },
+  server:  { statements: 82, branches: 86, functions: 97 },
+  client:  { statements: 90, branches: 89, functions: 76 },
+  service: { statements: 82 },
+  cli:     { statements: 92 },
 };
 
 const ALL_COMPONENTS = Object.keys(GATES);
@@ -127,6 +135,38 @@ function toNum(v) {
   return typeof v === "number" && isFinite(v) ? v : null;
 }
 
+/**
+ * Check a gate object against measured data.
+ * Returns { passed: bool, failures: string[] }.
+ */
+function checkGate(gate, data) {
+  const failures = [];
+  if (gate.statements != null && data.statements < gate.statements) {
+    failures.push(`stmts(${data.statements.toFixed(1)}%<${gate.statements}%)`);
+  }
+  if (gate.branches != null && data.branches != null && data.branches < gate.branches) {
+    failures.push(`branch(${data.branches.toFixed(1)}%<${gate.branches}%)`);
+  }
+  if (gate.functions != null && data.functions != null && data.functions < gate.functions) {
+    failures.push(`funcs(${data.functions.toFixed(1)}%<${gate.functions}%)`);
+  }
+  return { passed: failures.length === 0, failures };
+}
+
+/**
+ * Format a gate object for display in the summary table.
+ * Single-metric gates (service/cli) show "82%" — multi-metric show "82/54/90".
+ */
+function fmtGate(gate) {
+  const parts = [
+    gate.statements != null ? String(gate.statements) : null,
+    gate.branches   != null ? String(gate.branches)   : null,
+    gate.functions  != null ? String(gate.functions)  : null,
+  ].filter(Boolean);
+  if (parts.length === 1) return `${parts[0]}%`;
+  return parts.join("/");
+}
+
 // ── Run coverage for active components ───────────────────────────────────────
 
 ensureCoverDir();
@@ -149,18 +189,19 @@ for (const component of activeComponents) {
 
 // ── Summary table ─────────────────────────────────────────────────────────────
 
-console.log(`\n${"═".repeat(68)}`);
+const W = 72;
+console.log(`\n${"═".repeat(W)}`);
 console.log(" Coverage Summary");
-console.log(`${"═".repeat(68)}`);
+console.log(`${"═".repeat(W)}`);
 console.log(
   " Component".padEnd(12) +
   "Statements".padStart(12) +
   "  Branch".padStart(10) +
   "  Functions".padStart(12) +
-  "  Gate".padStart(8) +
-  "  Status".padStart(10)
+  "  Gate".padStart(12) +
+  "  Status".padStart(14)
 );
-console.log(`${"─".repeat(68)}`);
+console.log(`${"─".repeat(W)}`);
 
 let anyGateFailed = false;
 
@@ -171,10 +212,14 @@ for (const [component, data] of Object.entries(results)) {
   if (data === null) {
     status = "FAILED";
     anyGateFailed = true;
-  } else if (gate !== null) {
-    if (data.statements < gate) {
-      status = "FAIL";
+  } else {
+    const { passed, failures } = checkGate(gate, data);
+    if (!passed) {
+      status = `FAIL`;
       anyGateFailed = true;
+      for (const f of failures) {
+        console.error(`[validate-coverage]   ${component}: ${f}`);
+      }
     } else {
       status = "PASS";
     }
@@ -183,19 +228,21 @@ for (const [component, data] of Object.entries(results)) {
   const stmts    = data         ? `${data.statements.toFixed(1)}%` : "—";
   const branches = data?.branches  != null ? `${data.branches.toFixed(1)}%`  : "—";
   const funcs    = data?.functions != null ? `${data.functions.toFixed(1)}%` : "—";
-  const gateStr  = gate !== null ? `${gate}%` : "none";
+  const gateStr  = fmtGate(gate);
 
   console.log(
     ` ${component}`.padEnd(12) +
     stmts.padStart(12) +
     branches.padStart(10) +
     funcs.padStart(12) +
-    gateStr.padStart(8) +
-    `  ${status}`.padStart(10)
+    gateStr.padStart(12) +
+    `  ${status}`.padStart(14)
   );
 }
 
-console.log(`${"═".repeat(68)}\n`);
+console.log(`${"─".repeat(W)}`);
+console.log(" Gate format: s/b/f = statements / branches / functions thresholds");
+console.log(`${"═".repeat(W)}\n`);
 
 if (anyRunFailed || anyGateFailed) {
   if (anyRunFailed) {
