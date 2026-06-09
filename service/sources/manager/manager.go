@@ -23,6 +23,7 @@ type Manager struct {
 	onStartLog  func(rule domain.ForwardRule)
 	onEventLog  forwarders.LogFunc
 	tcpRegistry *connections.TcpConnectionRegistry
+	udpRegistry *connections.UdpSessionRegistry
 }
 
 type runtimeState struct {
@@ -44,7 +45,13 @@ func NewWithStore(store *config.Store, rules []domain.ForwardRule) (*Manager, er
 
 	copied := make([]domain.ForwardRule, len(rules))
 	copy(copied, rules)
-	return &Manager{rules: copied, runtime: make(map[string]runtimeState), store: store, tcpRegistry: connections.NewTcpConnectionRegistry()}, nil
+	return &Manager{
+		rules:       copied,
+		runtime:     make(map[string]runtimeState),
+		store:       store,
+		tcpRegistry: connections.NewTcpConnectionRegistry(),
+		udpRegistry: connections.NewUdpSessionRegistry(),
+	}, nil
 }
 
 func NewFromConfig(configPath string) (*Manager, error) {
@@ -120,6 +127,11 @@ func (m *Manager) ClearActivity() {
 // GetLiveTCPConnections returns a snapshot of all currently active TCP connections.
 func (m *Manager) GetLiveTCPConnections() []connections.TcpConnectionInfo {
 	return m.tcpRegistry.Snapshot(time.Now())
+}
+
+// GetLiveUDPSessions returns a snapshot of all non-expired UDP sessions.
+func (m *Manager) GetLiveUDPSessions() []connections.UdpSessionInfo {
+	return m.udpRegistry.Snapshot(time.Now())
 }
 
 func (m *Manager) ExportConfig() domain.ExportedConfig {
@@ -457,7 +469,7 @@ func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
 	}
 
 	if rule.Protocol == domain.ProtocolUDP {
-		udpForwarder := forwarders.NewUDPForwarder(rule, m.onEventLog, onEvent)
+		udpForwarder := forwarders.NewUDPForwarderWithRegistry(rule, m.onEventLog, onEvent, m.udpRegistry)
 		if err := udpForwarder.Start(); err != nil {
 			state.running = false
 			state.startedAt = ""

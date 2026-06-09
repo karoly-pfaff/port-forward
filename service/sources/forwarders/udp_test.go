@@ -1,14 +1,17 @@
 package forwarders
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"portier/service/sources/activity"
+	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 )
 
@@ -698,5 +701,392 @@ func TestUDPMultiClientEmitsSessionOpenedAndClosed(t *testing.T) {
 	}
 	if !hasClosed {
 		t.Fatal("udp.session.closed event not emitted")
+	}
+}
+
+// --- registry integration tests ---
+
+func TestUDPForwarderWithRegistryOneWayTracksSession(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(freeTestUDPPort(t), targetPort, domain.UdpModeOneWay),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, forwarder.rule.ListenPort, []byte("hello"))
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 1
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(snap))
+	}
+	if snap[0].Protocol != "udp" {
+		t.Fatalf("protocol = %q, want udp", snap[0].Protocol)
+	}
+	if snap[0].Mode != string(domain.UdpModeOneWay) {
+		t.Fatalf("mode = %q, want one-way", snap[0].Mode)
+	}
+	if snap[0].PacketsIn == 0 {
+		t.Fatal("packetsIn should be non-zero")
+	}
+}
+
+func TestUDPForwarderWithRegistryOneWayRecordsBytesIn(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(freeTestUDPPort(t), targetPort, domain.UdpModeOneWay),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	payload := []byte("test-payload-12345")
+	client := sendUDPPacket(t, forwarder.rule.ListenPort, payload)
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		snap := reg.Snapshot(time.Now())
+		return len(snap) >= 1 && snap[0].BytesIn >= int64(len(payload))
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) == 0 {
+		t.Fatal("expected session")
+	}
+	if snap[0].BytesIn < int64(len(payload)) {
+		t.Fatalf("bytesIn = %d, want >= %d", snap[0].BytesIn, len(payload))
+	}
+}
+
+func TestUDPForwarderWithRegistryLastClientCreatesSession(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(freeTestUDPPort(t), targetPort, domain.UdpModeBidirectionalLast),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, forwarder.rule.ListenPort, []byte("ping"))
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 1
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(snap))
+	}
+	if snap[0].Mode != string(domain.UdpModeBidirectionalLast) {
+		t.Fatalf("mode = %q, want bidirectional-last-client", snap[0].Mode)
+	}
+}
+
+func TestUDPForwarderWithRegistryLastClientRecordsOutbound(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, listenPort, []byte("hello"))
+	defer client.Close()
+	_, _ = receiveUDPPacket(t, client, 500*time.Millisecond)
+
+	waitForUDPCondition(t, func() bool {
+		snap := reg.Snapshot(time.Now())
+		return len(snap) >= 1 && snap[0].PacketsOut >= 1
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) == 0 {
+		t.Fatal("expected session")
+	}
+	if snap[0].PacketsOut == 0 {
+		t.Fatal("packetsOut should be non-zero after target response")
+	}
+	if snap[0].BytesOut == 0 {
+		t.Fatal("bytesOut should be non-zero after target response")
+	}
+}
+
+func TestUDPForwarderWithRegistryLastClientReplacesSession(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	clientA := sendUDPPacket(t, listenPort, []byte("from-a"))
+	defer clientA.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 1
+	})
+	firstSnap := reg.Snapshot(time.Now())
+	if len(firstSnap) != 1 {
+		t.Fatalf("expected 1 session after client A, got %d", len(firstSnap))
+	}
+	firstID := firstSnap[0].ID
+
+	// Client B sends — should close A's session and open a new one
+	clientB := sendUDPPacket(t, listenPort, []byte("from-b"))
+	defer clientB.Close()
+
+	waitForUDPCondition(t, func() bool {
+		snap := reg.Snapshot(time.Now())
+		return len(snap) == 1 && snap[0].ID != firstID
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 session after client B, got %d", len(snap))
+	}
+	if snap[0].ID == firstID {
+		t.Fatal("expected new session ID for client B, got same as client A")
+	}
+}
+
+func TestUDPForwarderWithRegistryMultiClientSeparateSessions(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	clientA := sendUDPPacket(t, listenPort, []byte("msgA"))
+	defer clientA.Close()
+	clientB := sendUDPPacket(t, listenPort, []byte("msgB"))
+	defer clientB.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 2
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(snap))
+	}
+	if snap[0].ID == snap[1].ID {
+		t.Fatal("expected different session IDs for different clients")
+	}
+}
+
+func TestUDPForwarderWithRegistryMultiClientSameClientSameSession(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, listenPort, []byte("first"))
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 1
+	})
+	firstID := reg.Snapshot(time.Now())[0].ID
+
+	if _, err := client.Write([]byte("second")); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+
+	waitForUDPCondition(t, func() bool {
+		snap := reg.Snapshot(time.Now())
+		return len(snap) >= 1 && snap[0].PacketsIn >= 2
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) != 1 {
+		t.Fatalf("expected 1 session (same client reuses session), got %d", len(snap))
+	}
+	if snap[0].ID != firstID {
+		t.Fatal("session ID must not change on second packet from same client")
+	}
+	if snap[0].PacketsIn < 2 {
+		t.Fatalf("packetsIn = %d, want >= 2", snap[0].PacketsIn)
+	}
+}
+
+func TestUDPForwarderWithRegistryMultiClientOutbound(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, listenPort, []byte("hi"))
+	defer client.Close()
+	_, _ = receiveUDPPacket(t, client, 500*time.Millisecond)
+
+	waitForUDPCondition(t, func() bool {
+		snap := reg.Snapshot(time.Now())
+		return len(snap) >= 1 && snap[0].PacketsOut >= 1
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) == 0 {
+		t.Fatal("expected session")
+	}
+	if snap[0].PacketsOut == 0 {
+		t.Fatal("packetsOut should be non-zero after echo response")
+	}
+	if snap[0].BytesOut == 0 {
+		t.Fatal("bytesOut should be non-zero after echo response")
+	}
+}
+
+func TestUDPForwarderWithRegistryStopClearsSessions(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeOneWay),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	client := sendUDPPacket(t, listenPort, []byte("ping"))
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 1
+	})
+
+	forwarder.Stop()
+
+	if got := len(reg.Snapshot(time.Now())); got != 0 {
+		t.Fatalf("expected 0 sessions after Stop, got %d", got)
+	}
+}
+
+func TestUDPForwarderWithRegistrySessionTimeoutClosesRegistrySession(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, listenPort, []byte("hello"))
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 1
+	})
+
+	// Wait for the session to be removed by expireSession (testSessionTimeout = 100ms)
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 0
+	})
+}
+
+func TestUDPForwarderWithRegistryNoPayloadData(t *testing.T) {
+	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
+	defer stopTarget()
+
+	reg := connections.NewUdpSessionRegistry()
+	listenPort := freeTestUDPPort(t)
+	forwarder := newUDPForwarderWithRegistryAndTimeout(
+		testUDPRule(listenPort, targetPort, domain.UdpModeOneWay),
+		nil, nil, testSessionTimeout, reg,
+	)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, listenPort, []byte("secret-payload-data"))
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) >= 1
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if len(snap) == 0 {
+		t.Fatal("expected session")
+	}
+
+	data, err := json.Marshal(snap[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	raw := string(data)
+	if strings.Contains(raw, "secret-payload-data") {
+		t.Fatal("session snapshot must not contain payload content")
 	}
 }

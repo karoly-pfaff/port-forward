@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"portier/service/sources/activity"
+	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 )
 
@@ -22,6 +23,7 @@ type udpSession struct {
 	clientAddr *net.UDPAddr
 	timer      *time.Timer
 	gen        int
+	registryID string // corresponding registry session ID, set at creation
 }
 
 type UDPForwarder struct {
@@ -29,15 +31,17 @@ type UDPForwarder struct {
 	log            LogFunc
 	onEvent        activity.EventFunc
 	sessionTimeout time.Duration
+	registry       *connections.UdpSessionRegistry
 
-	mu         sync.Mutex
-	listenConn *net.UDPConn
-	targetConn *net.UDPConn // shared socket for one-way and bidirectional-last-client
-	lastClient *net.UDPAddr // most-recent client for bidirectional-last-client
-	sessions   map[string]*udpSession
-	running    bool
-	started    string
-	lastErr    string
+	mu            sync.Mutex
+	listenConn    *net.UDPConn
+	targetConn    *net.UDPConn // shared socket for one-way and bidirectional-last-client
+	lastClient    *net.UDPAddr // most-recent client for bidirectional-last-client
+	lastSessionID string       // registry session ID for bidirectional-last-client (under mu)
+	sessions      map[string]*udpSession
+	running       bool
+	started       string
+	lastErr       string
 
 	packetsIn  int64
 	packetsOut int64
@@ -52,18 +56,34 @@ type UDPForwarder struct {
 	wg       sync.WaitGroup
 }
 
-func NewUDPForwarder(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc) *UDPForwarder {
-	return NewUDPForwarderWithTimeout(rule, log, onEvent, DefaultUDPSessionTimeout)
-}
-
-func NewUDPForwarderWithTimeout(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc, sessionTimeout time.Duration) *UDPForwarder {
+func newUDPForwarder(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc, sessionTimeout time.Duration, registry *connections.UdpSessionRegistry) *UDPForwarder {
 	return &UDPForwarder{
 		rule:           rule,
 		log:            log,
 		onEvent:        onEvent,
 		sessionTimeout: sessionTimeout,
 		sessions:       make(map[string]*udpSession),
+		registry:       registry,
 	}
+}
+
+func NewUDPForwarder(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc) *UDPForwarder {
+	return newUDPForwarder(rule, log, onEvent, DefaultUDPSessionTimeout, nil)
+}
+
+func NewUDPForwarderWithTimeout(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc, sessionTimeout time.Duration) *UDPForwarder {
+	return newUDPForwarder(rule, log, onEvent, sessionTimeout, nil)
+}
+
+// NewUDPForwarderWithRegistry creates a UDPForwarder that tracks live sessions in reg.
+func NewUDPForwarderWithRegistry(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc, registry *connections.UdpSessionRegistry) *UDPForwarder {
+	return newUDPForwarder(rule, log, onEvent, DefaultUDPSessionTimeout, registry)
+}
+
+// newUDPForwarderWithRegistryAndTimeout is used in tests that need both a registry and
+// a short session timeout.
+func newUDPForwarderWithRegistryAndTimeout(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc, sessionTimeout time.Duration, registry *connections.UdpSessionRegistry) *UDPForwarder {
+	return newUDPForwarder(rule, log, onEvent, sessionTimeout, registry)
 }
 
 func (f *UDPForwarder) Start() error {
@@ -128,6 +148,7 @@ func (f *UDPForwarder) Stop() {
 		f.listenConn = nil
 		f.targetConn = nil
 		f.lastClient = nil
+		f.lastSessionID = ""
 
 		sessions := make([]*udpSession, 0, len(f.sessions))
 		for _, s := range f.sessions {
@@ -156,6 +177,12 @@ func (f *UDPForwarder) Stop() {
 		case <-waitDone:
 		case <-time.After(2 * time.Second):
 			f.setLastError(fmt.Errorf("timed out waiting for UDP forwarder shutdown"))
+		}
+
+		// Belt-and-suspenders: clear any registry sessions that were not closed
+		// by goroutine defers (e.g. when Stop times out or for one-way mode).
+		if f.registry != nil {
+			f.registry.CloseSessionsForRule(f.rule.ID)
 		}
 
 		f.logInfo("UDP rule stopped", "ruleId", f.rule.ID, "ruleName", f.rule.Name)
@@ -216,6 +243,20 @@ func (f *UDPForwarder) listenLoop(listenConn *net.UDPConn) {
 			f.mu.Lock()
 			tc := f.targetConn
 			f.mu.Unlock()
+
+			if f.registry != nil {
+				sessID := f.registry.OpenOrTouchSession(connections.UdpSessionInput{
+					RuleID:        f.rule.ID,
+					RuleName:      f.rule.Name,
+					Mode:          string(domain.UdpModeOneWay),
+					ClientAddress: clientAddr.IP.String(),
+					ClientPort:    clientAddr.Port,
+					TargetAddress: f.rule.TargetHost,
+					TargetPort:    f.rule.TargetPort,
+				})
+				f.registry.RecordInbound(sessID, int64(n))
+			}
+
 			if tc != nil {
 				if _, werr := tc.Write(packet); werr != nil && f.isRunning() {
 					f.setLastError(werr)
@@ -228,9 +269,32 @@ func (f *UDPForwarder) listenLoop(listenConn *net.UDPConn) {
 
 		case domain.UdpModeBidirectionalLast:
 			f.mu.Lock()
+			prevLastClient := f.lastClient
 			f.lastClient = clientAddr
 			tc := f.targetConn
+			prevSessionID := f.lastSessionID
 			f.mu.Unlock()
+
+			if f.registry != nil {
+				isDifferentClient := prevLastClient != nil && prevLastClient.String() != clientAddr.String()
+				if isDifferentClient && prevSessionID != "" {
+					f.registry.CloseSession(prevSessionID)
+				}
+				newID := f.registry.OpenOrTouchSession(connections.UdpSessionInput{
+					RuleID:        f.rule.ID,
+					RuleName:      f.rule.Name,
+					Mode:          string(domain.UdpModeBidirectionalLast),
+					ClientAddress: clientAddr.IP.String(),
+					ClientPort:    clientAddr.Port,
+					TargetAddress: f.rule.TargetHost,
+					TargetPort:    f.rule.TargetPort,
+				})
+				f.registry.RecordInbound(newID, int64(n))
+				f.mu.Lock()
+				f.lastSessionID = newID
+				f.mu.Unlock()
+			}
+
 			if tc != nil {
 				if _, werr := tc.Write(packet); werr != nil && f.isRunning() {
 					f.setLastError(werr)
@@ -263,6 +327,7 @@ func (f *UDPForwarder) targetReadLoop(listenConn *net.UDPConn, targetConn *net.U
 
 		f.mu.Lock()
 		client := f.lastClient
+		sessionID := f.lastSessionID
 		f.mu.Unlock()
 
 		if client == nil {
@@ -271,6 +336,10 @@ func (f *UDPForwarder) targetReadLoop(listenConn *net.UDPConn, targetConn *net.U
 
 		atomic.AddInt64(&f.packetsOut, 1)
 		atomic.AddInt64(&f.bytesOut, int64(n))
+
+		if f.registry != nil && sessionID != "" {
+			f.registry.RecordOutbound(sessionID, int64(n))
+		}
 
 		packet := make([]byte, n)
 		copy(packet, buf[:n])
@@ -293,7 +362,7 @@ func (f *UDPForwarder) handleMultiClientPacket(listenConn *net.UDPConn, clientAd
 
 	if exists {
 		// Reset idle timer using gen to prevent a stale timer from expiring
-		// a session that has been renewed.
+		// a session that was renewed by a subsequent packet before the timer fired.
 		session.timer.Stop()
 		session.gen++
 		gen := session.gen
@@ -316,10 +385,24 @@ func (f *UDPForwarder) handleMultiClientPacket(listenConn *net.UDPConn, clientAd
 			return
 		}
 
+		var regID string
+		if f.registry != nil {
+			regID = f.registry.OpenOrTouchSession(connections.UdpSessionInput{
+				RuleID:        f.rule.ID,
+				RuleName:      f.rule.Name,
+				Mode:          string(domain.UdpModeBidirectionalMulti),
+				ClientAddress: clientAddr.IP.String(),
+				ClientPort:    clientAddr.Port,
+				TargetAddress: f.rule.TargetHost,
+				TargetPort:    f.rule.TargetPort,
+			})
+		}
+
 		session = &udpSession{
 			conn:       tc,
 			clientAddr: clientAddr,
 			gen:        0,
+			registryID: regID,
 		}
 		gen := session.gen
 		session.timer = time.AfterFunc(f.sessionTimeout, func() {
@@ -334,6 +417,10 @@ func (f *UDPForwarder) handleMultiClientPacket(listenConn *net.UDPConn, clientAd
 
 		f.wg.Add(1)
 		go f.sessionReadLoop(listenConn, session, clientAddr)
+	}
+
+	if f.registry != nil && session.registryID != "" {
+		f.registry.RecordInbound(session.registryID, int64(len(packet)))
 	}
 
 	f.maybeEmitForwarded(clientAddr, len(packet))
@@ -362,6 +449,10 @@ func (f *UDPForwarder) sessionReadLoop(listenConn *net.UDPConn, session *udpSess
 		atomic.AddInt64(&f.packetsOut, 1)
 		atomic.AddInt64(&f.bytesOut, int64(n))
 
+		if f.registry != nil && session.registryID != "" {
+			f.registry.RecordOutbound(session.registryID, int64(n))
+		}
+
 		packet := make([]byte, n)
 		copy(packet, buf[:n])
 
@@ -387,6 +478,10 @@ func (f *UDPForwarder) expireSession(key string, s *udpSession, capturedGen int)
 	}
 	delete(f.sessions, key)
 	f.mu.Unlock()
+
+	if f.registry != nil && s.registryID != "" {
+		f.registry.CloseSession(s.registryID)
+	}
 
 	_ = s.conn.Close()
 	f.logInfo("UDP session expired", "ruleId", f.rule.ID, "ruleName", f.rule.Name, "client", s.clientAddr.String())

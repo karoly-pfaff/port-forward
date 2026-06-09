@@ -111,20 +111,20 @@ All three require mocking or specific timing and remain from Slice 1. The regist
 
 ---
 
-## service — 80.6% statements (combined cross-package)
+## service — 82.1% statements (combined cross-package)
 
-Updated at v1.4 Slice 5 (2026-06-08). Previous: 79.7% (baseline v1.3.0).
+Updated at v1.4 Slice 6 (2026-06-09). Previous: 80.6% (Slice 5). Baseline (v1.3.0): 79.7%.
 
 Per-package figures (package-internal test coverage):
 
 | Package                          | Stmts (pkg) | Notes                                            |
 | -------------------------------- | ----------: | ------------------------------------------------ |
-| sources/connections              |       98.1% | v1.4 Slice 5: new module, 100% public methods    |
+| sources/connections              |       98.4% | v1.4 Slice 6: UDP registry added, 100% public methods; Slice 5: TCP registry, 100% public methods |
 | sources/advisory                 |      100.0% | fully covered                                    |
 | sources/activity                 |       89.5% |                                                  |
 | sources/api                      |       81.0% | update, delete, reorder, import partially covered|
 | sources/config                   |       77.6% |                                                  |
-| sources/forwarders               |       82.6% | emitPacketError 0%; UDP acceptor path gaps       |
+| sources/forwarders               |       85.1% | v1.4 Slice 6: UDP registry wiring added; emitPacketError 0% gap remains |
 | sources/manager                  |       83.2% | SetStartLogger, SetEventLogger, Error() 0%       |
 | sources/options                  |       81.0% | FromOSEnv 0% (requires real env, not unit-tested)|
 | sources/validation               |       77.2% | ValidateForwardRuleInputWithOptionalID 0%         |
@@ -134,7 +134,7 @@ Per-package figures (package-internal test coverage):
 | sources/static                   |        N/T  | static file helper, no test file                 |
 | sources/version                  |        N/T  | constant, no test file                           |
 | sources/ (main.go)               |        N/T  | entry point, no test file                        |
-| **Combined total (-coverpkg)**   |   **80.6%** |                                                  |
+| **Combined total (-coverpkg)**   |   **82.1%** |                                                  |
 
 N/T = no test file. Most of these are thin wrappers, type definitions, or OS-integration code.
 
@@ -143,7 +143,7 @@ No coverage gate. Tooling added: `scripts/coverage-service.js` added; run via `n
 Notes:
 - The combined coverage run uses `-p 1` (sequential) to avoid timing flakiness in `TestTCPForwarderEmitsConnectionClosedEvent` under parallel cross-package instrumentation. The per-package test for that package passes reliably.
 - The `waitForTestCondition` timeout in `sources/forwarders/tcp_test.go` was raised from 2s to 5s for robustness under heavy instrumentation.
-- `sources/connections/` package added in v1.4 Slice 5. The 1.9% gap is the `rand.Read` error path in the private `generateConnectionID` function — genuinely untestable without mocking crypto/rand, same pattern as CLI commands. All public methods are at 100% statements.
+- `sources/connections/` package: Slice 5 added TCP registry (98.1% stmts), Slice 6 added UDP registry (98.4% combined). Gaps: `rand.Read` fallback in private `generateConnectionID` (untestable, same pattern as CLI), and stale-key defensive path in `OpenOrTouchSession` (unreachable through public API). All public methods are at 100% statements.
 
 ---
 
@@ -241,15 +241,13 @@ Same policy: 100% meaningful for all new/materially changed files in plan/diff/a
 
 ### Existing baselines — incremental ratchet (non-blocking for unrelated work)
 
-| Component | Baseline (v1.3) | After Slice 1 | After Slice 4 | After Slice 5 | v1.4 target | v1.5 target | v1.6 target |
-| --------- | --------------: | ------------: | ------------: | ------------: | ----------: | ----------: | ----------: |
-| client    |           89.2% |         89.2% |         89.2% |         89.2% |       90%+  |       95%+  |        100% |
-| server    |           71.9% |     **79.6%** |     **82.2%** |         82.2% |       85%+  |       92%+  |        100% |
-| service   |           79.7% |         79.7% |         79.7% |     **80.6%** |       85%+* |       92%+  |        100% |
-| shared    |           82.1% |         82.1% |         82.1% |         82.1% |       90%+  |       95%+  |        100% |
+| Component | Baseline (v1.3) | After Slice 1 | After Slice 4 | After Slice 5 | After Slice 6 | v1.4 target | v1.5 target | v1.6 target |
+| --------- | --------------: | ------------: | ------------: | ------------: | ------------: | ----------: | ----------: | ----------: |
+| client    |           89.2% |         89.2% |         89.2% |         89.2% |         89.2% |       90%+  |       95%+  |        100% |
+| server    |           71.9% |     **79.6%** |     **82.2%** |         82.2% |         82.2% |       85%+  |       92%+  |        100% |
+| service   |           79.7% |         79.7% |         79.7% |     **80.6%** |     **82.1%** |       85%+  |       92%+  |        100% |
+| shared    |           82.1% |         82.1% |         82.1% |         82.1% |         82.1% |       90%+  |       95%+  |        100% |
 
-\* Service forwarder coverage improvement is part of v1.4 Slices 5–6 (Go live tracking).
-
-Server is at 82.2% after Slices 3–4 added TCP and UDP live tracking modules at 100% coverage. Service is at 80.6% after Slice 5 added the Go TCP connection registry at 98.1% statements (100% public methods). Further service improvement expected when Go UDP session tracking (Slice 6) is added.
+Server is at 82.2% after Slices 3–4 added TCP and UDP live tracking modules at 100% coverage. Service is at 82.1% after Slices 5–6 added Go TCP (98.1% stmts, 100% public methods) and Go UDP session tracking (98.4% combined stmts, 100% public methods).
 
 Do not block unrelated v1.4 work on legacy coverage gaps. Require 100% for newly added or materially changed files.
