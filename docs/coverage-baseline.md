@@ -7,7 +7,7 @@ Measured at v1.3.0 (2026-06-08). This is the pre-v1.4 baseline.
 | Component     | Statements | Branch | Functions |     Gate | Tooling                           |
 | ------------- | ---------: | -----: | --------: | -------: | --------------------------------- |
 | tools/cli     |      92.7% |      — |         — |      92% | `go test` + validate-coverage --only cli |
-| client        |      89.0% |  87.4% |     74.0% |     none | vitest + @vitest/coverage-v8      |
+| client        |      90.56% |  89.46% |     76.19% |     none | vitest + @vitest/coverage-v8      |
 | service       |      82.5% |      — |         — |     none | `go test -coverpkg`               |
 | shared        |      82.1% |  53.6% |     88.9% |     none | vitest + @vitest/coverage-v8      |
 | server        |      82.88% |  86.35% |    97.91% |     none | vitest + @vitest/coverage-v8      |
@@ -47,7 +47,9 @@ Known untestable branches documented in scripts/validate-coverage.js: `main()` o
 
 ---
 
-## client — 89.0% statements, 87.4% branch, 74.0% functions
+## client — 90.56% statements, 89.46% branch, 76.19% functions
+
+Updated at v1.4 Slice 8 (2026-06-09). Previous: 89.0% stmts (Slice 7). Baseline (v1.3.0): 89.0%.
 
 | File                                        | Stmts  | Branch | Funcs  | Notes                             |
 | ------------------------------------------- | -----: | -----: | -----: | --------------------------------- |
@@ -66,6 +68,8 @@ Known untestable branches documented in scripts/validate-coverage.js: `main()` o
 | sources/features/forwards/RuleDiagnosticsPanel.tsx | 100% | 100% | 100% |                            |
 | sources/app/Sidebar.tsx                     |   100% |   100% |   100% |                                   |
 | sources/app/NavItem.ts                      |   100% |   100% |   100% |                                   |
+| sources/features/connections/LiveConnectionsView.tsx | 100% | 94.11% | 88.23% | v1.4 Slice 8: new module, 100% stmts |
+| sources/utils/format.ts                     |   100% |   100% |   100% | v1.4 Slice 8: 3 new helpers added |
 
 No coverage gate. Tooling added: vitest.config.ts updated with coverage config, `coverage` script added.
 

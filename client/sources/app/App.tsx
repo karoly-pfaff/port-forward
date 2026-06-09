@@ -17,6 +17,7 @@ import { ActivityLogView } from "../features/activity/ActivityLogView.js";
 import { DashboardView } from "../features/dashboard/DashboardView.js";
 import { SettingsView } from "../features/settings/SettingsView.js";
 import { ApiDocsView } from "../features/apidocs/ApiDocsView.js";
+import { LiveConnectionsView } from "../features/connections/LiveConnectionsView.js";
 import { RuleSummaryCards } from "../components/RuleSummaryCards.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopHeader } from "./TopHeader.js";
@@ -379,6 +380,8 @@ export function App(): ReactElement {
               diagnosisMap={diagnosisMap}
             />
           )}
+
+          {view === "connections" && <LiveConnectionsView />}
 
           {view === "api-docs" && <ApiDocsView />}
         </main>
