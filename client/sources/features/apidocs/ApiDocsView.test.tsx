@@ -137,10 +137,10 @@ describe("ApiDocsView", () => {
     expect(container.textContent).toMatch(/empty arrays when nothing is active/i);
   });
 
-  it("lists the POST /api/config/plan endpoint with a Planned v1.5 badge", () => {
+  it("lists the POST /api/config/plan endpoint with a parity note badge", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("/api/config/plan")).toBeInTheDocument();
-    expect(screen.getAllByText("Planned — v1.5").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/TypeScript server.*Go service parity pending/i)).toBeInTheDocument();
   });
 
   it("describes POST /api/config/plan as read-only", () => {
@@ -159,7 +159,7 @@ describe("ApiDocsView", () => {
   it("lists the POST /api/config/apply endpoint with a Planned v1.5 badge", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("/api/config/apply")).toBeInTheDocument();
-    expect(screen.getAllByText("Planned — v1.5").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Planned — v1.5")).toBeInTheDocument();
   });
 
   it("describes POST /api/config/apply as requiring yes: true", () => {

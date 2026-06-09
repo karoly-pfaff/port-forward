@@ -16,6 +16,7 @@ import type { ForwardManager } from "./forward-manager.js";
 import { ConflictError, NotFoundError, ValidationError } from "./forward-manager.js";
 import { diagnoseRule } from "./diagnose.js";
 import type { ActivityStore } from "./activity/activity-store.js";
+import { buildConfigPlan } from "./config-plan.js";
 
 export interface RuntimeInfoOptions {
   version: string;
@@ -200,6 +201,18 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
     } catch (error) {
       next(error);
     }
+  });
+
+  // ── Config plan ───────────────────────────────────────────────────────────────
+
+  app.post("/api/config/plan", (request, response) => {
+    const body = request.body as Record<string, unknown> | null;
+    if (!body || typeof body !== "object" || !("desired" in body)) {
+      response.status(400).json({ errors: ["desired is required."] });
+      return;
+    }
+    const plan = buildConfigPlan({ currentRules: manager.listRules(), desiredRaw: body.desired });
+    response.json(plan);
   });
 
   // ── Port advisory ─────────────────────────────────────────────────────────────

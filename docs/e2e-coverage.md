@@ -130,7 +130,7 @@ When `POST /api/config/plan`, `POST /api/config/apply`, and CLI `config diff/pla
 | Config apply | backup-out writes pre-apply config before applying | no | medium | planned: CLI --backup-out |
 | Config apply | apply with yes applies desired config and refreshes rule list | no | high | planned: post-apply state verification |
 | Config diff | diff output is human-readable and shows field-level changes | no | medium | planned: CLI diff command |
-| API docs | POST /api/config/plan listed with Planned badge removed | no | medium | planned: remove badge after Slice 2/3 implement |
+| API docs | POST /api/config/plan listed with parity badge (TS implemented; Go pending) | no | medium | Slice 2: Planned badge replaced with parity badge; Go parity badge removal after Slice 3 |
 | API docs | POST /api/config/apply listed with Planned badge removed | no | medium | planned: remove badge after Slice 5 implement |
 
 v1.5 should not be considered release-ready without E2E coverage for the new config plan/apply surface once it is implemented.

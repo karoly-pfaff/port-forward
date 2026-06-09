@@ -752,7 +752,7 @@ Warning examples: apply would remove rules, LAN exposure, privileged or common p
 ### Suggested Implementation Slices
 
 1. ~~**Config diff/plan strategy and contract**~~ — ✓ Complete. Matching semantics, operation model, plan/summary types, and API contract documented. Shared TypeScript types added to `@portier/shared` (`shared/sources/plan.ts`). `POST /api/config/plan` and `POST /api/config/apply` added to `docs/api-contract.md` as Planned. Client in-app API Docs updated with planned badges. `validate:contract` updated with skip notes. `docs/e2e-coverage.md` updated with planned workflows. `tools/cli/readme.md` updated with planned CLI commands.
-2. Backend plan endpoint: `POST /api/config/plan` in TypeScript server
+2. ~~**Backend plan endpoint**~~ — ✓ Complete. Pure plan engine (`server/sources/config-plan.ts`) with id-first matching, identity key fallback, ambiguous match error, 8 material field diff, destructive flag, `REMOVE_EXISTING`/`LAN_EXPOSURE` warnings. `POST /api/config/plan` endpoint added to TypeScript server; 400 for missing desired, 200 with structured errors for invalid desired. 65 engine unit tests + 11 API integration tests. `validate:contract` TS skip removed (11 real assertions). API Docs parity badge added. `docs/api-contract.md` updated.
 3. Go service plan parity: `POST /api/config/plan` in Go service
 4. CLI `config plan` and `config diff` commands
 5. CLI `config apply` with `--yes`, `--dry-run`, `--backup-out`

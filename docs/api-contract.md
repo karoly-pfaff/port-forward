@@ -383,11 +383,11 @@ Field notes:
 - UDP `one-way` mode: per-client session metadata may be limited; see UDP mode notes.
 - UDP `bidirectional-last-client` mode: only the most recent client session is available.
 
-## `POST /api/config/plan` — Planned (v1.5)
+## `POST /api/config/plan` — Implemented (TypeScript server); Go service parity pending (v1.5 Slice 3)
 
 Purpose: compare a desired config against the currently running Portier configuration and return a structured plan showing adds, updates, removes, and unchanged rules. Read-only — does not modify state.
 
-Planned for v1.5 Slice 2. Not yet implemented in either runtime.
+Implemented in v1.5 Slice 2 in the TypeScript server. Go service parity is pending v1.5 Slice 3.
 
 Request body:
 
@@ -552,9 +552,9 @@ The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GE
 - `LiveConnectionStatus` — `"active"` (TCP connections are either active or gone)
 - `UdpSessionStatus` — `"active" | "idle"`
 
-### Added in v1.5 Slice 1 — Planned (implementation pending)
+### Added in v1.5 — Plan/diff/apply types
 
-The following types are defined in `@portier/shared` (`shared/sources/plan.ts`) as of v1.5 Slice 1. The `POST /api/config/plan` and `POST /api/config/apply` endpoints are planned for v1.5 Slices 2–3. Implementation is pending.
+The following types are defined in `@portier/shared` (`shared/sources/plan.ts`). `POST /api/config/plan` is implemented in the TypeScript server (v1.5 Slice 2); Go parity is pending Slice 3. `POST /api/config/apply` is pending Slices 3+.
 
 - `ConfigPlanOperationType` — `"add" | "update" | "remove" | "unchanged"`
 - `ConfigPlanChange` — a single field-level change: `{ field, before, after }`

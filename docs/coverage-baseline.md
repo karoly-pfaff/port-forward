@@ -10,7 +10,7 @@ Gates ratcheted after v1.5 coverage uplift pass. Raise them as coverage improves
 | --------- | ---------: | -----: | --------: | ------------------------: | ------ |
 | tools/cli |      92.7% |      — |      98.2% |                       92% | gated  |
 | client    |     94.71% | 90.19% |     78.26% |                  94/90/78 | gated  |
-| server    |     87.11% | 89.91% |     99.00% |                  87/89/99 | gated  |
+| server    |     88.63% | 91.24% |     99.09% |                  87/89/99 | gated  |
 | service   |      84.8% |      — |      92.5% |                       84% | gated  |
 | shared    |    100.00% |100.00% |    100.00% |             100/100/100   | gated  |
 
@@ -24,7 +24,7 @@ Gates are enforced by `npm run validate:coverage` (`scripts/validate-coverage.js
 | client        |     94.71% | 90.19% |     78.26% |     94/90/78 | vitest + @vitest/coverage-v8    |
 | service       |      84.8% |      — |      92.5% |          84% | `go test -coverpkg`               |
 | shared        |    100.00% |100.00% |    100.00% | 100/100/100  | vitest + @vitest/coverage-v8    |
-| server        |     87.11% | 89.91% |     99.00% |     87/89/99 | vitest + @vitest/coverage-v8    |
+| server        |     88.63% | 91.24% |     99.09% |     87/89/99 | vitest + @vitest/coverage-v8    |
 | scripts       |        N/M |      — |          — |         none | not yet measured                  |
 
 Coverage commands:
@@ -96,9 +96,9 @@ Gate: 94/90/78. Enforced by `npm run validate:coverage:client`.
 
 ---
 
-## server — 87.11% statements, 89.91% branch, 99.00% functions
+## server — 88.63% statements, 91.24% branch, 99.09% functions
 
-Updated at v1.5 pre-release (2026-06-09). Previous: 82.88% stmts (v1.4.0). Baseline (v1.3.0): 71.9% stmts.
+Updated at v1.5 Slice 2 (2026-06-09). Previous: 87.11% (v1.5 pre-release). Before that: 82.88% stmts (v1.4.0). Baseline (v1.3.0): 71.9% stmts.
 
 "All files" figure from `npm run coverage:server`.
 
@@ -109,7 +109,8 @@ Updated at v1.5 pre-release (2026-06-09). Previous: 82.88% stmts (v1.4.0). Basel
 | sources/diagnose.ts                                   |  85.9% |  86.5% |   100% | timeout paths (2s) not unit-tested               |
 | sources/forwarders/udp-forwarder.ts                   |  86.3% |  84.0% |   100% | send error callbacks require specific timing     |
 | sources/forward-manager.ts                            |  99.4% |  88.7% |   100% | v1.5 pre: 9 new tests; 1 unreachable path at 129-130 |
-| sources/api.ts                                        |  92.5% |  86.6% |   100% | platform detection branches (Windows-only env)  |
+| sources/api.ts                                        |  92.8% |  87.0% |   100% | platform detection branches (Windows-only env)  |
+| sources/config-plan.ts                                |  100%  |  100%  |   100% | v1.5 Slice 2: pure plan engine, 65 unit tests   |
 | sources/logger.ts                                     |   100% |   100% |   100% | v1.5 pre: 6 unit tests added                    |
 | sources/config-store.ts                               |   100% |   100% |   100% | v1.5 pre: non-array JSON test added              |
 | sources/server-options.ts                             |   100% |   100% |   100% | v1.5 pre: unknown flag + missing value tests     |
@@ -118,7 +119,7 @@ Updated at v1.5 pre-release (2026-06-09). Previous: 82.88% stmts (v1.4.0). Basel
 | sources/forwarders/tcp-forwarder.ts                   |   100% |    90% |   100% | branch gap = optional registry param             |
 | sources/activity/activity-store.ts                    |   100% |   100% |   100% |                                                  |
 
-Gate: 87/89/99. Enforced by `npm run validate:coverage:server`.
+Gate: 87/89/99. Enforced by `npm run validate:coverage:server`. (Consider ratcheting to 88/91/99 after v1.5 Slice 2.)
 
 Notes:
 - `index.ts` bootstrap is integration-tested via E2E and `validate:contract`; 0% here is expected.
@@ -256,10 +257,10 @@ All new or materially changed implementation files in v1.5 must reach 100% meani
 | --------- | -----: | --------: | --------: | ----------: | ----------: |
 | cli       |  92.7% |     92.7% |     92.7% |       95%+  |        100% |
 | client    |  89.2% |    90.56% |    94.71% |       96%+  |        100% |
-| server    |  71.9% |    82.88% |    87.11% |       92%+  |        100% |
+| server    |  71.9% |    82.88% |    88.63% |       92%+  |        100% |
 | service   |  79.7% |     82.5% |     84.8% |       90%+  |        100% |
 | shared    |  82.1% |     82.1% |    100.0% |      100.0% |        100% |
 
-v1.5 pre-release coverage uplift: shared → 100%, client 90.56% → 94.71%, server 82.88% → 87.11%, service 82.5% → 84.8%. All gates ratcheted upward.
+v1.5 pre-release coverage uplift: shared → 100%, client 90.56% → 94.71%, server 82.88% → 87.11%, service 82.5% → 84.8%. All gates ratcheted upward. v1.5 Slice 2: server 87.11% → 88.63% (`config-plan.ts` at 100%).
 
 Do not block unrelated v1.5 work on legacy coverage gaps. Require 100% for newly added or materially changed files in v1.5 and v1.6.

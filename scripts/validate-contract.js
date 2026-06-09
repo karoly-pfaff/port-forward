@@ -735,10 +735,120 @@ async function runScenarios(baseUrl, runtime) {
     }
   }
 
-  // ── POST /api/config/plan (v1.5 — Planned) ──────────────────────────────
-  // Not yet implemented. Remove this skip when v1.5 Slice 2 adds the backend.
-  skip("POST /api/config/plan → planned v1.5 endpoint; not yet implemented");
-  skip("POST /api/config/apply → planned v1.5 endpoint; not yet implemented");
+  // ── POST /api/config/plan (v1.5) ─────────────────────────────────────────
+  // Implemented in TypeScript server (v1.5 Slice 2). Go parity pending Slice 3.
+  if (runtime === "TypeScript") {
+    // Clear server state before plan tests so "empty desired → no drift" is unambiguous.
+    await api.post("/api/config/import", {
+      mode: "replace",
+      config: { version: "1", exportedAt: new Date().toISOString(), rules: [] }
+    });
+
+    // Empty desired → no drift, no errors
+    const planRes = await api.post("/api/config/plan", { desired: [] });
+    if (planRes.status === 200) {
+      const planData = planRes.json();
+      const requiredFields = ["generatedAt", "mode", "summary", "operations", "errors", "warnings"];
+      const missingFields = requiredFields.filter((f) => !(f in planData));
+      if (missingFields.length === 0) {
+        pass("POST /api/config/plan → 200 with all required top-level fields");
+      } else {
+        fail(`POST /api/config/plan → missing fields: ${missingFields.join(", ")}`);
+      }
+      if (planData.mode === "plan") {
+        pass("POST /api/config/plan → mode is 'plan'");
+      } else {
+        fail(`POST /api/config/plan → mode is '${planData.mode}', expected 'plan'`);
+      }
+      if (typeof planData.generatedAt === "string" && !isNaN(new Date(planData.generatedAt).getTime())) {
+        pass("POST /api/config/plan → generatedAt is a parseable timestamp");
+      } else {
+        fail(`POST /api/config/plan → generatedAt not parseable: ${planData.generatedAt}`);
+      }
+      if (planData.summary && typeof planData.summary === "object") {
+        const summaryFields = ["add", "update", "remove", "unchanged", "destructive", "hasDrift", "hasErrors"];
+        const missingSummary = summaryFields.filter((f) => !(f in planData.summary));
+        if (missingSummary.length === 0) {
+          pass("POST /api/config/plan → summary has all required fields");
+        } else {
+          fail(`POST /api/config/plan → summary missing fields: ${missingSummary.join(", ")}`);
+        }
+      } else {
+        fail("POST /api/config/plan → summary is not an object");
+      }
+      if (Array.isArray(planData.operations)) {
+        pass("POST /api/config/plan → operations is an array");
+      } else {
+        fail("POST /api/config/plan → operations is not an array");
+      }
+      if (Array.isArray(planData.errors)) {
+        pass("POST /api/config/plan → errors is an array");
+      } else {
+        fail("POST /api/config/plan → errors is not an array");
+      }
+      if (Array.isArray(planData.warnings)) {
+        pass("POST /api/config/plan → warnings is an array");
+      } else {
+        fail("POST /api/config/plan → warnings is not an array");
+      }
+      if (!planData.summary.hasDrift && !planData.summary.hasErrors) {
+        pass("POST /api/config/plan → empty desired with no current → no drift, no errors");
+      } else {
+        fail(`POST /api/config/plan → expected no drift/errors, got hasDrift=${planData.summary.hasDrift} hasErrors=${planData.summary.hasErrors}`);
+      }
+    } else {
+      fail(`POST /api/config/plan → expected 200, got ${planRes.status}: ${planRes.body}`);
+    }
+
+    // Single desired rule → add operation, hasDrift
+    {
+      const driftRes = await api.post("/api/config/plan", {
+        desired: [{ name: "Plan Test", protocol: "tcp", listenHost: "127.0.0.1", listenPort: TCP_LISTEN, targetHost: "127.0.0.1", targetPort: 49801, enabled: false }]
+      });
+      if (driftRes.status === 200) {
+        const d = driftRes.json();
+        if (d.summary.hasDrift && d.summary.add === 1 && d.operations.length === 1 && d.operations[0].type === "add") {
+          pass("POST /api/config/plan → single desired rule → add op, hasDrift");
+        } else {
+          fail(`POST /api/config/plan → expected add op/hasDrift, got: ${JSON.stringify(d.summary)}`);
+        }
+      } else {
+        fail(`POST /api/config/plan (drift) → expected 200, got ${driftRes.status}`);
+      }
+    }
+
+    // Invalid desired rule → 200 with structured errors
+    {
+      const errRes = await api.post("/api/config/plan", { desired: [{ name: "" }] });
+      if (errRes.status === 200) {
+        const d = errRes.json();
+        if (d.summary.hasErrors && Array.isArray(d.errors) && d.errors.length > 0 && d.errors[0].code) {
+          pass("POST /api/config/plan → invalid rule → 200 with structured errors");
+        } else {
+          fail(`POST /api/config/plan → expected hasErrors + errors[], got: ${JSON.stringify(d.summary)}`);
+        }
+      } else {
+        fail(`POST /api/config/plan (invalid) → expected 200, got ${errRes.status}`);
+      }
+    }
+
+    // Missing desired field → 400
+    {
+      const missingRes = await api.post("/api/config/plan", {});
+      if (missingRes.status === 400) {
+        pass("POST /api/config/plan → missing desired field → 400");
+      } else {
+        fail(`POST /api/config/plan (missing desired) → expected 400, got ${missingRes.status}`);
+      }
+    }
+
+    // POST /api/config/apply — still pending v1.5 Slice 3+
+    skip("POST /api/config/apply → v1.5 Slice 3+ pending; not yet implemented");
+  } else {
+    // Go service parity pending v1.5 Slice 3
+    skip("POST /api/config/plan → TypeScript implemented; Go service parity pending (v1.5 Slice 3)");
+    skip("POST /api/config/apply → v1.5 Slice 3+ pending; not yet implemented");
+  }
 
   // Cleanup remaining rules
   for (const id of [udpId, udpDefaultId].filter(Boolean)) {

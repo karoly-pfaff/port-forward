@@ -8,6 +8,7 @@ interface EndpointDoc {
   response?: string;
   notes?: string;
   planned?: string;
+  parity?: string;
 }
 
 const ENDPOINTS: EndpointDoc[] = [
@@ -133,7 +134,7 @@ const ENDPOINTS: EndpointDoc[] = [
       "ConfigPlanResponse { generatedAt, mode, summary: ConfigPlanSummary, operations: ConfigPlanOperation[], errors: ConfigPlanError[], warnings: ConfigPlanWarning[] }",
     notes:
       "Rules are matched by stable rule id when present; otherwise by protocol+listenHost+listenPort identity. Ambiguous matches produce an error and refuse apply. hasDrift is true when any operation is add, update, or remove. destructive is true when a remove or forwarding-affecting update is present. Does not mutate running config.",
-    planned: "v1.5"
+    parity: "TypeScript server — Go service parity pending (v1.5)"
   },
   {
     method: "POST",
@@ -181,6 +182,9 @@ export function ApiDocsView(): ReactElement {
                   <code className="api-path">{ep.path}</code>
                   {ep.planned && (
                     <span className="api-planned-badge">Planned — {ep.planned}</span>
+                  )}
+                  {ep.parity && (
+                    <span className="api-parity-badge">{ep.parity}</span>
                   )}
                 </div>
                 <p className="api-purpose">{ep.purpose}</p>

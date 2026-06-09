@@ -980,6 +980,172 @@ describe("POST /api/forwards/:id/diagnose", () => {
   });
 });
 
+describe("POST /api/config/plan", () => {
+  it("returns 400 when desired field is missing", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { errors: string[] };
+      expect(Array.isArray(body.errors)).toBe(true);
+    });
+  });
+
+  it("returns 200 with no drift when desired is empty and current is empty", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [] })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { mode: string; summary: { hasDrift: boolean; hasErrors: boolean }; operations: unknown[]; errors: unknown[]; warnings: unknown[]; generatedAt: string };
+      expect(body.mode).toBe("plan");
+      expect(body.summary.hasDrift).toBe(false);
+      expect(body.summary.hasErrors).toBe(false);
+      expect(Array.isArray(body.operations)).toBe(true);
+      expect(Array.isArray(body.errors)).toBe(true);
+      expect(Array.isArray(body.warnings)).toBe(true);
+      expect(typeof body.generatedAt).toBe("string");
+    });
+  });
+
+  it("returns 200 with add operation when desired has a rule not in current", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          desired: [{ name: "New", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 49200, targetHost: "127.0.0.1", targetPort: 49201, enabled: false }]
+        })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { summary: { add: number; hasDrift: boolean }; operations: Array<{ type: string }> };
+      expect(body.summary.add).toBe(1);
+      expect(body.summary.hasDrift).toBe(true);
+      expect(body.operations[0].type).toBe("add");
+    });
+  });
+
+  it("returns 200 with remove operation for existing rule not in desired", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [] })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { summary: { remove: number; hasDrift: boolean } };
+      expect(body.summary.remove).toBe(1);
+      expect(body.summary.hasDrift).toBe(true);
+    }, { rules: [baseRule] });
+  });
+
+  it("returns 200 with unchanged op when desired matches existing rule", async () => {
+    await withServer(async (port) => {
+      const desired = {
+        name: baseRule.name,
+        protocol: baseRule.protocol,
+        listenHost: baseRule.listenHost,
+        listenPort: baseRule.listenPort,
+        targetHost: baseRule.targetHost,
+        targetPort: baseRule.targetPort,
+        enabled: baseRule.enabled
+      };
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [desired] })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { summary: { unchanged: number; hasDrift: boolean } };
+      expect(body.summary.unchanged).toBe(1);
+      expect(body.summary.hasDrift).toBe(false);
+    }, { rules: [baseRule] });
+  });
+
+  it("returns 200 with structured errors for invalid desired rule", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [{ name: "" }] })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { summary: { hasErrors: boolean }; errors: Array<{ code: string }> };
+      expect(body.summary.hasErrors).toBe(true);
+      expect(body.errors.some((e) => e.code === "INVALID_DESIRED_RULE")).toBe(true);
+    });
+  });
+
+  it("does not mutate existing rules", async () => {
+    await withServer(async (port) => {
+      await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [] })
+      });
+      const listResponse = await fetch(`http://127.0.0.1:${port}/api/forwards`);
+      const rules = (await listResponse.json()) as Array<{ id: string }>;
+      expect(rules).toHaveLength(1);
+      expect(rules[0].id).toBe("r1");
+    }, { rules: [baseRule] });
+  });
+
+  it("accepts wrapper object shape for desired", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: { rules: [] } })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { mode: string };
+      expect(body.mode).toBe("plan");
+    });
+  });
+
+  it("returns 200 with errors for completely invalid desired shape", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: "not-a-config" })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { summary: { hasErrors: boolean } };
+      expect(body.summary.hasErrors).toBe(true);
+    });
+  });
+
+  it("response includes warnings for remove operations", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [] })
+      });
+      const body = (await response.json()) as { warnings: Array<{ code: string }> };
+      expect(body.warnings.some((w) => w.code === "REMOVE_EXISTING")).toBe(true);
+    }, { rules: [baseRule] });
+  });
+
+  it("generatedAt is a parseable ISO timestamp", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/plan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [] })
+      });
+      const body = (await response.json()) as { generatedAt: string };
+      expect(isNaN(new Date(body.generatedAt).getTime())).toBe(false);
+    });
+  });
+});
+
 describe("GET /api/connections", () => {
   it("returns empty arrays when no rules exist", async () => {
     await withServer(async (port) => {

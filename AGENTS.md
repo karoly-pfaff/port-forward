@@ -404,7 +404,7 @@ v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cl
 
 v1.4 delivered the Live Connection Inspector: `GET /api/connections` in both runtimes, TCP and UDP session tracking, rule summaries, and a dedicated Live Connections UI view (TCP/UDP/Summary tabs, filters, auto-refresh). Coverage hardened before the feature was built; 116/116 contract checks pass. Tagged 1.4.0.
 
-v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. Slice 1 complete: shared types, API contract, matching semantics, and planned CLI commands documented. Backend implementation pending (Slices 2–8). See `docs/roadmap.md`.
+v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. Slices 1–2 complete: shared types, API contract, matching semantics, and planned CLI commands documented; pure plan engine and `POST /api/config/plan` implemented in TypeScript server; `validate:contract` TS assertions live; API Docs parity badge added. Go service parity (Slice 3), CLI commands (Slices 4–5), and Settings UI preview (Slice 6) pending. See `docs/roadmap.md`.
 
 Quality target for v1.4 and v1.5: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This coverage push is a deliberate prerequisite for v1.6.
 
