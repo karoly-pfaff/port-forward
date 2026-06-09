@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"portier/cli/sources/client"
 	"portier/cli/sources/output"
@@ -20,8 +21,54 @@ Subcommands:
   validate <file>                     Validate a local config file without importing it
   export --out <file>                 Export current rules to a file (omit --out to print to stdout)
   import <file> --mode merge|replace  Import rules from a file (--yes required for replace mode)
+  plan <file>                         Compare a desired config file against the running config (read-only)
+  diff <file>                         Human-friendly diff view of changes (read-only)
 
 Run 'portier config <subcommand> --help' for subcommand options.
+`
+
+const planHelp = `Usage: portier config plan <file> [options]
+
+Compare a desired config file against the running Portier configuration.
+Calls POST /api/config/plan. Read-only: does not mutate any running config.
+
+Options:
+  --fail-on-drift   Exit with code 4 when any add, update, or remove is present.
+
+Accepted file shapes:
+  Raw JSON array:  [{ "name": "...", ... }, ...]
+  Wrapper object:  { "rules": [{ "name": "...", ... }, ...] }
+  Exported config: { "version": "1", "exportedAt": "...", "rules": [...] }
+
+Exit codes:
+  0  No drift or --fail-on-drift not set
+  1  Plan errors (hasErrors: true) or API error
+  2  Invalid file, missing argument, or local validation failure
+  3  Connection failure — Portier service unreachable
+  4  Drift detected with --fail-on-drift (only when no plan errors)
+
+Examples:
+  portier config plan desired.json
+  portier config plan desired.json --fail-on-drift
+  portier --json config plan desired.json
+`
+
+const diffHelp = `Usage: portier config diff <file> [options]
+
+Show a human-friendly diff between a desired config file and the running Portier configuration.
+Calls POST /api/config/plan. Read-only: does not mutate any running config.
+
+Options:
+  --fail-on-drift    Exit with code 4 when any add, update, or remove is present.
+  --show-unchanged   Include unchanged rules in diff output (hidden by default).
+
+Exit codes: same as portier config plan.
+
+Examples:
+  portier config diff desired.json
+  portier config diff desired.json --show-unchanged
+  portier config diff desired.json --fail-on-drift
+  portier --json config diff desired.json
 `
 
 const exportHelp = `Usage: portier config export [--out <file>]
@@ -90,6 +137,10 @@ func RunConfig(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 		return RunConfigImport(c, jsonOutput, args[1:], stdout, stderr)
 	case "validate":
 		return RunConfigValidate(jsonOutput, args[1:], stdout, stderr)
+	case "plan":
+		return RunConfigPlan(c, jsonOutput, args[1:], stdout, stderr)
+	case "diff":
+		return RunConfigDiff(c, jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, configHelp)
 		return 0
@@ -495,4 +546,310 @@ func pluralRule(n int) string {
 		return "rule"
 	}
 	return "rules"
+}
+
+// RunConfigPlan compares a desired config file against the running config.
+func RunConfigPlan(c *client.Client, jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("config plan", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagFailOnDrift := fs.Bool("fail-on-drift", false, "exit code 4 when drift is detected")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, planHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, planHelp)
+		return 2
+	}
+	if fs.NArg() == 0 {
+		fmt.Fprintln(stderr, "Error: plan requires a config file path")
+		fmt.Fprint(stderr, planHelp)
+		return 2
+	}
+
+	filePath := fs.Arg(0)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
+		return 2
+	}
+
+	rules, parseErr := parseLocalConfig(data)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
+		return 2
+	}
+	vr := validateLocalConfig(rules)
+	if !vr.Valid {
+		fmt.Fprintln(stderr, "Config is invalid — plan aborted.")
+		for _, e := range vr.Errors {
+			fmt.Fprintf(stderr, "  %s\n", e)
+		}
+		return 2
+	}
+
+	plan, err := c.PlanConfig(buildPlanRequest(rules))
+	if err != nil {
+		return exitWithError(err, stderr)
+	}
+
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, plan); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return planExitCode(plan, *flagFailOnDrift)
+	}
+
+	printPlanHuman(plan, stdout)
+	return planExitCode(plan, *flagFailOnDrift)
+}
+
+// RunConfigDiff shows a human-friendly diff between a desired config and the running config.
+func RunConfigDiff(c *client.Client, jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("config diff", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagFailOnDrift := fs.Bool("fail-on-drift", false, "exit code 4 when drift is detected")
+	flagShowUnchanged := fs.Bool("show-unchanged", false, "include unchanged rules in diff output")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, diffHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, diffHelp)
+		return 2
+	}
+	if fs.NArg() == 0 {
+		fmt.Fprintln(stderr, "Error: diff requires a config file path")
+		fmt.Fprint(stderr, diffHelp)
+		return 2
+	}
+
+	filePath := fs.Arg(0)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
+		return 2
+	}
+
+	rules, parseErr := parseLocalConfig(data)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
+		return 2
+	}
+	vr := validateLocalConfig(rules)
+	if !vr.Valid {
+		fmt.Fprintln(stderr, "Config is invalid — diff aborted.")
+		for _, e := range vr.Errors {
+			fmt.Fprintf(stderr, "  %s\n", e)
+		}
+		return 2
+	}
+
+	plan, err := c.PlanConfig(buildPlanRequest(rules))
+	if err != nil {
+		return exitWithError(err, stderr)
+	}
+
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, plan); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return planExitCode(plan, *flagFailOnDrift)
+	}
+
+	printDiffHuman(plan, *flagShowUnchanged, stdout)
+	return planExitCode(plan, *flagFailOnDrift)
+}
+
+// buildPlanRequest converts local config rules into a ConfigPlanRequest.
+func buildPlanRequest(rules []rawConfigRule) client.ConfigPlanRequest {
+	configRules := make([]client.ConfigRule, len(rules))
+	for i, r := range rules {
+		configRules[i] = client.ConfigRule{
+			ID:         r.ID,
+			Name:       r.Name,
+			Protocol:   r.Protocol,
+			ListenHost: r.ListenHost,
+			ListenPort: r.ListenPort,
+			TargetHost: r.TargetHost,
+			TargetPort: r.TargetPort,
+			Enabled:    r.Enabled,
+			UDPMode:    r.UDPMode,
+		}
+	}
+	return client.ConfigPlanRequest{
+		Desired: client.ConfigPlanDesired{Rules: configRules},
+	}
+}
+
+// planExitCode determines the exit code for plan/diff commands.
+// Priority: plan errors (1) > drift with --fail-on-drift (4) > success (0).
+func planExitCode(plan *client.ConfigPlanResponse, failOnDrift bool) int {
+	if plan.Summary.HasErrors {
+		return 1
+	}
+	if failOnDrift && plan.Summary.HasDrift {
+		return 4
+	}
+	return 0
+}
+
+// printPlanHuman renders the plan response in structured human-readable format.
+func printPlanHuman(plan *client.ConfigPlanResponse, w io.Writer) {
+	s := plan.Summary
+
+	if !s.HasDrift && !s.HasErrors {
+		fmt.Fprintln(w, "No drift detected.")
+		if s.Unchanged > 0 {
+			fmt.Fprintf(w, "  %d %s unchanged.\n", s.Unchanged, pluralRule(s.Unchanged))
+		}
+		if len(plan.Warnings) > 0 {
+			fmt.Fprintln(w)
+			printPlanWarnings(plan.Warnings, w)
+		}
+		return
+	}
+
+	fmt.Fprintln(w, "Config Plan")
+	parts := []string{
+		fmt.Sprintf("Add: %d", s.Add),
+		fmt.Sprintf("Update: %d", s.Update),
+		fmt.Sprintf("Remove: %d", s.Remove),
+		fmt.Sprintf("Unchanged: %d", s.Unchanged),
+	}
+	if s.Destructive > 0 {
+		parts = append(parts, fmt.Sprintf("Destructive: %d", s.Destructive))
+	}
+	fmt.Fprintf(w, "  %s\n", strings.Join(parts, "  "))
+
+	if len(plan.Operations) > 0 {
+		fmt.Fprintln(w)
+		for _, op := range plan.Operations {
+			dest := ""
+			if op.Destructive {
+				dest = "  [destructive]"
+			}
+			fmt.Fprintf(w, "  %-10s %-24s %-5s %s%s\n",
+				op.Type, op.RuleName, op.Protocol, opEndpoint(op), dest)
+			for _, ch := range op.Changes {
+				fmt.Fprintf(w, "    %s: %s → %s\n",
+					ch.Field, formatChangeValue(ch.Before), formatChangeValue(ch.After))
+			}
+		}
+	}
+
+	if len(plan.Warnings) > 0 {
+		fmt.Fprintln(w)
+		printPlanWarnings(plan.Warnings, w)
+	}
+	if len(plan.Errors) > 0 {
+		fmt.Fprintln(w)
+		printPlanErrors(plan.Errors, w)
+	}
+}
+
+// printDiffHuman renders the plan response as a visual diff.
+func printDiffHuman(plan *client.ConfigPlanResponse, showUnchanged bool, w io.Writer) {
+	s := plan.Summary
+
+	if !s.HasDrift && !s.HasErrors {
+		fmt.Fprintln(w, "No drift detected.")
+		return
+	}
+
+	for _, op := range plan.Operations {
+		if op.Type == "unchanged" && !showUnchanged {
+			continue
+		}
+		dest := ""
+		if op.Destructive {
+			dest = "  [destructive]"
+		}
+		fmt.Fprintf(w, "%s %-9s %-24s %-5s %s%s\n",
+			opDiffPrefix(op.Type), opDiffLabel(op.Type),
+			op.RuleName, op.Protocol, opEndpoint(op), dest)
+		for _, ch := range op.Changes {
+			fmt.Fprintf(w, "  %s: %s → %s\n",
+				ch.Field, formatChangeValue(ch.Before), formatChangeValue(ch.After))
+		}
+	}
+
+	if len(plan.Warnings) > 0 {
+		fmt.Fprintln(w)
+		printPlanWarnings(plan.Warnings, w)
+	}
+	if len(plan.Errors) > 0 {
+		fmt.Fprintln(w)
+		printPlanErrors(plan.Errors, w)
+	}
+}
+
+func opEndpoint(op client.ConfigPlanOperation) string {
+	snap := op.Current
+	if snap == nil {
+		snap = op.Desired
+	}
+	if snap == nil {
+		return "—"
+	}
+	return fmt.Sprintf("%s:%d → %s:%d", snap.ListenHost, snap.ListenPort, snap.TargetHost, snap.TargetPort)
+}
+
+func opDiffPrefix(opType string) string {
+	switch opType {
+	case "add":
+		return "+"
+	case "update":
+		return "~"
+	case "remove":
+		return "-"
+	default:
+		return "="
+	}
+}
+
+func opDiffLabel(opType string) string {
+	switch opType {
+	case "add":
+		return "Add:"
+	case "update":
+		return "Update:"
+	case "remove":
+		return "Remove:"
+	default:
+		return "Unchanged:"
+	}
+}
+
+func formatChangeValue(v any) string {
+	if v == nil {
+		return "(none)"
+	}
+	if f, ok := v.(float64); ok {
+		if f == float64(int64(f)) {
+			return fmt.Sprintf("%d", int64(f))
+		}
+		return fmt.Sprintf("%g", f)
+	}
+	return fmt.Sprintf("%v", v)
+}
+
+func printPlanWarnings(warnings []client.ConfigPlanWarning, w io.Writer) {
+	fmt.Fprintln(w, "Warnings:")
+	for _, warn := range warnings {
+		fmt.Fprintf(w, "  [%s] %s\n", warn.Code, warn.Message)
+	}
+}
+
+func printPlanErrors(errs []client.ConfigPlanError, w io.Writer) {
+	fmt.Fprintln(w, "Errors:")
+	for _, e := range errs {
+		fmt.Fprintf(w, "  [%s] %s\n", e.Code, e.Message)
+	}
 }

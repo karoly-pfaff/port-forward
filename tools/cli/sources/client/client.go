@@ -262,6 +262,82 @@ type ConfigImportResponse struct {
 	Rules  []ForwardRuleResponse `json:"rules"`
 }
 
+// ConfigPlanRuleSnapshot mirrors a rule snapshot in a plan response.
+type ConfigPlanRuleSnapshot struct {
+	ID         string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	Protocol   string `json:"protocol"`
+	ListenHost string `json:"listenHost"`
+	ListenPort int    `json:"listenPort"`
+	TargetHost string `json:"targetHost"`
+	TargetPort int    `json:"targetPort"`
+	Enabled    bool   `json:"enabled"`
+	UDPMode    string `json:"udpMode,omitempty"`
+}
+
+// ConfigPlanChange describes a field-level change in a plan update operation.
+type ConfigPlanChange struct {
+	Field  string `json:"field"`
+	Before any    `json:"before"`
+	After  any    `json:"after"`
+}
+
+// ConfigPlanOperation describes one add/update/remove/unchanged operation.
+type ConfigPlanOperation struct {
+	Type        string                  `json:"type"`
+	RuleID      string                  `json:"ruleId,omitempty"`
+	RuleName    string                  `json:"ruleName"`
+	Protocol    string                  `json:"protocol"`
+	Current     *ConfigPlanRuleSnapshot `json:"current,omitempty"`
+	Desired     *ConfigPlanRuleSnapshot `json:"desired,omitempty"`
+	Changes     []ConfigPlanChange      `json:"changes,omitempty"`
+	Destructive bool                    `json:"destructive"`
+}
+
+// ConfigPlanSummary contains operation counts for the plan response.
+type ConfigPlanSummary struct {
+	Add         int  `json:"add"`
+	Update      int  `json:"update"`
+	Remove      int  `json:"remove"`
+	Unchanged   int  `json:"unchanged"`
+	Destructive int  `json:"destructive"`
+	HasDrift    bool `json:"hasDrift"`
+	HasErrors   bool `json:"hasErrors"`
+}
+
+// ConfigPlanError is a structured error in a plan response.
+type ConfigPlanError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Field   string `json:"field,omitempty"`
+}
+
+// ConfigPlanWarning is a warning in a plan response.
+type ConfigPlanWarning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// ConfigPlanResponse mirrors the response from POST /api/config/plan.
+type ConfigPlanResponse struct {
+	GeneratedAt string                `json:"generatedAt"`
+	Mode        string                `json:"mode"`
+	Summary     ConfigPlanSummary     `json:"summary"`
+	Operations  []ConfigPlanOperation `json:"operations"`
+	Errors      []ConfigPlanError     `json:"errors"`
+	Warnings    []ConfigPlanWarning   `json:"warnings"`
+}
+
+// ConfigPlanDesired is the desired config sent to POST /api/config/plan.
+type ConfigPlanDesired struct {
+	Rules []ConfigRule `json:"rules"`
+}
+
+// ConfigPlanRequest is the request body for POST /api/config/plan.
+type ConfigPlanRequest struct {
+	Desired ConfigPlanDesired `json:"desired"`
+}
+
 // doWithBody executes an HTTP request with a JSON body and unmarshals the response into out.
 // If out is nil the response body is checked for errors but not parsed.
 func (c *Client) doWithBody(method, path string, body any, out any) error {
@@ -315,6 +391,15 @@ func (c *Client) ExportConfig() (*ConfigExportResponse, error) {
 func (c *Client) ImportConfig(req ConfigImportRequest) (*ConfigImportResponse, error) {
 	var resp ConfigImportResponse
 	if err := c.doWithBody(http.MethodPost, "/api/config/import", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// PlanConfig calls POST /api/config/plan and returns the plan response.
+func (c *Client) PlanConfig(req ConfigPlanRequest) (*ConfigPlanResponse, error) {
+	var resp ConfigPlanResponse
+	if err := c.doWithBody(http.MethodPost, "/api/config/plan", req, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

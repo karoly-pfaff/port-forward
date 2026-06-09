@@ -156,7 +156,7 @@ Coverage outputs (gitignored):
 - `coverage/shared/`, `coverage/server/`, `coverage/client/` — vitest json-summary + text
 - `coverage/` — Go .out profiles (written and removed per run)
 
-Baseline (v1.5 Slice 3): cli 92.7%, client 94.71%, service 85.8%, shared 100%, server 88.63%.
+Baseline (v1.5 Slice 4): cli 93.2%, client 94.71%, service 85.8%, shared 100%, server 88.63%.
 See `docs/coverage-baseline.md` for full breakdown and ratchet plan.
 
 Gates (in `scripts/validate-coverage.js`, set at v1.4.0):
@@ -183,15 +183,15 @@ CLI binary: `portier` / `portier.exe`. Background service remains `service` / `s
 
 Global flags: `--url`, `--host`, `--port`, `--json`, `--version`, `-h`/`--help`.  
 Environment: `PORTIER_URL`. Default URL: `http://127.0.0.1:47831`.  
-Exit codes: `0` success, `1` API error, `2` invalid args, `3` connection failure, `4` drift detected (planned v1.5: `config plan --fail-on-drift`).
+Exit codes: `0` success, `1` API error, `2` invalid args, `3` connection failure, `4` drift detected (`config plan --fail-on-drift` / `config diff --fail-on-drift`).
 
-Implemented commands: `list`, `status`, `activity` (with `--limit`/`--rule`/`--type`/`--severity`), `start <id|name>`, `stop <id|name>`, `diagnose <id|name>`, `config validate <file>`, `config export --out <file>`, `config import --mode merge|replace [--yes] <file>`, `diagnostics export --out <file> [--run-diagnostics] [--activity-limit N]`, `runtime`, `version`, `help`.
+Implemented commands: `list`, `status`, `activity` (with `--limit`/`--rule`/`--type`/`--severity`), `start <id|name>`, `stop <id|name>`, `diagnose <id|name>`, `config validate <file>`, `config export --out <file>`, `config import --mode merge|replace [--yes] <file>`, `config plan <file> [--fail-on-drift]`, `config diff <file> [--show-unchanged] [--fail-on-drift]`, `diagnostics export --out <file> [--run-diagnostics] [--activity-limit N]`, `runtime`, `version`, `help`.
 
 Rule-targeting commands (`start`, `stop`, `diagnose`) accept an exact rule ID or an exact rule name. Duplicate names produce exit 2 with an ID disambiguation table on stderr.
 
 `portier config validate` validates a local file without contacting the service. `portier config export/import` use `GET /api/config/export` and `POST /api/config/import`. Import validates locally first — invalid files are rejected without an API call. Replace mode requires `--yes`.
 
-`portier diagnostics export` builds a local JSON support bundle (schemaVersion, runtime, rules, statuses, activity, diagnostics, metadata) from independent API calls. Partial source failures are recorded in `errors[]` rather than aborting. `--run-diagnostics` adds per-rule diagnose results. `--activity-limit` (1–500, default 100). 163+ CLI tests. Coverage gate: 92.7% total, threshold 92%.
+`portier diagnostics export` builds a local JSON support bundle (schemaVersion, runtime, rules, statuses, activity, diagnostics, metadata) from independent API calls. Partial source failures are recorded in `errors[]` rather than aborting. `--run-diagnostics` adds per-rule diagnose results. `--activity-limit` (1–500, default 100). 200+ CLI tests. Coverage gate: 93.2% total, threshold 92%.
 
 The CLI binary (`portier`/`portier.exe`) is included in the runtime package (`build/portier/`) and release artifacts. It is not added to PATH by the installer in v1.3.
 
@@ -404,7 +404,7 @@ v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cl
 
 v1.4 delivered the Live Connection Inspector: `GET /api/connections` in both runtimes, TCP and UDP session tracking, rule summaries, and a dedicated Live Connections UI view (TCP/UDP/Summary tabs, filters, auto-refresh). Coverage hardened before the feature was built; 116/116 contract checks pass. Tagged 1.4.0.
 
-v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. Slices 1–3 complete: shared types, API contract, matching semantics, and planned CLI commands documented; pure plan engine and `POST /api/config/plan` implemented in TypeScript server (Slice 2) and Go service (Slice 3); `validate:contract` runs all 11 plan assertions against both runtimes (138 passed, 2 skipped); API Docs parity badge removed. CLI commands (Slices 4–5) and Settings UI preview (Slice 6) pending. See `docs/roadmap.md`.
+v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. Slices 1–4 complete: shared types, API contract, matching semantics documented (Slice 1); pure plan engine and `POST /api/config/plan` implemented in TypeScript server (Slice 2) and Go service (Slice 3); `portier config plan <file>` and `portier config diff <file>` CLI commands implemented (Slice 4) with structured output, field-level change detail, `--fail-on-drift` (exit 4), `--show-unchanged`, and `--json`; 200+ CLI tests; CLI coverage 93.2% (gate 92%). CLI apply command (Slice 5) and Settings UI preview (Slice 6) pending. See `docs/roadmap.md`.
 
 Quality target for v1.4 and v1.5: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This coverage push is a deliberate prerequisite for v1.6.
 

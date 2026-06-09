@@ -121,15 +121,15 @@ When `POST /api/config/plan`, `POST /api/config/apply`, and CLI `config diff/pla
 
 | Area | Workflow | E2E coverage | Priority | Notes |
 | ---- | -------- | :----------: | -------- | ----- |
-| Config plan | plan preview shows Add/Update/Remove/Unchanged counts | no | high | planned: Settings import preview UI |
-| Config plan | plan shows no-drift when desired matches running | no | high | planned: zero-change case |
-| Config plan | plan shows drift when desired differs from running | no | high | planned: add/update/remove cases |
-| Config plan | plan shows destructive flag for remove/forwarding-field-update | no | high | planned: destructive operation highlight |
+| Config plan | plan preview shows Add/Update/Remove/Unchanged counts | no | high | Slice 4 complete: `portier config plan <file>` CLI implemented; UI preview pending (Slice 6) |
+| Config plan | plan shows no-drift when desired matches running | no | high | Slice 4 complete: CLI shows "No drift detected."; UI pending |
+| Config plan | plan shows drift when desired differs from running | no | high | Slice 4 complete: CLI shows add/update/remove per-operation; UI pending |
+| Config plan | plan shows destructive flag for remove/forwarding-field-update | no | high | Slice 4 complete: CLI shows [destructive] marker; UI pending |
 | Config apply | apply confirmation dialog shown for destructive operations | no | high | planned: Settings apply confirm |
 | Config apply | dry-run does not mutate running rules | no | high | planned: CLI dry-run via UI proxy or direct test |
 | Config apply | backup-out writes pre-apply config before applying | no | medium | planned: CLI --backup-out |
 | Config apply | apply with yes applies desired config and refreshes rule list | no | high | planned: post-apply state verification |
-| Config diff | diff output is human-readable and shows field-level changes | no | medium | planned: CLI diff command |
+| Config diff | diff output is human-readable and shows field-level changes | no | medium | Slice 4 complete: `portier config diff <file>` implemented; CLI E2E harness would be needed for full coverage |
 | API docs | POST /api/config/plan listed without any badge (both runtimes implement it) | no | medium | Slice 3 complete: parity badge removed from ApiDocsView; both runtimes implement |
 | API docs | POST /api/config/apply listed with Planned badge removed | no | medium | planned: remove badge after Slice 5 implement |
 

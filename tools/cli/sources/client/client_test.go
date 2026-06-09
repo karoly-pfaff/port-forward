@@ -803,3 +803,187 @@ func TestImportConfig_ConnectionError(t *testing.T) {
 		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
 	}
 }
+
+// --- PlanConfig ---
+
+func planNoDriftResponse() map[string]any {
+	return map[string]any{
+		"generatedAt": "2026-01-01T00:00:00.000Z",
+		"mode":        "plan",
+		"summary": map[string]any{
+			"add": 0, "update": 0, "remove": 0, "unchanged": 1,
+			"destructive": 0, "hasDrift": false, "hasErrors": false,
+		},
+		"operations": []map[string]any{
+			{
+				"type": "unchanged", "ruleId": "r1", "ruleName": "Local DNS",
+				"protocol": "udp",
+				"current": map[string]any{
+					"id": "r1", "name": "Local DNS", "protocol": "udp",
+					"listenHost": "127.0.0.1", "listenPort": 5353,
+					"targetHost": "8.8.8.8", "targetPort": 53, "enabled": true,
+				},
+				"desired": map[string]any{
+					"name": "Local DNS", "protocol": "udp",
+					"listenHost": "127.0.0.1", "listenPort": 5353,
+					"targetHost": "8.8.8.8", "targetPort": 53, "enabled": true,
+				},
+				"changes": []any{}, "destructive": false,
+			},
+		},
+		"errors": []any{}, "warnings": []any{},
+	}
+}
+
+func planWithErrorsResponse() map[string]any {
+	return map[string]any{
+		"generatedAt": "2026-01-01T00:00:00.000Z",
+		"mode":        "plan",
+		"summary": map[string]any{
+			"add": 0, "update": 0, "remove": 0, "unchanged": 0,
+			"destructive": 0, "hasDrift": false, "hasErrors": true,
+		},
+		"operations": []any{},
+		"errors":     []map[string]any{{"code": "INVALID_DESIRED_RULE", "message": "rule 1: name is required"}},
+		"warnings":   []any{},
+	}
+}
+
+func TestPlanConfig_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/config/plan" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(planNoDriftResponse())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigPlanRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}},
+	}
+	resp, err := c.PlanConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Mode != "plan" {
+		t.Errorf("mode = %q, want %q", resp.Mode, "plan")
+	}
+	if resp.Summary.HasDrift {
+		t.Error("hasDrift should be false")
+	}
+	if len(resp.Operations) != 1 {
+		t.Errorf("len(operations) = %d, want 1", len(resp.Operations))
+	}
+	if resp.Operations[0].Type != "unchanged" {
+		t.Errorf("operations[0].type = %q, want unchanged", resp.Operations[0].Type)
+	}
+}
+
+func TestPlanConfig_PlanErrorsInResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(planWithErrorsResponse())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigPlanRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}},
+	}
+	resp, err := c.PlanConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error (plan errors come as 200): %v", err)
+	}
+	if !resp.Summary.HasErrors {
+		t.Error("hasErrors should be true")
+	}
+	if len(resp.Errors) != 1 {
+		t.Errorf("len(errors) = %d, want 1", len(resp.Errors))
+	}
+	if resp.Errors[0].Code != "INVALID_DESIRED_RULE" {
+		t.Errorf("errors[0].code = %q, want INVALID_DESIRED_RULE", resp.Errors[0].Code)
+	}
+}
+
+func TestPlanConfig_RequestBodyShape(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(planNoDriftResponse())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	rule := client.ConfigRule{
+		Name: "API", Protocol: "tcp",
+		ListenHost: "127.0.0.1", ListenPort: 48000,
+		TargetHost: "10.0.0.1", TargetPort: 8080, Enabled: true,
+	}
+	req := client.ConfigPlanRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{rule}},
+	}
+	_, err := c.PlanConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	desired, ok := gotBody["desired"].(map[string]any)
+	if !ok {
+		t.Fatalf("request body missing 'desired' object; got: %v", gotBody)
+	}
+	rules, ok := desired["rules"].([]any)
+	if !ok || len(rules) != 1 {
+		t.Fatalf("desired.rules = %v, want array of 1", desired["rules"])
+	}
+	r0 := rules[0].(map[string]any)
+	if r0["name"] != "API" {
+		t.Errorf("rules[0].name = %v, want API", r0["name"])
+	}
+	if r0["protocol"] != "tcp" {
+		t.Errorf("rules[0].protocol = %v, want tcp", r0["protocol"])
+	}
+}
+
+func TestPlanConfig_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string][]string{"errors": {"desired is required"}})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigPlanRequest{Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}}}
+	_, err := c.PlanConfig(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 400 {
+		t.Errorf("status = %d, want 400", apiErr.StatusCode)
+	}
+}
+
+func TestPlanConfig_ConnectionError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+
+	c := client.New(addr)
+	req := client.ConfigPlanRequest{Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}}}
+	_, err := c.PlanConfig(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var connErr *client.ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
+	}
+}

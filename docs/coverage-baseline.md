@@ -1,6 +1,6 @@
 # Coverage Baseline
 
-Measured at v1.5 pre-release (2026-06-09). Updated from v1.4.0 (cli 92.7%, client 90.56%, service 82.5%, shared 82.1%, server 82.88%).
+Measured at v1.5 pre-release (2026-06-09). Updated from v1.4.0 (cli 92.7%, client 90.56%, service 82.5%, shared 82.1%, server 82.88%). CLI updated at v1.5 Slice 4 (92.7% → 93.2%).
 
 ## v1.5 Pre-Release Gates (ratcheted from v1.4.0)
 
@@ -8,7 +8,7 @@ Gates ratcheted after v1.5 coverage uplift pass. Raise them as coverage improves
 
 | Component | Statements | Branch | Functions | Gate (stmts/branch/funcs) | Status |
 | --------- | ---------: | -----: | --------: | ------------------------: | ------ |
-| tools/cli |      92.7% |      — |      98.2% |                       92% | gated  |
+| tools/cli |      93.2% |      — |      98.6% |                       92% | gated  |
 | client    |     94.71% | 90.19% |     78.26% |                  94/90/78 | gated  |
 | server    |     88.63% | 91.24% |     99.09% |                  87/89/99 | gated  |
 | service   |      85.8% |      — |      92.5% |                       84% | gated  |
@@ -20,7 +20,7 @@ Gates are enforced by `npm run validate:coverage` (`scripts/validate-coverage.js
 
 | Component     | Statements | Branch | Functions |         Gate | Tooling                           |
 | ------------- | ---------: | -----: | --------: | -----------: | --------------------------------- |
-| tools/cli     |      92.7% |      — |      98.2% |          92% | `go test` + validate-coverage --only cli |
+| tools/cli     |      93.2% |      — |      98.6% |          92% | `go test` + validate-coverage --only cli |
 | client        |     94.71% | 90.19% |     78.26% |     94/90/78 | vitest + @vitest/coverage-v8    |
 | service       |      85.8% |      — |      92.5% |          84% | `go test -coverpkg`               |
 | shared        |    100.00% |100.00% |    100.00% | 100/100/100  | vitest + @vitest/coverage-v8    |
@@ -50,17 +50,17 @@ All coverage output lands in `coverage/` (gitignored). TypeScript workspaces wri
 
 ---
 
-## tools/cli — 92.7% statements (gate: 92%)
+## tools/cli — 93.2% statements (gate: 92%)
 
 | Package                    | Coverage |
 | -------------------------- | -------: |
-| portier/cli/sources        |    ~35%* |
-| portier/cli/sources/client |    ~11%* |
-| portier/cli/sources/commands |  ~82%* |
+| portier/cli/sources        |    ~29%* |
+| portier/cli/sources/client |    ~9%*  |
+| portier/cli/sources/commands |  ~85%* |
 | portier/cli/sources/output |     ~2%* |
-| **Total (cross-package)**  |  **92.7%** |
+| **Total (cross-package)**  |  **93.2%** |
 
-\* Per-package numbers reflect cross-package instrumentation totals; the combined 92.7% is the meaningful figure.
+\* Per-package numbers reflect cross-package instrumentation totals; the combined 93.2% is the meaningful figure. Updated at v1.5 Slice 4: `configplancmd_test.go` (35 tests) + 5 client PlanConfig tests added; `config plan` and `config diff` commands fully covered.
 
 Gate: 92%. Enforced by `npm run validate:coverage:cli` (scripts/validate-coverage.js --only cli).
 
@@ -244,7 +244,7 @@ These are not part of statement coverage but are important for overall test conf
 - **server config-store.ts** (100% ✓): high baseline maintained.
 - **shared validation/types** (100% ✓): new diff/plan types and validation helpers — 100% required.
 - **service config**: 100% for new diff/plan/apply logic when Slice 5 (apply) is implemented.
-- **tools/cli commands** (gate 92%): `config diff`, `config plan`, `config apply` — 100% target; gate will ratchet (Slices 4–5 pending).
+- **tools/cli commands** (93.2% ✓): `config plan` and `config diff` implemented (Slice 4 complete); `config apply` pending (Slice 5). CLI gate at 93.2% (gate 92%).
 
 ---
 
@@ -258,12 +258,12 @@ All new or materially changed implementation files in v1.5 must reach 100% meani
 
 | Component | v1.3.0 | v1.4.0    | v1.5 pre  | v1.5 target | v1.6 target |
 | --------- | -----: | --------: | --------: | ----------: | ----------: |
-| cli       |  92.7% |     92.7% |     92.7% |       95%+  |        100% |
+| cli       |  92.7% |     92.7% |     93.2% |       95%+  |        100% |
 | client    |  89.2% |    90.56% |    94.71% |       96%+  |        100% |
 | server    |  71.9% |    82.88% |    88.63% |       92%+  |        100% |
 | service   |  79.7% |     82.5% |     85.8% |       90%+  |        100% |
 | shared    |  82.1% |     82.1% |    100.0% |      100.0% |        100% |
 
-v1.5 pre-release coverage uplift: shared → 100%, client 90.56% → 94.71%, server 82.88% → 87.11%, service 82.5% → 84.8%. All gates ratcheted upward. v1.5 Slice 2: server 87.11% → 88.63% (`config-plan.ts` at 100%). v1.5 Slice 3: service 84.8% → 85.8% (`configplan` package added at ~100%, 49 unit tests).
+v1.5 pre-release coverage uplift: shared → 100%, client 90.56% → 94.71%, server 82.88% → 87.11%, service 82.5% → 84.8%. All gates ratcheted upward. v1.5 Slice 2: server 87.11% → 88.63% (`config-plan.ts` at 100%). v1.5 Slice 3: service 84.8% → 85.8% (`configplan` package added at ~100%, 49 unit tests). v1.5 Slice 4: cli 92.7% → 93.2% (`config plan` and `config diff` commands; 200+ CLI tests).
 
 Do not block unrelated v1.5 work on legacy coverage gaps. Require 100% for newly added or materially changed files in v1.5 and v1.6.

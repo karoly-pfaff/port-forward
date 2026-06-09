@@ -216,7 +216,7 @@ All commands that target a rule accept:
 
 If multiple rules share the same name, the command exits with code 2 and lists the matching IDs on stderr. Use the rule ID in that case.
 
-### `portier config plan <file>` — Planned (v1.5)
+### `portier config plan <file>`
 
 Compare a desired config file against the currently running configuration and show a structured plan.
 
@@ -226,24 +226,69 @@ portier --json config plan <file>
 portier config plan <file> --fail-on-drift
 ```
 
-Validates the desired file locally, then calls `POST /api/config/plan`. Prints a human-readable summary of adds, updates, removes, and unchanged rules.
+Validates the desired file locally (same validation as `config validate`), then calls `POST /api/config/plan`. If the file is invalid or unreadable, exits with code `2` without calling the API.
+
+Human output when no drift:
+```
+No drift detected.  (5 unchanged)
+```
+
+Human output when drift is present — prints a "Config Plan" header, a summary line (`Add: N  Update: N  Remove: N  Unchanged: N`), then per-operation rows with field-level change detail:
+```
+  add        my-rule                  tcp   127.0.0.1:48000
+  update     other-rule               tcp   127.0.0.1:48001 [destructive]
+    listenPort: 15432 → 15433
+  remove     old-rule                 udp   0.0.0.0:48002 [destructive]
+```
+
+Warnings and errors are printed after the operation list. Warnings do not change the exit code.
 
 Flags:
-- `--fail-on-drift` — exits with code `4` when any add, update, or remove operation is present.
+- `--fail-on-drift` — exits with code `4` when any add, update, or remove is present and no plan errors occurred. Plan errors (exit `1`) take priority over drift (exit `4`).
 
-With `--json`: prints `ConfigPlanResponse` from the API.
+With `--json`: prints the raw `ConfigPlanResponse` from the API.
 
-Exit codes: `0` no drift or `--fail-on-drift` not set; `4` drift detected with `--fail-on-drift`; `1` API error; `2` invalid file or missing argument; `3` connection failure.
+Exit codes:
+- `0` — success: no drift, or drift present but `--fail-on-drift` not set, and no plan errors
+- `1` — plan errors returned (`hasErrors: true`) or API error
+- `2` — invalid file, unreadable file, or missing argument
+- `3` — connection failure (Portier service unreachable)
+- `4` — drift detected with `--fail-on-drift` (only when no plan errors)
 
-### `portier config diff <file>` — Planned (v1.5)
+### `portier config diff <file>`
 
 Human-friendly diff view of changes between the desired file and the running config.
 
 ```
 portier config diff <file>
+portier config diff <file> --show-unchanged
+portier --json config diff <file>
+portier config diff <file> --fail-on-drift
 ```
 
-Uses the same underlying `POST /api/config/plan` response as `portier config plan`. Formats output as a compact diff with field-level change detail.
+Uses the same underlying `POST /api/config/plan` response as `portier config plan`. Formats output as a compact diff with `+`/`~`/`-`/`=` prefixes and field-level change detail.
+
+Human output when no drift:
+```
+No drift detected.
+```
+
+Human output when drift is present:
+```
++ Add:       my-rule                  tcp   127.0.0.1:48000
+~ Update:    other-rule               tcp   127.0.0.1:48001 [destructive]
+  listenPort: 15432 → 15433
+- Remove:    old-rule                 udp   0.0.0.0:48002 [destructive]
+```
+
+Unchanged rules are hidden by default. Warnings and errors are printed after the rule list.
+
+Flags:
+- `--show-unchanged` — include unchanged rules in output (shown with `=` prefix)
+- `--fail-on-drift` — exits with code `4` when drift is present and no plan errors occurred
+- `--json` (global) — prints the raw `ConfigPlanResponse` (same as `config plan --json`)
+
+Exit codes are the same as `portier config plan`.
 
 ### `portier config apply <file> --yes` — Planned (v1.5)
 
@@ -366,7 +411,7 @@ portier -h
 | `1` | General error or API error |
 | `2` | Invalid arguments or usage error |
 | `3` | Connection failure — Portier service unreachable |
-| `4` | Drift detected — used by `portier config plan --fail-on-drift` (planned v1.5) |
+| `4` | Drift detected — used by `portier config plan --fail-on-drift` and `portier config diff --fail-on-drift` |
 
 ## Runtime Package
 
