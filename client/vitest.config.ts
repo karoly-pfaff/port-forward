@@ -22,7 +22,9 @@ export default defineConfig({
       reporter: ["text", "json-summary"],
       reportsDirectory: "../coverage/client",
       include: ["sources/**/*.{ts,tsx}"],
-      exclude: ["sources/**/*.test.{ts,tsx}", "sources/test/**", "build/**", "*.config.ts"]
+      // main.tsx is the browser ReactDOM mount entry point; not a unit-test target.
+      // Runtime behavior is covered by E2E and smoke tests.
+      exclude: ["sources/**/*.test.{ts,tsx}", "sources/test/**", "sources/main.tsx", "build/**", "*.config.ts"]
     }
   }
 });

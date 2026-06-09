@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,6 +171,35 @@ func TestObjectWithoutRulesKeyReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Config file must contain an array of forward rules.") {
 		t.Fatalf("error = %q, want array error", err)
+	}
+}
+
+// TestLoadNonErrNotExistError verifies that Load propagates a read error that is
+// NOT os.ErrNotExist, as distinct from the missing-file case (which silently
+// returns an empty rule list).  Using a directory path as the config path causes
+// os.ReadFile to return a non-ErrNotExist error on all platforms.
+func TestLoadNonErrNotExistError(t *testing.T) {
+	dirPath := t.TempDir()
+	_, err := NewStore(dirPath).Load()
+	if err == nil {
+		t.Fatal("expected error when config path is a directory")
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("error should not be os.ErrNotExist; got: %v", err)
+	}
+}
+
+// TestSaveMkdirAllFails verifies that Save returns an error when it cannot create
+// the parent directory (here: a regular file exists at the parent path).
+func TestSaveMkdirAllFails(t *testing.T) {
+	blockFile := filepath.Join(t.TempDir(), "notadir")
+	if err := os.WriteFile(blockFile, []byte("x"), 0o600); err != nil {
+		t.Fatalf("create block file: %v", err)
+	}
+	// blockFile is a regular file; using it as a directory component fails MkdirAll.
+	store := NewStore(filepath.Join(blockFile, "forwards.json"))
+	if err := store.Save([]domain.ForwardRule{testRule()}); err == nil {
+		t.Fatal("expected error when parent path is a file, not a directory")
 	}
 }
 

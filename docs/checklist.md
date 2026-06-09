@@ -51,6 +51,11 @@ Flags supported by all scripts:
 - `--keep-files` / `-KeepFiles` — preserve temp directories on failure for debugging
 - `--port` / `-Port` — override the management port (default: auto-detect free port)
 
+## Coverage Tooling Notes
+
+- [x] **v1.6 Slice B — Service manager rollback and config error-path tests** — 9 new Go tests: 7 in `manager_test.go` (CreateRule/UpdateRule/DeleteRule/ReorderRules persist-failure rollback, UpdateRule restart-after-rollback, NewFromConfig load error, StartEnabled bind failure), 2 in `config_test.go` (Load non-ErrNotExist error, Save MkdirAll failure). Service coverage 87.7% → 88.6%, gate raised 87% → 88%. All tests pass without sockets or permissions tricks.
+- [x] **v1.6 Slice A — Coverage tooling stabilized** — Windows vitest/v8 path-case deduplication bug fixed in `scripts/validate-coverage.js`. Structural-zero files excluded from vitest `coverage.include` in shared/server/client workspaces. Client branch/funcs gates recalibrated to accurate post-dedup values (89/78). Two consecutive `npm run validate:coverage` runs both pass. See `docs/coverage-baseline.md` methodology section.
+
 ## Automated Coverage Confirmed
 
 Shared and TypeScript coverage:

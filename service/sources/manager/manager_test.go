@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -1414,4 +1415,166 @@ func waitFor(t *testing.T, condition func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("condition was not met before timeout")
+}
+
+// ── Persist-failure rollback tests ───────────────────────────────────────────
+//
+// failingStore returns a *config.Store whose Save will always fail.
+// The path is placed under a regular file so os.MkdirAll cannot create the
+// parent directory — a clean, cross-platform failure that requires no
+// permission manipulation.
+func failingStore(t *testing.T) *config.Store {
+	t.Helper()
+	blockFile := filepath.Join(t.TempDir(), "notadir")
+	if err := os.WriteFile(blockFile, []byte("x"), 0o600); err != nil {
+		t.Fatalf("create block file: %v", err)
+	}
+	s := config.NewStore(filepath.Join(blockFile, "forwards.json"))
+	return &s
+}
+
+// TestCreateRulePersistFailureRollsBack asserts that CreateRule removes the
+// appended rule from memory when the persist call fails.
+func TestCreateRulePersistFailureRollsBack(t *testing.T) {
+	m := testManager(t, nil)
+	m.store = failingStore(t)
+
+	input := inputForRule(tcpRule(), "")
+	if _, err := m.CreateRule(input); err == nil {
+		t.Fatal("expected error from failing store")
+	}
+	if got := m.ListRules(); len(got) != 0 {
+		t.Fatalf("expected empty rules after rollback, got %d rule(s)", len(got))
+	}
+}
+
+// TestUpdateRulePersistFailureRollsBack asserts that UpdateRule restores the
+// original rule when the persist call fails (non-forwarding field change).
+func TestUpdateRulePersistFailureRollsBack(t *testing.T) {
+	rule := tcpRule()
+	rule.Enabled = false
+	m := testManager(t, []domain.ForwardRule{rule})
+	m.store = failingStore(t)
+
+	newName := "Renamed"
+	if _, err := m.UpdateRule(rule.ID, validation.ForwardRulePatch{Name: &newName}); err == nil {
+		t.Fatal("expected error from failing store")
+	}
+	rules := m.ListRules()
+	if len(rules) != 1 || rules[0].Name != rule.Name {
+		t.Fatalf("original rule not restored after rollback: %#v", rules)
+	}
+}
+
+// TestUpdateRulePersistFailureWithRunningRuleRestartsOriginal asserts that when a
+// running rule's forwarding fields are updated but persist fails, the original
+// rule is re-started to restore the pre-update running state.
+func TestUpdateRulePersistFailureWithRunningRuleRestartsOriginal(t *testing.T) {
+	rule := tcpRule()
+	rule.ListenPort = freeTCPPort(t)
+	m := testManager(t, []domain.ForwardRule{rule})
+	defer m.StopAll()
+
+	if _, err := m.StartRule(rule.ID); err != nil {
+		t.Fatalf("StartRule: %v", err)
+	}
+	if !statusByRuleID(m.ListStatus(), rule.ID).Running {
+		t.Fatal("rule should be running before update")
+	}
+
+	// Inject a failing store after starting the rule.
+	m.store = failingStore(t)
+
+	altPort := freeTCPPort(t)
+	if _, err := m.UpdateRule(rule.ID, validation.ForwardRulePatch{TargetPort: &altPort}); err == nil {
+		t.Fatal("expected error from failing store")
+	}
+
+	rules := m.ListRules()
+	if len(rules) != 1 || rules[0].TargetPort != rule.TargetPort {
+		t.Fatalf("original rule not restored: %#v", rules)
+	}
+	if !statusByRuleID(m.ListStatus(), rule.ID).Running {
+		t.Fatal("rule should be running again after rollback restart")
+	}
+}
+
+// TestDeleteRulePersistFailureRollsBack asserts that DeleteRule keeps the rule
+// in the list when the persist call fails.
+func TestDeleteRulePersistFailureRollsBack(t *testing.T) {
+	rule := tcpRule()
+	rule.Enabled = false
+	m := testManager(t, []domain.ForwardRule{rule})
+	m.store = failingStore(t)
+
+	if err := m.DeleteRule(rule.ID); err == nil {
+		t.Fatal("expected error from failing store")
+	}
+	rules := m.ListRules()
+	if len(rules) != 1 || rules[0].ID != rule.ID {
+		t.Fatalf("rule removed despite persist failure: %#v", rules)
+	}
+}
+
+// TestReorderRulesPersistFailureRollsBack asserts that ReorderRules preserves the
+// original order when the persist call fails.
+func TestReorderRulesPersistFailureRollsBack(t *testing.T) {
+	ruleB := tcpRule()
+	ruleB.ID = "tcp-2"
+	ruleB.Name = "Other"
+	ruleB.ListenPort = 48002
+	m := testManager(t, []domain.ForwardRule{tcpRule(), ruleB})
+	m.store = failingStore(t)
+
+	if err := m.ReorderRules([]string{"tcp-2", "tcp-1"}); err == nil {
+		t.Fatal("expected error from failing store")
+	}
+	rules := m.ListRules()
+	if len(rules) != 2 || rules[0].ID != "tcp-1" || rules[1].ID != "tcp-2" {
+		t.Fatalf("order changed despite persist failure: %v %v", rules[0].ID, rules[1].ID)
+	}
+}
+
+// ── NewFromConfig error path ──────────────────────────────────────────────────
+
+// TestNewFromConfigLoadError asserts that NewFromConfig propagates a config Load
+// error (e.g. invalid JSON) rather than returning a partially-initialised manager.
+func TestNewFromConfigLoadError(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte("not valid json"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	m, err := NewFromConfig(configPath)
+	if err == nil {
+		t.Fatal("expected error from invalid config")
+	}
+	if m != nil {
+		t.Fatal("expected nil manager on error")
+	}
+}
+
+// ── StartEnabled failure path ─────────────────────────────────────────────────
+
+// TestStartEnabledWithFailingRule asserts that StartEnabled returns an error and
+// the started count when one of the enabled rules fails to start.
+func TestStartEnabledWithFailingRule(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	rule := tcpRule()
+	rule.ListenPort = port
+	rule.Enabled = true
+	m := testManager(t, []domain.ForwardRule{rule})
+
+	started, err := m.StartEnabled()
+	if err == nil {
+		t.Fatal("expected error from bind failure")
+	}
+	if started != 0 {
+		t.Fatalf("started = %d, want 0", started)
+	}
 }
