@@ -16,7 +16,7 @@ import type { ForwardManager } from "./forward-manager.js";
 import { ConflictError, NotFoundError, ValidationError } from "./forward-manager.js";
 import { diagnoseRule } from "./diagnose.js";
 import type { ActivityStore } from "./activity/activity-store.js";
-import { buildConfigPlan } from "./config-plan.js";
+import { buildApplyImportFromPlan, buildConfigPlan } from "./config-plan.js";
 
 export interface RuntimeInfoOptions {
   version: string;
@@ -238,11 +238,12 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
         return;
       }
 
+      // Apply transformation (desired-state rule list + counts) lives in the
+      // plan engine; the handler keeps only request/response and gating concerns.
+      const { rules: rulesForImport, applied } = buildApplyImportFromPlan(plan);
+
       if (dryRun) {
-        response.json({
-          ok: true, dryRun: true, appliedAt, plan,
-          applied: { add: plan.summary.add, update: plan.summary.update, remove: plan.summary.remove, unchanged: plan.summary.unchanged },
-        });
+        response.json({ ok: true, dryRun: true, appliedAt, plan, applied });
         return;
       }
 
@@ -252,28 +253,15 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
       }
 
       if (plan.summary.hasDrift) {
-        // Build desired rules for replace import, injecting current IDs for key-matched rules.
-        const rulesForImport = plan.operations
-          .filter((op) => op.type !== "remove")
-          .map((op) => {
-            const desired = op.desired!;
-            if ((op.type === "unchanged" || op.type === "update") && op.ruleId && desired.id === undefined) {
-              return { ...desired, id: op.ruleId };
-            }
-            return desired;
-          });
         const importCfg: ExportedConfig = {
           version: "1",
           exportedAt: appliedAt,
-          rules: rulesForImport as unknown as ForwardRule[],
+          rules: rulesForImport,
         };
         await manager.importConfig(importCfg, "replace");
       }
 
-      response.json({
-        ok: true, dryRun: false, appliedAt, plan,
-        applied: { add: plan.summary.add, update: plan.summary.update, remove: plan.summary.remove, unchanged: plan.summary.unchanged },
-      });
+      response.json({ ok: true, dryRun: false, appliedAt, plan, applied });
     } catch (error) {
       next(error);
     }

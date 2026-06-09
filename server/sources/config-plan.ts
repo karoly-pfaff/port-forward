@@ -1,6 +1,8 @@
+import crypto from "node:crypto";
 import type { ForwardRule, ForwardRuleInput } from "@portier/shared";
 import { listenKey, validateForwardRule } from "@portier/shared";
 import type {
+  ConfigAppliedCounts,
   ConfigPlanChange,
   ConfigPlanError,
   ConfigPlanOperation,
@@ -283,4 +285,83 @@ function makeResponse(
   };
 
   return { generatedAt, mode: "plan", summary, operations, errors, warnings };
+}
+
+// ── Apply orchestration ─────────────────────────────────────────────────────
+// Apply transformation logic lives here, beside the plan engine — NOT in the
+// HTTP handler. The handler owns request/response concerns (missing desired,
+// yes/dryRun gating, status codes, calling the manager import). This helper
+// owns the pure business transformation: deriving the desired-state replace
+// rule list from a completed plan, injecting/preserving rule IDs, and computing
+// applied counts. It does not mutate the plan, call the manager, write files,
+// or start/stop rules. The Go service mirrors this in
+// service/sources/configplan/plan.go (BuildApplyImportFromPlan); validate:contract
+// is the parity guard for the externally observable result.
+
+export interface ApplyImportResult {
+  /** Desired-state rule list to pass to a "replace" import. Removes are omitted. */
+  rules: ForwardRule[];
+  /** Counts derived from the plan summary, returned to the caller verbatim. */
+  applied: ConfigAppliedCounts;
+}
+
+/**
+ * Derive the replace-import rule list and applied counts from a completed plan.
+ *
+ * ID rules (matching the prior inline handler behavior):
+ * - `remove` operations are omitted from the result.
+ * - When the desired snapshot carries an explicit id, it is preserved.
+ * - For `unchanged`/`update` matches without an explicit desired id, the matched
+ *   current rule's id (`op.ruleId`) is preserved so identity is stable.
+ * - Otherwise (a genuine add) a fresh id is generated via `newId`.
+ *
+ * `newId` defaults to `crypto.randomUUID`; tests inject a deterministic generator.
+ * The caller is responsible for only invoking the replace import when the plan
+ * actually has drift — this helper always returns the full desired list.
+ */
+export function buildApplyImportFromPlan(
+  plan: ConfigPlanResponse,
+  newId: () => string = () => crypto.randomUUID(),
+): ApplyImportResult {
+  const rules: ForwardRule[] = [];
+  for (const op of plan.operations) {
+    if (op.type === "remove") {
+      continue;
+    }
+    const desired = op.desired;
+    if (!desired) {
+      continue;
+    }
+
+    let id: string;
+    if (desired.id !== undefined) {
+      id = desired.id;
+    } else if ((op.type === "unchanged" || op.type === "update") && op.ruleId !== undefined) {
+      id = op.ruleId;
+    } else {
+      id = newId();
+    }
+
+    rules.push({
+      id,
+      name: desired.name,
+      protocol: desired.protocol,
+      listenHost: desired.listenHost,
+      listenPort: desired.listenPort,
+      targetHost: desired.targetHost,
+      targetPort: desired.targetPort,
+      enabled: desired.enabled,
+      ...(desired.udpMode !== undefined ? { udpMode: desired.udpMode } : {}),
+    });
+  }
+
+  return {
+    rules,
+    applied: {
+      add: plan.summary.add,
+      update: plan.summary.update,
+      remove: plan.summary.remove,
+      unchanged: plan.summary.unchanged,
+    },
+  };
 }

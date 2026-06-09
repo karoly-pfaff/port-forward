@@ -105,7 +105,7 @@ func GetPortAdvisories(input Input) []domain.PortAdvisory {
 		advisories = append(advisories, domain.PortAdvisory{
 			Code:     "LAN_EXPOSURE",
 			Severity: "warning",
-			Message:  "Listening on 0.0.0.0 exposes this forwarded port on the LAN.",
+			Message:  "Listening on 0.0.0.0 exposes this forwarded port on all interfaces. Other LAN devices may be able to connect if firewall settings allow it.",
 		})
 	}
 

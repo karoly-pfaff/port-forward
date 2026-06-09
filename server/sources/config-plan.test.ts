@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ForwardRule } from "@portier/shared";
-import { buildConfigPlan, extractRulesArray } from "./config-plan.js";
+import { buildApplyImportFromPlan, buildConfigPlan, extractRulesArray } from "./config-plan.js";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -558,5 +558,110 @@ describe("buildConfigPlan — UDP defaults", () => {
     const desired = { name: "UDP Rule", protocol: "udp" as const, listenHost: "127.0.0.1", listenPort: 9003, targetHost: "127.0.0.1", targetPort: 9004, enabled: false };
     const plan = buildConfigPlan({ currentRules: [udpRule], desiredRaw: [desired], now: NOW });
     expect(plan.summary.unchanged).toBe(1);
+  });
+});
+
+// ── buildApplyImportFromPlan — apply orchestration ─────────────────────────────
+
+describe("buildApplyImportFromPlan", () => {
+  // Deterministic id generator for assertions — production defaults to crypto.randomUUID.
+  let counter = 0;
+  const seqId = () => `gen-${++counter}`;
+  const resetSeq = () => { counter = 0; };
+
+  it("no-drift plan → desired config preserves the unchanged rule with its current id", () => {
+    const desired = { ...makeTcpDesired() }; // matched by key, no explicit id
+    const plan = buildConfigPlan({ currentRules: [tcpRule], desiredRaw: [desired], now: NOW });
+    expect(plan.summary.hasDrift).toBe(false);
+
+    resetSeq();
+    const { rules, applied } = buildApplyImportFromPlan(plan, seqId);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("r1"); // current id preserved, not regenerated
+    expect(counter).toBe(0); // newId never called for an unchanged match
+    expect(applied).toEqual({ add: 0, update: 0, remove: 0, unchanged: 1 });
+  });
+
+  it("add operation → injects a freshly generated id", () => {
+    const plan = buildConfigPlan({ currentRules: [], desiredRaw: [makeTcpDesired()], now: NOW });
+    expect(plan.operations[0].type).toBe("add");
+
+    resetSeq();
+    const { rules, applied } = buildApplyImportFromPlan(plan, seqId);
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("gen-1");
+    expect(applied).toEqual({ add: 1, update: 0, remove: 0, unchanged: 0 });
+  });
+
+  it("add operation with an explicit desired id → preserves that id (no generation)", () => {
+    const desired = { ...makeTcpDesired(), id: "explicit-id", listenPort: 9999 };
+    const plan = buildConfigPlan({ currentRules: [], desiredRaw: [desired], now: NOW });
+    expect(plan.operations[0].type).toBe("add");
+
+    resetSeq();
+    const { rules } = buildApplyImportFromPlan(plan, seqId);
+    expect(rules[0].id).toBe("explicit-id");
+    expect(counter).toBe(0);
+  });
+
+  it("update operation → preserves the matched current rule id", () => {
+    const desired = { ...makeTcpDesired(), targetPort: 9999 }; // forwarding field changed
+    const plan = buildConfigPlan({ currentRules: [tcpRule], desiredRaw: [desired], now: NOW });
+    expect(plan.operations[0].type).toBe("update");
+
+    const { rules, applied } = buildApplyImportFromPlan(plan, seqId);
+    expect(rules[0].id).toBe("r1");
+    expect(rules[0].targetPort).toBe(9999);
+    expect(applied).toEqual({ add: 0, update: 1, remove: 0, unchanged: 0 });
+  });
+
+  it("remove operation → omitted from the desired config", () => {
+    const plan = buildConfigPlan({ currentRules: [tcpRule], desiredRaw: [], now: NOW });
+    expect(plan.operations[0].type).toBe("remove");
+
+    const { rules, applied } = buildApplyImportFromPlan(plan, seqId);
+    expect(rules).toHaveLength(0);
+    expect(applied).toEqual({ add: 0, update: 0, remove: 1, unchanged: 0 });
+  });
+
+  it("mixed plan → deterministic order: add, update, unchanged kept; remove dropped", () => {
+    // current: tcpRule (r1, port 9001), udpRule (r2, port 9003)
+    // desired: tcpRule updated (targetPort change), udpRule unchanged, a new rule added.
+    // tcpRule's remove counterpart: none. udpRule kept. r1 updated. one add. nothing removed.
+    const updatedTcp = { ...makeTcpDesired(), targetPort: 9999 };
+    const unchangedUdp = { name: "UDP Rule", protocol: "udp" as const, listenHost: "127.0.0.1", listenPort: 9003, targetHost: "127.0.0.1", targetPort: 9004, enabled: false };
+    const added = { name: "New", protocol: "tcp" as const, listenHost: "127.0.0.1", listenPort: 9100, targetHost: "127.0.0.1", targetPort: 9200, enabled: true };
+    const plan = buildConfigPlan({ currentRules: [tcpRule, udpRule], desiredRaw: [updatedTcp, unchangedUdp, added], now: NOW });
+
+    resetSeq();
+    const { rules, applied } = buildApplyImportFromPlan(plan, seqId);
+    // Order follows plan.operations order (desired order, then removes — none here).
+    expect(rules.map((r) => r.id)).toEqual(["r1", "r2", "gen-1"]);
+    expect(applied).toEqual({ add: 1, update: 1, remove: 0, unchanged: 1 });
+  });
+
+  it("does not mutate the input plan", () => {
+    const plan = buildConfigPlan({ currentRules: [tcpRule], desiredRaw: [makeTcpDesired({ targetPort: 9999 })], now: NOW });
+    const before = JSON.stringify(plan);
+    buildApplyImportFromPlan(plan, seqId);
+    expect(JSON.stringify(plan)).toBe(before);
+  });
+
+  it("preserves udpMode on the desired rule", () => {
+    const desired = { name: "UDP Rule", protocol: "udp" as const, listenHost: "127.0.0.1", listenPort: 9003, targetHost: "127.0.0.1", targetPort: 9004, enabled: false, udpMode: "bidirectional-multi-client" as const };
+    const plan = buildConfigPlan({ currentRules: [udpRule], desiredRaw: [desired], now: NOW });
+    const { rules } = buildApplyImportFromPlan(plan, seqId);
+    expect(rules[0].udpMode).toBe("bidirectional-multi-client");
+  });
+
+  it("default id generator produces unique ids for adds (no injected generator)", () => {
+    const a = { name: "A", protocol: "tcp" as const, listenHost: "127.0.0.1", listenPort: 9100, targetHost: "127.0.0.1", targetPort: 9200, enabled: true };
+    const b = { name: "B", protocol: "tcp" as const, listenHost: "127.0.0.1", listenPort: 9101, targetHost: "127.0.0.1", targetPort: 9201, enabled: true };
+    const plan = buildConfigPlan({ currentRules: [], desiredRaw: [a, b], now: NOW });
+    const { rules } = buildApplyImportFromPlan(plan);
+    expect(rules).toHaveLength(2);
+    expect(rules[0].id).toBeTruthy();
+    expect(rules[1].id).toBeTruthy();
+    expect(rules[0].id).not.toBe(rules[1].id);
   });
 });

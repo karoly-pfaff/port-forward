@@ -2,6 +2,7 @@ package configplan
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -696,5 +697,167 @@ func TestExtractRulesRawNullRules(t *testing.T) {
 	_, ok := ExtractRulesRaw(json.RawMessage(`{"rules":null}`))
 	if ok {
 		t.Fatal("expected ok=false for object with null rules")
+	}
+}
+
+// ── BuildApplyImportFromPlan — apply orchestration ────────────────────────────
+
+// seqIDGen returns a deterministic id generator and a pointer to its call count.
+func seqIDGen() (func() string, *int) {
+	count := 0
+	gen := func() string {
+		count++
+		return "gen-" + strconv.Itoa(count)
+	}
+	return gen, &count
+}
+
+func assertApplied(t *testing.T, applied map[string]int, add, update, remove, unchanged int) {
+	t.Helper()
+	want := map[string]int{"add": add, "update": update, "remove": remove, "unchanged": unchanged}
+	for k, v := range want {
+		if applied[k] != v {
+			t.Errorf("applied[%q] = %d, want %d (full: %#v)", k, applied[k], v, applied)
+		}
+	}
+}
+
+func TestBuildApplyImportNoDriftPreservesCurrentID(t *testing.T) {
+	current := []domain.ForwardRule{tcpRule("r1", "App", 9001, 9002)}
+	// Desired matches by identity key (same protocol+host+port), no explicit id.
+	plan := buildPlan(current, `[{"name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9002,"enabled":true}]`)
+	if plan.Summary.HasDrift {
+		t.Fatalf("expected no drift, got summary %#v", plan.Summary)
+	}
+
+	gen, count := seqIDGen()
+	result := BuildApplyImportFromPlan(plan, gen)
+	if len(result.Rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(result.Rules))
+	}
+	if result.Rules[0].ID != "r1" {
+		t.Errorf("id = %q, want current id %q", result.Rules[0].ID, "r1")
+	}
+	if *count != 0 {
+		t.Errorf("newID called %d times for an unchanged match, want 0", *count)
+	}
+	assertApplied(t, result.Applied, 0, 0, 0, 1)
+}
+
+func TestBuildApplyImportAddInjectsGeneratedID(t *testing.T) {
+	plan := buildPlan(nil, `[{"name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9002,"enabled":true}]`)
+	if plan.Operations[0].Type != "add" {
+		t.Fatalf("expected add op, got %q", plan.Operations[0].Type)
+	}
+
+	gen, _ := seqIDGen()
+	result := BuildApplyImportFromPlan(plan, gen)
+	if len(result.Rules) != 1 || result.Rules[0].ID != "gen-1" {
+		t.Fatalf("expected one rule with id gen-1, got %#v", result.Rules)
+	}
+	assertApplied(t, result.Applied, 1, 0, 0, 0)
+}
+
+func TestBuildApplyImportAddWithExplicitIDPreservesIt(t *testing.T) {
+	plan := buildPlan(nil, `[{"id":"explicit-id","name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9002,"enabled":true}]`)
+	if plan.Operations[0].Type != "add" {
+		t.Fatalf("expected add op, got %q", plan.Operations[0].Type)
+	}
+
+	gen, count := seqIDGen()
+	result := BuildApplyImportFromPlan(plan, gen)
+	if result.Rules[0].ID != "explicit-id" {
+		t.Errorf("id = %q, want %q", result.Rules[0].ID, "explicit-id")
+	}
+	if *count != 0 {
+		t.Errorf("newID called %d times when explicit id present, want 0", *count)
+	}
+}
+
+func TestBuildApplyImportUpdatePreservesCurrentID(t *testing.T) {
+	current := []domain.ForwardRule{tcpRule("r1", "App", 9001, 9002)}
+	// Same identity key, changed forwarding field (targetPort) → update.
+	plan := buildPlan(current, `[{"name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9999,"enabled":true}]`)
+	if plan.Operations[0].Type != "update" {
+		t.Fatalf("expected update op, got %q", plan.Operations[0].Type)
+	}
+
+	gen, _ := seqIDGen()
+	result := BuildApplyImportFromPlan(plan, gen)
+	if result.Rules[0].ID != "r1" {
+		t.Errorf("id = %q, want preserved current id %q", result.Rules[0].ID, "r1")
+	}
+	if result.Rules[0].TargetPort != 9999 {
+		t.Errorf("targetPort = %d, want 9999", result.Rules[0].TargetPort)
+	}
+	assertApplied(t, result.Applied, 0, 1, 0, 0)
+}
+
+func TestBuildApplyImportRemoveOmitted(t *testing.T) {
+	current := []domain.ForwardRule{tcpRule("r1", "App", 9001, 9002)}
+	plan := buildPlan(current, `[]`)
+	if plan.Operations[0].Type != "remove" {
+		t.Fatalf("expected remove op, got %q", plan.Operations[0].Type)
+	}
+
+	gen, _ := seqIDGen()
+	result := BuildApplyImportFromPlan(plan, gen)
+	if len(result.Rules) != 0 {
+		t.Fatalf("expected 0 rules (remove omitted), got %#v", result.Rules)
+	}
+	assertApplied(t, result.Applied, 0, 0, 1, 0)
+}
+
+func TestBuildApplyImportMixedDeterministicOrder(t *testing.T) {
+	current := []domain.ForwardRule{
+		tcpRule("r1", "App", 9001, 9002),
+		udpRule("r2", "Udp", 9003, 9004, domain.UdpModeOneWay),
+	}
+	// r1 updated, r2 unchanged, one new rule added — nothing removed.
+	desired := `[` +
+		`{"name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9999,"enabled":true},` +
+		`{"name":"Udp","protocol":"udp","listenHost":"127.0.0.1","listenPort":9003,"targetHost":"127.0.0.1","targetPort":9004,"enabled":true,"udpMode":"one-way"},` +
+		`{"name":"New","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9100,"targetHost":"127.0.0.1","targetPort":9200,"enabled":true}` +
+		`]`
+	plan := buildPlan(current, desired)
+
+	gen, _ := seqIDGen()
+	result := BuildApplyImportFromPlan(plan, gen)
+	want := []string{"r1", "r2", "gen-1"}
+	if len(result.Rules) != len(want) {
+		t.Fatalf("got %d rules, want %d (%#v)", len(result.Rules), len(want), result.Rules)
+	}
+	for i := range want {
+		if result.Rules[i].ID != want[i] {
+			gotIDs := make([]string, len(result.Rules))
+			for j, r := range result.Rules {
+				gotIDs[j] = r.ID
+			}
+			t.Fatalf("ids = %#v, want %#v", gotIDs, want)
+		}
+	}
+	assertApplied(t, result.Applied, 1, 1, 0, 1)
+}
+
+func TestBuildApplyImportDoesNotMutatePlan(t *testing.T) {
+	current := []domain.ForwardRule{tcpRule("r1", "App", 9001, 9002)}
+	plan := buildPlan(current, `[{"name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9999,"enabled":true}]`)
+	before, _ := json.Marshal(plan)
+
+	gen, _ := seqIDGen()
+	_ = BuildApplyImportFromPlan(plan, gen)
+	after, _ := json.Marshal(plan)
+	if string(before) != string(after) {
+		t.Errorf("plan mutated:\n before: %s\n after:  %s", before, after)
+	}
+}
+
+func TestBuildApplyImportPreservesUdpMode(t *testing.T) {
+	current := []domain.ForwardRule{udpRule("r2", "Udp", 9003, 9004, domain.UdpModeOneWay)}
+	plan := buildPlan(current, `[{"name":"Udp","protocol":"udp","listenHost":"127.0.0.1","listenPort":9003,"targetHost":"127.0.0.1","targetPort":9004,"enabled":false,"udpMode":"bidirectional-multi-client"}]`)
+	gen, _ := seqIDGen()
+	result := BuildApplyImportFromPlan(plan, gen)
+	if result.Rules[0].UdpMode == nil || *result.Rules[0].UdpMode != domain.UdpModeBidirectionalMulti {
+		t.Errorf("udpMode = %v, want bidirectional-multi-client", result.Rules[0].UdpMode)
 	}
 }

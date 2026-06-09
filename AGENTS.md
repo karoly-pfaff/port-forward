@@ -164,6 +164,24 @@ Coverage outputs (gitignored):
 Baseline (v1.6-pre, recalibrated at Slice A, service updated at Slice B): cli 93.2%, client ~95%/~89-90%/~78-80%, service 88.6%, shared 100%, server 95.2%/91.6%/100%.
 Client numbers vary ±1% per run (Windows vitest ghost-entry deduplication — both runs pass gates). See `docs/coverage-baseline.md` for full breakdown and methodology.
 
+v1.6 Architecture Slice Arch-A (contract drift guard) did not change any coverage number or gate: it aligned the Go `LAN_EXPOSURE` advisory message to the canonical `@portier/shared` wording and strengthened `validate:contract` to compare advisory/plan content (not just codes/shape). `@portier/shared` is canonical for advisory wording; the Go service must match it. Source: `audits/v1.6-architecture-audit-1.md`.
+
+v1.6 Architecture Slice Arch-B (apply orchestration extraction) moved config apply transformation out of the HTTP handlers into tested plan-engine helpers (`buildApplyImportFromPlan` in `server/sources/config-plan.ts`, `BuildApplyImportFromPlan` in `service/sources/configplan/plan.go`). Behavior preserved exactly; `validate:contract` 166/166; server coverage 95.2/91.6 → 95.3/92.0, service unchanged; no gate change.
+
+**Durable architecture rule (Arch-B):** Config apply orchestration must live beside the plan engine, not inside HTTP handlers. Handlers own request/response, confirmation (`yes`), dry-run, and status codes; plan/apply transformation (desired replace list, id injection/preservation, applied counts) stays in the tested config-plan/configplan helpers. Keep the TypeScript and Go helpers semantically mirrored; add unit tests in both runtimes plus `validate:contract` parity assertions for any new externally observable apply behavior. `validate:contract` is the parity guard. Source: `audits/v1.6-architecture-audit-1.md`.
+
+v1.6 Architecture Slice Arch-C1 (Go ID dedupe + dead code) replaced the duplicate UUID generators `manager.randomID` and `api.newApplyRuleID` with one shared `domain.NewRuleID()` (`service/sources/domain/id.go`) and removed a no-op `name` assignment in `api.go`. Behavior preserved; `validate:contract` 166/166; coverage neutral; no gate change.
+
+**Durable architecture rule (Arch-C1):** Go service rule ID generation must have one shared implementation (`domain.NewRuleID`). Manager-created and config-apply-created rule IDs must use the same generator so the two paths cannot silently drift in format. Do not reintroduce per-package UUID helpers. Source: `audits/v1.6-architecture-audit-1.md`.
+
+v1.6 Architecture Slice Arch-C2 (manager activity-emission dedupe) collapsed the 10 repeated rule-scoped emission blocks in `manager.go` into one `emitRuleEvent(eventType, severity, rule, message)` helper; config-level events keep their own `emitActivity` calls (they carry `details`, no rule fields). Payloads preserved byte-for-byte; full-payload regression tests added. `validate:contract` 166/166; service 88.6% → 88.5% (no gate change). Arch-C complete.
+
+**Durable architecture rule (Arch-C2):** Rule-scoped Go manager activity events must be emitted via `emitRuleEvent` so ruleId/ruleName/protocol cannot drift between call sites; non-rule-scoped config events stay on `emitActivity` with their own details. Activity payloads are user-visible diagnostics — changes must be covered by tests asserting type, severity, ruleId, ruleName, protocol, message, and details. Source: `audits/v1.6-architecture-audit-1.md`.
+
+v1.6 Architecture Slice Arch-D (CLI DTO live-runtime parity guard) added live-fixture capture to `validate:contract` plus `TestCLIDTOContractParity` (`tools/cli/sources/client/contract_decode_test.go`), which strictly decodes real runtime responses into the CLI DTOs (env-gated by `PORTIER_CLI_CONTRACT_FIXTURES`). `validate:contract` 167 passed; no coverage/gate change; CLI stays a pure API client. Completes the audit's contract-parity remediation.
+
+**Durable architecture rule (Arch-D):** The CLI DTOs are a third copy of the REST contract and must be guarded against live runtime responses, not only httptest mocks. The CLI must remain a pure API client (no server/service imports, not a second runtime). New API response families must update both the `validate:contract` live capture and the CLI decode guard (`contract_decode_test.go`). `/api/connections` is out of CLI scope. Source: `audits/v1.6-architecture-audit-1.md`.
+
 Gates (in `scripts/validate-coverage.js`, ratcheted at v1.6-pre, client branch/funcs recalibrated at Slice A, service raised at Slice B):
 - cli: statements ≥ 93%
 - client: statements ≥ 94%, branches ≥ 89%, functions ≥ 78%
@@ -339,7 +357,7 @@ npm run validate:scripts           # installer script static analysis + dry-run 
 
 TypeScript runtime is always checked. Go runtime is checked when `build/portier/service[.exe]` or `service/build/portier-service[.exe]` is present. Pass `--skip-go` to force skip. No real `rules.json` is used.
 
-**`validate:contract`** — Starts the TypeScript server (and the Go binary if present) and runs all API scenarios: CRUD forwards, start/stop, status, activity, config export/import, port advisory, error shapes, duplicate binding, unknown-ID 404s. Skips Go parity with a clear message if the binary is not built. Use `--skip-go` to force skip.
+**`validate:contract`** — Starts the TypeScript server (and the Go binary if present) and runs all API scenarios: CRUD forwards, start/stop, status, activity, config export/import, port advisory, error shapes, duplicate binding, unknown-ID 404s. Since Arch-A it also verifies advisory/plan **content** parity: in-runtime canonical assertions for `LAN_EXPOSURE`/`MANAGEMENT_LAN_EXPOSURE` advisory code+severity+message and the `LAN_EXPOSURE` plan warning, plus a cross-runtime `compareParity` pass that captures deterministic normalized advisory and config-plan payloads from both runtimes and diffs them field-by-field (timestamps and generated ids excluded), reporting the exact mismatching path. Since Arch-D it also captures live runtime JSON and strictly decodes it into the CLI DTOs via `tools/cli`'s `TestCLIDTOContractParity` (skips if the `go` toolchain is absent). 167/167 against both runtimes. The Go binary used is `build/portier/service[.exe]` if present, else `service/build/portier-service[.exe]` — rebuild after Go advisory/plan changes. Skips Go parity with a clear message if the binary is not built. Use `--skip-go` to force skip.
 
 **`validate:binary`** (also `validate:runtime:behavior`) — Runs `build:runtime` then tests `build/portier/service[.exe]` behavior:
 1. `/api/health` responds on a free port

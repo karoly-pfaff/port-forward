@@ -1,8 +1,6 @@
 package manager
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -152,7 +150,7 @@ func (m *Manager) ExportConfig() domain.ExportedConfig {
 
 func (m *Manager) CreateRule(input validation.ForwardRuleInput) (domain.ForwardRule, error) {
 	if input.ID == nil {
-		id := randomID()
+		id := domain.NewRuleID()
 		input.ID = &id
 	}
 
@@ -170,15 +168,7 @@ func (m *Manager) CreateRule(input validation.ForwardRuleInput) (domain.ForwardR
 		return domain.ForwardRule{}, err
 	}
 
-	id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-	m.emitActivity(activity.ActivityEventInput{
-		Type:     activity.EventRuleCreated,
-		Severity: activity.SeveritySuccess,
-		RuleID:   &id,
-		RuleName: &name,
-		Protocol: &proto,
-		Message:  fmt.Sprintf(`Rule "%s" created.`, rule.Name),
-	})
+	m.emitRuleEvent(activity.EventRuleCreated, activity.SeveritySuccess, rule, fmt.Sprintf(`Rule "%s" created.`, rule.Name))
 
 	if rule.Enabled {
 		if _, err := m.StartRule(rule.ID); err != nil {
@@ -209,15 +199,7 @@ func (m *Manager) UpdateRule(ruleID string, patch validation.ForwardRulePatch) (
 	needsRestart := wasRunning && ForwardingFieldsChanged(existing, next)
 	if needsRestart {
 		m.stopRuntime(existing)
-		id, name, proto := existing.ID, existing.Name, string(existing.Protocol)
-		m.emitActivity(activity.ActivityEventInput{
-			Type:     activity.EventRuleStopped,
-			Severity: activity.SeverityInfo,
-			RuleID:   &id,
-			RuleName: &name,
-			Protocol: &proto,
-			Message:  fmt.Sprintf(`Rule "%s" stopped.`, existing.Name),
-		})
+		m.emitRuleEvent(activity.EventRuleStopped, activity.SeverityInfo, existing, fmt.Sprintf(`Rule "%s" stopped.`, existing.Name))
 	}
 
 	previous := m.rules[index]
@@ -230,15 +212,7 @@ func (m *Manager) UpdateRule(ruleID string, patch validation.ForwardRulePatch) (
 		return domain.ForwardRule{}, err
 	}
 
-	id, name, proto := next.ID, next.Name, string(next.Protocol)
-	m.emitActivity(activity.ActivityEventInput{
-		Type:     activity.EventRuleUpdated,
-		Severity: activity.SeverityInfo,
-		RuleID:   &id,
-		RuleName: &name,
-		Protocol: &proto,
-		Message:  fmt.Sprintf(`Rule "%s" updated.`, next.Name),
-	})
+	m.emitRuleEvent(activity.EventRuleUpdated, activity.SeverityInfo, next, fmt.Sprintf(`Rule "%s" updated.`, next.Name))
 
 	if needsRestart {
 		if _, err := m.StartRule(next.ID); err != nil {
@@ -262,15 +236,7 @@ func (m *Manager) DeleteRule(ruleID string) error {
 	m.stopRuntime(rule)
 
 	if wasRunning {
-		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-		m.emitActivity(activity.ActivityEventInput{
-			Type:     activity.EventRuleStopped,
-			Severity: activity.SeverityInfo,
-			RuleID:   &id,
-			RuleName: &name,
-			Protocol: &proto,
-			Message:  fmt.Sprintf(`Rule "%s" stopped.`, rule.Name),
-		})
+		m.emitRuleEvent(activity.EventRuleStopped, activity.SeverityInfo, rule, fmt.Sprintf(`Rule "%s" stopped.`, rule.Name))
 	}
 
 	m.rules = append(m.rules[:index], m.rules[index+1:]...)
@@ -281,15 +247,7 @@ func (m *Manager) DeleteRule(ruleID string) error {
 		return err
 	}
 
-	id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-	m.emitActivity(activity.ActivityEventInput{
-		Type:     activity.EventRuleDeleted,
-		Severity: activity.SeverityWarning,
-		RuleID:   &id,
-		RuleName: &name,
-		Protocol: &proto,
-		Message:  fmt.Sprintf(`Rule "%s" deleted.`, rule.Name),
-	})
+	m.emitRuleEvent(activity.EventRuleDeleted, activity.SeverityWarning, rule, fmt.Sprintf(`Rule "%s" deleted.`, rule.Name))
 	return nil
 }
 
@@ -369,7 +327,7 @@ func (m *Manager) ImportConfig(config domain.ExportedConfig, mode string) (domai
 		for _, rule := range validated {
 			candidate := rule
 			if m.hasIDIn(candidate.ID, nextRules) {
-				candidate.ID = randomID()
+				candidate.ID = domain.NewRuleID()
 			}
 			if conflict := findDuplicateBinding(candidate, nextRules, ""); conflict != nil {
 				conflictMsg := fmt.Sprintf(
@@ -440,15 +398,7 @@ func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
 			state.lastError = err.Error()
 			state.tcp = nil
 			m.runtime[ruleID] = state
-			id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-			m.emitActivity(activity.ActivityEventInput{
-				Type:     activity.EventRuleError,
-				Severity: activity.SeverityError,
-				RuleID:   &id,
-				RuleName: &name,
-				Protocol: &proto,
-				Message:  fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()),
-			})
+			m.emitRuleEvent(activity.EventRuleError, activity.SeverityError, rule, fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()))
 			return m.statusForRule(rule), err
 		}
 		state.running = true
@@ -456,15 +406,7 @@ func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
 		state.lastError = ""
 		state.tcp = tcpForwarder
 		m.runtime[ruleID] = state
-		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-		m.emitActivity(activity.ActivityEventInput{
-			Type:     activity.EventRuleStarted,
-			Severity: activity.SeveritySuccess,
-			RuleID:   &id,
-			RuleName: &name,
-			Protocol: &proto,
-			Message:  fmt.Sprintf(`Rule "%s" started.`, rule.Name),
-		})
+		m.emitRuleEvent(activity.EventRuleStarted, activity.SeveritySuccess, rule, fmt.Sprintf(`Rule "%s" started.`, rule.Name))
 		return m.statusForRule(rule), nil
 	}
 
@@ -476,15 +418,7 @@ func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
 			state.lastError = err.Error()
 			state.udp = nil
 			m.runtime[ruleID] = state
-			id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-			m.emitActivity(activity.ActivityEventInput{
-				Type:     activity.EventRuleError,
-				Severity: activity.SeverityError,
-				RuleID:   &id,
-				RuleName: &name,
-				Protocol: &proto,
-				Message:  fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()),
-			})
+			m.emitRuleEvent(activity.EventRuleError, activity.SeverityError, rule, fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()))
 			return m.statusForRule(rule), err
 		}
 		state.running = true
@@ -492,15 +426,7 @@ func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
 		state.lastError = ""
 		state.udp = udpForwarder
 		m.runtime[ruleID] = state
-		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-		m.emitActivity(activity.ActivityEventInput{
-			Type:     activity.EventRuleStarted,
-			Severity: activity.SeveritySuccess,
-			RuleID:   &id,
-			RuleName: &name,
-			Protocol: &proto,
-			Message:  fmt.Sprintf(`Rule "%s" started.`, rule.Name),
-		})
+		m.emitRuleEvent(activity.EventRuleStarted, activity.SeveritySuccess, rule, fmt.Sprintf(`Rule "%s" started.`, rule.Name))
 		return m.statusForRule(rule), nil
 	}
 
@@ -517,15 +443,7 @@ func (m *Manager) StopRule(ruleID string) (domain.ForwardStatus, error) {
 	m.stopRuntime(rule)
 
 	if wasRunning {
-		id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
-		m.emitActivity(activity.ActivityEventInput{
-			Type:     activity.EventRuleStopped,
-			Severity: activity.SeverityInfo,
-			RuleID:   &id,
-			RuleName: &name,
-			Protocol: &proto,
-			Message:  fmt.Sprintf(`Rule "%s" stopped.`, rule.Name),
-		})
+		m.emitRuleEvent(activity.EventRuleStopped, activity.SeverityInfo, rule, fmt.Sprintf(`Rule "%s" stopped.`, rule.Name))
 	}
 
 	return m.statusForRule(rule), nil
@@ -718,6 +636,23 @@ func (m *Manager) emitActivity(input activity.ActivityEventInput) {
 	}
 }
 
+// emitRuleEvent records a rule-scoped activity event, populating RuleID, RuleName,
+// and Protocol from the given rule. It is the single emission path for rule-scoped
+// events (created/updated/deleted/started/stopped/error) so their payload shape
+// cannot drift between call sites. Config-level events (export/import) are not
+// rule-scoped and continue to call emitActivity directly with their own details.
+func (m *Manager) emitRuleEvent(eventType, severity string, rule domain.ForwardRule, message string) {
+	id, name, proto := rule.ID, rule.Name, string(rule.Protocol)
+	m.emitActivity(activity.ActivityEventInput{
+		Type:     eventType,
+		Severity: severity,
+		RuleID:   &id,
+		RuleName: &name,
+		Protocol: &proto,
+		Message:  message,
+	})
+}
+
 // activityEventFunc returns an EventFunc that records events to the activity store,
 // or nil when no store is configured.
 func (m *Manager) activityEventFunc() activity.EventFunc {
@@ -728,17 +663,6 @@ func (m *Manager) activityEventFunc() activity.EventFunc {
 	return func(input activity.ActivityEventInput) {
 		store.Add(input)
 	}
-}
-
-func randomID() string {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return fmt.Sprintf("rule-%d", time.Now().UnixNano())
-	}
-	bytes[6] = (bytes[6] & 0x0f) | 0x40
-	bytes[8] = (bytes[8] & 0x3f) | 0x80
-	encoded := hex.EncodeToString(bytes)
-	return fmt.Sprintf("%s-%s-%s-%s-%s", encoded[0:8], encoded[8:12], encoded[12:16], encoded[16:20], encoded[20:32])
 }
 
 func udpModeValue(mode *domain.UdpMode) string {

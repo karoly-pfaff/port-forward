@@ -454,6 +454,10 @@ npm run test:cli
 
 Runs `go test ./...` inside `tools/cli/`. Uses `httptest` for API client tests — no running Portier service required.
 
+### Live-runtime DTO parity guard
+
+The CLI DTOs in `sources/client/client.go` are a third copy of the REST contract (alongside `@portier/shared` and the Go service's `domain`/`configplan` types). `httptest` mocks alone can mask drift between what the CLI expects and what a real runtime emits, so `npm run validate:contract` additionally captures live JSON responses from each running runtime and strictly decodes them (`DisallowUnknownFields`) into the CLI DTOs via `TestCLIDTOContractParity` (`sources/client/contract_decode_test.go`). That test only runs when `PORTIER_CLI_CONTRACT_FIXTURES` is set (which `validate:contract` does); plain `go test`/`npm run test:cli` skips it. When a new API response family is added, update both `scripts/validate-contract.js` (capture) and this test (decode + assert). `/api/connections` is intentionally out of scope — the CLI has no connections DTO/command.
+
 ## Validation
 
 ```powershell

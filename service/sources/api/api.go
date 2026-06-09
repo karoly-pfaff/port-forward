@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -510,14 +508,9 @@ func buildRuleLiveSummary(
 		}
 	}
 
-	name := rule.Name
-	if name == "" {
-		name = ""
-	}
-
 	return connections.RuleLiveSummary{
 		RuleID:               rule.ID,
-		RuleName:             name,
+		RuleName:             rule.Name,
 		Protocol:             string(rule.Protocol),
 		ActiveTCPConnections: activeTCP,
 		ActiveUDPSessions:    activeUDP,
@@ -643,16 +636,13 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	plannedCounts := map[string]int{
-		"add":       plan.Summary.Add,
-		"update":    plan.Summary.Update,
-		"remove":    plan.Summary.Remove,
-		"unchanged": plan.Summary.Unchanged,
-	}
+	// Apply transformation (desired-state rule list + counts) lives in the plan
+	// engine; the handler keeps only request/response and gating concerns.
+	applyResult := configplan.BuildApplyImportFromPlan(plan, domain.NewRuleID)
 
 	if body.DryRun {
 		writeJSON(w, http.StatusOK, applyResponse{
-			Ok: true, DryRun: true, AppliedAt: appliedAt, Plan: plan, Applied: plannedCounts,
+			Ok: true, DryRun: true, AppliedAt: appliedAt, Plan: plan, Applied: applyResult.Applied,
 		})
 		return
 	}
@@ -665,34 +655,8 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if plan.Summary.HasDrift {
-		desiredRules := make([]domain.ForwardRule, 0, len(plan.Operations))
-		for _, op := range plan.Operations {
-			if op.Type == "remove" {
-				continue
-			}
-			snap := op.Desired
-			ruleID := ""
-			if snap.ID != nil {
-				ruleID = *snap.ID
-			} else if (op.Type == "unchanged" || op.Type == "update") && op.RuleID != nil {
-				ruleID = *op.RuleID
-			} else {
-				ruleID = newApplyRuleID()
-			}
-			desiredRules = append(desiredRules, domain.ForwardRule{
-				ID:         ruleID,
-				Name:       snap.Name,
-				Protocol:   snap.Protocol,
-				ListenHost: snap.ListenHost,
-				ListenPort: snap.ListenPort,
-				TargetHost: snap.TargetHost,
-				TargetPort: snap.TargetPort,
-				Enabled:    snap.Enabled,
-				UdpMode:    snap.UdpMode,
-			})
-		}
 		if _, err := h.manager.ImportConfig(domain.ExportedConfig{
-			Version: "1", Rules: desiredRules,
+			Version: "1", Rules: applyResult.Rules,
 		}, "replace"); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string][]string{"errors": {err.Error()}})
 			return
@@ -700,17 +664,8 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, applyResponse{
-		Ok: true, DryRun: false, AppliedAt: appliedAt, Plan: plan, Applied: plannedCounts,
+		Ok: true, DryRun: false, AppliedAt: appliedAt, Plan: plan, Applied: applyResult.Applied,
 	})
-}
-
-func newApplyRuleID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	enc := hex.EncodeToString(b)
-	return enc[0:8] + "-" + enc[8:12] + "-" + enc[12:16] + "-" + enc[16:20] + "-" + enc[20:32]
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

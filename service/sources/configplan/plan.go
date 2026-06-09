@@ -452,3 +452,83 @@ func makeResponse(generatedAt string, operations []Operation, planErrors []PlanE
 func strPtr(s string) *string { return &s }
 
 func desiredPtr(s RuleSnapshot) *RuleSnapshot { return &s }
+
+// ── Apply orchestration ──────────────────────────────────────────────────────
+// Apply transformation logic lives here, beside the plan engine — NOT in the
+// HTTP handler. The handler (service/sources/api/api.go) owns request/response
+// concerns (missing desired, yes/dryRun gating, status codes, calling the
+// manager import). This helper owns the pure business transformation: deriving
+// the desired-state replace rule list from a completed plan, injecting/preserving
+// rule IDs, and computing applied counts. It does not mutate the plan, call the
+// manager, write files, or start/stop rules. The TypeScript server mirrors this
+// in server/sources/config-plan.ts (buildApplyImportFromPlan); validate:contract
+// is the parity guard for the externally observable result.
+
+// ApplyImportResult is the output of BuildApplyImportFromPlan.
+type ApplyImportResult struct {
+	// Rules is the desired-state rule list to pass to a "replace" import.
+	// Remove operations are omitted.
+	Rules []domain.ForwardRule
+	// Applied holds the counts derived from the plan summary, returned verbatim
+	// to the caller (keys: add, update, remove, unchanged).
+	Applied map[string]int
+}
+
+// BuildApplyImportFromPlan derives the replace-import rule list and applied
+// counts from a completed plan.
+//
+// ID rules (matching the prior inline handler behavior):
+//   - "remove" operations are omitted from the result.
+//   - When the desired snapshot carries an explicit id, it is preserved.
+//   - For "unchanged"/"update" matches without an explicit desired id, the matched
+//     current rule's id (op.RuleID) is preserved so identity is stable.
+//   - Otherwise (a genuine add) a fresh id is generated via newID.
+//
+// newID is injected so tests can use a deterministic generator; production passes
+// the shared domain.NewRuleID. The caller is responsible for only invoking the
+// replace import when the plan actually has drift — this helper always returns the
+// full desired list.
+func BuildApplyImportFromPlan(plan Response, newID func() string) ApplyImportResult {
+	rules := make([]domain.ForwardRule, 0, len(plan.Operations))
+	for _, op := range plan.Operations {
+		if op.Type == "remove" {
+			continue
+		}
+		if op.Desired == nil {
+			continue
+		}
+		snap := op.Desired
+
+		var id string
+		switch {
+		case snap.ID != nil:
+			id = *snap.ID
+		case (op.Type == "unchanged" || op.Type == "update") && op.RuleID != nil:
+			id = *op.RuleID
+		default:
+			id = newID()
+		}
+
+		rules = append(rules, domain.ForwardRule{
+			ID:         id,
+			Name:       snap.Name,
+			Protocol:   snap.Protocol,
+			ListenHost: snap.ListenHost,
+			ListenPort: snap.ListenPort,
+			TargetHost: snap.TargetHost,
+			TargetPort: snap.TargetPort,
+			Enabled:    snap.Enabled,
+			UdpMode:    snap.UdpMode,
+		})
+	}
+
+	return ApplyImportResult{
+		Rules: rules,
+		Applied: map[string]int{
+			"add":       plan.Summary.Add,
+			"update":    plan.Summary.Update,
+			"remove":    plan.Summary.Remove,
+			"unchanged": plan.Summary.Unchanged,
+		},
+	}
+}

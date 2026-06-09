@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -980,6 +981,109 @@ func TestImportConfigRecordsActivity(t *testing.T) {
 	assertActivityType(t, store, activity.EventConfigImported)
 }
 
+// ── Full rule-scoped activity payload assertions (Arch-C2 emitRuleEvent guard) ──
+// These assert the complete payload (type, severity, ruleId, ruleName, protocol,
+// message, details) so the shared emitRuleEvent helper cannot silently change any
+// user-visible activity content.
+
+func TestCreateRuleActivityPayload(t *testing.T) {
+	m, store := testManagerWithActivity(t, nil)
+	input := tcpRule()
+	input.ListenPort = freeTCPPort(t)
+	input.Enabled = false
+	created, err := m.CreateRule(inputForRule(input, ""))
+	if err != nil {
+		t.Fatalf("CreateRule: %v", err)
+	}
+	e := findActivityEvent(t, store, activity.EventRuleCreated)
+	assertRuleEventPayload(t, e, activity.EventRuleCreated, activity.SeveritySuccess, created, `Rule "TCP" created.`)
+}
+
+func TestUpdateRuleActivityPayload(t *testing.T) {
+	rule := tcpRule()
+	rule.ListenPort = freeTCPPort(t)
+	rule.Enabled = false
+	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
+	newName := "Renamed"
+	updated, err := m.UpdateRule(rule.ID, validation.ForwardRulePatch{Name: &newName})
+	if err != nil {
+		t.Fatalf("UpdateRule: %v", err)
+	}
+	e := findActivityEvent(t, store, activity.EventRuleUpdated)
+	assertRuleEventPayload(t, e, activity.EventRuleUpdated, activity.SeverityInfo, updated, `Rule "Renamed" updated.`)
+}
+
+func TestDeleteRuleActivityPayload(t *testing.T) {
+	rule := tcpRule()
+	rule.ListenPort = freeTCPPort(t)
+	rule.Enabled = false
+	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
+	if err := m.DeleteRule(rule.ID); err != nil {
+		t.Fatalf("DeleteRule: %v", err)
+	}
+	e := findActivityEvent(t, store, activity.EventRuleDeleted)
+	assertRuleEventPayload(t, e, activity.EventRuleDeleted, activity.SeverityWarning, rule, `Rule "TCP" deleted.`)
+}
+
+func TestStartStopRuleActivityPayload(t *testing.T) {
+	targetPort, stopTarget := startEchoServer(t, "payload-act")
+	defer stopTarget()
+	rule := tcpRule()
+	rule.ListenPort = freeTCPPort(t)
+	rule.TargetPort = targetPort
+	rule.Enabled = false
+	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
+	defer m.StopAll()
+
+	if _, err := m.StartRule(rule.ID); err != nil {
+		t.Fatalf("StartRule: %v", err)
+	}
+	started := findActivityEvent(t, store, activity.EventRuleStarted)
+	assertRuleEventPayload(t, started, activity.EventRuleStarted, activity.SeveritySuccess, rule, `Rule "TCP" started.`)
+
+	if _, err := m.StopRule(rule.ID); err != nil {
+		t.Fatalf("StopRule: %v", err)
+	}
+	stopped := findActivityEvent(t, store, activity.EventRuleStopped)
+	assertRuleEventPayload(t, stopped, activity.EventRuleStopped, activity.SeverityInfo, rule, `Rule "TCP" stopped.`)
+}
+
+func TestFailedStartActivityPayload(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	defer listener.Close()
+	rule := tcpRule()
+	rule.ListenPort = listener.Addr().(*net.TCPAddr).Port
+	rule.Enabled = false
+	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
+	if _, err := m.StartRule(rule.ID); err == nil {
+		t.Fatal("expected bind failure")
+	}
+	e := findActivityEvent(t, store, activity.EventRuleError)
+	// Error message embeds an OS-dependent reason, so assert the stable prefix and
+	// all the rule-scoped fields rather than the full text.
+	if e.Severity != activity.SeverityError {
+		t.Errorf("severity = %q, want %q", e.Severity, activity.SeverityError)
+	}
+	if e.RuleID == nil || *e.RuleID != rule.ID {
+		t.Errorf("ruleId = %v, want %q", e.RuleID, rule.ID)
+	}
+	if e.RuleName == nil || *e.RuleName != rule.Name {
+		t.Errorf("ruleName = %v, want %q", e.RuleName, rule.Name)
+	}
+	if e.Protocol == nil || *e.Protocol != string(domain.ProtocolTCP) {
+		t.Errorf("protocol = %v, want %q", e.Protocol, string(domain.ProtocolTCP))
+	}
+	if !strings.HasPrefix(e.Message, `Rule "TCP" failed to start: `) {
+		t.Errorf("message = %q, want prefix %q", e.Message, `Rule "TCP" failed to start: `)
+	}
+	if e.Details != nil {
+		t.Errorf("rule-scoped event must not carry details, got: %#v", e.Details)
+	}
+}
+
 func TestSetStartLogger(t *testing.T) {
 	m, err := New([]domain.ForwardRule{})
 	if err != nil {
@@ -1117,6 +1221,47 @@ func assertActivityType(t *testing.T, store *activity.Store, eventType string) {
 		}
 	}
 	t.Fatalf("expected event type %q not found; got: %#v", eventType, events)
+}
+
+// findActivityEvent returns the first stored event of the given type, failing if none.
+func findActivityEvent(t *testing.T, store *activity.Store, eventType string) activity.ActivityEvent {
+	t.Helper()
+	events := store.List(activity.ListParams{})
+	for _, e := range events {
+		if e.Type == eventType {
+			return e
+		}
+	}
+	t.Fatalf("expected event type %q not found; got: %#v", eventType, events)
+	return activity.ActivityEvent{}
+}
+
+// assertRuleEventPayload asserts a full rule-scoped activity payload. Rule-scoped
+// events must carry ruleId/ruleName/protocol from the rule and must NOT carry a
+// details map. This guards the Arch-C2 emitRuleEvent helper against payload drift.
+func assertRuleEventPayload(t *testing.T, e activity.ActivityEvent, wantType, wantSeverity string, rule domain.ForwardRule, wantMessage string) {
+	t.Helper()
+	if e.Type != wantType {
+		t.Errorf("type = %q, want %q", e.Type, wantType)
+	}
+	if e.Severity != wantSeverity {
+		t.Errorf("severity = %q, want %q", e.Severity, wantSeverity)
+	}
+	if e.RuleID == nil || *e.RuleID != rule.ID {
+		t.Errorf("ruleId = %v, want %q", e.RuleID, rule.ID)
+	}
+	if e.RuleName == nil || *e.RuleName != rule.Name {
+		t.Errorf("ruleName = %v, want %q", e.RuleName, rule.Name)
+	}
+	if e.Protocol == nil || *e.Protocol != string(rule.Protocol) {
+		t.Errorf("protocol = %v, want %q", e.Protocol, string(rule.Protocol))
+	}
+	if e.Message != wantMessage {
+		t.Errorf("message = %q, want %q", e.Message, wantMessage)
+	}
+	if e.Details != nil {
+		t.Errorf("rule-scoped event must not carry details, got: %#v", e.Details)
+	}
 }
 
 func inputForRule(rule domain.ForwardRule, id string) validation.ForwardRuleInput {

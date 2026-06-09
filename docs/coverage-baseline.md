@@ -2,14 +2,14 @@
 
 ## v1.6-pre Release Gates (updated at Slice B, 2026-06-09)
 
-Achieved after coverage ratchet & quality hardening uplift (v1.6-pre), then recalibrated at Slice A (tooling stabilization) and updated at Slice B (service behavioral tests). See methodology section below.
+Achieved after coverage ratchet & quality hardening uplift (v1.6-pre), then recalibrated at Slice A (tooling stabilization), updated at Slice B (service behavioral tests), and refreshed at Arch-C2 (manager activity-emission dedupe — refactor removed covered duplicate lines, nudging service 88.6% → 88.5%; gate unchanged). See methodology section below.
 
 | Component | Statements | Branch | Functions | Gate (post-Slice-B) |
 | --------- | ---------: | -----: | --------: | ------------------: |
 | tools/cli |      93.2% |      — |      98.6% |                 93% |
 | client    |   ~95-96%† |~89-90%†|   ~78-80%† |           94/89/78  |
-| server    |      95.2% |  91.6% |    100.0%  |           89/91/99  |
-| service   |      88.6% |      — |      95.4% |                 88% |
+| server    |      95.3% |  92.0% |    100.0%  |           89/91/99  |
+| service   |      88.5% |      — |      95.4% |                 88% |
 | shared    |    100.00% | 100.0% |    100.00% |         100/100/100 |
 
 † Client numbers fluctuate slightly (±1%) depending on whether Windows vitest ghost entries appear in a given run. Both the ghost-entry run and the clean run now pass the recalibrated gates. See methodology section below.
@@ -213,11 +213,11 @@ Per-package figures (package-internal test coverage):
 | sources/static                   |        N/T  | static file helper, no test file                 |
 | sources/version                  |        N/T  | constant, no test file                           |
 | sources/ (main.go)               |        N/T  | entry point, no test file                        |
-| **Combined total (-coverpkg)**   |   **88.6%** |                                                  |
+| **Combined total (-coverpkg)**   |   **88.5%** |                                                  |
 
 N/T = no test file. Most of these are thin wrappers, type definitions, or OS-integration code.
 
-Gate: 88%. Enforced by `npm run validate:coverage:service`. Ratcheted 85% (v1.5.0) → 87% (v1.6-pre) → 88% (Slice B: 9 new tests for manager rollback and config error paths).
+Gate: 88%. Enforced by `npm run validate:coverage:service`. Ratcheted 85% (v1.5.0) → 87% (v1.6-pre) → 88% (Slice B: 9 new tests for manager rollback and config error paths). Arch-C2 (manager activity-emission dedupe) nudged the statement total 88.6% → 88.5% by removing covered duplicate lines; the gate is unchanged and full rule-event payloads are now asserted in `manager_test.go`.
 
 Notes:
 - The combined coverage run uses `-p 1` (sequential) to avoid timing flakiness in `TestTCPForwarderEmitsConnectionClosedEvent` under parallel cross-package instrumentation. The per-package test for that package passes reliably.
