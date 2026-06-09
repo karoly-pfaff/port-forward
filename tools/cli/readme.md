@@ -216,6 +216,55 @@ All commands that target a rule accept:
 
 If multiple rules share the same name, the command exits with code 2 and lists the matching IDs on stderr. Use the rule ID in that case.
 
+### `portier config plan <file>` — Planned (v1.5)
+
+Compare a desired config file against the currently running configuration and show a structured plan.
+
+```
+portier config plan <file>
+portier --json config plan <file>
+portier config plan <file> --fail-on-drift
+```
+
+Validates the desired file locally, then calls `POST /api/config/plan`. Prints a human-readable summary of adds, updates, removes, and unchanged rules.
+
+Flags:
+- `--fail-on-drift` — exits with code `4` when any add, update, or remove operation is present.
+
+With `--json`: prints `ConfigPlanResponse` from the API.
+
+Exit codes: `0` no drift or `--fail-on-drift` not set; `4` drift detected with `--fail-on-drift`; `1` API error; `2` invalid file or missing argument; `3` connection failure.
+
+### `portier config diff <file>` — Planned (v1.5)
+
+Human-friendly diff view of changes between the desired file and the running config.
+
+```
+portier config diff <file>
+```
+
+Uses the same underlying `POST /api/config/plan` response as `portier config plan`. Formats output as a compact diff with field-level change detail.
+
+### `portier config apply <file> --yes` — Planned (v1.5)
+
+Apply a desired config to the running configuration with explicit confirmation.
+
+```
+portier config apply <file> --yes
+portier config apply <file> --dry-run
+portier config apply <file> --backup-out <backup.json> --yes
+portier --json config apply <file> --yes
+```
+
+Validates the desired file locally, runs `POST /api/config/plan` to preview, then calls `POST /api/config/apply`. Requires `--yes` to confirm when destructive operations (remove or forwarding-field update) are present.
+
+Flags:
+- `--yes` — required to confirm destructive operations; without it, exits with code `2` after showing the plan.
+- `--dry-run` — shows the plan and exits without applying. Never calls `POST /api/config/apply`.
+- `--backup-out <file>` — exports the current config to a file before applying.
+
+With `--json`: prints `ConfigApplyResponse` from the API.
+
 ### `portier diagnostics export`
 
 Build a JSON diagnostics bundle from the running Portier service.
@@ -317,6 +366,7 @@ portier -h
 | `1` | General error or API error |
 | `2` | Invalid arguments or usage error |
 | `3` | Connection failure — Portier service unreachable |
+| `4` | Drift detected — used by `portier config plan --fail-on-drift` (planned v1.5) |
 
 ## Runtime Package
 

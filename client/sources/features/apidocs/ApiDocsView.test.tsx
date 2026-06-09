@@ -101,6 +101,8 @@ describe("ApiDocsView", () => {
       "/api/config/import",
       "/api/ports/advisory",
       "/api/connections",
+      "/api/config/plan",
+      "/api/config/apply",
     ];
     for (const path of expectedPaths) {
       expect(screen.queryAllByText(path).length).toBeGreaterThan(0);
@@ -133,5 +135,35 @@ describe("ApiDocsView", () => {
   it("notes that GET /api/connections returns empty arrays when nothing is active", () => {
     const { container } = render(<ApiDocsView />);
     expect(container.textContent).toMatch(/empty arrays when nothing is active/i);
+  });
+
+  it("lists the POST /api/config/plan endpoint with a Planned v1.5 badge", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("/api/config/plan")).toBeInTheDocument();
+    expect(screen.getAllByText("Planned — v1.5").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("describes POST /api/config/plan as read-only", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText(/does not modify state/i)).toBeInTheDocument();
+  });
+
+  it("documents ConfigPlanResponse fields for POST /api/config/plan", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/ConfigPlanResponse/);
+    expect(container.textContent).toMatch(/ConfigPlanSummary/);
+    expect(container.textContent).toMatch(/ConfigPlanOperation/);
+    expect(container.textContent).toMatch(/hasDrift/);
+  });
+
+  it("lists the POST /api/config/apply endpoint with a Planned v1.5 badge", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("/api/config/apply")).toBeInTheDocument();
+    expect(screen.getAllByText("Planned — v1.5").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("describes POST /api/config/apply as requiring yes: true", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/yes: true/);
   });
 });

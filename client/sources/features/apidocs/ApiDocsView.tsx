@@ -122,6 +122,31 @@ const ENDPOINTS: EndpointDoc[] = [
       "LiveConnectionsResponse { generatedAt, tcpConnections[], udpSessions[], ruleSummaries[] }",
     notes:
       "tcpConnections, udpSessions, and ruleSummaries are always arrays; empty arrays when nothing is active. TCP status: active. UDP status: active | idle (idle after 30s, retained up to 5min). bytesIn = client-to-target; bytesOut = target-to-client. IDs are runtime-local and do not persist across restarts. Payload contents are never exposed."
+  },
+  {
+    method: "POST",
+    path: "/api/config/plan",
+    purpose:
+      "Compare a desired config against the currently running configuration and return a structured plan showing adds, updates, removes, and unchanged rules. Read-only — does not modify state.",
+    params: "Body: ConfigPlanRequest { desired: { rules: ForwardRuleInput[] } }",
+    response:
+      "ConfigPlanResponse { generatedAt, mode, summary: ConfigPlanSummary, operations: ConfigPlanOperation[], errors: ConfigPlanError[], warnings: ConfigPlanWarning[] }",
+    notes:
+      "Rules are matched by stable rule id when present; otherwise by protocol+listenHost+listenPort identity. Ambiguous matches produce an error and refuse apply. hasDrift is true when any operation is add, update, or remove. destructive is true when a remove or forwarding-affecting update is present. Does not mutate running config.",
+    planned: "v1.5"
+  },
+  {
+    method: "POST",
+    path: "/api/config/apply",
+    purpose:
+      "Apply a desired config to the running configuration after explicit confirmation. Supports dry-run and backup before apply.",
+    params:
+      "Body: ConfigApplyRequest { desired: { rules: ForwardRuleInput[] }, yes: true, backup?: boolean }",
+    response:
+      "ConfigApplyResponse { appliedAt, applied, errors: ConfigPlanError[], warnings: ConfigPlanWarning[] }",
+    notes:
+      "requires yes: true for destructive operations. Use POST /api/config/plan first to preview. backup: true returns the pre-apply config for safekeeping. Dry-run behavior is via the CLI --dry-run flag; the API endpoint always applies when called with yes: true.",
+    planned: "v1.5"
   }
 ];
 

@@ -14,6 +14,21 @@ export type {
   LiveConnectionsResponse
 } from "./connections.js";
 
+export type {
+  ConfigPlanOperationType,
+  ConfigPlanChange,
+  ConfigPlanRuleSnapshot,
+  ConfigPlanOperation,
+  ConfigPlanSummary,
+  ConfigPlanError,
+  ConfigPlanWarning,
+  ConfigPlanResponse,
+  DesiredConfig,
+  ConfigPlanRequest,
+  ConfigApplyRequest,
+  ConfigApplyResponse
+} from "./plan.js";
+
 export type ForwardProtocol = "tcp" | "udp";
 
 export type UdpMode = "one-way" | "bidirectional-last-client" | "bidirectional-multi-client";

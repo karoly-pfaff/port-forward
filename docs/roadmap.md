@@ -653,18 +653,93 @@ portier config plan desired.json --fail-on-drift
 
 ### Proposed API Direction
 
-**Primary endpoint:**
+**Primary endpoints:**
 
 ```
 POST /api/config/plan
+POST /api/config/apply
 ```
 
-Returns a structured diff: adds, updates, removes, and unchanged rules. Read-only — does not modify state.
+`POST /api/config/plan` returns a structured diff: adds, updates, removes, and unchanged rules. Read-only — does not modify state.
 
-Notes:
-- Exact request and response shape to be finalized during Slice 1.
-- Both TypeScript server and Go service must expose the same response shape.
-- Applying the plan uses the existing `POST /api/config/import` with replace mode or a new dedicated apply endpoint, to be decided during Slice 1.
+`POST /api/config/apply` applies the desired config with explicit confirmation (`yes: true`). Supports `backup: true` to snapshot the pre-apply config.
+
+Both TypeScript server and Go service must expose the same response shape.
+
+### Config Comparison Semantics
+
+Rules are matched using the following priority:
+
+1. Match by stable rule `id` when present in both current and desired config.
+2. If the desired rule has no `id`, match by identity key: `protocol + listenHost + listenPort`.
+3. If no match, the desired rule is an **add** operation.
+4. If a current rule has no desired match, it is a **remove** operation.
+5. If matched and material fields differ, the operation is **update**.
+6. If matched and all material fields are equal, the operation is **unchanged**.
+
+**Material fields** (trigger update or destructive flag):
+- `name`, `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, `enabled`, `udpMode`
+
+**Non-material fields** (never trigger update):
+- Runtime status, lastError, live connections, activity events, diagnostics results, transient state
+
+**Destructive operations:**
+- `remove` is always destructive.
+- `update` is destructive when any forwarding-affecting field changes: `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, `udpMode`.
+
+**Ambiguity policy:**
+- Do not match by fuzzy name.
+- Do not silently merge ambiguous rules.
+- If identity matching is ambiguous (two desired rules share the same identity key), the plan reports an error and refuses apply.
+- Plans are deterministic.
+
+### Plan Operation Model
+
+```
+ConfigPlanOperation {
+  type: "add" | "update" | "remove" | "unchanged"
+  ruleId?: string
+  ruleName: string
+  protocol: "tcp" | "udp"
+  current?: ConfigPlanRuleSnapshot
+  desired?: ConfigPlanRuleSnapshot
+  changes?: ConfigPlanChange[]
+  destructive: boolean
+}
+
+ConfigPlanChange {
+  field: string
+  before: unknown
+  after: unknown
+}
+```
+
+### Plan Summary Model
+
+```
+ConfigPlanSummary {
+  add: number
+  update: number
+  remove: number
+  unchanged: number
+  destructive: number
+  hasDrift: boolean
+  hasErrors: boolean
+}
+
+ConfigPlanResponse {
+  generatedAt: string
+  mode: "plan"
+  summary: ConfigPlanSummary
+  operations: ConfigPlanOperation[]
+  errors: ConfigPlanError[]
+  warnings: ConfigPlanWarning[]
+}
+```
+
+Error examples: invalid desired config, duplicate desired rule identity, ambiguous match, invalid UDP mode, invalid port, missing required fields.
+
+Warning examples: apply would remove rules, LAN exposure, privileged or common port advisories.
 
 ### UI Direction
 
@@ -676,12 +751,12 @@ Notes:
 
 ### Suggested Implementation Slices
 
-1. Config diff/plan strategy and contract
+1. ~~**Config diff/plan strategy and contract**~~ — ✓ Complete. Matching semantics, operation model, plan/summary types, and API contract documented. Shared TypeScript types added to `@portier/shared` (`shared/sources/plan.ts`). `POST /api/config/plan` and `POST /api/config/apply` added to `docs/api-contract.md` as Planned. Client in-app API Docs updated with planned badges. `validate:contract` updated with skip notes. `docs/e2e-coverage.md` updated with planned workflows. `tools/cli/readme.md` updated with planned CLI commands.
 2. Backend plan endpoint: `POST /api/config/plan` in TypeScript server
-3. Go service plan parity
+3. Go service plan parity: `POST /api/config/plan` in Go service
 4. CLI `config plan` and `config diff` commands
 5. CLI `config apply` with `--yes`, `--dry-run`, `--backup-out`
-6. Settings import preview UI
+6. Settings import preview UI (shows plan counts before confirm)
 7. Contract/config validation and coverage gates
 8. v1.5 readiness audit, version bump, changelog, tag
 

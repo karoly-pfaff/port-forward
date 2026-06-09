@@ -116,9 +116,23 @@ The `tests/e2e/fixtures/` directory is currently empty; use `tests/fixtures/conf
 - **Accessibility / keyboard nav smoke**: not yet automated; propose adding one focused test per v1.6 audit.
 
 ### v1.5 Declarative Config additions (not yet implemented)
-When `POST /api/config/plan` and CLI `config diff/plan/apply` are implemented, add:
-- E2E for plan preview in Settings (if UI surface is added)
-- E2E for apply confirmation (destructive, needs modal or confirm dialog)
-- E2E for drift indicator in rule list
 
-v1.5 should not be considered release-ready without E2E coverage for the new config diff/plan/apply surface once it is implemented.
+When `POST /api/config/plan`, `POST /api/config/apply`, and CLI `config diff/plan/apply` are implemented (v1.5 Slices 2–6), add:
+
+| Area | Workflow | E2E coverage | Priority | Notes |
+| ---- | -------- | :----------: | -------- | ----- |
+| Config plan | plan preview shows Add/Update/Remove/Unchanged counts | no | high | planned: Settings import preview UI |
+| Config plan | plan shows no-drift when desired matches running | no | high | planned: zero-change case |
+| Config plan | plan shows drift when desired differs from running | no | high | planned: add/update/remove cases |
+| Config plan | plan shows destructive flag for remove/forwarding-field-update | no | high | planned: destructive operation highlight |
+| Config apply | apply confirmation dialog shown for destructive operations | no | high | planned: Settings apply confirm |
+| Config apply | dry-run does not mutate running rules | no | high | planned: CLI dry-run via UI proxy or direct test |
+| Config apply | backup-out writes pre-apply config before applying | no | medium | planned: CLI --backup-out |
+| Config apply | apply with yes applies desired config and refreshes rule list | no | high | planned: post-apply state verification |
+| Config diff | diff output is human-readable and shows field-level changes | no | medium | planned: CLI diff command |
+| API docs | POST /api/config/plan listed with Planned badge removed | no | medium | planned: remove badge after Slice 2/3 implement |
+| API docs | POST /api/config/apply listed with Planned badge removed | no | medium | planned: remove badge after Slice 5 implement |
+
+v1.5 should not be considered release-ready without E2E coverage for the new config plan/apply surface once it is implemented.
+
+**Note on existing import coverage:** The `POST /api/config/import` (replace mode) E2E in `settings.spec.ts` covers the confirm-and-apply flow for the existing import path. v1.5 extends this with a preview step (plan counts) before the confirm dialog. Existing import E2E remains valid; the plan preview tests are additive.

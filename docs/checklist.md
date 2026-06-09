@@ -158,17 +158,17 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 - macOS `.app` bundle or Homebrew formula.
 - Linux hardening beyond the example systemd unit.
 
-## Coverage Baseline (v1.4.0)
+## Coverage Baseline (v1.5 pre-release)
 
-Measured at v1.4.0 (2026-06-09). See `docs/coverage-baseline.md` for full per-file breakdown and ratchet plan.
+Updated at v1.5 pre-release (2026-06-09). See `docs/coverage-baseline.md` for full per-file breakdown and ratchet plan.
 
 | Component  | Statements | Branch | Functions |      Gate | Run command                      |
 | ---------- | ---------: | -----: | --------: | --------: | -------------------------------- |
 | tools/cli  |      92.7% |      — |         — |       92% | `npm run coverage:cli`           |
-| client     |     90.56% | 89.46% |    76.19% |  90/89/76 | `npm run coverage:client`        |
-| service    |      82.5% |      — |         — |       82% | `npm run coverage:service`       |
-| shared     |      82.1% | 54.28% |     90.0% |  82/54/90 | `npm run coverage:shared`        |
-| server     |     82.88% | 86.35% |    97.91% |  82/86/97 | `npm run coverage:server`        |
+| client     |     94.71% | 90.0%+ |    78%+   |  94/90/78 | `npm run coverage:client`        |
+| service    |      84.8% |      — |         — |       84% | `npm run coverage:service`       |
+| shared     |     100.0% |  100%  |    100%   | 100/100/100 | `npm run coverage:shared`      |
+| server     |     87.11% | 89.0%+ |    99.0%+ |  87/89/99 | `npm run coverage:server`        |
 | scripts    |        N/M |      — |         — |      none | not yet measured                 |
 
 Gate format: `stmts/branch/funcs` thresholds. All gates enforced at v1.4.0.
@@ -218,6 +218,17 @@ Planning checklist:
 - [x] UI import preview direction recorded (Settings / Config Import Preview: Add/Update/Remove/Unchanged counts before confirm)
 - [x] Non-goals recorded (auth, remote management, cloud sync, team sharing, scheduled rules, firewall management, service install from CLI, full rollback/history, TUI, traffic graphs)
 - [x] 100% meaningful coverage target recorded for v1.4 and v1.5
+
+Checklist items to add per slice as work proceeds:
+
+- [x] **Slice 1** — Config diff/plan strategy and contract: matching semantics (id-first, then identity key protocol+listenHost+listenPort), operation model (add/update/remove/unchanged, destructive flag, changes[]), plan summary (hasDrift, hasErrors, counts), plan/apply types added to `@portier/shared` (`shared/sources/plan.ts`: `ConfigPlanOperationType`, `ConfigPlanChange`, `ConfigPlanRuleSnapshot`, `ConfigPlanOperation`, `ConfigPlanSummary`, `ConfigPlanError`, `ConfigPlanWarning`, `ConfigPlanResponse`, `DesiredConfig`, `ConfigPlanRequest`, `ConfigApplyRequest`, `ConfigApplyResponse`). `plan.test.ts` added with 20+ shape tests covering all types. `POST /api/config/plan` and `POST /api/config/apply` added to `docs/api-contract.md` as Planned (v1.5). Client in-app API Docs updated with planned badges and response/request field docs. `ApiDocsView.test.tsx` updated with 6 new tests. `validate:contract` updated with skip notes for both endpoints. `docs/e2e-coverage.md` updated with planned v1.5 workflows. `tools/cli/readme.md` updated with planned v1.5 CLI commands. `docs/roadmap.md` v1.5 section expanded with matching semantics, operation model, and summary model.
+- [ ] **Slice 2** — Backend plan endpoint: `POST /api/config/plan` in TypeScript server; config comparison logic; 100% meaningful coverage.
+- [ ] **Slice 3** — Go service plan parity: `POST /api/config/plan` in Go service; parity with TypeScript behavior; `validate:contract` skip replaced with real checks.
+- [ ] **Slice 4** — CLI `config plan` and `config diff` commands; `--json` output; `--fail-on-drift` with exit code 4; 100% meaningful coverage.
+- [ ] **Slice 5** — CLI `config apply` with `--yes`, `--dry-run`, `--backup-out`; 100% meaningful coverage.
+- [ ] **Slice 6** — Settings import preview UI: shows plan counts (Add/Update/Remove/Unchanged) before confirm; reuses existing import flow.
+- [ ] **Slice 7** — Contract/config validation and coverage gates: `validate:contract` fully checks both endpoints; coverage gates raised.
+- [ ] **Slice 8** — v1.5 readiness audit, version bump, changelog, tag.
 
 ---
 

@@ -735,6 +735,11 @@ async function runScenarios(baseUrl, runtime) {
     }
   }
 
+  // ── POST /api/config/plan (v1.5 — Planned) ──────────────────────────────
+  // Not yet implemented. Remove this skip when v1.5 Slice 2 adds the backend.
+  skip("POST /api/config/plan → planned v1.5 endpoint; not yet implemented");
+  skip("POST /api/config/apply → planned v1.5 endpoint; not yet implemented");
+
   // Cleanup remaining rules
   for (const id of [udpId, udpDefaultId].filter(Boolean)) {
     try { await api.delete(`/api/forwards/${id}`); } catch { /* best effort cleanup */ }

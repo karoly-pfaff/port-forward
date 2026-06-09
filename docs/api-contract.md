@@ -383,6 +383,108 @@ Field notes:
 - UDP `one-way` mode: per-client session metadata may be limited; see UDP mode notes.
 - UDP `bidirectional-last-client` mode: only the most recent client session is available.
 
+## `POST /api/config/plan` — Planned (v1.5)
+
+Purpose: compare a desired config against the currently running Portier configuration and return a structured plan showing adds, updates, removes, and unchanged rules. Read-only — does not modify state.
+
+Planned for v1.5 Slice 2. Not yet implemented in either runtime.
+
+Request body:
+
+```json
+{
+  "desired": {
+    "rules": [...]
+  }
+}
+```
+
+The `desired.rules` array accepts the same rule input shape as `POST /api/config/import`. The `exportedAt` and `version` wrapper fields are not required.
+
+Response: `ConfigPlanResponse`.
+
+```json
+{
+  "generatedAt": "ISO timestamp",
+  "mode": "plan",
+  "summary": {
+    "add": 1,
+    "update": 0,
+    "remove": 1,
+    "unchanged": 2,
+    "destructive": 1,
+    "hasDrift": true,
+    "hasErrors": false
+  },
+  "operations": [
+    {
+      "type": "add" | "update" | "remove" | "unchanged",
+      "ruleId": "string (when matched)",
+      "ruleName": "string",
+      "protocol": "tcp" | "udp",
+      "current": "ConfigPlanRuleSnapshot | undefined",
+      "desired": "ConfigPlanRuleSnapshot | undefined",
+      "changes": [{ "field": "string", "before": "any", "after": "any" }],
+      "destructive": true | false
+    }
+  ],
+  "errors": [{ "code": "string", "message": "string", "field": "string (optional)" }],
+  "warnings": [{ "code": "string", "message": "string" }]
+}
+```
+
+Matching semantics:
+- Match by stable rule `id` if present in both current and desired config.
+- If the desired rule has no `id`, match by identity key: `protocol + listenHost + listenPort`.
+- If no match, the desired rule is an `add` operation.
+- If a current rule has no desired match, it is a `remove` operation.
+- If matched and material fields differ, the operation is `update`.
+- If matched and all material fields are equal, the operation is `unchanged`.
+
+Material fields (those that trigger `update` and potentially `destructive: true`):
+- `name`, `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, `enabled`, `udpMode`
+
+Destructive operations:
+- `remove` is always destructive.
+- `update` is destructive when any of `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, or `udpMode` changes.
+
+Error conditions:
+- `400` when `desired.rules` is not a valid array.
+- `400` when any rule fails field validation.
+- `400` when two desired rules share the same identity key (ambiguous match).
+- `400` when a desired rule id matches multiple current rules.
+
+Does not mutate running config. Does not start or stop rules.
+
+## `POST /api/config/apply` — Planned (v1.5)
+
+Purpose: apply a desired config to the running configuration after explicit confirmation.
+
+Planned for v1.5. Not yet implemented. `POST /api/config/plan` must be implemented first.
+
+Request body:
+
+```json
+{
+  "desired": { "rules": [...] },
+  "yes": true,
+  "backup": true
+}
+```
+
+The `yes: true` field is required for destructive operations. The `backup` field is optional; when true, the response includes the pre-apply config snapshot.
+
+Response: `ConfigApplyResponse`.
+
+```json
+{
+  "appliedAt": "ISO timestamp",
+  "applied": 3,
+  "errors": [],
+  "warnings": []
+}
+```
+
 ## `GET /api/health`
 
 Purpose: lightweight health probe for the native Go service.
@@ -449,3 +551,20 @@ The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GE
 - `RuleLiveSummary` — per-rule aggregated live traffic summary; `lastTrafficAt` is `string | null`
 - `LiveConnectionStatus` — `"active"` (TCP connections are either active or gone)
 - `UdpSessionStatus` — `"active" | "idle"`
+
+### Added in v1.5 Slice 1 — Planned (implementation pending)
+
+The following types are defined in `@portier/shared` (`shared/sources/plan.ts`) as of v1.5 Slice 1. The `POST /api/config/plan` and `POST /api/config/apply` endpoints are planned for v1.5 Slices 2–3. Implementation is pending.
+
+- `ConfigPlanOperationType` — `"add" | "update" | "remove" | "unchanged"`
+- `ConfigPlanChange` — a single field-level change: `{ field, before, after }`
+- `ConfigPlanRuleSnapshot` — rule config fields used for comparison (mirrors `ForwardRule`; no runtime state or advisories)
+- `ConfigPlanOperation` — a single plan operation: `{ type, ruleId?, ruleName, protocol, current?, desired?, changes?, destructive }`
+- `ConfigPlanSummary` — counts and drift flags: `{ add, update, remove, unchanged, destructive, hasDrift, hasErrors }`
+- `ConfigPlanError` — a plan validation error: `{ code, message, field? }`
+- `ConfigPlanWarning` — a plan advisory warning: `{ code, message }`
+- `ConfigPlanResponse` — top-level response for `POST /api/config/plan`: `{ generatedAt, mode: "plan", summary, operations, errors, warnings }`
+- `DesiredConfig` — the desired config wrapper: `{ rules: ConfigPlanRuleSnapshot[] }`
+- `ConfigPlanRequest` — request body for `POST /api/config/plan`: `{ desired: DesiredConfig }`
+- `ConfigApplyRequest` — request body for `POST /api/config/apply`: `{ desired: DesiredConfig, yes: boolean, backup?: boolean }`
+- `ConfigApplyResponse` — response for `POST /api/config/apply`: `{ appliedAt, applied, errors, warnings }`
