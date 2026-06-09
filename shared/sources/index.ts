@@ -25,6 +25,7 @@ export type {
   ConfigPlanResponse,
   DesiredConfig,
   ConfigPlanRequest,
+  ConfigAppliedCounts,
   ConfigApplyRequest,
   ConfigApplyResponse
 } from "./plan.js";

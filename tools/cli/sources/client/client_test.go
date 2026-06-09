@@ -987,3 +987,219 @@ func TestPlanConfig_ConnectionError(t *testing.T) {
 		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
 	}
 }
+
+// --- ApplyConfig ---
+
+func applyNoDriftClientResp() map[string]any {
+	return map[string]any{
+		"ok":        true,
+		"dryRun":    false,
+		"appliedAt": "2026-01-01T00:00:00.000Z",
+		"plan":      planNoDriftResponse(),
+		"applied":   map[string]any{"add": 0, "update": 0, "remove": 0, "unchanged": 1},
+	}
+}
+
+func applyWithDriftClientResp() map[string]any {
+	return map[string]any{
+		"ok":        true,
+		"dryRun":    false,
+		"appliedAt": "2026-01-01T00:00:00.000Z",
+		"plan":      planNoDriftResponse(),
+		"applied":   map[string]any{"add": 1, "update": 0, "remove": 0, "unchanged": 0},
+	}
+}
+
+func applyErrorsClientResp() map[string]any {
+	return map[string]any{
+		"ok":        false,
+		"dryRun":    false,
+		"appliedAt": "2026-01-01T00:00:00.000Z",
+		"plan":      planWithErrorsResponse(),
+		"applied":   map[string]any{"add": 0, "update": 0, "remove": 0, "unchanged": 0},
+	}
+}
+
+func TestApplyConfig_NoDrift(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/config/apply" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(applyNoDriftClientResp())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigApplyRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}},
+		Yes:     false,
+	}
+	resp, err := c.ApplyConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.Ok {
+		t.Error("ok should be true")
+	}
+	if resp.DryRun {
+		t.Error("dryRun should be false")
+	}
+	if resp.Applied.Unchanged != 1 {
+		t.Errorf("applied.unchanged = %d, want 1", resp.Applied.Unchanged)
+	}
+}
+
+func TestApplyConfig_WithDrift(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(applyWithDriftClientResp())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigApplyRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}},
+		Yes:     true,
+	}
+	resp, err := c.ApplyConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.Ok {
+		t.Error("ok should be true")
+	}
+	if resp.Applied.Add != 1 {
+		t.Errorf("applied.add = %d, want 1", resp.Applied.Add)
+	}
+}
+
+func TestApplyConfig_PlanErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(applyErrorsClientResp())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigApplyRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}},
+	}
+	resp, err := c.ApplyConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error (plan errors come as 200): %v", err)
+	}
+	if resp.Ok {
+		t.Error("ok should be false when plan has errors")
+	}
+	if !resp.Plan.Summary.HasErrors {
+		t.Error("plan.summary.hasErrors should be true")
+	}
+}
+
+func TestApplyConfig_DryRun(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"ok": true, "dryRun": true,
+			"appliedAt": "2026-01-01T00:00:00.000Z",
+			"plan":      planNoDriftResponse(),
+			"applied":   map[string]any{"add": 0, "update": 0, "remove": 0, "unchanged": 1},
+		})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigApplyRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}},
+		DryRun:  true,
+	}
+	resp, err := c.ApplyConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.DryRun {
+		t.Error("dryRun should be true")
+	}
+}
+
+func TestApplyConfig_RequestBodyShape(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(applyNoDriftClientResp())
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigApplyRequest{
+		Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{
+			{Name: "API", Protocol: "tcp", ListenHost: "127.0.0.1", ListenPort: 48000,
+				TargetHost: "10.0.0.1", TargetPort: 8080, Enabled: true},
+		}},
+		Yes:    true,
+		DryRun: false,
+	}
+	_, err := c.ApplyConfig(req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if gotBody["yes"] != true {
+		t.Errorf("yes = %v, want true", gotBody["yes"])
+	}
+	desired, ok := gotBody["desired"].(map[string]any)
+	if !ok {
+		t.Fatalf("body missing 'desired'; got: %v", gotBody)
+	}
+	rules, ok := desired["rules"].([]any)
+	if !ok || len(rules) != 1 {
+		t.Fatalf("desired.rules = %v, want array of 1", desired["rules"])
+	}
+	_, hasDryRun := gotBody["dryRun"]
+	if hasDryRun {
+		t.Error("dryRun should be omitted when false (omitempty)")
+	}
+}
+
+func TestApplyConfig_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string][]string{"errors": {"desired is required"}})
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	req := client.ConfigApplyRequest{Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}}}
+	_, err := c.ApplyConfig(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *client.APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 400 {
+		t.Errorf("status = %d, want 400", apiErr.StatusCode)
+	}
+}
+
+func TestApplyConfig_ConnectionError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	addr := srv.URL
+	srv.Close()
+
+	c := client.New(addr)
+	req := client.ConfigApplyRequest{Desired: client.ConfigPlanDesired{Rules: []client.ConfigRule{}}}
+	_, err := c.ApplyConfig(req)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	var connErr *client.ConnectionError
+	if !errors.As(err, &connErr) {
+		t.Fatalf("expected *client.ConnectionError, got %T: %v", err, err)
+	}
+}

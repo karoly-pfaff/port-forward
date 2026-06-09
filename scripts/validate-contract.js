@@ -843,8 +843,127 @@ async function runScenarios(baseUrl, runtime) {
     }
   }
 
-  // POST /api/config/apply — pending v1.5 Slice 5+
-  skip("POST /api/config/apply → v1.5 Slice 5+ pending; not yet implemented");
+  // POST /api/config/apply
+  {
+    // Missing desired → 400
+    {
+      const res = await api.post("/api/config/apply", { yes: true });
+      if (res.status === 400) {
+        pass("POST /api/config/apply → missing desired → 400");
+      } else {
+        fail(`POST /api/config/apply (missing desired) → expected 400, got ${res.status}`);
+      }
+    }
+
+    // Invalid desired rule → 200 with ok:false, plan.summary.hasErrors
+    {
+      const res = await api.post("/api/config/apply", { desired: [{ name: "" }], yes: true });
+      if (res.status === 200) {
+        const d = res.json();
+        if (d.ok === false && d.plan && d.plan.summary && d.plan.summary.hasErrors) {
+          pass("POST /api/config/apply → invalid desired → 200 ok:false with plan.summary.hasErrors");
+        } else {
+          fail(`POST /api/config/apply (invalid) → expected ok:false + hasErrors, got: ${JSON.stringify({ ok: d.ok, hasErrors: d.plan?.summary?.hasErrors })}`);
+        }
+      } else {
+        fail(`POST /api/config/apply (invalid) → expected 200, got ${res.status}`);
+      }
+    }
+
+    // No-drift apply (empty desired, no existing rules) → 200 ok:true, required fields
+    {
+      const res = await api.post("/api/config/apply", { desired: [], yes: false });
+      if (res.status === 200) {
+        const d = res.json();
+        const requiredFields = ["ok", "dryRun", "appliedAt", "plan", "applied"];
+        const missing = requiredFields.filter((f) => !(f in d));
+        if (missing.length === 0 && d.ok === true) {
+          pass("POST /api/config/apply → no-drift apply → 200 ok:true with all required fields");
+        } else if (missing.length > 0) {
+          fail(`POST /api/config/apply → missing fields: ${missing.join(", ")}`);
+        } else {
+          fail(`POST /api/config/apply → no-drift → ok=${d.ok}, expected true`);
+        }
+        // Validate applied counts shape
+        if (d.applied && typeof d.applied === "object") {
+          const countFields = ["add", "update", "remove", "unchanged"];
+          const missingCounts = countFields.filter((f) => !(f in d.applied));
+          if (missingCounts.length === 0) {
+            pass("POST /api/config/apply → applied has all count fields (add, update, remove, unchanged)");
+          } else {
+            fail(`POST /api/config/apply → applied missing fields: ${missingCounts.join(", ")}`);
+          }
+        } else {
+          fail("POST /api/config/apply → applied is not an object");
+        }
+        // appliedAt is parseable
+        if (typeof d.appliedAt === "string" && !isNaN(new Date(d.appliedAt).getTime())) {
+          pass("POST /api/config/apply → appliedAt is a parseable timestamp");
+        } else {
+          fail(`POST /api/config/apply → appliedAt not parseable: ${d.appliedAt}`);
+        }
+      } else {
+        fail(`POST /api/config/apply (no-drift) → expected 200, got ${res.status}`);
+      }
+    }
+
+    // Dry-run apply → 200 ok:true, dryRun:true, no mutation
+    {
+      const res = await api.post("/api/config/apply", {
+        desired: [{ name: "DryRun Rule", protocol: "tcp", listenHost: "127.0.0.1", listenPort: TCP_LISTEN, targetHost: "127.0.0.1", targetPort: 49802, enabled: false }],
+        yes: true,
+        dryRun: true,
+      });
+      if (res.status === 200) {
+        const d = res.json();
+        if (d.ok === true && d.dryRun === true) {
+          pass("POST /api/config/apply → dry-run → 200 ok:true dryRun:true");
+        } else {
+          fail(`POST /api/config/apply (dry-run) → expected ok:true dryRun:true, got ok:${d.ok} dryRun:${d.dryRun}`);
+        }
+        // Verify dry-run did not create the rule
+        const rulesRes = await api.get("/api/forwards");
+        const rules = rulesRes.json();
+        const dryRunRule = rules.find((r) => r.name === "DryRun Rule");
+        if (!dryRunRule) {
+          pass("POST /api/config/apply → dry-run → no mutation (rule not created)");
+        } else {
+          fail("POST /api/config/apply → dry-run → mutated state (rule was created)");
+        }
+      } else {
+        fail(`POST /api/config/apply (dry-run) → expected 200, got ${res.status}`);
+      }
+    }
+
+    // Real apply with add operation → rule appears
+    {
+      const res = await api.post("/api/config/apply", {
+        desired: [{ name: "Apply Test", protocol: "tcp", listenHost: "127.0.0.1", listenPort: TCP_LISTEN, targetHost: "127.0.0.1", targetPort: 49803, enabled: false }],
+        yes: true,
+      });
+      if (res.status === 200) {
+        const d = res.json();
+        if (d.ok === true && d.dryRun === false) {
+          pass("POST /api/config/apply → real apply with add → 200 ok:true dryRun:false");
+        } else {
+          fail(`POST /api/config/apply (real add) → expected ok:true dryRun:false, got: ${JSON.stringify({ ok: d.ok, dryRun: d.dryRun })}`);
+        }
+        // Verify rule was created
+        const rulesRes = await api.get("/api/forwards");
+        const rules = rulesRes.json();
+        const applied = rules.find((r) => r.name === "Apply Test");
+        if (applied) {
+          pass("POST /api/config/apply → real apply → rule appears in /api/forwards");
+          // Cleanup
+          try { await api.delete(`/api/forwards/${applied.id}`); } catch { /* best effort */ }
+        } else {
+          fail("POST /api/config/apply → real apply → rule not found in /api/forwards after apply");
+        }
+      } else {
+        fail(`POST /api/config/apply (real add) → expected 200, got ${res.status}`);
+      }
+    }
+  }
 
   // Cleanup remaining rules
   for (const id of [udpId, udpDefaultId].filter(Boolean)) {

@@ -290,7 +290,7 @@ Flags:
 
 Exit codes are the same as `portier config plan`.
 
-### `portier config apply <file> --yes` — Planned (v1.5)
+### `portier config apply <file> --yes`
 
 Apply a desired config to the running configuration with explicit confirmation.
 
@@ -301,14 +301,16 @@ portier config apply <file> --backup-out <backup.json> --yes
 portier --json config apply <file> --yes
 ```
 
-Validates the desired file locally, runs `POST /api/config/plan` to preview, then calls `POST /api/config/apply`. Requires `--yes` to confirm when destructive operations (remove or forwarding-field update) are present.
+Validates the desired file locally before calling `POST /api/config/apply`. When destructive operations (remove or forwarding-field update) are present, `--yes` is required or the API returns 400.
 
 Flags:
-- `--yes` — required to confirm destructive operations; without it, exits with code `2` after showing the plan.
-- `--dry-run` — shows the plan and exits without applying. Never calls `POST /api/config/apply`.
-- `--backup-out <file>` — exports the current config to a file before applying.
+- `--yes` — required for destructive operations.
+- `--dry-run` — previews plan counts without mutating config. Does not require `--yes`.
+- `--backup-out <file>` — exports the current config to a file before applying (skipped when `--dry-run`).
 
-With `--json`: prints `ConfigApplyResponse` from the API.
+Exit codes: `0` success, `1` plan errors or API error, `2` usage/local validation, `3` connection error.
+
+With `--json`: prints raw `ConfigApplyResponse { ok, dryRun, appliedAt, plan, applied }` from the API.
 
 ### `portier diagnostics export`
 

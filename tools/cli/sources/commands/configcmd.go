@@ -23,8 +23,37 @@ Subcommands:
   import <file> --mode merge|replace  Import rules from a file (--yes required for replace mode)
   plan <file>                         Compare a desired config file against the running config (read-only)
   diff <file>                         Human-friendly diff view of changes (read-only)
+  apply <file> --yes                  Apply a desired config file to the running service
 
 Run 'portier config <subcommand> --help' for subcommand options.
+`
+
+const applyHelp = `Usage: portier config apply <file> --yes [options]
+
+Apply a desired config file to the running Portier service.
+Calls POST /api/config/apply. Plans the changes first; no mutation occurs on errors.
+
+Options:
+  --yes               Required when the plan contains destructive operations (update, remove).
+  --dry-run           Preview what would change without mutating the running config.
+  --backup-out <file> Export current config to <file> before applying. Backup failure prevents apply.
+
+Accepted file shapes:
+  Raw JSON array:  [{ "name": "...", ... }, ...]
+  Wrapper object:  { "rules": [{ "name": "...", ... }, ...] }
+  Exported config: { "version": "1", "exportedAt": "...", "rules": [...] }
+
+Exit codes:
+  0  Apply succeeded (or dry-run completed with no errors)
+  1  Plan errors (hasErrors: true), API error, or backup failure
+  2  Invalid file, missing argument, local validation failure, or missing --yes for destructive ops
+  3  Connection failure — Portier service unreachable
+
+Examples:
+  portier config apply desired.json --yes
+  portier config apply desired.json --dry-run
+  portier config apply desired.json --yes --backup-out backup.json
+  portier --json config apply desired.json --yes
 `
 
 const planHelp = `Usage: portier config plan <file> [options]
@@ -141,6 +170,8 @@ func RunConfig(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 		return RunConfigPlan(c, jsonOutput, args[1:], stdout, stderr)
 	case "diff":
 		return RunConfigDiff(c, jsonOutput, args[1:], stdout, stderr)
+	case "apply":
+		return RunConfigApply(c, jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, configHelp)
 		return 0
@@ -851,5 +882,149 @@ func printPlanErrors(errs []client.ConfigPlanError, w io.Writer) {
 	fmt.Fprintln(w, "Errors:")
 	for _, e := range errs {
 		fmt.Fprintf(w, "  [%s] %s\n", e.Code, e.Message)
+	}
+}
+
+// RunConfigApply applies a desired config file to the running Portier service.
+func RunConfigApply(c *client.Client, jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("config apply", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagYes := fs.Bool("yes", false, "confirm destructive operations")
+	flagDryRun := fs.Bool("dry-run", false, "preview changes without mutating the running config")
+	flagBackupOut := fs.String("backup-out", "", "export current config to this file before applying")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, applyHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, applyHelp)
+		return 2
+	}
+	if fs.NArg() == 0 {
+		fmt.Fprintln(stderr, "Error: apply requires a config file path")
+		fmt.Fprint(stderr, applyHelp)
+		return 2
+	}
+
+	filePath := fs.Arg(0)
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
+		return 2
+	}
+
+	rules, parseErr := parseLocalConfig(data)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
+		return 2
+	}
+	vr := validateLocalConfig(rules)
+	if !vr.Valid {
+		fmt.Fprintln(stderr, "Config is invalid — apply aborted.")
+		for _, e := range vr.Errors {
+			fmt.Fprintf(stderr, "  %s\n", e)
+		}
+		return 2
+	}
+
+	// Export backup before applying if --backup-out was specified.
+	if *flagBackupOut != "" && !*flagDryRun {
+		cfg, backupErr := c.ExportConfig()
+		if backupErr != nil {
+			fmt.Fprintf(stderr, "Error exporting backup: %v\n", backupErr)
+			fmt.Fprintln(stderr, "Apply aborted — backup failed.")
+			return 1
+		}
+		if writeErr := writePrettyJSON(*flagBackupOut, cfg); writeErr != nil {
+			fmt.Fprintf(stderr, "Error writing backup to %s: %v\n", *flagBackupOut, writeErr)
+			fmt.Fprintln(stderr, "Apply aborted — backup failed.")
+			return 1
+		}
+		if !jsonOutput {
+			fmt.Fprintf(stdout, "Backup written to %s\n", *flagBackupOut)
+		}
+	}
+
+	configRules := make([]client.ConfigRule, len(rules))
+	for i, r := range rules {
+		configRules[i] = client.ConfigRule{
+			ID:         r.ID,
+			Name:       r.Name,
+			Protocol:   r.Protocol,
+			ListenHost: r.ListenHost,
+			ListenPort: r.ListenPort,
+			TargetHost: r.TargetHost,
+			TargetPort: r.TargetPort,
+			Enabled:    r.Enabled,
+			UDPMode:    r.UDPMode,
+		}
+	}
+
+	applyReq := client.ConfigApplyRequest{
+		Desired: client.ConfigPlanDesired{Rules: configRules},
+		Yes:     *flagYes,
+		DryRun:  *flagDryRun,
+	}
+
+	resp, err := c.ApplyConfig(applyReq)
+	if err != nil {
+		return exitWithError(err, stderr)
+	}
+
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, resp); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return applyExitCode(resp)
+	}
+
+	printApplyHuman(resp, stdout, stderr)
+	return applyExitCode(resp)
+}
+
+// applyExitCode maps an apply response to an exit code.
+func applyExitCode(resp *client.ConfigApplyResponse) int {
+	if !resp.Ok {
+		return 1
+	}
+	return 0
+}
+
+// printApplyHuman renders the apply response in human-readable format.
+func printApplyHuman(resp *client.ConfigApplyResponse, stdout, stderr io.Writer) {
+	plan := resp.Plan
+
+	if !resp.Ok {
+		fmt.Fprintln(stderr, "Apply failed — plan has errors.")
+		printPlanErrors(plan.Errors, stderr)
+		return
+	}
+
+	if resp.DryRun {
+		fmt.Fprintln(stdout, "Dry run complete — no changes applied.")
+		if !plan.Summary.HasDrift {
+			fmt.Fprintln(stdout, "  No drift detected.")
+			return
+		}
+		fmt.Fprintf(stdout, "  Would apply: +%d update:%d -%d (unchanged:%d)\n",
+			resp.Applied.Add, resp.Applied.Update, resp.Applied.Remove, resp.Applied.Unchanged)
+		return
+	}
+
+	if !plan.Summary.HasDrift {
+		fmt.Fprintln(stdout, "No drift detected — nothing to apply.")
+		return
+	}
+
+	fmt.Fprintln(stdout, "Config applied.")
+	fmt.Fprintf(stdout, "  +%d added  ~%d updated  -%d removed  =%d unchanged\n",
+		resp.Applied.Add, resp.Applied.Update, resp.Applied.Remove, resp.Applied.Unchanged)
+
+	if len(plan.Warnings) > 0 {
+		fmt.Fprintln(stdout)
+		printPlanWarnings(plan.Warnings, stdout)
 	}
 }

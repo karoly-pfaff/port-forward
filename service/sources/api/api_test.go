@@ -2727,3 +2727,405 @@ func TestConfigPlanRemoveOperation(t *testing.T) {
 		t.Fatalf("warning code = %v, want REMOVE_EXISTING", w["code"])
 	}
 }
+
+// ── POST /api/config/apply tests ───────────────────────────────────────────
+
+func TestConfigApplyMissingDesiredReturns400(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{"yes":true}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+	var body struct {
+		Errors []string `json:"errors"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Errors) == 0 {
+		t.Fatal("expected errors[] in 400 response")
+	}
+}
+
+func TestConfigApplyPlanErrorsReturnsOkFalse(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	// desired rule is missing required fields — plan will have errors
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{"desired":[{"name":""}],"yes":true}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 with ok:false for plan errors", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != false {
+		t.Fatalf("ok = %v, want false", body["ok"])
+	}
+	plan, ok := body["plan"].(map[string]any)
+	if !ok {
+		t.Fatal("plan must be an object")
+	}
+	summary := plan["summary"].(map[string]any)
+	if summary["hasErrors"] != true {
+		t.Fatal("plan.summary.hasErrors must be true")
+	}
+}
+
+func TestConfigApplyPlanErrorsDoNotMutate(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"ap-kept","name":"Kept","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49310,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	resp, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{"desired":[{"name":""}],"yes":true}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	resp.Body.Close()
+
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	var rules []any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("plan-error apply mutated config: expected 1 rule, got %d", len(rules))
+	}
+}
+
+func TestConfigApplyDestructiveWithoutYesReturns400(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"ap-r1","name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49311,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	// desired=[] would remove the existing rule (destructive), but yes is not set
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{"desired":[],"yes":false}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for destructive without yes", response.StatusCode)
+	}
+	var body struct {
+		Errors []string `json:"errors"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Errors) == 0 {
+		t.Fatal("expected errors[] in 400 response")
+	}
+}
+
+func TestConfigApplyDryRunReturnsOkTrueWithNoMutation(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"ap-dry","name":"Dry Rule","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49312,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	// dryRun with empty desired would remove the rule — but must not mutate
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{"desired":[],"yes":true,"dryRun":true}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != true {
+		t.Fatalf("ok = %v, want true", body["ok"])
+	}
+	if body["dryRun"] != true {
+		t.Fatalf("dryRun = %v, want true", body["dryRun"])
+	}
+
+	// rule must still exist
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	var rules []any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("dryRun mutated config: expected 1 rule, got %d", len(rules))
+	}
+}
+
+func TestConfigApplyAddRuleWithYes(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{
+		"desired":[{"name":"New Rule","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49313,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}],
+		"yes":true
+	}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != true {
+		t.Fatalf("ok = %v, want true", body["ok"])
+	}
+
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	var rules []map[string]any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule after apply add, got %d", len(rules))
+	}
+	if rules[0]["name"] != "New Rule" {
+		t.Fatalf("rule name = %v, want New Rule", rules[0]["name"])
+	}
+}
+
+func TestConfigApplyNoDriftSkipsImport(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"ap-nd","name":"No Drift","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49314,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	// desired matches current exactly by key identity — no drift
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{
+		"desired":[{"id":"ap-nd","name":"No Drift","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49314,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}],
+		"yes":false
+	}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != true {
+		t.Fatalf("ok = %v, want true", body["ok"])
+	}
+	plan := body["plan"].(map[string]any)
+	summary := plan["summary"].(map[string]any)
+	if summary["hasDrift"] != false {
+		t.Fatal("hasDrift must be false for no-drift apply")
+	}
+}
+
+func TestConfigApplyResponseIncludesPlan(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{"desired":[],"yes":false}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	for _, field := range []string{"ok", "dryRun", "appliedAt", "plan", "applied"} {
+		if _, ok := body[field]; !ok {
+			t.Fatalf("response missing field: %s", field)
+		}
+	}
+
+	appliedAt, ok := body["appliedAt"].(string)
+	if !ok || appliedAt == "" {
+		t.Fatalf("appliedAt must be a non-empty string, got %v", body["appliedAt"])
+	}
+
+	plan, ok := body["plan"].(map[string]any)
+	if !ok {
+		t.Fatal("plan must be an object")
+	}
+	for _, field := range []string{"generatedAt", "mode", "summary", "operations", "errors", "warnings"} {
+		if _, ok := plan[field]; !ok {
+			t.Fatalf("plan missing field: %s", field)
+		}
+	}
+
+	applied, ok := body["applied"].(map[string]any)
+	if !ok {
+		t.Fatal("applied must be an object")
+	}
+	for _, field := range []string{"add", "update", "remove", "unchanged"} {
+		if _, ok := applied[field]; !ok {
+			t.Fatalf("applied missing field: %s", field)
+		}
+	}
+}
+
+func TestConfigApplyRemoveWithYes(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"ap-rm","name":"Remove Me","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49315,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{"desired":[],"yes":true}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != true {
+		t.Fatalf("ok = %v, want true", body["ok"])
+	}
+
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	var rules []any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected 0 rules after apply remove, got %d", len(rules))
+	}
+}
+
+func TestConfigApplyPreservesRuleIDs(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"ap-preserve","name":"Preserve Me","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49316,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	// Desired matches by name/key but no explicit id — the existing rule's ID must be preserved
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{
+		"desired":[{"name":"Preserve Me","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49316,"targetHost":"127.0.0.1","targetPort":3001,"enabled":false}],
+		"yes":true
+	}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	var rules []map[string]any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule after apply update, got %d", len(rules))
+	}
+	if rules[0]["id"] != "ap-preserve" {
+		t.Fatalf("rule id = %v, want ap-preserve (ID not preserved)", rules[0]["id"])
+	}
+	if rules[0]["targetPort"] != float64(3001) {
+		t.Fatalf("targetPort = %v, want 3001 (update not applied)", rules[0]["targetPort"])
+	}
+}
+
+func TestConfigApplyAppliedCountsMatchPlanSummary(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"ap-cnt-rm","name":"Remove Me","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49317,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	// add one new rule, remove the existing one (destructive)
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(`{
+		"desired":[{"name":"Added","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49318,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}],
+		"yes":true
+	}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	plan := body["plan"].(map[string]any)
+	summary := plan["summary"].(map[string]any)
+	applied := body["applied"].(map[string]any)
+
+	if applied["add"] != summary["add"] {
+		t.Fatalf("applied.add = %v, want %v (from plan.summary.add)", applied["add"], summary["add"])
+	}
+	if applied["update"] != summary["update"] {
+		t.Fatalf("applied.update = %v, want %v", applied["update"], summary["update"])
+	}
+	if applied["remove"] != summary["remove"] {
+		t.Fatalf("applied.remove = %v, want %v", applied["remove"], summary["remove"])
+	}
+	if applied["unchanged"] != summary["unchanged"] {
+		t.Fatalf("applied.unchanged = %v, want %v", applied["unchanged"], summary["unchanged"])
+	}
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  ConfigAppliedCounts,
   ConfigApplyRequest,
   ConfigApplyResponse,
   ConfigPlanChange,
@@ -442,6 +443,22 @@ describe("ConfigPlanRequest shape", () => {
   });
 });
 
+describe("ConfigAppliedCounts shape", () => {
+  it("accepts applied counts with all four fields", () => {
+    const counts: ConfigAppliedCounts = { add: 1, update: 2, remove: 1, unchanged: 5 };
+    expect(counts.add).toBe(1);
+    expect(counts.update).toBe(2);
+    expect(counts.remove).toBe(1);
+    expect(counts.unchanged).toBe(5);
+  });
+
+  it("accepts zero counts for a no-drift apply", () => {
+    const counts: ConfigAppliedCounts = { add: 0, update: 0, remove: 0, unchanged: 3 };
+    expect(counts.add).toBe(0);
+    expect(counts.unchanged).toBe(3);
+  });
+});
+
 describe("ConfigApplyRequest shape", () => {
   it("requires desired and yes flag", () => {
     const req: ConfigApplyRequest = {
@@ -449,39 +466,69 @@ describe("ConfigApplyRequest shape", () => {
       yes: true
     };
     expect(req.yes).toBe(true);
-    expect(req.backup).toBeUndefined();
+    expect(req.dryRun).toBeUndefined();
   });
 
-  it("accepts optional backup flag", () => {
+  it("accepts optional dryRun flag", () => {
     const req: ConfigApplyRequest = {
       desired: { rules: [] },
-      yes: true,
-      backup: true
+      yes: false,
+      dryRun: true
     };
-    expect(req.backup).toBe(true);
+    expect(req.dryRun).toBe(true);
   });
 });
 
 describe("ConfigApplyResponse shape", () => {
+  const minimalPlan: ConfigPlanResponse = {
+    generatedAt: "2026-06-09T12:00:00.000Z",
+    mode: "plan",
+    summary: { add: 0, update: 0, remove: 0, unchanged: 0, destructive: 0, hasDrift: false, hasErrors: false },
+    operations: [],
+    errors: [],
+    warnings: []
+  };
+
   it("accepts a successful apply response", () => {
     const res: ConfigApplyResponse = {
+      ok: true,
+      dryRun: false,
       appliedAt: "2026-06-09T12:00:00.000Z",
-      applied: 3,
-      errors: [],
-      warnings: []
+      plan: minimalPlan,
+      applied: { add: 1, update: 0, remove: 0, unchanged: 2 }
     };
-    expect(res.applied).toBe(3);
-    expect(res.errors).toHaveLength(0);
+    expect(res.ok).toBe(true);
+    expect(res.dryRun).toBe(false);
+    expect(res.applied.add).toBe(1);
+    expect(res.applied.unchanged).toBe(2);
   });
 
-  it("accepts a response with errors", () => {
+  it("accepts a dry-run response with ok:true", () => {
     const res: ConfigApplyResponse = {
+      ok: true,
+      dryRun: true,
       appliedAt: "2026-06-09T12:00:00.000Z",
-      applied: 0,
-      errors: [{ code: "APPLY_FAILED", message: "Could not apply config: bind error." }],
-      warnings: []
+      plan: minimalPlan,
+      applied: { add: 0, update: 0, remove: 0, unchanged: 0 }
     };
-    expect(res.errors).toHaveLength(1);
-    expect(res.errors[0].code).toBe("APPLY_FAILED");
+    expect(res.dryRun).toBe(true);
+    expect(res.ok).toBe(true);
+  });
+
+  it("accepts a plan-error response with ok:false", () => {
+    const errorPlan: ConfigPlanResponse = {
+      ...minimalPlan,
+      summary: { ...minimalPlan.summary, hasErrors: true },
+      errors: [{ code: "INVALID_DESIRED_RULE", message: "name is required." }]
+    };
+    const res: ConfigApplyResponse = {
+      ok: false,
+      dryRun: false,
+      appliedAt: "2026-06-09T12:00:00.000Z",
+      plan: errorPlan,
+      applied: { add: 0, update: 0, remove: 0, unchanged: 0 }
+    };
+    expect(res.ok).toBe(false);
+    expect(res.plan.summary.hasErrors).toBe(true);
   });
 });

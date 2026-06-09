@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -146,6 +148,11 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost && r.URL.Path == "/api/config/plan" {
 		h.configPlan(w, r)
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/config/apply" {
+		h.configApply(w, r)
 		return
 	}
 
@@ -582,6 +589,120 @@ func normalizeArch() string {
 	default:
 		return "unknown"
 	}
+}
+
+type applyResponse struct {
+	Ok        bool                `json:"ok"`
+	DryRun    bool                `json:"dryRun"`
+	AppliedAt string              `json:"appliedAt"`
+	Plan      configplan.Response `json:"plan"`
+	Applied   map[string]int      `json:"applied"`
+}
+
+func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
+	raw, err := readBody(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {err.Error()}})
+		return
+	}
+
+	var body struct {
+		Desired *json.RawMessage `json:"desired"`
+		Yes     bool             `json:"yes"`
+		DryRun  bool             `json:"dryRun"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {err.Error()}})
+		return
+	}
+	if body.Desired == nil {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {"desired is required."}})
+		return
+	}
+
+	appliedAt := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	plan := configplan.BuildConfigPlan(configplan.Input{
+		CurrentRules: h.manager.ListRules(),
+		DesiredRaw:   *body.Desired,
+	})
+
+	zeroCounts := map[string]int{"add": 0, "update": 0, "remove": 0, "unchanged": plan.Summary.Unchanged}
+
+	if plan.Summary.HasErrors {
+		writeJSON(w, http.StatusOK, applyResponse{
+			Ok: false, DryRun: body.DryRun, AppliedAt: appliedAt, Plan: plan, Applied: zeroCounts,
+		})
+		return
+	}
+
+	plannedCounts := map[string]int{
+		"add":       plan.Summary.Add,
+		"update":    plan.Summary.Update,
+		"remove":    plan.Summary.Remove,
+		"unchanged": plan.Summary.Unchanged,
+	}
+
+	if body.DryRun {
+		writeJSON(w, http.StatusOK, applyResponse{
+			Ok: true, DryRun: true, AppliedAt: appliedAt, Plan: plan, Applied: plannedCounts,
+		})
+		return
+	}
+
+	if plan.Summary.Destructive > 0 && !body.Yes {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{
+			"errors": {"Apply requires yes: true when destructive operations are present."},
+		})
+		return
+	}
+
+	if plan.Summary.HasDrift {
+		desiredRules := make([]domain.ForwardRule, 0, len(plan.Operations))
+		for _, op := range plan.Operations {
+			if op.Type == "remove" {
+				continue
+			}
+			snap := op.Desired
+			ruleID := ""
+			if snap.ID != nil {
+				ruleID = *snap.ID
+			} else if (op.Type == "unchanged" || op.Type == "update") && op.RuleID != nil {
+				ruleID = *op.RuleID
+			} else {
+				ruleID = newApplyRuleID()
+			}
+			desiredRules = append(desiredRules, domain.ForwardRule{
+				ID:         ruleID,
+				Name:       snap.Name,
+				Protocol:   snap.Protocol,
+				ListenHost: snap.ListenHost,
+				ListenPort: snap.ListenPort,
+				TargetHost: snap.TargetHost,
+				TargetPort: snap.TargetPort,
+				Enabled:    snap.Enabled,
+				UdpMode:    snap.UdpMode,
+			})
+		}
+		if _, err := h.manager.ImportConfig(domain.ExportedConfig{
+			Version: "1", Rules: desiredRules,
+		}, "replace"); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string][]string{"errors": {err.Error()}})
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, applyResponse{
+		Ok: true, DryRun: false, AppliedAt: appliedAt, Plan: plan, Applied: plannedCounts,
+	})
+}
+
+func newApplyRuleID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	enc := hex.EncodeToString(b)
+	return enc[0:8] + "-" + enc[8:12] + "-" + enc[12:16] + "-" + enc[16:20] + "-" + enc[20:32]
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

@@ -456,11 +456,11 @@ Error conditions:
 
 Does not mutate running config. Does not start or stop rules.
 
-## `POST /api/config/apply` — Planned (v1.5)
+## `POST /api/config/apply` — Implemented (v1.5)
 
-Purpose: apply a desired config to the running configuration after explicit confirmation.
+Purpose: apply a desired config to the running configuration after explicit confirmation. Supports dry-run mode.
 
-Planned for v1.5. Not yet implemented. `POST /api/config/plan` must be implemented first.
+Implemented in TypeScript server and Go service (v1.5 Slice 5). Both runtimes pass all 9 contract assertions.
 
 Request body:
 
@@ -468,22 +468,33 @@ Request body:
 {
   "desired": { "rules": [...] },
   "yes": true,
-  "backup": true
+  "dryRun": false
 }
 ```
 
-The `yes: true` field is required for destructive operations. The `backup` field is optional; when true, the response includes the pre-apply config snapshot.
+- `desired` (required) — desired config with `rules` array.
+- `yes` — required to be `true` when destructive operations (remove or forwarding-affecting update) are present; without it returns 400.
+- `dryRun` — optional; when `true`, previews plan counts without mutating config. Dry-run does **not** require `yes: true`.
 
 Response: `ConfigApplyResponse`.
 
 ```json
 {
+  "ok": true,
+  "dryRun": false,
   "appliedAt": "ISO timestamp",
-  "applied": 3,
-  "errors": [],
-  "warnings": []
+  "plan": { ...ConfigPlanResponse... },
+  "applied": { "add": 0, "update": 0, "remove": 0, "unchanged": 1 }
 }
 ```
+
+Behavior:
+
+- Plan errors → `200 ok:false`, no mutation.
+- `dryRun: true` → `200 ok:true`, no mutation (does not require `yes`).
+- Destructive operations without `yes: true` → `400`.
+- No drift → `200 ok:true`, no import called.
+- Drift present → replace import using desired rules; key-matched rules (unchanged/update) have their current `ruleId` injected to preserve IDs.
 
 ## `GET /api/health`
 
@@ -554,7 +565,7 @@ The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GE
 
 ### Added in v1.5 — Plan/diff/apply types
 
-The following types are defined in `@portier/shared` (`shared/sources/plan.ts`). `POST /api/config/plan` is implemented in the TypeScript server (v1.5 Slice 2); Go parity is pending Slice 3. `POST /api/config/apply` is pending Slices 3+.
+The following types are defined in `@portier/shared` (`shared/sources/plan.ts`). Both `POST /api/config/plan` and `POST /api/config/apply` are implemented in both the TypeScript server and Go service.
 
 - `ConfigPlanOperationType` — `"add" | "update" | "remove" | "unchanged"`
 - `ConfigPlanChange` — a single field-level change: `{ field, before, after }`
@@ -566,5 +577,6 @@ The following types are defined in `@portier/shared` (`shared/sources/plan.ts`).
 - `ConfigPlanResponse` — top-level response for `POST /api/config/plan`: `{ generatedAt, mode: "plan", summary, operations, errors, warnings }`
 - `DesiredConfig` — the desired config wrapper: `{ rules: ConfigPlanRuleSnapshot[] }`
 - `ConfigPlanRequest` — request body for `POST /api/config/plan`: `{ desired: DesiredConfig }`
-- `ConfigApplyRequest` — request body for `POST /api/config/apply`: `{ desired: DesiredConfig, yes: boolean, backup?: boolean }`
-- `ConfigApplyResponse` — response for `POST /api/config/apply`: `{ appliedAt, applied, errors, warnings }`
+- `ConfigAppliedCounts` — per-operation counts in apply response: `{ add, update, remove, unchanged }`
+- `ConfigApplyRequest` — request body for `POST /api/config/apply`: `{ desired: DesiredConfig, yes: boolean, dryRun?: boolean }`
+- `ConfigApplyResponse` — response for `POST /api/config/apply`: `{ ok: boolean, dryRun: boolean, appliedAt: string, plan: ConfigPlanResponse, applied: ConfigAppliedCounts }`

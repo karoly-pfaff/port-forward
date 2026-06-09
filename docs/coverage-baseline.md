@@ -243,8 +243,8 @@ These are not part of statement coverage but are important for overall test conf
 - **server config-plan.ts** (100% ✓): pure plan engine, 65 unit tests. Slice 2 complete.
 - **server config-store.ts** (100% ✓): high baseline maintained.
 - **shared validation/types** (100% ✓): new diff/plan types and validation helpers — 100% required.
-- **service config**: 100% for new diff/plan/apply logic when Slice 5 (apply) is implemented.
-- **tools/cli commands** (93.2% ✓): `config plan` and `config diff` implemented (Slice 4 complete); `config apply` pending (Slice 5). CLI gate at 93.2% (gate 92%).
+- **service api** (POST /api/config/apply handler ✓): 11 integration tests. Slice 5 complete.
+- **tools/cli commands** (93.2% ✓): `config plan`, `config diff`, and `config apply` all implemented (Slices 4–5 complete). CLI gate at 93.2% (gate 92%).
 
 ---
 

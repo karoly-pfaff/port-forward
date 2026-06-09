@@ -405,6 +405,40 @@ func (c *Client) PlanConfig(req ConfigPlanRequest) (*ConfigPlanResponse, error) 
 	return &resp, nil
 }
 
+// ConfigAppliedCounts holds the count of each operation type from an apply response.
+type ConfigAppliedCounts struct {
+	Add       int `json:"add"`
+	Update    int `json:"update"`
+	Remove    int `json:"remove"`
+	Unchanged int `json:"unchanged"`
+}
+
+// ConfigApplyRequest is the request body for POST /api/config/apply.
+type ConfigApplyRequest struct {
+	Desired ConfigPlanDesired `json:"desired"`
+	Yes     bool              `json:"yes"`
+	DryRun  bool              `json:"dryRun,omitempty"`
+}
+
+// ConfigApplyResponse mirrors the response from POST /api/config/apply.
+type ConfigApplyResponse struct {
+	Ok        bool                `json:"ok"`
+	DryRun    bool                `json:"dryRun"`
+	AppliedAt string              `json:"appliedAt"`
+	Plan      ConfigPlanResponse  `json:"plan"`
+	Applied   ConfigAppliedCounts `json:"applied"`
+}
+
+// ApplyConfig calls POST /api/config/apply and returns the apply response.
+// Returns an APIError for 400 responses (e.g. destructive without yes).
+func (c *Client) ApplyConfig(req ConfigApplyRequest) (*ConfigApplyResponse, error) {
+	var resp ConfigApplyResponse
+	if err := c.doWithBody(http.MethodPost, "/api/config/apply", req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // StartForward calls POST /api/forwards/:id/start to start a forwarding rule.
 func (c *Client) StartForward(id string) error {
 	return c.do(http.MethodPost, "/api/forwards/"+id+"/start", nil)

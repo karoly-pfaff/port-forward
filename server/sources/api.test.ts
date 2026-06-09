@@ -1146,6 +1146,196 @@ describe("POST /api/config/plan", () => {
   });
 });
 
+describe("POST /api/config/apply", () => {
+  const applyRule: ForwardRule = {
+    id: "apply-r1",
+    name: "Apply Test",
+    protocol: "tcp",
+    listenHost: "127.0.0.1",
+    listenPort: 49300,
+    targetHost: "127.0.0.1",
+    targetPort: 49301,
+    enabled: false
+  };
+
+  it("returns 400 when desired field is missing", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { errors: string[] };
+      expect(Array.isArray(body.errors)).toBe(true);
+    });
+  });
+
+  it("returns 200 ok:false when plan has errors (no mutation)", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [{ name: "" }], yes: true })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; plan: { summary: { hasErrors: boolean } } };
+      expect(body.ok).toBe(false);
+      expect(body.plan.summary.hasErrors).toBe(true);
+      // State is unchanged
+      const list = (await (await fetch(`http://127.0.0.1:${port}/api/forwards`)).json()) as unknown[];
+      expect(list).toHaveLength(0);
+    });
+  });
+
+  it("returns 400 when destructive operations present without yes:true", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [], yes: false })
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { errors: string[] };
+      expect(body.errors[0]).toContain("yes: true");
+    }, { rules: [applyRule] });
+  });
+
+  it("returns 200 ok:true dryRun:true without mutating state", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [], dryRun: true })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; dryRun: boolean; applied: { remove: number } };
+      expect(body.ok).toBe(true);
+      expect(body.dryRun).toBe(true);
+      expect(body.applied.remove).toBe(1);
+      // State is unchanged: rule still exists
+      const list = (await (await fetch(`http://127.0.0.1:${port}/api/forwards`)).json()) as unknown[];
+      expect(list).toHaveLength(1);
+    }, { rules: [applyRule] });
+  });
+
+  it("returns 200 ok:true and applies add operation with yes:true", async () => {
+    await withServer(async (port) => {
+      const desired = [{ name: "New Rule", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 49310, targetHost: "127.0.0.1", targetPort: 49311, enabled: false }];
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired, yes: true })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; dryRun: boolean; applied: { add: number } };
+      expect(body.ok).toBe(true);
+      expect(body.dryRun).toBe(false);
+      expect(body.applied.add).toBe(1);
+      const list = (await (await fetch(`http://127.0.0.1:${port}/api/forwards`)).json()) as Array<{ name: string }>;
+      expect(list).toHaveLength(1);
+      expect(list[0].name).toBe("New Rule");
+    });
+  });
+
+  it("returns 200 ok:true for no-drift apply without mutating state", async () => {
+    await withServer(async (port) => {
+      const desired = [{
+        id: applyRule.id,
+        name: applyRule.name, protocol: applyRule.protocol,
+        listenHost: applyRule.listenHost, listenPort: applyRule.listenPort,
+        targetHost: applyRule.targetHost, targetPort: applyRule.targetPort,
+        enabled: applyRule.enabled
+      }];
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired, yes: false })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; applied: { add: number; remove: number; unchanged: number } };
+      expect(body.ok).toBe(true);
+      expect(body.applied.add).toBe(0);
+      expect(body.applied.remove).toBe(0);
+      expect(body.applied.unchanged).toBe(1);
+      const list = (await (await fetch(`http://127.0.0.1:${port}/api/forwards`)).json()) as unknown[];
+      expect(list).toHaveLength(1);
+    }, { rules: [applyRule] });
+  });
+
+  it("response includes plan with all required top-level fields", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [], yes: false })
+      });
+      const body = (await response.json()) as { ok: boolean; dryRun: boolean; appliedAt: string; plan: Record<string, unknown>; applied: Record<string, unknown> };
+      expect(body.ok).toBe(true);
+      expect(typeof body.dryRun).toBe("boolean");
+      expect(typeof body.appliedAt).toBe("string");
+      expect(isNaN(new Date(body.appliedAt).getTime())).toBe(false);
+      expect(body.plan).toBeDefined();
+      expect(body.plan.mode).toBe("plan");
+      expect(Array.isArray(body.plan.operations)).toBe(true);
+      expect(Array.isArray(body.plan.errors)).toBe(true);
+      expect(Array.isArray(body.plan.warnings)).toBe(true);
+      expect(body.applied).toBeDefined();
+      expect(typeof (body.applied as { add: number }).add).toBe("number");
+    });
+  });
+
+  it("removes existing rules when empty desired is applied with yes:true", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired: [], yes: true })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; applied: { remove: number } };
+      expect(body.ok).toBe(true);
+      expect(body.applied.remove).toBe(1);
+      const list = (await (await fetch(`http://127.0.0.1:${port}/api/forwards`)).json()) as unknown[];
+      expect(list).toHaveLength(0);
+    }, { rules: [applyRule] });
+  });
+
+  it("preserves existing rule IDs when applying unchanged rules matched by key", async () => {
+    await withServer(async (port) => {
+      // Desired has no explicit ID — should match by key and preserve existing ID
+      const desired = [{
+        name: applyRule.name, protocol: applyRule.protocol,
+        listenHost: applyRule.listenHost, listenPort: applyRule.listenPort,
+        targetHost: applyRule.targetHost, targetPort: applyRule.targetPort,
+        enabled: applyRule.enabled
+      }];
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired, yes: false })
+      });
+      expect(response.status).toBe(200);
+      const list = (await (await fetch(`http://127.0.0.1:${port}/api/forwards`)).json()) as Array<{ id: string }>;
+      expect(list[0].id).toBe(applyRule.id);
+    }, { rules: [applyRule] });
+  });
+
+  it("applied counts match plan summary for mixed operations", async () => {
+    await withServer(async (port) => {
+      const desired = [{ name: "Brand New", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 49320, targetHost: "127.0.0.1", targetPort: 49321, enabled: false }];
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired, yes: true })
+      });
+      const body = (await response.json()) as { applied: { add: number; remove: number }; plan: { summary: { add: number; remove: number } } };
+      expect(body.applied.add).toBe(body.plan.summary.add);
+      expect(body.applied.remove).toBe(body.plan.summary.remove);
+    }, { rules: [applyRule] });
+  });
+});
+
 describe("GET /api/connections", () => {
   it("returns empty arrays when no rules exist", async () => {
     await withServer(async (port) => {

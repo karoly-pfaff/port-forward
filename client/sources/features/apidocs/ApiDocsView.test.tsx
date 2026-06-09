@@ -156,13 +156,19 @@ describe("ApiDocsView", () => {
     expect(container.textContent).toMatch(/hasDrift/);
   });
 
-  it("lists the POST /api/config/apply endpoint with a Planned v1.5 badge", () => {
+  it("lists the POST /api/config/apply endpoint without a Planned badge", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("/api/config/apply")).toBeInTheDocument();
-    expect(screen.getByText("Planned — v1.5")).toBeInTheDocument();
+    expect(screen.queryByText(/Planned — v1\.5/)).not.toBeInTheDocument();
   });
 
-  it("describes POST /api/config/apply as requiring yes: true", () => {
+  it("describes POST /api/config/apply response shape with ok and dryRun fields", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/ok.*boolean/);
+    expect(container.textContent).toMatch(/dryRun/);
+  });
+
+  it("describes POST /api/config/apply as requiring yes: true for destructive operations", () => {
     const { container } = render(<ApiDocsView />);
     expect(container.textContent).toMatch(/yes: true/);
   });

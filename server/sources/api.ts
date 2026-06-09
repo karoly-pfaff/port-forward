@@ -215,6 +215,70 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
     response.json(plan);
   });
 
+  // ── Config apply ──────────────────────────────────────────────────────────────
+
+  app.post("/api/config/apply", async (request, response, next) => {
+    try {
+      const body = request.body as Record<string, unknown> | null;
+      if (!body || typeof body !== "object" || !("desired" in body)) {
+        response.status(400).json({ errors: ["desired is required."] });
+        return;
+      }
+
+      const yes = body.yes === true;
+      const dryRun = body.dryRun === true;
+      const appliedAt = new Date().toISOString();
+      const plan = buildConfigPlan({ currentRules: manager.listRules(), desiredRaw: body.desired });
+
+      if (plan.summary.hasErrors) {
+        response.json({
+          ok: false, dryRun, appliedAt, plan,
+          applied: { add: 0, update: 0, remove: 0, unchanged: plan.summary.unchanged },
+        });
+        return;
+      }
+
+      if (dryRun) {
+        response.json({
+          ok: true, dryRun: true, appliedAt, plan,
+          applied: { add: plan.summary.add, update: plan.summary.update, remove: plan.summary.remove, unchanged: plan.summary.unchanged },
+        });
+        return;
+      }
+
+      if (plan.summary.destructive > 0 && !yes) {
+        response.status(400).json({ errors: ["Apply requires yes: true when destructive operations are present."] });
+        return;
+      }
+
+      if (plan.summary.hasDrift) {
+        // Build desired rules for replace import, injecting current IDs for key-matched rules.
+        const rulesForImport = plan.operations
+          .filter((op) => op.type !== "remove")
+          .map((op) => {
+            const desired = op.desired!;
+            if ((op.type === "unchanged" || op.type === "update") && op.ruleId && desired.id === undefined) {
+              return { ...desired, id: op.ruleId };
+            }
+            return desired;
+          });
+        const importCfg: ExportedConfig = {
+          version: "1",
+          exportedAt: appliedAt,
+          rules: rulesForImport as unknown as ForwardRule[],
+        };
+        await manager.importConfig(importCfg, "replace");
+      }
+
+      response.json({
+        ok: true, dryRun: false, appliedAt, plan,
+        applied: { add: plan.summary.add, update: plan.summary.update, remove: plan.summary.remove, unchanged: plan.summary.unchanged },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // ── Port advisory ─────────────────────────────────────────────────────────────
 
   app.get("/api/connections", (_request, response) => {

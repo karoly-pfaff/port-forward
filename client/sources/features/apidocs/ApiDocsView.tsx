@@ -139,14 +139,13 @@ const ENDPOINTS: EndpointDoc[] = [
     method: "POST",
     path: "/api/config/apply",
     purpose:
-      "Apply a desired config to the running configuration after explicit confirmation. Supports dry-run and backup before apply.",
+      "Apply a desired config to the running configuration after explicit confirmation. Supports dry-run mode.",
     params:
-      "Body: ConfigApplyRequest { desired: { rules: ForwardRuleInput[] }, yes: true, backup?: boolean }",
+      "Body: ConfigApplyRequest { desired: DesiredConfig, yes: boolean, dryRun?: boolean }",
     response:
-      "ConfigApplyResponse { appliedAt, applied, errors: ConfigPlanError[], warnings: ConfigPlanWarning[] }",
+      "ConfigApplyResponse { ok: boolean, dryRun: boolean, appliedAt: string, plan: ConfigPlanResponse, applied: { add, update, remove, unchanged } }",
     notes:
-      "requires yes: true for destructive operations. Use POST /api/config/plan first to preview. backup: true returns the pre-apply config for safekeeping. Dry-run behavior is via the CLI --dry-run flag; the API endpoint always applies when called with yes: true.",
-    planned: "v1.5"
+      "Plan errors return ok:false with no mutation. Destructive operations (update, remove) require yes: true; without it returns 400. dryRun: true previews the plan counts without mutating. No drift: ok:true with no import called."
   }
 ];
 

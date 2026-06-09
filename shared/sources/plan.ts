@@ -67,15 +67,23 @@ export interface ConfigPlanRequest {
   desired: DesiredConfig;
 }
 
+export interface ConfigAppliedCounts {
+  add: number;
+  update: number;
+  remove: number;
+  unchanged: number;
+}
+
 export interface ConfigApplyRequest {
   desired: DesiredConfig;
   yes: boolean;
-  backup?: boolean;
+  dryRun?: boolean;
 }
 
 export interface ConfigApplyResponse {
+  ok: boolean;
+  dryRun: boolean;
   appliedAt: string;
-  applied: number;
-  errors: ConfigPlanError[];
-  warnings: ConfigPlanWarning[];
+  plan: ConfigPlanResponse;
+  applied: ConfigAppliedCounts;
 }
