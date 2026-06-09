@@ -129,8 +129,9 @@ E2E install (one-time): `npm run test:e2e:install`
 Do not add `test:e2e` to `npm run test` or `npm run check`. E2E is a separate step.
 
 E2E spec files:
-- `tests/e2e/portier.spec.ts` — app load, CRUD, start/stop, merge import, mobile
-- `tests/e2e/settings.spec.ts` — replace-mode import (v1-mixed), invalid-JSON rejection, export shape
+- `tests/e2e/portier.spec.ts` — app load, CRUD, start/stop, merge import, mobile, form validation, diagnose, API docs connections
+- `tests/e2e/settings.spec.ts` — replace-mode import (v1-mixed), invalid-JSON rejection, export shape, runtime info
+- `tests/e2e/connections.spec.ts` — Live Connections view: title/tabs, empty states, tab switching, filters, auto-refresh, footer counts, rule filter
 - `tests/e2e/tcp.spec.ts` — TCP real forwarding
 - `tests/e2e/udp.spec.ts` — UDP one-way, last-client, multi-client
 

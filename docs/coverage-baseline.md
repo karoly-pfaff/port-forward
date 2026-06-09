@@ -202,7 +202,7 @@ Coverage measurement for scripts is not currently feasible without dedicated tes
 
 These are not part of statement coverage but are important for overall test confidence:
 
-- **E2E (Playwright)**: 4 spec files covering app load, CRUD, import/export, TCP, and 3 UDP modes. Runs against the real TypeScript server. Does not produce statement coverage metrics.
+- **E2E (Playwright)**: 5 spec files, 31 tests total. Covers app load, CRUD, form validation, diagnostics, import/export, settings runtime info, API docs (including `/api/connections`), Live Connections view (all tabs, filters, auto-refresh, rule filter), TCP real forwarding, and 3 UDP modes. Runs against the real TypeScript server. Does not produce statement coverage metrics. See `docs/e2e-coverage.md` for the full workflow matrix.
 - **validate:contract**: API parity between TypeScript server and Go service. Runs when Go binary is present.
 - **validate:config**: Fixture-based config compatibility (load, import, export, rejection, UDP defaults). 8 valid fixtures, multiple invalid fixtures.
 - **validate:binary**: Runtime binary smoke tests (start, health, static, shutdown).

@@ -69,21 +69,25 @@ Shared and TypeScript coverage:
 - [x] **TypeScript server UDP session tracking (v1.4 Slice 4)** — added `UdpSessionRegistry` (`server/sources/connections/udp-session-registry.ts`): runtime-local UUID IDs, composite session keys (`ruleId:mode:clientAddress:clientPort`), `openOrTouchSession`/`recordInbound`/`recordOutbound`/`closeSession`/`closeSessionsForRule`/`pruneExpired`/`snapshot`/`snapshotForRule` API. Constants: `UDP_SESSION_IDLE_MS = 30_000`, `UDP_SESSION_EXPIRE_MS = 300_000`. `snapshot` filters expired sessions without pruning; `pruneExpired` removes them explicitly. Wired into `UdpForwarder`: one-way and last-client tracked via inbound packet handler (last-client change detects new client, closes old session, opens new); multi-client tracked per client endpoint in `handleMultiClientMessage`; `recordOutbound` called on target responses in last-client and multi-client; `closeSession` called on multi-client timeout; `closeSessionsForRule` called in `stop()`. `ForwardManager` owns shared `UdpSessionRegistry`, injects via 4th constructor parameter, exposes `getLiveUdpSessions()` for internal use. No public `GET /api/connections` endpoint added yet. Registry: 100% stmts/branch/funcs; 49 unit tests. `udp-forwarder.ts`: 86.3% stmts (up from 84.3%), 84% branch, 100% funcs; 9 new integration tests. Server overall: 80.55% → 82.21% stmts.
 - [x] **Go service TCP live tracking (v1.4 Slice 5)** — added `TcpConnectionRegistry` (`service/sources/connections/tcp_connection_registry.go`): runtime-local UUID IDs, `OpenConnection`/`AddBytesIn`/`AddBytesOut`/`CloseConnection`/`CloseConnectionsForRule`/`Snapshot`/`SnapshotForRule` API, concurrency-safe (mutex for map ops, atomic ops for byte counters), serializable `TcpConnectionInfo` snapshots with `durationMs` at snapshot time. `NewTCPForwarderWithRegistry` constructor added; `countingWriter` extended with `onBytes` callback; `CloseConnectionsForRule` called in `Stop()` after `wg.Wait()` as belt-and-suspenders cleanup. `Manager` owns shared `TcpConnectionRegistry`, passes it to each `TCPForwarder` via `NewTCPForwarderWithRegistry`, exposes `GetLiveTCPConnections()` for internal use. No public `GET /api/connections` endpoint added yet. Registry: 98.1% stmts (100% all public methods; 1 untestable `rand.Read` error path in private `generateConnectionID`); 26 unit tests. Forwarder: 8 new integration tests. Service overall: 79.7% → 80.6% stmts.
 
-Playwright E2E coverage:
+Playwright E2E coverage (31 tests across 5 spec files — see `docs/e2e-coverage.md` for full matrix):
 
-- [ ] App load
-- [ ] Add/edit/delete rule flows
-- [ ] Start/stop rule flow
-- [ ] Settings config import (merge — 1 TCP rule)
-- [ ] Settings config import (replace — v1-mixed fixture, 4 rules; verify Forward Rules view)
-- [ ] Settings config import (invalid JSON — parse error, state preserved)
-- [ ] Settings config export (download shape: version, exportedAt, rules array, rule present)
-- [ ] Mobile sidebar behavior
-- [ ] TCP real forwarding
-- [ ] UDP one-way real forwarding
-- [ ] UDP bidirectional-last-client real forwarding
-- [ ] UDP bidirectional-multi-client real forwarding
-- [ ] TCP and UDP activity assertions
+- [x] App load, sidebar navigation, mobile hamburger/sidebar, Dashboard stat cards
+- [x] Add/edit/delete rule flows
+- [x] Start/stop rule flow
+- [x] Rule form validation — name required error
+- [x] Diagnose rule — panel opens, results shown, close button
+- [x] Settings config import (merge — inline 1 TCP rule)
+- [x] Settings config import (replace — v1-mixed fixture, 4 rules; verify Forward Rules view)
+- [x] Settings config import (invalid JSON — parse error, state preserved)
+- [x] Settings config export (download shape: version, exportedAt, rules array, rule present)
+- [x] Settings Runtime/Environment section shows Node server runtime info
+- [x] API Docs view — endpoint list, GET /api/connections listed
+- [x] Live Connections view — title/tabs/empty states, tab switching, summary stats bar
+- [x] Live Connections — protocol filter set/clear, auto-refresh toggle, footer counts
+- [x] Live Connections — rule filter dropdown populated when rule is running
+- [x] TCP real forwarding
+- [x] UDP one-way, bidirectional-last-client, bidirectional-multi-client real forwarding
+- [x] TCP and UDP activity event assertions
 
 Config compatibility coverage (`validate:config` — not manual QA):
 

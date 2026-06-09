@@ -4,6 +4,14 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — v1.5 pre-release work
+
+### Added
+
+- **E2E coverage baseline and uplift** — assessed and expanded Playwright E2E coverage from 4 spec files / ~19 tests to 5 spec files / 31 tests. New spec: `tests/e2e/connections.spec.ts` (8 tests covering the v1.4 Live Connections view: title/tabs/empty states, tab switching, summary stats bar, protocol filter set/clear, auto-refresh toggle, footer counts, rule filter dropdown populated when a rule is running). New tests added to `tests/e2e/portier.spec.ts`: rule form validation (name required error), diagnose rule (panel opens, results shown, close button), `GET /api/connections` listed in API Docs. New test added to `tests/e2e/settings.spec.ts`: Runtime/Environment section shows "Node server" and key labels. Created `docs/e2e-coverage.md` with full workflow coverage matrix (35+ workflows, real vs mocked classification, v1.5 readiness notes, and remaining gap documentation). Fixed pre-existing test bugs: export button label corrected to "Download Config", filename pattern updated to `portier-config-YYYYMMDD-HHMMSS.json`, `getByLabel("Listen Host")` strict mode violation fixed in `tests/e2e/helpers/ui.ts` (presets group div was ambiguously matched), ambiguous `getByText` calls fixed with exact matches and CSS class selectors. All 31 E2E tests now pass cleanly.
+
+---
+
 ## [1.4.0] — 2026-06-09
 
 ### Goal

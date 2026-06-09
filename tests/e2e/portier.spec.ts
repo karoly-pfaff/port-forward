@@ -47,7 +47,7 @@ test("add rule: drawer opens, form saved, rule appears in list", async ({ page, 
   // Fill form
   await drawer.getByLabel("Name").fill(ruleName);
   await drawer.getByLabel("Protocol").selectOption("tcp");
-  await drawer.getByLabel("Listen Host").fill("127.0.0.1");
+  await drawer.getByRole("textbox", { name: "Listen Host" }).fill("127.0.0.1");
   await drawer.getByLabel("Listen Port").fill(String(listenPort));
   await drawer.getByLabel("Target Host").fill("127.0.0.1");
   await drawer.getByLabel("Target Port").fill(String(targetPort));
@@ -310,6 +310,76 @@ test("dashboard: navigating to Dashboard shows stat cards", async ({ page }) => 
   await expect(page.getByText(/Total|Rules|Running|dashboard/i).first()).toBeVisible({ timeout: 5_000 });
 });
 
+// ── J. Rule form validation ───────────────────────────────────────────────────
+
+test("rule form: submitting without a name shows Name is required error", async ({ page }) => {
+  const listenPort = await getFreePort();
+  const targetPort = await getFreePort();
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "+ Add Rule" }).click();
+
+  const drawer = page.getByRole("complementary", { name: "Add Forward Rule" });
+  await expect(drawer).toBeVisible();
+
+  // Fill ports and hosts so the submit button is enabled, but leave name empty.
+  await drawer.getByRole("textbox", { name: "Listen Host" }).fill("127.0.0.1");
+  await drawer.getByLabel("Listen Port").fill(String(listenPort));
+  await drawer.getByLabel("Target Host").fill("127.0.0.1");
+  await drawer.getByLabel("Target Port").fill(String(targetPort));
+
+  // Submit with empty name — the form validates client-side and blocks the save.
+  await drawer.getByRole("button", { name: "Add Rule", exact: true }).click();
+
+  // Validation error appears and the drawer remains open.
+  await expect(drawer.getByText("Name is required")).toBeVisible({ timeout: 3_000 });
+  await expect(drawer).toBeVisible();
+});
+
+// ── K. Diagnose rule ──────────────────────────────────────────────────────────
+
+test("diagnose: clicking Diagnose on a rule opens the diagnostics panel with results", async ({ page, baseURL }) => {
+  const listenPort = await getFreePort();
+  await createRule(baseURL!, {
+    name: "E2E Diagnose Test",
+    protocol: "tcp",
+    listenHost: "127.0.0.1",
+    listenPort,
+    targetHost: "127.0.0.1",
+    targetPort: 9999,
+  });
+
+  await page.goto("/");
+  const ruleRow = page.locator("tr", { hasText: "E2E Diagnose Test" });
+  await expect(ruleRow).toBeVisible();
+
+  // Click the Diagnose icon button in the rule row.
+  await ruleRow.getByRole("button", { name: "Diagnose" }).click();
+
+  // The diagnostics panel title is visible (exact match avoids matching "Running diagnostics…").
+  await expect(page.locator(".diag-panel-title")).toBeVisible({ timeout: 5_000 });
+
+  // Wait for the loading state to clear.
+  await expect(page.getByText("Running diagnostics…")).not.toBeVisible({ timeout: 10_000 });
+
+  // The panel body appears once results have loaded (not shown during loading state).
+  await expect(page.locator(".diag-panel-body")).toBeVisible({ timeout: 5_000 });
+
+  // Close button is present.
+  await expect(page.getByRole("button", { name: "Close diagnostics" })).toBeVisible();
+});
+
+// ── L. API Docs lists GET /api/connections ───────────────────────────────────
+
+test("api docs: GET /api/connections endpoint is listed", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "API Docs" })
+    .click();
+
+  await expect(page.getByText("/api/connections").first()).toBeVisible({ timeout: 5_000 });
+});
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 // Shared helper: fill the Add Rule drawer and submit.
@@ -322,7 +392,7 @@ async function addRuleViaUI(
   await expect(drawer).toBeVisible();
   await drawer.getByLabel("Name").fill(rule.name);
   await drawer.getByLabel("Protocol").selectOption("tcp");
-  await drawer.getByLabel("Listen Host").fill("127.0.0.1");
+  await drawer.getByRole("textbox", { name: "Listen Host" }).fill("127.0.0.1");
   await drawer.getByLabel("Listen Port").fill(String(rule.listenPort));
   await drawer.getByLabel("Target Host").fill("127.0.0.1");
   await drawer.getByLabel("Target Port").fill(String(rule.targetPort));

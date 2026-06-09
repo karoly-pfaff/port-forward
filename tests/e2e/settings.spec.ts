@@ -159,11 +159,11 @@ test("settings: export downloads a valid ExportedConfig JSON file", async ({ pag
 
   // Capture the download triggered by the Export button.
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download rules.json" }).click();
+  await page.getByRole("button", { name: "Download Config" }).click();
   const download = await downloadPromise;
 
-  // Filename must match portier-rules-YYYY-MM-DD.json.
-  expect(download.suggestedFilename()).toMatch(/^portier-rules-\d{4}-\d{2}-\d{2}\.json$/);
+  // Filename must match portier-config-YYYYMMDD-HHMMSS.json.
+  expect(download.suggestedFilename()).toMatch(/^portier-config-\d{8}-\d{6}\.json$/);
 
   // Read and parse the saved file.
   const downloadPath = await download.path();
@@ -187,4 +187,26 @@ test("settings: export downloads a valid ExportedConfig JSON file", async ({ pag
   expect(rule).toBeTruthy();
   expect(rule?.protocol).toBe("tcp");
   expect(rule?.listenPort).toBe(49002);
+});
+
+// ── D. Runtime / Environment section ─────────────────────────────────────────
+//
+// Verifies that the Settings view fetches and renders the /api/runtime response.
+// Checks that the section heading appears and that key runtime fields are present.
+
+test("settings: Runtime/Environment section shows runtime info", async ({ page }) => {
+  await page.goto("/");
+  await goToSettings(page);
+
+  // The section heading is present.
+  await expect(page.getByText("Runtime / Environment")).toBeVisible({ timeout: 5_000 });
+
+  // Runtime field shows "Node server" (E2E uses the TypeScript server runtime).
+  await expect(page.getByText("Node server")).toBeVisible({ timeout: 5_000 });
+
+  // Config path label is specific to the runtime info section.
+  await expect(page.getByText("Config path")).toBeVisible();
+
+  // PID label appears in the runtime section.
+  await expect(page.getByText("PID")).toBeVisible();
 });

@@ -24,7 +24,7 @@ export async function addRuleViaUI(page: Page, rule: AddRuleOptions): Promise<vo
     await drawer.getByLabel("UDP Mode").selectOption(rule.udpMode);
   }
 
-  await drawer.getByLabel("Listen Host").fill(rule.listenHost);
+  await drawer.getByRole("textbox", { name: "Listen Host" }).fill(rule.listenHost);
   await drawer.getByLabel("Listen Port").fill(String(rule.listenPort));
   await drawer.getByLabel("Target Host").fill(rule.targetHost);
   await drawer.getByLabel("Target Port").fill(String(rule.targetPort));
