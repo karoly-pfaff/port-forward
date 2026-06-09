@@ -11,15 +11,17 @@ import (
 	"time"
 
 	"portier/service/sources/activity"
+	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 )
 
 type LogFunc func(message string, args ...any)
 
 type TCPForwarder struct {
-	rule    domain.ForwardRule
-	log     LogFunc
-	onEvent activity.EventFunc
+	rule     domain.ForwardRule
+	log      LogFunc
+	onEvent  activity.EventFunc
+	registry *connections.TcpConnectionRegistry
 
 	mu       sync.Mutex
 	listener net.Listener
@@ -45,6 +47,13 @@ func NewTCPForwarder(rule domain.ForwardRule, log LogFunc, onEvent activity.Even
 		conns:   make(map[net.Conn]struct{}),
 		done:    make(chan struct{}),
 	}
+}
+
+// NewTCPForwarderWithRegistry creates a TCPForwarder that tracks live connections in reg.
+func NewTCPForwarderWithRegistry(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc, reg *connections.TcpConnectionRegistry) *TCPForwarder {
+	f := NewTCPForwarder(rule, log, onEvent)
+	f.registry = reg
+	return f
 }
 
 func (f *TCPForwarder) Start() error {
@@ -97,6 +106,9 @@ func (f *TCPForwarder) Stop() {
 			f.setLastError(errors.New("timed out waiting for TCP forwarder shutdown"))
 		}
 
+		if f.registry != nil {
+			f.registry.CloseConnectionsForRule(f.rule.ID)
+		}
 		close(f.done)
 		f.logInfo("TCP rule stopped", "ruleId", f.rule.ID, "ruleName", f.rule.Name)
 	})
@@ -150,6 +162,18 @@ func (f *TCPForwarder) handleClient(clientConn net.Conn) {
 	remoteHost, remotePortStr, _ := net.SplitHostPort(remote)
 	remotePort, _ := strconv.Atoi(remotePortStr)
 
+	var connID string
+	if f.registry != nil {
+		connID = f.registry.OpenConnection(connections.TcpConnectionInput{
+			RuleID:        f.rule.ID,
+			RuleName:      f.rule.Name,
+			ClientAddress: remoteHost,
+			ClientPort:    remotePort,
+			TargetAddress: f.rule.TargetHost,
+			TargetPort:    f.rule.TargetPort,
+		})
+	}
+
 	id, name, proto := f.rule.ID, f.rule.Name, "tcp"
 	var loggedError int32 // 0 = no error, 1 = error already emitted (CAS guard)
 
@@ -172,6 +196,9 @@ func (f *TCPForwarder) handleClient(clientConn net.Conn) {
 		f.removeConn(clientConn)
 		_ = clientConn.Close()
 		atomic.AddInt64(&f.activeConnections, -1)
+		if connID != "" {
+			f.registry.CloseConnection(connID)
+		}
 		f.logInfo("TCP connection closed", "ruleId", f.rule.ID, "ruleName", f.rule.Name)
 		if atomic.LoadInt32(&loggedError) == 0 {
 			f.emitEvent(activity.ActivityEventInput{
@@ -227,9 +254,17 @@ func (f *TCPForwarder) handleClient(clientConn net.Conn) {
 		}
 	}
 
+	var onBytesIn, onBytesOut func(int64)
+	if connID != "" {
+		reg := f.registry
+		cid := connID
+		onBytesIn = func(n int64) { reg.AddBytesIn(cid, n) }
+		onBytesOut = func(n int64) { reg.AddBytesOut(cid, n) }
+	}
+
 	copyDone := make(chan struct{}, 2)
-	go f.copyAndClose(targetConn, clientConn, &f.bytesIn, copyDone, errEmitOnce)
-	go f.copyAndClose(clientConn, targetConn, &f.bytesOut, copyDone, errEmitOnce)
+	go f.copyAndClose(targetConn, clientConn, &f.bytesIn, onBytesIn, copyDone, errEmitOnce)
+	go f.copyAndClose(clientConn, targetConn, &f.bytesOut, onBytesOut, copyDone, errEmitOnce)
 
 	<-copyDone
 	_ = clientConn.Close()
@@ -237,8 +272,8 @@ func (f *TCPForwarder) handleClient(clientConn net.Conn) {
 	<-copyDone
 }
 
-func (f *TCPForwarder) copyAndClose(dst net.Conn, src net.Conn, counter *int64, done chan<- struct{}, onCopyError func(error)) {
-	_, err := io.Copy(countingWriter{writer: dst, counter: counter}, src)
+func (f *TCPForwarder) copyAndClose(dst net.Conn, src net.Conn, counter *int64, onBytes func(int64), done chan<- struct{}, onCopyError func(error)) {
+	_, err := io.Copy(countingWriter{writer: dst, counter: counter, onBytes: onBytes}, src)
 	if err != nil && f.isRunning() {
 		f.setLastError(err)
 		f.logInfo("TCP copy error", "ruleId", f.rule.ID, "ruleName", f.rule.Name, "error", err)
@@ -255,11 +290,15 @@ func (f *TCPForwarder) copyAndClose(dst net.Conn, src net.Conn, counter *int64, 
 type countingWriter struct {
 	writer  io.Writer
 	counter *int64
+	onBytes func(int64) // nil-safe per-connection byte callback
 }
 
 func (w countingWriter) Write(p []byte) (int, error) {
 	n, err := w.writer.Write(p)
 	atomic.AddInt64(w.counter, int64(n))
+	if w.onBytes != nil {
+		w.onBytes(int64(n))
+	}
 	return n, err
 }
 

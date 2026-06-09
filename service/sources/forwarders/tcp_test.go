@@ -2,6 +2,7 @@ package forwarders
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"portier/service/sources/activity"
+	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 )
 
@@ -324,4 +326,236 @@ func waitForTestCondition(t *testing.T, condition func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("condition was not met before timeout")
+}
+
+// --- Registry integration tests ---
+
+func TestTCPForwarderWithRegistryTracksConnection(t *testing.T) {
+	targetPort, stopTarget := startTestEchoServer(t, "reg1")
+	defer stopTarget()
+
+	reg := connections.NewTcpConnectionRegistry()
+	rule := testTCPRule(freeTestTCPPort(t), targetPort)
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	conn := dialTestTCP(t, rule.ListenPort)
+	defer conn.Close()
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 1
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if snap[0].RuleID != rule.ID {
+		t.Errorf("RuleID = %q; want %q", snap[0].RuleID, rule.ID)
+	}
+}
+
+func TestTCPForwarderWithRegistryTracksBytesIn(t *testing.T) {
+	targetPort, stopTarget := startTestEchoServer(t, "bin")
+	defer stopTarget()
+
+	reg := connections.NewTcpConnectionRegistry()
+	rule := testTCPRule(freeTestTCPPort(t), targetPort)
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	conn := dialTestTCP(t, rule.ListenPort)
+	defer conn.Close()
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 1
+	})
+
+	_, _ = conn.Write([]byte("hello\n"))
+
+	waitForTestCondition(t, func() bool {
+		snap := reg.Snapshot(time.Now())
+		return len(snap) == 1 && snap[0].BytesIn > 0
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if snap[0].BytesIn == 0 {
+		t.Fatal("BytesIn was not tracked after client write")
+	}
+}
+
+func TestTCPForwarderWithRegistryTracksBytesOut(t *testing.T) {
+	targetPort, stopTarget := startTestEchoServer(t, "bout")
+	defer stopTarget()
+
+	reg := connections.NewTcpConnectionRegistry()
+	rule := testTCPRule(freeTestTCPPort(t), targetPort)
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	conn := dialTestTCP(t, rule.ListenPort)
+	defer conn.Close()
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 1
+	})
+
+	_, _ = conn.Write([]byte("hello\n"))
+	_, _ = bufio.NewReader(conn).ReadString('\n') // read echo to ensure reply has been sent
+
+	waitForTestCondition(t, func() bool {
+		snap := reg.Snapshot(time.Now())
+		return len(snap) == 1 && snap[0].BytesOut > 0
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if snap[0].BytesOut == 0 {
+		t.Fatal("BytesOut was not tracked after target echo")
+	}
+}
+
+func TestTCPForwarderWithRegistryClosesOnDisconnect(t *testing.T) {
+	targetPort, stopTarget := startTestEchoServer(t, "cls")
+	defer stopTarget()
+
+	reg := connections.NewTcpConnectionRegistry()
+	rule := testTCPRule(freeTestTCPPort(t), targetPort)
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	conn := dialTestTCP(t, rule.ListenPort)
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 1
+	})
+
+	_ = conn.Close()
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 0
+	})
+}
+
+func TestTCPForwarderWithRegistryNoLeakOnTargetFail(t *testing.T) {
+	// Target port is not listening — dial will fail.
+	rule := testTCPRule(freeTestTCPPort(t), freeTestTCPPort(t))
+
+	reg := connections.NewTcpConnectionRegistry()
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	conn := dialTestTCP(t, rule.ListenPort)
+	defer conn.Close()
+
+	// Entry may appear briefly; must be removed after target dial failure.
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 0
+	})
+}
+
+func TestTCPForwarderWithRegistryClearsOnStop(t *testing.T) {
+	targetPort, stopTarget := startTestEchoServer(t, "stop")
+	defer stopTarget()
+
+	reg := connections.NewTcpConnectionRegistry()
+	rule := testTCPRule(freeTestTCPPort(t), targetPort)
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	conn := dialTestTCP(t, rule.ListenPort)
+	defer conn.Close()
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 1
+	})
+
+	forwarder.Stop()
+
+	if len(reg.Snapshot(time.Now())) != 0 {
+		t.Fatal("registry should be empty after Stop()")
+	}
+}
+
+func TestTCPForwarderWithRegistryTracksMultipleConnections(t *testing.T) {
+	targetPort, stopTarget := startTestEchoServer(t, "multi")
+	defer stopTarget()
+
+	reg := connections.NewTcpConnectionRegistry()
+	rule := testTCPRule(freeTestTCPPort(t), targetPort)
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	conn1 := dialTestTCP(t, rule.ListenPort)
+	defer conn1.Close()
+	conn2 := dialTestTCP(t, rule.ListenPort)
+	defer conn2.Close()
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 2
+	})
+
+	snap := reg.Snapshot(time.Now())
+	if snap[0].ID == snap[1].ID {
+		t.Fatal("multiple connections should have distinct registry IDs")
+	}
+}
+
+func TestTCPForwarderWithRegistrySnapshotHasNoPayloadFields(t *testing.T) {
+	targetPort, stopTarget := startTestEchoServer(t, "shape")
+	defer stopTarget()
+
+	reg := connections.NewTcpConnectionRegistry()
+	rule := testTCPRule(freeTestTCPPort(t), targetPort)
+	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	if err := forwarder.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer forwarder.Stop()
+
+	conn := dialTestTCP(t, rule.ListenPort)
+	defer conn.Close()
+
+	waitForTestCondition(t, func() bool {
+		return len(reg.Snapshot(time.Now())) == 1
+	})
+
+	snap := reg.Snapshot(time.Now())
+	data, err := json.Marshal(snap[0])
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	expected := []string{
+		"id", "ruleId", "ruleName", "protocol",
+		"clientAddress", "clientPort", "targetAddress", "targetPort",
+		"startedAt", "durationMs", "bytesIn", "bytesOut", "status",
+	}
+	if len(m) != len(expected) {
+		t.Errorf("JSON has %d fields; want %d (no payload fields)", len(m), len(expected))
+	}
+	for _, key := range expected {
+		if _, ok := m[key]; !ok {
+			t.Errorf("JSON missing field %q", key)
+		}
+	}
 }

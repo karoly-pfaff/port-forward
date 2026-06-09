@@ -9,18 +9,20 @@ import (
 
 	"portier/service/sources/activity"
 	"portier/service/sources/config"
+	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 	"portier/service/sources/forwarders"
 	"portier/service/sources/validation"
 )
 
 type Manager struct {
-	rules      []domain.ForwardRule
-	runtime    map[string]runtimeState
-	store      *config.Store
-	activity   *activity.Store
-	onStartLog func(rule domain.ForwardRule)
-	onEventLog forwarders.LogFunc
+	rules       []domain.ForwardRule
+	runtime     map[string]runtimeState
+	store       *config.Store
+	activity    *activity.Store
+	onStartLog  func(rule domain.ForwardRule)
+	onEventLog  forwarders.LogFunc
+	tcpRegistry *connections.TcpConnectionRegistry
 }
 
 type runtimeState struct {
@@ -42,7 +44,7 @@ func NewWithStore(store *config.Store, rules []domain.ForwardRule) (*Manager, er
 
 	copied := make([]domain.ForwardRule, len(rules))
 	copy(copied, rules)
-	return &Manager{rules: copied, runtime: make(map[string]runtimeState), store: store}, nil
+	return &Manager{rules: copied, runtime: make(map[string]runtimeState), store: store, tcpRegistry: connections.NewTcpConnectionRegistry()}, nil
 }
 
 func NewFromConfig(configPath string) (*Manager, error) {
@@ -113,6 +115,11 @@ func (m *Manager) ClearActivity() {
 	if m.activity != nil {
 		m.activity.Clear()
 	}
+}
+
+// GetLiveTCPConnections returns a snapshot of all currently active TCP connections.
+func (m *Manager) GetLiveTCPConnections() []connections.TcpConnectionInfo {
+	return m.tcpRegistry.Snapshot(time.Now())
 }
 
 func (m *Manager) ExportConfig() domain.ExportedConfig {
@@ -414,7 +421,7 @@ func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
 	onEvent := m.activityEventFunc()
 
 	if rule.Protocol == domain.ProtocolTCP {
-		tcpForwarder := forwarders.NewTCPForwarder(rule, m.onEventLog, onEvent)
+		tcpForwarder := forwarders.NewTCPForwarderWithRegistry(rule, m.onEventLog, onEvent, m.tcpRegistry)
 		if err := tcpForwarder.Start(); err != nil {
 			state.running = false
 			state.startedAt = ""

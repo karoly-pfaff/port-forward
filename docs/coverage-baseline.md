@@ -8,7 +8,7 @@ Measured at v1.3.0 (2026-06-08). This is the pre-v1.4 baseline.
 | ------------- | ---------: | -----: | --------: | -------: | --------------------------------- |
 | tools/cli     |      92.7% |      — |         — |      92% | `go test` + validate-coverage --only cli |
 | client        |      89.2% |  87.6% |     74.0% |     none | vitest + @vitest/coverage-v8      |
-| service       |      79.7% |      — |         — |     none | `go test -coverpkg`               |
+| service       |      80.6% |      — |         — |     none | `go test -coverpkg`               |
 | shared        |      82.1% |  53.6% |     88.9% |     none | vitest + @vitest/coverage-v8      |
 | server        |      82.21% |  85.96% |    95.83% |     none | vitest + @vitest/coverage-v8      |
 | scripts       |        N/M |      — |         — |     none | not yet measured                  |
@@ -111,12 +111,15 @@ All three require mocking or specific timing and remain from Slice 1. The regist
 
 ---
 
-## service — 79.7% statements (combined cross-package)
+## service — 80.6% statements (combined cross-package)
+
+Updated at v1.4 Slice 5 (2026-06-08). Previous: 79.7% (baseline v1.3.0).
 
 Per-package figures (package-internal test coverage):
 
 | Package                          | Stmts (pkg) | Notes                                            |
 | -------------------------------- | ----------: | ------------------------------------------------ |
+| sources/connections              |       98.1% | v1.4 Slice 5: new module, 100% public methods    |
 | sources/advisory                 |      100.0% | fully covered                                    |
 | sources/activity                 |       89.5% |                                                  |
 | sources/api                      |       81.0% | update, delete, reorder, import partially covered|
@@ -131,7 +134,7 @@ Per-package figures (package-internal test coverage):
 | sources/static                   |        N/T  | static file helper, no test file                 |
 | sources/version                  |        N/T  | constant, no test file                           |
 | sources/ (main.go)               |        N/T  | entry point, no test file                        |
-| **Combined total (-coverpkg)**   |   **79.7%** |                                                  |
+| **Combined total (-coverpkg)**   |   **80.6%** |                                                  |
 
 N/T = no test file. Most of these are thin wrappers, type definitions, or OS-integration code.
 
@@ -140,6 +143,7 @@ No coverage gate. Tooling added: `scripts/coverage-service.js` added; run via `n
 Notes:
 - The combined coverage run uses `-p 1` (sequential) to avoid timing flakiness in `TestTCPForwarderEmitsConnectionClosedEvent` under parallel cross-package instrumentation. The per-package test for that package passes reliably.
 - The `waitForTestCondition` timeout in `sources/forwarders/tcp_test.go` was raised from 2s to 5s for robustness under heavy instrumentation.
+- `sources/connections/` package added in v1.4 Slice 5. The 1.9% gap is the `rand.Read` error path in the private `generateConnectionID` function — genuinely untestable without mocking crypto/rand, same pattern as CLI commands. All public methods are at 100% statements.
 
 ---
 
@@ -237,15 +241,15 @@ Same policy: 100% meaningful for all new/materially changed files in plan/diff/a
 
 ### Existing baselines — incremental ratchet (non-blocking for unrelated work)
 
-| Component | Baseline (v1.3) | After Slice 1 | After Slice 4 | v1.4 target | v1.5 target | v1.6 target |
-| --------- | --------------: | ------------: | ------------: | ----------: | ----------: | ----------: |
-| client    |           89.2% |         89.2% |         89.2% |       90%+  |       95%+  |        100% |
-| server    |           71.9% |     **79.6%** |     **82.2%** |       85%+  |       92%+  |        100% |
-| service   |           79.7% |         79.7% |         79.7% |       85%+* |       92%+  |        100% |
-| shared    |           82.1% |         82.1% |         82.1% |       90%+  |       95%+  |        100% |
+| Component | Baseline (v1.3) | After Slice 1 | After Slice 4 | After Slice 5 | v1.4 target | v1.5 target | v1.6 target |
+| --------- | --------------: | ------------: | ------------: | ------------: | ----------: | ----------: | ----------: |
+| client    |           89.2% |         89.2% |         89.2% |         89.2% |       90%+  |       95%+  |        100% |
+| server    |           71.9% |     **79.6%** |     **82.2%** |         82.2% |       85%+  |       92%+  |        100% |
+| service   |           79.7% |         79.7% |         79.7% |     **80.6%** |       85%+* |       92%+  |        100% |
+| shared    |           82.1% |         82.1% |         82.1% |         82.1% |       90%+  |       95%+  |        100% |
 
 \* Service forwarder coverage improvement is part of v1.4 Slices 5–6 (Go live tracking).
 
-Server is at 82.2% after Slices 3–4 added TCP and UDP live tracking modules at 100% coverage. The connections/ subfolder is 100% statements/branch/funcs for both registries. Further improvement expected when Go service tracking modules (Slices 5–6) are added.
+Server is at 82.2% after Slices 3–4 added TCP and UDP live tracking modules at 100% coverage. Service is at 80.6% after Slice 5 added the Go TCP connection registry at 98.1% statements (100% public methods). Further service improvement expected when Go UDP session tracking (Slice 6) is added.
 
 Do not block unrelated v1.4 work on legacy coverage gaps. Require 100% for newly added or materially changed files.
