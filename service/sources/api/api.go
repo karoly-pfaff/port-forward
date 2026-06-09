@@ -568,7 +568,11 @@ func (h *Handler) serveRuntimeInfo(w http.ResponseWriter) {
 }
 
 func normalizePlatform() string {
-	switch runtime.GOOS {
+	return internalNormalizePlatform(runtime.GOOS)
+}
+
+func internalNormalizePlatform(goos string) string {
+	switch goos {
 	case "windows":
 		return "windows"
 	case "darwin":
@@ -581,7 +585,11 @@ func normalizePlatform() string {
 }
 
 func normalizeArch() string {
-	switch runtime.GOARCH {
+	return internalNormalizeArch(runtime.GOARCH)
+}
+
+func internalNormalizeArch(goarch string) string {
+	switch goarch {
 	case "amd64":
 		return "x64"
 	case "arm64":

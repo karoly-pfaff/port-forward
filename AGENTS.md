@@ -161,14 +161,14 @@ Coverage outputs (gitignored):
 - `coverage/shared/`, `coverage/server/`, `coverage/client/` — vitest json-summary + text
 - `coverage/` — Go .out profiles (written and removed per run)
 
-Baseline (v1.5.0): cli 93.2%, client 95.1%/90.1%/79.9%, service 85.8%, shared 100%, server 88.7%/91.0%/99.1%.
-See `docs/coverage-baseline.md` for full breakdown and ratchet plan.
+Baseline (v1.6-pre): cli 93.2%, client 95.1%/90.1%/79.9%, service 87.7%, shared 100%, server 89.0%/91.5%/99.1%.
+See `docs/coverage-baseline.md` for full breakdown.
 
-Gates (in `scripts/validate-coverage.js`, ratcheted at v1.5.0):
+Gates (in `scripts/validate-coverage.js`, ratcheted at v1.6-pre):
 - cli: statements ≥ 93%
 - client: statements ≥ 94%, branches ≥ 90%, functions ≥ 79%
-- server: statements ≥ 88%, branches ≥ 90%, functions ≥ 99%
-- service: statements ≥ 85%
+- server: statements ≥ 89%, branches ≥ 91%, functions ≥ 99%
+- service: statements ≥ 87%
 - shared: statements ≥ 100%, branches ≥ 100%, functions ≥ 100%
 
 Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.5 and v1.6. Existing baselines ratcheted incrementally. Do not lower gates without explicit rationale. Do not remove gates to make a release pass.

@@ -1,5 +1,21 @@
 # Coverage Baseline
 
+## v1.6-pre Release Gates (2026-06-09)
+
+Achieved after coverage ratchet & quality hardening uplift.
+
+| Component | Statements | Branch | Functions | Gate (v1.6-pre) |
+| --------- | ---------: | -----: | --------: | --------------: |
+| tools/cli |      93.2% |      — |      98.6% |            93% |
+| client    |      95.1% |  90.1% |     79.9%  |        94/90/79 |
+| server    |      89.0% |  91.5% |     99.1%  |        89/91/99 |
+| service   |      87.7% |      — |      95.4% |            87% |
+| shared    |    100.00% | 100.0% |    100.00% |    100/100/100 |
+
+Starting point (same as v1.5.0): service 85.8%, server 88.7%/91.0%/99.1%, others unchanged.
+
+---
+
 Measured at v1.5.0 release (2026-06-09). Updated from v1.4.0 (cli 92.7%, client 90.56%, service 82.5%, shared 82.1%, server 82.88%). CLI updated at v1.5 Slice 4 (92.7% → 93.2%). Gates ratcheted at v1.5.0 release.
 
 ## v1.5.0 Release Gates

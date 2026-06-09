@@ -190,6 +190,25 @@ Coverage policy for v1.4 and v1.5: 100% meaningful coverage for all newly added 
 
 ---
 
+## v1.6-pre Coverage Ratchet & Quality Hardening
+
+Pre-release hardening pass to raise the test safety net toward ~95% meaningful coverage before starting the v1.6 architecture and quality audit. No new product features.
+
+- [ ] v1.6-pre roadmap added to `docs/roadmap.md` ✓
+- [ ] v1.6-pre changelog entry added
+- [ ] Coverage baseline re-measured and documented under v1.6-pre in `docs/coverage-baseline.md`
+- [ ] Gap analysis performed; prioritized gap list produced
+- **Service uplift** — meaningful Go tests for api, config, manager, validation, forwarder gaps → target ≥90%
+- **Server uplift** — meaningful TS tests for api.ts, diagnose.ts, udp-forwarder.ts → target ≥95% stmts
+- **CLI uplift** — meaningful CLI tests for remaining gaps → target ≥95%
+- **Client branch/function uplift** — App.tsx, ActivityLogView, ForwardRuleList gaps → preserve ≥95% stmts
+- [ ] Coverage gates ratcheted to stable achieved values; no gate lowered
+- [ ] `validate:coverage` passes all gates at new values
+- [ ] Full validation suite run: lint, typecheck, test, build, validate:contract, test:e2e, validate:cli, validate:runtime:smoke
+- [ ] `docs/coverage-baseline.md` updated with before/after comparison and rationale
+
+---
+
 ## v1.6 Planning
 
 v1.6 is a dedicated audit and hardening release targeting a structured multi-angle inspection of the codebase after v1.4 and v1.5 have raised test coverage. See `docs/roadmap.md` for audit dimensions, slice plan, and non-goals.

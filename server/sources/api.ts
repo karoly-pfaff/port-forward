@@ -385,14 +385,14 @@ export function hasStaticClient(staticClientDir: string): boolean {
   return existsSync(join(staticClientDir, "index.html"));
 }
 
-function normalizePlatform(platform: string): "windows" | "macos" | "linux" | "unknown" {
+export function normalizePlatform(platform: string): "windows" | "macos" | "linux" | "unknown" {
   if (platform === "win32") return "windows";
   if (platform === "darwin") return "macos";
   if (platform === "linux") return "linux";
   return "unknown";
 }
 
-function normalizeArch(arch: string): "x64" | "arm64" | "unknown" {
+export function normalizeArch(arch: string): "x64" | "arm64" | "unknown" {
   if (arch === "x64") return "x64";
   if (arch === "arm64") return "arm64";
   return "unknown";

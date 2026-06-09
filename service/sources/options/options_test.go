@@ -107,3 +107,35 @@ func TestResolveRejectsInvalidPort(t *testing.T) {
 		t.Fatal("expected invalid port error")
 	}
 }
+
+func TestResolveRejectsUnknownCLIFlag(t *testing.T) {
+	if _, err := Resolve([]string{"--unknown-flag", "value"}, Env{}, t.TempDir()); err == nil {
+		t.Fatal("expected error for unknown CLI flag")
+	}
+}
+
+func TestResolveAbsoluteConfigPath(t *testing.T) {
+	cwd := t.TempDir()
+	absPath := filepath.Join(t.TempDir(), "abs", "rules.json")
+
+	got, err := Resolve([]string{"--config", absPath}, Env{}, cwd)
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	// Absolute paths must not be joined with cwd.
+	if got.ConfigPath != filepath.Clean(absPath) {
+		t.Fatalf("config path = %q, want %q (absolute path must not be joined with cwd)", got.ConfigPath, filepath.Clean(absPath))
+	}
+}
+
+func TestFromOSEnv(t *testing.T) {
+	env := FromOSEnv()
+	if env == nil {
+		t.Fatal("FromOSEnv returned nil")
+	}
+	// The process environment always has at least one variable (PATH or similar).
+	// We just verify the function returns a non-nil map and doesn't panic.
+	// Note: on Windows, special directory vars like "=C:=C:\path" produce an
+	// empty key ("") — that is expected behavior, not a bug.
+	_ = env
+}

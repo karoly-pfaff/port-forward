@@ -1258,6 +1258,152 @@ func requestThroughForwarder(t *testing.T, port int, message string) string {
 	return line
 }
 
+// ── Error type string methods ────────────────────────────────────────────────
+
+func TestValidationErrorMessage(t *testing.T) {
+	err := ValidationError{Errors: []string{"name is required", "port is invalid"}}
+	want := "name is required port is invalid"
+	if got := err.Error(); got != want {
+		t.Fatalf("ValidationError.Error() = %q, want %q", got, want)
+	}
+}
+
+func TestConflictErrorMessage(t *testing.T) {
+	err := ConflictError{Message: "A TCP rule is already listening on 127.0.0.1:48001."}
+	if got := err.Error(); got != err.Message {
+		t.Fatalf("ConflictError.Error() = %q, want %q", got, err.Message)
+	}
+}
+
+func TestNotFoundErrorMessage(t *testing.T) {
+	err := NotFoundError{Message: "Forward rule rule-99 was not found."}
+	if got := err.Error(); got != err.Message {
+		t.Fatalf("NotFoundError.Error() = %q, want %q", got, err.Message)
+	}
+}
+
+// ── nil-store persist (in-memory only manager) ───────────────────────────────
+
+func TestCreateRuleWithNilStore(t *testing.T) {
+	m, err := New([]domain.ForwardRule{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	input := tcpRule()
+	input.ListenPort = freeTCPPort(t)
+	input.Enabled = false
+	rule, err := m.CreateRule(inputForRule(input, ""))
+	if err != nil {
+		t.Fatalf("CreateRule: %v", err)
+	}
+	if len(m.ListRules()) != 1 {
+		t.Fatal("rule should be in memory")
+	}
+	if rule.ID == "" {
+		t.Fatal("expected generated ID")
+	}
+}
+
+// ── CreateRule validation error path ─────────────────────────────────────────
+
+func TestCreateRuleValidationError(t *testing.T) {
+	m := testManager(t, nil)
+	input := inputForRule(tcpRule(), "")
+	// Zero port fails port range validation.
+	zero := 0
+	input.ListenPort = &zero
+	_, err := m.CreateRule(input)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	var ve ValidationError
+	if _, ok := err.(ValidationError); !ok {
+		_ = ve // suppress unused var warning
+		t.Fatalf("expected ValidationError, got %T: %v", err, err)
+	}
+}
+
+// ── DeleteRule without start (wasRunning=false branch) ───────────────────────
+
+func TestDeleteRuleNotStarted(t *testing.T) {
+	rule := tcpRule()
+	rule.Enabled = false
+	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
+
+	if err := m.DeleteRule("tcp-1"); err != nil {
+		t.Fatalf("DeleteRule: %v", err)
+	}
+	if len(m.ListRules()) != 0 {
+		t.Fatal("rule should be deleted")
+	}
+	// No EventRuleStopped should be emitted when rule was not running.
+	for _, e := range store.List(activity.ListParams{}) {
+		if e.Type == activity.EventRuleStopped {
+			t.Fatal("EventRuleStopped must not be emitted for a rule that was not running")
+		}
+	}
+}
+
+// ── ReorderRules with duplicate ID in list ───────────────────────────────────
+
+func TestReorderRulesDuplicateIDInList(t *testing.T) {
+	ruleB := tcpRule()
+	ruleB.ID = "tcp-2"
+	ruleB.Name = "Other"
+	ruleB.ListenPort = 48002
+	m := testManager(t, []domain.ForwardRule{tcpRule(), ruleB})
+
+	// Passing tcp-1 twice: the second occurrence should be silently skipped.
+	if err := m.ReorderRules([]string{"tcp-2", "tcp-1", "tcp-1"}); err != nil {
+		t.Fatalf("ReorderRules with duplicate ID: %v", err)
+	}
+	rules := m.ListRules()
+	if len(rules) != 2 {
+		t.Fatalf("rule count = %d, want 2", len(rules))
+	}
+	if rules[0].ID != "tcp-2" || rules[1].ID != "tcp-1" {
+		t.Fatalf("unexpected order: %v", rules)
+	}
+}
+
+// ── ListActivity / ClearActivity with store ───────────────────────────────────
+
+func TestListActivityWithStore(t *testing.T) {
+	rule := tcpRule()
+	rule.Enabled = false
+	m, _ := testManagerWithActivity(t, []domain.ForwardRule{rule})
+
+	// Trigger an activity event by updating the rule.
+	newName := "Renamed"
+	if _, err := m.UpdateRule("tcp-1", validation.ForwardRulePatch{Name: &newName}); err != nil {
+		t.Fatalf("UpdateRule: %v", err)
+	}
+
+	events := m.ListActivity(activity.ListParams{})
+	if len(events) == 0 {
+		t.Fatal("expected at least one activity event from ListActivity")
+	}
+}
+
+func TestClearActivityWithStore(t *testing.T) {
+	rule := tcpRule()
+	rule.Enabled = false
+	m, _ := testManagerWithActivity(t, []domain.ForwardRule{rule})
+
+	newName := "Renamed"
+	if _, err := m.UpdateRule("tcp-1", validation.ForwardRulePatch{Name: &newName}); err != nil {
+		t.Fatalf("UpdateRule: %v", err)
+	}
+	if len(m.ListActivity(activity.ListParams{})) == 0 {
+		t.Fatal("expected events before clear")
+	}
+
+	m.ClearActivity()
+	if len(m.ListActivity(activity.ListParams{})) != 0 {
+		t.Fatal("expected empty activity log after ClearActivity")
+	}
+}
+
 func waitFor(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

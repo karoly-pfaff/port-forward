@@ -3129,3 +3129,185 @@ func TestConfigApplyAppliedCountsMatchPlanSummary(t *testing.T) {
 		t.Fatalf("applied.unchanged = %v, want %v", applied["unchanged"], summary["unchanged"])
 	}
 }
+
+// ── Normalization unit tests ─────────────────────────────────────────────────
+
+func TestInternalNormalizePlatform(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"windows", "windows"},
+		{"darwin", "macos"},
+		{"linux", "linux"},
+		{"freebsd", "unknown"},
+		{"", "unknown"},
+	}
+	for _, tc := range cases {
+		got := internalNormalizePlatform(tc.input)
+		if got != tc.want {
+			t.Errorf("internalNormalizePlatform(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestInternalNormalizeArch(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"amd64", "x64"},
+		{"arm64", "arm64"},
+		{"386", "unknown"},
+		{"mips", "unknown"},
+		{"", "unknown"},
+	}
+	for _, tc := range cases {
+		got := internalNormalizeArch(tc.input)
+		if got != tc.want {
+			t.Errorf("internalNormalizeArch(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+// ── ServeHTTP non-API path without static dir ────────────────────────────────
+
+func TestServeHTTPNonAPIPathNoStaticDir(t *testing.T) {
+	// newTestHandler uses a non-existent static dir, so staticAvailable=false.
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/")
+	if err != nil {
+		t.Fatalf("GET / failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for non-API path without static dir", response.StatusCode)
+	}
+}
+
+// ── updateForward missing and validation error paths ─────────────────────────
+
+func TestUpdateForwardEmptyBody(t *testing.T) {
+	configPath := writeSingleRuleConfig(t)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	req, _ := http.NewRequest(http.MethodPatch, server.URL+"/api/forwards/rule-1", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH /api/forwards/rule-1 failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for empty body", response.StatusCode)
+	}
+}
+
+func TestUpdateForwardInvalidPatch(t *testing.T) {
+	configPath := writeSingleRuleConfig(t)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	// listenPort:0 fails port range validation
+	req, _ := http.NewRequest(http.MethodPatch, server.URL+"/api/forwards/rule-1", strings.NewReader(`{"listenPort":0}`))
+	req.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH /api/forwards/rule-1 failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for invalid patch", response.StatusCode)
+	}
+	var body map[string][]string
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body["errors"]) == 0 {
+		t.Fatal("expected validation errors in response")
+	}
+}
+
+// ── deleteForward not-found path ─────────────────────────────────────────────
+
+func TestDeleteForwardNotFound(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	req, _ := http.NewRequest(http.MethodDelete, server.URL+"/api/forwards/no-such-rule", nil)
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE /api/forwards/no-such-rule failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for delete of missing rule", response.StatusCode)
+	}
+}
+
+// ── stopForward not-found path ───────────────────────────────────────────────
+
+func TestStopForwardNotFound(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/no-such-rule/stop", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/forwards/no-such-rule/stop failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for stop of missing rule", response.StatusCode)
+	}
+}
+
+// ── reorderForwards error paths ───────────────────────────────────────────────
+
+func TestReorderForwardsNullIDsField(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	// Body is valid JSON but has no "ids" key → should return 400
+	response, err := http.Post(server.URL+"/api/forwards/reorder", "application/json",
+		strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("POST /api/forwards/reorder failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 when ids field is missing", response.StatusCode)
+	}
+}
+
+func TestReorderForwardsInvalidJSON(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/reorder", "application/json",
+		strings.NewReader(`not-json`))
+	if err != nil {
+		t.Fatalf("POST /api/forwards/reorder failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for malformed JSON", response.StatusCode)
+	}
+}
+
+func TestReorderForwardsUnknownID(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/reorder", "application/json",
+		strings.NewReader(`{"ids":["no-such-id"]}`))
+	if err != nil {
+		t.Fatalf("POST /api/forwards/reorder failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 for reorder with unknown rule ID", response.StatusCode)
+	}
+}

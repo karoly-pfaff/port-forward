@@ -784,6 +784,63 @@ All five component coverage gates are now enforced via `npm run validate:coverag
 
 ---
 
+## Portier v1.6-pre — Coverage Ratchet & Quality Hardening
+
+**Core theme: Raise the test safety net toward ~95% coverage across measurable components before starting the v1.6 architecture and quality audit.**
+
+v1.5 shipped all product features for declarative config and drift control. Before beginning the structured multi-angle v1.6 audit, this pre-release hardening pass closes the remaining coverage gaps that exist across the CLI, TypeScript server, and Go service — gaps left over from incremental feature work in v1.4 and v1.5. The goal is to push meaningful coverage toward ~95% so that v1.6 refactoring and hardening work can be performed with confidence.
+
+### Goals
+
+- Raise CLI coverage from 93.2% toward 95%+.
+- Raise server statement coverage from 88.7% toward 95% where meaningful.
+- Raise service statement coverage from 85.8% toward 95% where meaningful.
+- Preserve client statement coverage above 95% and improve branch/function coverage where meaningful.
+- Preserve shared coverage at 100%.
+- Do not add new product features.
+- Do not change API contracts unless a real tested bug is found.
+- Do not redesign the UI.
+
+### Scope
+
+- Coverage gap analysis across all five components.
+- Meaningful behavioral tests for uncovered paths — not mechanical line-hit tests.
+- Coverage gate ratcheting after stable coverage is achieved.
+- Validation stability (EADDRINUSE flakiness watch).
+- No new product features, no API contract changes, no forwarding behavior changes.
+
+### Coverage Targets
+
+| Component | v1.5.0 actual | v1.6-pre target | Notes |
+|-----------|-------------|-----------------|-------|
+| cli       | 93.2%       | ≥95%            | exit codes, JSON paths, edge cases |
+| client    | 95.1%/90.1%/79.9% | preserve/improve | branch/function only where meaningful |
+| server    | 88.7%/91.0%/99.1% | ≥95% stmts | diagnose.ts, udp-forwarder.ts, api.ts gaps |
+| service   | 85.8%       | ≥90%            | api, config, manager, validation, forwarders |
+| shared    | 100%        | 100%            | preserve only |
+
+### Suggested Implementation Slices
+
+1. **v1.6-pre tracking setup** — update docs, record baseline, identify gaps. *This slice.*
+2. **Service coverage uplift** — meaningful Go service tests for api, config, manager, validation, forwarder gaps.
+3. **Server coverage uplift** — meaningful TypeScript server tests for api.ts, diagnose.ts, udp-forwarder.ts gaps.
+4. **CLI coverage uplift** — meaningful CLI tests for remaining exit code, JSON, and edge-case gaps.
+5. **Client branch/function uplift** — meaningful React/client tests for uncovered branches in App.tsx, ActivityLogView, ForwardRuleList, etc.
+6. **Gate ratchet and docs** — ratchet all gates to stable achieved values; update docs/coverage-baseline.md, changelog, checklist.
+7. **v1.6-pre readiness check** — full validation suite, report coverage delta, confirm gates pass.
+
+### Non-Goals for v1.6-pre
+
+- New user-facing features.
+- API contract changes.
+- Forwarding behavior changes.
+- UI redesign.
+- Superficial line-hit coverage tests.
+- Excluding files to inflate reported coverage.
+- Lowering any existing gate.
+
+---
+
 ## Portier v1.6 — Architecture, Quality & Maintainability Audit
 
 **Core theme: Inspect the whole codebase with fresh eyes after v1.4 and v1.5 have raised coverage.**

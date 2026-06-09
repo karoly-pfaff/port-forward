@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import type { ForwardRule } from "@portier/shared";
-import { createApp, type RuntimeInfoOptions } from "./api.js";
+import { createApp, normalizePlatform, normalizeArch, type RuntimeInfoOptions } from "./api.js";
 import { ForwardManager, type RuleStore } from "./forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
 import { getFreeTcpPort, getFreeUdpPort } from "./test-helpers.js";
@@ -1535,5 +1535,41 @@ describe("GET /api/connections", () => {
       expect("rawPacket" in body).toBe(false);
       expect("data" in body).toBe(false);
     });
+  });
+});
+
+// ── normalizePlatform / normalizeArch unit tests ─────────────────────────────
+
+describe("normalizePlatform", () => {
+  it("maps win32 to windows", () => {
+    expect(normalizePlatform("win32")).toBe("windows");
+  });
+
+  it("maps darwin to macos", () => {
+    expect(normalizePlatform("darwin")).toBe("macos");
+  });
+
+  it("maps linux to linux", () => {
+    expect(normalizePlatform("linux")).toBe("linux");
+  });
+
+  it("maps unknown os to unknown", () => {
+    expect(normalizePlatform("freebsd")).toBe("unknown");
+    expect(normalizePlatform("")).toBe("unknown");
+  });
+});
+
+describe("normalizeArch", () => {
+  it("maps x64 to x64", () => {
+    expect(normalizeArch("x64")).toBe("x64");
+  });
+
+  it("maps arm64 to arm64", () => {
+    expect(normalizeArch("arm64")).toBe("arm64");
+  });
+
+  it("maps unknown arch to unknown", () => {
+    expect(normalizeArch("ia32")).toBe("unknown");
+    expect(normalizeArch("")).toBe("unknown");
   });
 });

@@ -4,6 +4,20 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased — v1.6-pre] Coverage Ratchet & Quality Hardening
+
+### Goal
+
+Pre-release coverage uplift and test quality hardening before the v1.6 Architecture & Maintainability Audit. No new product features. Adds meaningful tests for previously untested edge cases in the Go service, TypeScript server, Go CLI, and React client; ratchets all coverage gates to newly achieved stable values.
+
+### Added
+
+- **Service coverage uplift** — 24 new Go tests across `api_test.go`, `manager_test.go`, and `options_test.go`. Refactored `normalizePlatform`/`normalizeArch` in Go service to delegate to `internalNormalizePlatform`/`internalNormalizeArch` helpers for platform-independent branch coverage. Tests cover: platform/arch all branches, missing error returns in API handlers (updateForward/deleteForward/stopForward/reorderForwards), manager error type `.Error()` methods, CreateRule validation error, DeleteRule not-started branch, ReorderRules duplicate IDs, options FromOSEnv, absolute config path. Service coverage: 85.8% → 87.7%.
+- **Server coverage uplift** — 7 new TypeScript tests in `api.test.ts`. Exported `normalizePlatform`/`normalizeArch` from `server/sources/api.ts` for direct branch testing. Covers: win32/darwin/linux/unknown platforms, x64/arm64/unknown arches. Server coverage: 88.7%/91.0%/99.1% → 89.0%/91.5%/99.1%.
+- **Coverage gates ratcheted** — service gate 85% → 87%, server gates 88/90/99 → 89/91/99. All five gates pass at new values. 31 new tests total.
+
+---
+
 ## [1.5.0] — 2026-06-09
 
 ### Goal
