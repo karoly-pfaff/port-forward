@@ -7,10 +7,10 @@ Measured at v1.3.0 (2026-06-08). This is the pre-v1.4 baseline.
 | Component     | Statements | Branch | Functions |     Gate | Tooling                           |
 | ------------- | ---------: | -----: | --------: | -------: | --------------------------------- |
 | tools/cli     |      92.7% |      — |         — |      92% | `go test` + validate-coverage --only cli |
-| client        |      89.2% |  87.6% |     74.0% |     none | vitest + @vitest/coverage-v8      |
-| service       |      80.6% |      — |         — |     none | `go test -coverpkg`               |
+| client        |      89.0% |  87.4% |     74.0% |     none | vitest + @vitest/coverage-v8      |
+| service       |      82.5% |      — |         — |     none | `go test -coverpkg`               |
 | shared        |      82.1% |  53.6% |     88.9% |     none | vitest + @vitest/coverage-v8      |
-| server        |      82.21% |  85.96% |    95.83% |     none | vitest + @vitest/coverage-v8      |
+| server        |      82.88% |  86.35% |    97.91% |     none | vitest + @vitest/coverage-v8      |
 | scripts       |        N/M |      — |         — |     none | not yet measured                  |
 
 Coverage commands:
@@ -47,7 +47,7 @@ Known untestable branches documented in scripts/validate-coverage.js: `main()` o
 
 ---
 
-## client — 89.2% statements, 87.6% branch, 74.0% functions
+## client — 89.0% statements, 87.4% branch, 74.0% functions
 
 | File                                        | Stmts  | Branch | Funcs  | Notes                             |
 | ------------------------------------------- | -----: | -----: | -----: | --------------------------------- |
@@ -71,9 +71,9 @@ No coverage gate. Tooling added: vitest.config.ts updated with coverage config, 
 
 ---
 
-## server — 82.21% statements, 85.96% branch, 95.83% functions
+## server — 82.88% statements, 86.35% branch, 97.91% functions
 
-Updated at v1.4 Slice 4 (2026-06-08). Previous: 80.55% stmts (Slice 3). Baseline (v1.3.0): 71.9% stmts.
+Updated at v1.4 Slice 7 (2026-06-09). Previous: 82.21% stmts (Slice 4). Baseline (v1.3.0): 71.9% stmts.
 
 "All files" figure from `npm run coverage:server`.
 
@@ -88,7 +88,7 @@ Updated at v1.4 Slice 4 (2026-06-08). Previous: 80.55% stmts (Slice 3). Baseline
 | sources/forwarders/udp-forwarder.ts                   |  86.3% |  84.0% |   100% | v1.4 Slice 4: up from 84.3%/82%/100% (Slice 1)  |
 | sources/diagnose.ts                                   |  84.8% |  83.0% |   100% |                                                  |
 | sources/forward-manager.ts                            |  87.6% |  76.5% |    92% |                                                  |
-| sources/api.ts                                        |  91.0% |  86.0% |   100% |                                                  |
+| sources/api.ts                                        |  92.5% |  86.6% |   100% | v1.4 Slice 7: GET /api/connections added, 6 new tests |
 | sources/server-options.ts                             |  96.7% |  93.5% |   100% |                                                  |
 | sources/config-store.ts                               |  94.1% |  92.9% |   100% |                                                  |
 | sources/activity/activity-store.ts                    |   100% |   100% |   100% |                                                  |
@@ -111,9 +111,9 @@ All three require mocking or specific timing and remain from Slice 1. The regist
 
 ---
 
-## service — 82.1% statements (combined cross-package)
+## service — 82.5% statements (combined cross-package)
 
-Updated at v1.4 Slice 6 (2026-06-09). Previous: 80.6% (Slice 5). Baseline (v1.3.0): 79.7%.
+Updated at v1.4 Slice 7 (2026-06-09). Previous: 82.1% (Slice 6). Baseline (v1.3.0): 79.7%.
 
 Per-package figures (package-internal test coverage):
 
@@ -191,7 +191,7 @@ These are not part of statement coverage but are important for overall test conf
 - **server forwarders** (`tcp-forwarder.ts` **100% stmts** ✓, `udp-forwarder.ts` **84.3% stmts**): forwarder hardening completed in v1.4 Slice 1. TCP forwarder is at 100% statements/functions with only untestable `??` branches remaining. UDP forwarder remaining gaps are multi-client send/return error callbacks and a race guard — documented above. v1.4 Slices 3–4 add live tracking to these modules; 100% meaningful coverage remains the target for the new tracking code.
 - **service forwarders** (82.6% combined): same concern on the Go side. `emitPacketError` at 0% — not critical but worth covering as a follow-up.
 - **shared branch coverage** (53.6%): `index.ts` has validation/advisory branches not fully exercised. Adding live connection types in Slice 2 should include 100% meaningful coverage for new types/helpers.
-- **client portierApi.ts** (0% unit): not a blocker for v1.4 since E2E covers it, but the `fetchLiveConnections()` helper added in Slice 8 should have unit tests.
+- **client portierApi.ts** (0% unit): not a blocker for v1.4 since E2E covers it. `fetchLiveConnections()` added in Slice 7; unit tests deferred to Slice 8 (UI) or E2E.
 
 ### v1.5 Declarative Config & Drift Control
 
@@ -241,13 +241,13 @@ Same policy: 100% meaningful for all new/materially changed files in plan/diff/a
 
 ### Existing baselines — incremental ratchet (non-blocking for unrelated work)
 
-| Component | Baseline (v1.3) | After Slice 1 | After Slice 4 | After Slice 5 | After Slice 6 | v1.4 target | v1.5 target | v1.6 target |
-| --------- | --------------: | ------------: | ------------: | ------------: | ------------: | ----------: | ----------: | ----------: |
-| client    |           89.2% |         89.2% |         89.2% |         89.2% |         89.2% |       90%+  |       95%+  |        100% |
-| server    |           71.9% |     **79.6%** |     **82.2%** |         82.2% |         82.2% |       85%+  |       92%+  |        100% |
-| service   |           79.7% |         79.7% |         79.7% |     **80.6%** |     **82.1%** |       85%+  |       92%+  |        100% |
-| shared    |           82.1% |         82.1% |         82.1% |         82.1% |         82.1% |       90%+  |       95%+  |        100% |
+| Component | Baseline (v1.3) | After Slice 1 | After Slice 4 | After Slice 5 | After Slice 6 | After Slice 7 | v1.4 target | v1.5 target | v1.6 target |
+| --------- | --------------: | ------------: | ------------: | ------------: | ------------: | ------------: | ----------: | ----------: | ----------: |
+| client    |           89.2% |         89.2% |         89.2% |         89.2% |         89.2% |     **89.0%** |       90%+  |       95%+  |        100% |
+| server    |           71.9% |     **79.6%** |     **82.2%** |         82.2% |         82.2% |     **82.9%** |       85%+  |       92%+  |        100% |
+| service   |           79.7% |         79.7% |         79.7% |     **80.6%** |     **82.1%** |     **82.5%** |       85%+  |       92%+  |        100% |
+| shared    |           82.1% |         82.1% |         82.1% |         82.1% |         82.1% |         82.1% |       90%+  |       95%+  |        100% |
 
-Server is at 82.2% after Slices 3–4 added TCP and UDP live tracking modules at 100% coverage. Service is at 82.1% after Slices 5–6 added Go TCP (98.1% stmts, 100% public methods) and Go UDP session tracking (98.4% combined stmts, 100% public methods).
+Server is at 82.9% after Slices 3–4 added TCP and UDP live tracking modules at 100% coverage, and Slice 7 added `GET /api/connections` with 6 integration tests. Service is at 82.5% after Slices 5–6 added Go TCP (98.1% stmts) and Go UDP session tracking (98.4% combined stmts), and Slice 7 added 5 Go API integration tests for the connections endpoint.
 
 Do not block unrelated v1.4 work on legacy coverage gaps. Require 100% for newly added or materially changed files.

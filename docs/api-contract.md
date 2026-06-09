@@ -292,11 +292,11 @@ If the rule is currently running, its own listener already occupies the port. Th
 
 UDP reachability cannot be proven without a protocol-specific response from the target. The `target-connect` check is always `skip` for UDP rules. This is by design, not an omission.
 
-## `GET /api/connections` [Planned — v1.4]
+## `GET /api/connections`
 
 Purpose: return a read-only snapshot of active TCP connections and UDP sessions for all running forwarding rules, along with per-rule live traffic summaries.
 
-This endpoint is planned for v1.4 (Live Connection Inspector). It is not yet implemented. Both runtimes must expose the same response shape.
+Implemented in v1.4 Slice 7. Both runtimes expose the same response shape.
 
 Request body: none.
 
@@ -439,9 +439,9 @@ The client should import these from `@portier/shared`:
 - `RuleDiagnosticsResult`
 - port constants and advisory helpers
 
-### Added in v1.4 Slice 2 (implementation pending)
+### Added in v1.4 Slice 2, implemented in v1.4 Slice 7
 
-The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GET /api/connections` endpoint that returns them is not yet implemented in either runtime.
+The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GET /api/connections` endpoint is implemented in both runtimes as of v1.4 Slice 7.
 
 - `LiveConnectionsResponse` — top-level response for `GET /api/connections`
 - `TcpConnectionInfo` — individual TCP connection record; `status: LiveConnectionStatus`

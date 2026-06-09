@@ -6,6 +6,8 @@ import type {
   ExportedConfig,
   ForwardRule,
   ForwardRuleResponse,
+  LiveConnectionsResponse,
+  RuleLiveSummary,
   ActivityEventType,
   ActivitySeverity
 } from "@portier/shared";
@@ -201,6 +203,56 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
   });
 
   // ── Port advisory ─────────────────────────────────────────────────────────────
+
+  app.get("/api/connections", (_request, response) => {
+    const tcpConnections = manager.getLiveTcpConnections();
+    const udpSessions = manager.getLiveUdpSessions();
+
+    const ruleSummaries: RuleLiveSummary[] = manager.listRules().map((rule) => {
+      const tcpForRule = tcpConnections.filter((c) => c.ruleId === rule.id);
+      const udpForRule = udpSessions.filter((s) => s.ruleId === rule.id);
+
+      const activeTcpConnections = tcpForRule.length;
+      const activeUdpSessions = udpForRule.length;
+      const bytesIn = [...tcpForRule, ...udpForRule].reduce((sum, item) => sum + item.bytesIn, 0);
+      const bytesOut = [...tcpForRule, ...udpForRule].reduce((sum, item) => sum + item.bytesOut, 0);
+      const packetsIn = udpForRule.reduce((sum, s) => sum + s.packetsIn, 0);
+      const packetsOut = udpForRule.reduce((sum, s) => sum + s.packetsOut, 0);
+
+      let lastTrafficAt: string | null = null;
+      if (tcpForRule.length > 0) {
+        lastTrafficAt = [...tcpForRule].sort((a, b) => a.startedAt < b.startedAt ? 1 : -1)[0].startedAt;
+      }
+      if (udpForRule.length > 0) {
+        const udpLast = [...udpForRule].sort((a, b) => a.lastSeenAt < b.lastSeenAt ? 1 : -1)[0].lastSeenAt;
+        if (lastTrafficAt === null || udpLast > lastTrafficAt) {
+          lastTrafficAt = udpLast;
+        }
+      }
+
+      return {
+        ruleId: rule.id,
+        ruleName: rule.name,
+        protocol: rule.protocol,
+        activeTcpConnections,
+        activeUdpSessions,
+        bytesIn,
+        bytesOut,
+        packetsIn,
+        packetsOut,
+        lastTrafficAt
+      };
+    });
+
+    const result: LiveConnectionsResponse = {
+      generatedAt: new Date().toISOString(),
+      tcpConnections,
+      udpSessions,
+      ruleSummaries
+    };
+
+    response.json(result);
+  });
 
   app.get("/api/ports/advisory", (request, response) => {
     const port = Number(request.query.port);

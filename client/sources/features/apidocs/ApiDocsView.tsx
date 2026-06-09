@@ -121,8 +121,7 @@ const ENDPOINTS: EndpointDoc[] = [
     response:
       "LiveConnectionsResponse { generatedAt, tcpConnections[], udpSessions[], ruleSummaries[] }",
     notes:
-      "tcpConnections, udpSessions, and ruleSummaries are always arrays; empty arrays when nothing is active. TCP status: active. UDP status: active | idle (idle after 30s, retained up to 5min). bytesIn = client-to-target; bytesOut = target-to-client. IDs are runtime-local and do not persist across restarts. Payload contents are never exposed.",
-    planned: "v1.4"
+      "tcpConnections, udpSessions, and ruleSummaries are always arrays; empty arrays when nothing is active. TCP status: active. UDP status: active | idle (idle after 30s, retained up to 5min). bytesIn = client-to-target; bytesOut = target-to-client. IDs are runtime-local and do not persist across restarts. Payload contents are never exposed."
   }
 ];
 

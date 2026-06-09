@@ -9,6 +9,7 @@ import type {
   ForwardStatus,
   ImportMode,
   ImportResult,
+  LiveConnectionsResponse,
   PortAdvisory,
   RuleDiagnosticsResult,
   RuntimeInfo
@@ -106,6 +107,12 @@ export async function diagnoseForwardRule(ruleId: string): Promise<RuleDiagnosti
   const response = await fetch(`/api/forwards/${ruleId}/diagnose`, { method: "POST" });
   await ensureOk(response);
   return (await response.json()) as RuleDiagnosticsResult;
+}
+
+export async function fetchLiveConnections(): Promise<LiveConnectionsResponse> {
+  const response = await fetch("/api/connections");
+  await ensureOk(response);
+  return (await response.json()) as LiveConnectionsResponse;
 }
 
 export async function fetchRuntimeInfo(): Promise<RuntimeInfo> {

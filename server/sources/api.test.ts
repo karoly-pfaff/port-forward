@@ -979,3 +979,205 @@ describe("POST /api/forwards/:id/diagnose", () => {
     }, { rules: [rule] });
   });
 });
+
+describe("GET /api/connections", () => {
+  it("returns empty arrays when no rules exist", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/connections`);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(typeof body.generatedAt).toBe("string");
+      expect(Array.isArray(body.tcpConnections)).toBe(true);
+      expect(Array.isArray(body.udpSessions)).toBe(true);
+      expect(Array.isArray(body.ruleSummaries)).toBe(true);
+      expect((body.tcpConnections as unknown[]).length).toBe(0);
+      expect((body.udpSessions as unknown[]).length).toBe(0);
+      expect((body.ruleSummaries as unknown[]).length).toBe(0);
+    });
+  });
+
+  it("includes ruleSummaries for all configured rules with zero counts and null lastTrafficAt", async () => {
+    const tcpRule: ForwardRule = {
+      id: "conn-tcp",
+      name: "Conn TCP",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: await getFreeTcpPort(),
+      targetHost: "127.0.0.1",
+      targetPort: await getFreeTcpPort(),
+      enabled: false
+    };
+    const udpRule: ForwardRule = {
+      id: "conn-udp",
+      name: "Conn UDP",
+      protocol: "udp",
+      listenHost: "127.0.0.1",
+      listenPort: await getFreeUdpPort(),
+      targetHost: "127.0.0.1",
+      targetPort: await getFreeUdpPort(),
+      enabled: false,
+      udpMode: "one-way"
+    };
+
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/connections`);
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        ruleSummaries: Array<{
+          ruleId: string; ruleName: string; protocol: string;
+          activeTcpConnections: number; activeUdpSessions: number;
+          bytesIn: number; bytesOut: number; packetsIn: number; packetsOut: number;
+          lastTrafficAt: string | null;
+        }>;
+      };
+      expect(body.ruleSummaries).toHaveLength(2);
+      const tcpSummary = body.ruleSummaries.find((s) => s.ruleId === "conn-tcp");
+      expect(tcpSummary).toBeDefined();
+      expect(tcpSummary?.ruleName).toBe("Conn TCP");
+      expect(tcpSummary?.protocol).toBe("tcp");
+      expect(tcpSummary?.activeTcpConnections).toBe(0);
+      expect(tcpSummary?.activeUdpSessions).toBe(0);
+      expect(tcpSummary?.bytesIn).toBe(0);
+      expect(tcpSummary?.bytesOut).toBe(0);
+      expect(tcpSummary?.packetsIn).toBe(0);
+      expect(tcpSummary?.packetsOut).toBe(0);
+      expect(tcpSummary?.lastTrafficAt).toBeNull();
+      const udpSummary = body.ruleSummaries.find((s) => s.ruleId === "conn-udp");
+      expect(udpSummary?.protocol).toBe("udp");
+      expect(udpSummary?.lastTrafficAt).toBeNull();
+    }, { rules: [tcpRule, udpRule] });
+  });
+
+  it("generatedAt is a parseable ISO timestamp", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/connections`);
+      const body = (await response.json()) as { generatedAt: string };
+      expect(isNaN(new Date(body.generatedAt).getTime())).toBe(false);
+    });
+  });
+
+  it("shows active TCP connection in tcpConnections and in ruleSummary", async () => {
+    const targetPort = await getFreeTcpPort();
+    const listenPort = await getFreeTcpPort();
+
+    const targetServer = net.createServer();
+    await new Promise<void>((resolve) => targetServer.listen(targetPort, "127.0.0.1", resolve));
+
+    const rule: ForwardRule = {
+      id: "conn-live-tcp",
+      name: "Live TCP",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort,
+      enabled: true
+    };
+
+    try {
+      await withServer(async (port) => {
+        const client = net.createConnection({ host: "127.0.0.1", port: listenPort });
+        await new Promise<void>((resolve, reject) => {
+          client.once("connect", resolve);
+          client.once("error", reject);
+        });
+
+        try {
+          let body: {
+            tcpConnections: Array<{ ruleId: string; protocol: string; status: string }>;
+            ruleSummaries: Array<{ ruleId: string; activeTcpConnections: number; lastTrafficAt: string | null }>;
+          } | undefined;
+
+          for (let i = 0; i < 20; i++) {
+            const res = await fetch(`http://127.0.0.1:${port}/api/connections`);
+            body = (await res.json()) as typeof body;
+            if (body && body.tcpConnections.some((c) => c.ruleId === "conn-live-tcp")) break;
+            await new Promise((r) => setTimeout(r, 50));
+          }
+
+          expect(body).toBeDefined();
+          const conn = body!.tcpConnections.find((c) => c.ruleId === "conn-live-tcp");
+          expect(conn).toBeDefined();
+          expect(conn?.protocol).toBe("tcp");
+          expect(conn?.status).toBe("active");
+
+          const summary = body!.ruleSummaries.find((s) => s.ruleId === "conn-live-tcp");
+          expect(summary?.activeTcpConnections).toBeGreaterThanOrEqual(1);
+          expect(summary?.lastTrafficAt).not.toBeNull();
+        } finally {
+          client.destroy();
+        }
+      }, { rules: [rule] });
+    } finally {
+      await new Promise<void>((resolve) => targetServer.close(() => resolve()));
+    }
+  });
+
+  it("shows active UDP session in udpSessions and in ruleSummary", async () => {
+    const dgram = await import("node:dgram");
+    const targetPort = await getFreeUdpPort();
+    const listenPort = await getFreeUdpPort();
+
+    const targetSocket = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => targetSocket.bind(targetPort, "127.0.0.1", resolve));
+
+    const rule: ForwardRule = {
+      id: "conn-live-udp",
+      name: "Live UDP",
+      protocol: "udp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort,
+      enabled: true,
+      udpMode: "one-way"
+    };
+
+    try {
+      await withServer(async (port) => {
+        const clientSocket = dgram.createSocket("udp4");
+        await new Promise<void>((resolve) => clientSocket.bind(0, "127.0.0.1", resolve));
+        clientSocket.send(Buffer.from("hello"), listenPort, "127.0.0.1");
+
+        try {
+          let body: {
+            udpSessions: Array<{ ruleId: string; protocol: string; status: string }>;
+            ruleSummaries: Array<{ ruleId: string; activeUdpSessions: number; packetsIn: number; bytesIn: number; lastTrafficAt: string | null }>;
+          } | undefined;
+
+          for (let i = 0; i < 30; i++) {
+            const res = await fetch(`http://127.0.0.1:${port}/api/connections`);
+            body = (await res.json()) as typeof body;
+            if (body && body.udpSessions.some((s) => s.ruleId === "conn-live-udp")) break;
+            await new Promise((r) => setTimeout(r, 50));
+          }
+
+          expect(body).toBeDefined();
+          const sess = body!.udpSessions.find((s) => s.ruleId === "conn-live-udp");
+          expect(sess).toBeDefined();
+          expect(sess?.protocol).toBe("udp");
+
+          const summary = body!.ruleSummaries.find((s) => s.ruleId === "conn-live-udp");
+          expect(summary?.activeUdpSessions).toBeGreaterThanOrEqual(1);
+          expect(summary?.packetsIn).toBeGreaterThanOrEqual(1);
+          expect(summary?.bytesIn).toBeGreaterThanOrEqual(1);
+          expect(summary?.lastTrafficAt).not.toBeNull();
+        } finally {
+          clientSocket.close();
+        }
+      }, { rules: [rule] });
+    } finally {
+      targetSocket.close();
+    }
+  });
+
+  it("does not include payload or raw packet fields", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/connections`);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect("payload" in body).toBe(false);
+      expect("rawPacket" in body).toBe(false);
+      expect("data" in body).toBe(false);
+    });
+  });
+});

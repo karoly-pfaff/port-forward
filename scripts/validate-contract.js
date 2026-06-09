@@ -667,6 +667,74 @@ async function runScenarios(baseUrl, runtime) {
     }
   }
 
+  // ── GET /api/connections ─────────────────────────────────────────────────
+  // udpId and udpDefaultId are still present here (tcpId was deleted above).
+  // Neither rule has active traffic, so tcpConnections/udpSessions are empty and
+  // lastTrafficAt is null in all summaries.
+  {
+    const res = await api.get("/api/connections");
+    if (res.status === 200) {
+      const data = res.json();
+      const required = ["generatedAt", "tcpConnections", "udpSessions", "ruleSummaries"];
+      const missing = required.filter((f) => !(f in data));
+      if (missing.length === 0) {
+        pass("GET /api/connections → 200 with all required fields");
+      } else {
+        fail(`GET /api/connections → 200 but missing fields: ${missing.join(", ")}`);
+      }
+      if (typeof data.generatedAt === "string" && !isNaN(new Date(data.generatedAt).getTime())) {
+        pass("GET /api/connections → generatedAt is a parseable timestamp");
+      } else {
+        fail(`GET /api/connections → generatedAt not parseable: ${data.generatedAt}`);
+      }
+      if (Array.isArray(data.tcpConnections)) {
+        pass("GET /api/connections → tcpConnections is an array");
+      } else {
+        fail(`GET /api/connections → tcpConnections is ${typeof data.tcpConnections}, want array`);
+      }
+      if (Array.isArray(data.udpSessions)) {
+        pass("GET /api/connections → udpSessions is an array");
+      } else {
+        fail(`GET /api/connections → udpSessions is ${typeof data.udpSessions}, want array`);
+      }
+      if (Array.isArray(data.ruleSummaries)) {
+        pass("GET /api/connections → ruleSummaries is an array");
+      } else {
+        fail(`GET /api/connections → ruleSummaries is ${typeof data.ruleSummaries}, want array`);
+      }
+      // Two UDP rules are still present (tcpId was already deleted)
+      const expectedCount = [udpId, udpDefaultId].filter(Boolean).length;
+      if (Array.isArray(data.ruleSummaries) && data.ruleSummaries.length === expectedCount) {
+        pass(`GET /api/connections → ruleSummaries has ${expectedCount} entries (one per rule)`);
+      } else {
+        fail(`GET /api/connections → expected ${expectedCount} rule summaries, got ${Array.isArray(data.ruleSummaries) ? data.ruleSummaries.length : "non-array"}`);
+      }
+      if (Array.isArray(data.ruleSummaries) && data.ruleSummaries.length > 0) {
+        const summary = data.ruleSummaries[0];
+        const summaryRequired = ["ruleId", "ruleName", "protocol", "activeTcpConnections", "activeUdpSessions", "bytesIn", "bytesOut", "packetsIn", "packetsOut", "lastTrafficAt"];
+        const summaryMissing = summaryRequired.filter((f) => !(f in summary));
+        if (summaryMissing.length === 0) {
+          pass("GET /api/connections → RuleLiveSummary has all required fields");
+        } else {
+          fail(`GET /api/connections → RuleLiveSummary missing fields: ${summaryMissing.join(", ")}`);
+        }
+        if (summary.lastTrafficAt === null) {
+          pass("GET /api/connections → lastTrafficAt is null for idle rule");
+        } else {
+          fail(`GET /api/connections → expected lastTrafficAt null for idle rule, got: ${summary.lastTrafficAt}`);
+        }
+        const forbidden = ["payload", "rawPacket", "data", "content"];
+        if (forbidden.every((f) => !(f in data))) {
+          pass("GET /api/connections → no forbidden payload/raw packet fields");
+        } else {
+          fail("GET /api/connections → found forbidden fields in response");
+        }
+      }
+    } else {
+      fail(`GET /api/connections → expected 200, got ${res.status}`);
+    }
+  }
+
   // Cleanup remaining rules
   for (const id of [udpId, udpDefaultId].filter(Boolean)) {
     try { await api.delete(`/api/forwards/${id}`); } catch { /* best effort cleanup */ }
@@ -686,12 +754,6 @@ async function runScenarios(baseUrl, runtime) {
       fail(`GET /api/unknown → expected 404, got ${res.status}`);
     }
   }
-
-  // ── GET /api/connections [Planned — v1.4] ───────────────────────────────
-  // Shared types (LiveConnectionsResponse, TcpConnectionInfo, UdpSessionInfo,
-  // RuleLiveSummary, LiveConnectionStatus, UdpSessionStatus) are defined in
-  // @portier/shared as of Slice 2. Runtime implementation is pending.
-  skip("GET /api/connections → planned for v1.4; endpoint not yet implemented");
 
   // ── POST /api/forwards/:id/diagnose ─────────────────────────────────────
 

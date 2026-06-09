@@ -100,20 +100,21 @@ describe("ApiDocsView", () => {
       "/api/config/export",
       "/api/config/import",
       "/api/ports/advisory",
+      "/api/connections",
     ];
     for (const path of expectedPaths) {
       expect(screen.queryAllByText(path).length).toBeGreaterThan(0);
     }
   });
 
-  it("lists the GET /api/connections endpoint as planned", () => {
+  it("lists the GET /api/connections endpoint", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("/api/connections")).toBeInTheDocument();
   });
 
-  it("marks GET /api/connections with a Planned — v1.4 badge", () => {
+  it("does not show a Planned badge for GET /api/connections", () => {
     render(<ApiDocsView />);
-    expect(screen.getByText("Planned — v1.4")).toBeInTheDocument();
+    expect(screen.queryByText("Planned — v1.4")).not.toBeInTheDocument();
   });
 
   it("describes GET /api/connections purpose", () => {

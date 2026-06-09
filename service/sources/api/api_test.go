@@ -1963,3 +1963,322 @@ func TestDiagnoseRunningRuleDoesNotFailListenBind(t *testing.T) {
 		t.Fatalf("listen-bind must not be fail when rule is running (got %v)", bindCheck["status"])
 	}
 }
+
+// ── GET /api/connections tests ─────────────────────────────────────────────
+
+func TestConnectionsEmptyState(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/connections")
+	if err != nil {
+		t.Fatalf("GET /api/connections failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		GeneratedAt    string `json:"generatedAt"`
+		TCPConnections []any  `json:"tcpConnections"`
+		UDPSessions    []any  `json:"udpSessions"`
+		RuleSummaries  []any  `json:"ruleSummaries"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.GeneratedAt == "" {
+		t.Fatal("generatedAt must not be empty")
+	}
+	if _, err := time.Parse("2006-01-02T15:04:05.000Z", body.GeneratedAt); err != nil {
+		t.Fatalf("generatedAt not parseable as ISO timestamp: %v", err)
+	}
+	if body.TCPConnections == nil {
+		t.Fatal("tcpConnections must be an array, not null")
+	}
+	if body.UDPSessions == nil {
+		t.Fatal("udpSessions must be an array, not null")
+	}
+	if body.RuleSummaries == nil {
+		t.Fatal("ruleSummaries must be an array, not null")
+	}
+	if len(body.TCPConnections) != 0 || len(body.UDPSessions) != 0 || len(body.RuleSummaries) != 0 {
+		t.Fatalf("expected all empty arrays; got tcp=%d udp=%d summaries=%d",
+			len(body.TCPConnections), len(body.UDPSessions), len(body.RuleSummaries))
+	}
+}
+
+func TestConnectionsIdleRulesHaveZeroSummaries(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+  {
+    "id": "idle-tcp",
+    "name": "Idle TCP",
+    "protocol": "tcp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48111,
+    "targetHost": "127.0.0.1",
+    "targetPort": 9999,
+    "enabled": false
+  },
+  {
+    "id": "idle-udp",
+    "name": "Idle UDP",
+    "protocol": "udp",
+    "listenHost": "127.0.0.1",
+    "listenPort": 48112,
+    "targetHost": "127.0.0.1",
+    "targetPort": 9998,
+    "enabled": false,
+    "udpMode": "one-way"
+  }
+]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/connections")
+	if err != nil {
+		t.Fatalf("GET /api/connections failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusOK)
+	}
+
+	var body struct {
+		RuleSummaries  []map[string]any `json:"ruleSummaries"`
+		TCPConnections []any            `json:"tcpConnections"`
+		UDPSessions    []any            `json:"udpSessions"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.RuleSummaries) != 2 {
+		t.Fatalf("expected 2 rule summaries, got %d", len(body.RuleSummaries))
+	}
+	if body.TCPConnections == nil || len(body.TCPConnections) != 0 {
+		t.Fatal("tcpConnections must be an empty array")
+	}
+	if body.UDPSessions == nil || len(body.UDPSessions) != 0 {
+		t.Fatal("udpSessions must be an empty array")
+	}
+
+	for _, summary := range body.RuleSummaries {
+		for _, field := range []string{"ruleId", "ruleName", "protocol", "activeTcpConnections", "activeUdpSessions", "bytesIn", "bytesOut", "packetsIn", "packetsOut", "lastTrafficAt"} {
+			if _, ok := summary[field]; !ok {
+				t.Fatalf("summary missing field %q in %v", field, summary)
+			}
+		}
+		if summary["lastTrafficAt"] != nil {
+			t.Fatalf("lastTrafficAt should be null for idle rule, got %v", summary["lastTrafficAt"])
+		}
+		for _, f := range []string{"activeTcpConnections", "activeUdpSessions", "bytesIn", "bytesOut", "packetsIn", "packetsOut"} {
+			if v, ok := summary[f].(float64); !ok || v != 0 {
+				t.Fatalf("expected %s=0, got %v", f, summary[f])
+			}
+		}
+	}
+
+	var tcpSummary, udpSummary map[string]any
+	for _, s := range body.RuleSummaries {
+		if s["ruleId"] == "idle-tcp" {
+			tcpSummary = s
+		}
+		if s["ruleId"] == "idle-udp" {
+			udpSummary = s
+		}
+	}
+	if tcpSummary == nil || udpSummary == nil {
+		t.Fatal("expected summaries for idle-tcp and idle-udp")
+	}
+	if tcpSummary["protocol"] != "tcp" {
+		t.Fatalf("idle-tcp protocol = %v, want tcp", tcpSummary["protocol"])
+	}
+	if udpSummary["protocol"] != "udp" {
+		t.Fatalf("idle-udp protocol = %v, want udp", udpSummary["protocol"])
+	}
+	if tcpSummary["ruleName"] != "Idle TCP" {
+		t.Fatalf("idle-tcp ruleName = %v", tcpSummary["ruleName"])
+	}
+}
+
+func TestConnectionsResponseJSONFieldNames(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/connections")
+	if err != nil {
+		t.Fatalf("GET /api/connections failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, field := range []string{"generatedAt", "tcpConnections", "udpSessions", "ruleSummaries"} {
+		if _, ok := body[field]; !ok {
+			t.Fatalf("response missing camelCase field %q", field)
+		}
+	}
+	for _, bad := range []string{"GeneratedAt", "TcpConnections", "UdpSessions", "RuleSummaries"} {
+		if _, ok := body[bad]; ok {
+			t.Fatalf("response has PascalCase field %q; want camelCase", bad)
+		}
+	}
+}
+
+func TestConnectionsActiveTCPConnectionAppearsInResponse(t *testing.T) {
+	targetPort, stopTarget := startAPIEchoServer(t, "conn")
+	defer stopTarget()
+	listenPort := freeAPITCPPort(t)
+	handler := newTestHandler(t, "", writeTCPRuleConfig(t, "live-tcp", listenPort, targetPort, true))
+	defer handler.manager.StopAll()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	startResp, err := http.Post(server.URL+"/api/forwards/live-tcp/start", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("start rule: %v", err)
+	}
+	startResp.Body.Close()
+
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", listenPort), 3*time.Second)
+	if err != nil {
+		t.Fatalf("connect through forwarder: %v", err)
+	}
+	defer conn.Close()
+
+	type connectionsBody struct {
+		TCPConnections []map[string]any `json:"tcpConnections"`
+		RuleSummaries  []map[string]any `json:"ruleSummaries"`
+	}
+	var result connectionsBody
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		r, err := http.Get(server.URL + "/api/connections")
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		_ = json.NewDecoder(r.Body).Decode(&result)
+		r.Body.Close()
+		if len(result.TCPConnections) > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if len(result.TCPConnections) == 0 {
+		t.Fatal("expected at least one TCP connection in /api/connections response")
+	}
+	c := result.TCPConnections[0]
+	if c["ruleId"] != "live-tcp" {
+		t.Fatalf("tcpConnections[0].ruleId = %v, want live-tcp", c["ruleId"])
+	}
+	if c["protocol"] != "tcp" {
+		t.Fatalf("tcpConnections[0].protocol = %v, want tcp", c["protocol"])
+	}
+	if c["status"] != "active" {
+		t.Fatalf("tcpConnections[0].status = %v, want active", c["status"])
+	}
+
+	var summary map[string]any
+	for _, s := range result.RuleSummaries {
+		if s["ruleId"] == "live-tcp" {
+			summary = s
+			break
+		}
+	}
+	if summary == nil {
+		t.Fatal("expected summary for live-tcp in ruleSummaries")
+	}
+	if v, ok := summary["activeTcpConnections"].(float64); !ok || v < 1 {
+		t.Fatalf("activeTcpConnections = %v, want >= 1", summary["activeTcpConnections"])
+	}
+	if summary["lastTrafficAt"] == nil {
+		t.Fatal("lastTrafficAt must not be null when connection is active")
+	}
+}
+
+func TestConnectionsActiveUDPSessionAppearsInResponse(t *testing.T) {
+	targetPort, stopTarget := startUDPAPIEchoServer(t, "udpconn")
+	defer stopTarget()
+	listenPort := freeAPIUDPPort(t)
+	handler := newTestHandler(t, "", writeUDPRuleConfig(t, "live-udp", listenPort, targetPort, true))
+	defer handler.manager.StopAll()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	startResp, err := http.Post(server.URL+"/api/forwards/live-udp/start", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("start rule: %v", err)
+	}
+	startResp.Body.Close()
+
+	clientAddr, err := net.ResolveUDPAddr("udp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("resolve client addr: %v", err)
+	}
+	clientConn, err := net.ListenUDP("udp4", clientAddr)
+	if err != nil {
+		t.Fatalf("listen client udp: %v", err)
+	}
+	defer clientConn.Close()
+
+	targetAddr := &net.UDPAddr{IP: net.ParseIP("127.0.0.1"), Port: listenPort}
+
+	type sessionsBody struct {
+		UDPSessions   []map[string]any `json:"udpSessions"`
+		RuleSummaries []map[string]any `json:"ruleSummaries"`
+	}
+	var result sessionsBody
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, _ = clientConn.WriteToUDP([]byte("ping"), targetAddr)
+		r, err := http.Get(server.URL + "/api/connections")
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		_ = json.NewDecoder(r.Body).Decode(&result)
+		r.Body.Close()
+		if len(result.UDPSessions) > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	if len(result.UDPSessions) == 0 {
+		t.Fatal("expected at least one UDP session in /api/connections response")
+	}
+	s := result.UDPSessions[0]
+	if s["ruleId"] != "live-udp" {
+		t.Fatalf("udpSessions[0].ruleId = %v, want live-udp", s["ruleId"])
+	}
+	if s["protocol"] != "udp" {
+		t.Fatalf("udpSessions[0].protocol = %v, want udp", s["protocol"])
+	}
+
+	var summary map[string]any
+	for _, sm := range result.RuleSummaries {
+		if sm["ruleId"] == "live-udp" {
+			summary = sm
+			break
+		}
+	}
+	if summary == nil {
+		t.Fatal("expected summary for live-udp in ruleSummaries")
+	}
+	if v, ok := summary["activeUdpSessions"].(float64); !ok || v < 1 {
+		t.Fatalf("activeUdpSessions = %v, want >= 1", summary["activeUdpSessions"])
+	}
+	if v, ok := summary["packetsIn"].(float64); !ok || v < 1 {
+		t.Fatalf("packetsIn = %v, want >= 1", summary["packetsIn"])
+	}
+	if summary["lastTrafficAt"] == nil {
+		t.Fatal("lastTrafficAt must not be null when session is active")
+	}
+}
