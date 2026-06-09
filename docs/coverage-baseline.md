@@ -11,7 +11,7 @@ Gates ratcheted after v1.5 coverage uplift pass. Raise them as coverage improves
 | tools/cli |      92.7% |      — |      98.2% |                       92% | gated  |
 | client    |     94.71% | 90.19% |     78.26% |                  94/90/78 | gated  |
 | server    |     88.63% | 91.24% |     99.09% |                  87/89/99 | gated  |
-| service   |      84.8% |      — |      92.5% |                       84% | gated  |
+| service   |      85.8% |      — |      92.5% |                       84% | gated  |
 | shared    |    100.00% |100.00% |    100.00% |             100/100/100   | gated  |
 
 Gates are enforced by `npm run validate:coverage` (`scripts/validate-coverage.js`). Per-component: `npm run validate:coverage:<component>`.
@@ -22,7 +22,7 @@ Gates are enforced by `npm run validate:coverage` (`scripts/validate-coverage.js
 | ------------- | ---------: | -----: | --------: | -----------: | --------------------------------- |
 | tools/cli     |      92.7% |      — |      98.2% |          92% | `go test` + validate-coverage --only cli |
 | client        |     94.71% | 90.19% |     78.26% |     94/90/78 | vitest + @vitest/coverage-v8    |
-| service       |      84.8% |      — |      92.5% |          84% | `go test -coverpkg`               |
+| service       |      85.8% |      — |      92.5% |          84% | `go test -coverpkg`               |
 | shared        |    100.00% |100.00% |    100.00% | 100/100/100  | vitest + @vitest/coverage-v8    |
 | server        |     88.63% | 91.24% |     99.09% |     87/89/99 | vitest + @vitest/coverage-v8    |
 | scripts       |        N/M |      — |          — |         none | not yet measured                  |
@@ -136,9 +136,9 @@ All three require mocking or specific timing and remain from Slice 1. The regist
 
 ---
 
-## service — 84.8% statements (combined cross-package)
+## service — 85.8% statements (combined cross-package)
 
-Updated at v1.5 pre-release (2026-06-09). Previous: 82.5% (v1.4.0). Baseline (v1.3.0): 79.7%.
+Updated at v1.5 Slice 3 (2026-06-09). Previous: 84.8% (v1.5 pre-release). Baseline (v1.3.0): 79.7%.
 
 Per-package figures (package-internal test coverage):
 
@@ -147,8 +147,9 @@ Per-package figures (package-internal test coverage):
 | sources/connections              |       98.4% | TCP + UDP registries; all public methods covered |
 | sources/advisory                 |      100.0% | fully covered                                    |
 | sources/activity                 |       89.5% |                                                  |
-| sources/api                      |       81.0% | v1.5 pre: 10 new tests for advisory/import/unknown endpoints |
+| sources/api                      |       81.0% | v1.5 pre: 10 new tests; v1.5 Slice 3: 10 plan endpoint tests added |
 | sources/config                   |       77.6% | v1.5 pre: object-without-rules-key test added    |
+| sources/configplan               |      ~100%  | v1.5 Slice 3: new pure plan engine; 49 unit tests |
 | sources/forwarders               |       85.1% | emitPacketError 0% gap remains                   |
 | sources/manager                  |       83.2% | v1.5 pre: 7 new tests (SetLogger, activity, import modes) |
 | sources/options                  |       81.0% | FromOSEnv 0% (requires real env, not unit-tested)|
@@ -159,7 +160,7 @@ Per-package figures (package-internal test coverage):
 | sources/static                   |        N/T  | static file helper, no test file                 |
 | sources/version                  |        N/T  | constant, no test file                           |
 | sources/ (main.go)               |        N/T  | entry point, no test file                        |
-| **Combined total (-coverpkg)**   |   **84.8%** |                                                  |
+| **Combined total (-coverpkg)**   |   **85.8%** |                                                  |
 
 N/T = no test file. Most of these are thin wrappers, type definitions, or OS-integration code.
 
@@ -237,11 +238,13 @@ These are not part of statement coverage but are important for overall test conf
 
 ### v1.5 Declarative Config & Drift Control targets
 
-- **service config**: 100% for new diff/plan/apply logic.
+- **service configplan** (~100% ✓): `BuildConfigPlan` and `ExtractRulesRaw` at ~100% (49 unit tests). Slice 3 complete.
+- **service api** (POST /api/config/plan handler ✓): 10 integration tests. Slice 3 complete.
+- **server config-plan.ts** (100% ✓): pure plan engine, 65 unit tests. Slice 2 complete.
 - **server config-store.ts** (100% ✓): high baseline maintained.
-- **server/service api**: new `POST /api/config/plan` endpoint — 100% for new handler.
-- **tools/cli commands** (gate 92%): `config diff`, `config plan`, `config apply` — 100% target; gate will ratchet.
 - **shared validation/types** (100% ✓): new diff/plan types and validation helpers — 100% required.
+- **service config**: 100% for new diff/plan/apply logic when Slice 5 (apply) is implemented.
+- **tools/cli commands** (gate 92%): `config diff`, `config plan`, `config apply` — 100% target; gate will ratchet (Slices 4–5 pending).
 
 ---
 
@@ -258,9 +261,9 @@ All new or materially changed implementation files in v1.5 must reach 100% meani
 | cli       |  92.7% |     92.7% |     92.7% |       95%+  |        100% |
 | client    |  89.2% |    90.56% |    94.71% |       96%+  |        100% |
 | server    |  71.9% |    82.88% |    88.63% |       92%+  |        100% |
-| service   |  79.7% |     82.5% |     84.8% |       90%+  |        100% |
+| service   |  79.7% |     82.5% |     85.8% |       90%+  |        100% |
 | shared    |  82.1% |     82.1% |    100.0% |      100.0% |        100% |
 
-v1.5 pre-release coverage uplift: shared → 100%, client 90.56% → 94.71%, server 82.88% → 87.11%, service 82.5% → 84.8%. All gates ratcheted upward. v1.5 Slice 2: server 87.11% → 88.63% (`config-plan.ts` at 100%).
+v1.5 pre-release coverage uplift: shared → 100%, client 90.56% → 94.71%, server 82.88% → 87.11%, service 82.5% → 84.8%. All gates ratcheted upward. v1.5 Slice 2: server 87.11% → 88.63% (`config-plan.ts` at 100%). v1.5 Slice 3: service 84.8% → 85.8% (`configplan` package added at ~100%, 49 unit tests).
 
 Do not block unrelated v1.5 work on legacy coverage gaps. Require 100% for newly added or materially changed files in v1.5 and v1.6.

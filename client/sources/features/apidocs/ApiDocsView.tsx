@@ -133,8 +133,7 @@ const ENDPOINTS: EndpointDoc[] = [
     response:
       "ConfigPlanResponse { generatedAt, mode, summary: ConfigPlanSummary, operations: ConfigPlanOperation[], errors: ConfigPlanError[], warnings: ConfigPlanWarning[] }",
     notes:
-      "Rules are matched by stable rule id when present; otherwise by protocol+listenHost+listenPort identity. Ambiguous matches produce an error and refuse apply. hasDrift is true when any operation is add, update, or remove. destructive is true when a remove or forwarding-affecting update is present. Does not mutate running config.",
-    parity: "TypeScript server — Go service parity pending (v1.5)"
+      "Rules are matched by stable rule id when present; otherwise by protocol+listenHost+listenPort identity. Ambiguous matches produce an error and refuse apply. hasDrift is true when any operation is add, update, or remove. destructive is true when a remove or forwarding-affecting update is present. Does not mutate running config."
   },
   {
     method: "POST",

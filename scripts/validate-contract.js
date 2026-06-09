@@ -736,8 +736,8 @@ async function runScenarios(baseUrl, runtime) {
   }
 
   // ── POST /api/config/plan (v1.5) ─────────────────────────────────────────
-  // Implemented in TypeScript server (v1.5 Slice 2). Go parity pending Slice 3.
-  if (runtime === "TypeScript") {
+  // Implemented in both TypeScript server (v1.5 Slice 2) and Go service (v1.5 Slice 3).
+  {
     // Clear server state before plan tests so "empty desired → no drift" is unambiguous.
     await api.post("/api/config/import", {
       mode: "replace",
@@ -841,14 +841,10 @@ async function runScenarios(baseUrl, runtime) {
         fail(`POST /api/config/plan (missing desired) → expected 400, got ${missingRes.status}`);
       }
     }
-
-    // POST /api/config/apply — still pending v1.5 Slice 3+
-    skip("POST /api/config/apply → v1.5 Slice 3+ pending; not yet implemented");
-  } else {
-    // Go service parity pending v1.5 Slice 3
-    skip("POST /api/config/plan → TypeScript implemented; Go service parity pending (v1.5 Slice 3)");
-    skip("POST /api/config/apply → v1.5 Slice 3+ pending; not yet implemented");
   }
+
+  // POST /api/config/apply — pending v1.5 Slice 5+
+  skip("POST /api/config/apply → v1.5 Slice 5+ pending; not yet implemented");
 
   // Cleanup remaining rules
   for (const id of [udpId, udpDefaultId].filter(Boolean)) {

@@ -137,10 +137,10 @@ describe("ApiDocsView", () => {
     expect(container.textContent).toMatch(/empty arrays when nothing is active/i);
   });
 
-  it("lists the POST /api/config/plan endpoint with a parity note badge", () => {
+  it("lists the POST /api/config/plan endpoint without a parity badge (both runtimes implement it)", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("/api/config/plan")).toBeInTheDocument();
-    expect(screen.getByText(/TypeScript server.*Go service parity pending/i)).toBeInTheDocument();
+    expect(screen.queryByText(/TypeScript server.*Go service parity pending/i)).not.toBeInTheDocument();
   });
 
   it("describes POST /api/config/plan as read-only", () => {

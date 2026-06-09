@@ -2435,3 +2435,295 @@ func TestConnectionsActiveUDPSessionAppearsInResponse(t *testing.T) {
 		t.Fatal("lastTrafficAt must not be null when session is active")
 	}
 }
+
+// ── POST /api/config/plan tests ────────────────────────────────────────────
+
+func TestConfigPlanEmptyDesiredNoDrift(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(`{"desired":[]}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	for _, field := range []string{"generatedAt", "mode", "summary", "operations", "errors", "warnings"} {
+		if _, ok := body[field]; !ok {
+			t.Fatalf("missing required field: %s", field)
+		}
+	}
+	if body["mode"] != "plan" {
+		t.Fatalf("mode = %v, want plan", body["mode"])
+	}
+	summary, ok := body["summary"].(map[string]any)
+	if !ok {
+		t.Fatalf("summary is not an object")
+	}
+	if summary["hasDrift"] != false {
+		t.Fatalf("hasDrift = %v, want false", summary["hasDrift"])
+	}
+	if summary["hasErrors"] != false {
+		t.Fatalf("hasErrors = %v, want false", summary["hasErrors"])
+	}
+	if ops, ok := body["operations"].([]any); !ok || len(ops) != 0 {
+		t.Fatalf("operations must be empty array, got %v", body["operations"])
+	}
+}
+
+func TestConfigPlanMissingDesiredReturns400(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for missing desired", response.StatusCode)
+	}
+	var body struct {
+		Errors []string `json:"errors"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Errors) == 0 {
+		t.Fatal("expected errors[] in 400 response")
+	}
+}
+
+func TestConfigPlanEmptyBodyReturns400(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for empty body", response.StatusCode)
+	}
+}
+
+func TestConfigPlanMalformedBodyReturns400(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader("not-json"))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 for malformed body", response.StatusCode)
+	}
+}
+
+func TestConfigPlanAddOperationFromDesired(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(`{
+		"desired": [{"name":"New Rule","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49901,"targetHost":"127.0.0.1","targetPort":49801,"enabled":false}]
+	}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	summary := body["summary"].(map[string]any)
+	if summary["add"] != float64(1) {
+		t.Fatalf("add = %v, want 1", summary["add"])
+	}
+	if summary["hasDrift"] != true {
+		t.Fatal("hasDrift must be true when there is an add")
+	}
+
+	ops := body["operations"].([]any)
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	op := ops[0].(map[string]any)
+	if op["type"] != "add" {
+		t.Fatalf("op type = %v, want add", op["type"])
+	}
+}
+
+func TestConfigPlanInvalidDesiredReturnsStructuredErrors(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(`{"desired":[{"name":""}]}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 with structured errors for invalid desired", response.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	summary := body["summary"].(map[string]any)
+	if summary["hasErrors"] != true {
+		t.Fatal("hasErrors must be true for invalid desired rule")
+	}
+	errs, ok := body["errors"].([]any)
+	if !ok || len(errs) == 0 {
+		t.Fatal("expected non-empty errors array")
+	}
+	errObj := errs[0].(map[string]any)
+	if _, ok := errObj["code"].(string); !ok {
+		t.Fatal("error must have a code string field")
+	}
+}
+
+func TestConfigPlanDoesNotMutateCurrentConfig(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"kept","name":"Kept Rule","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48001,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	// Plan that would remove the rule
+	resp, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(`{"desired":[]}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	resp.Body.Close()
+
+	// Verify the rule still exists
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	var rules []any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("plan mutated config: expected 1 rule, got %d", len(rules))
+	}
+}
+
+func TestConfigPlanResponseShape(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(`{"desired":[]}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// generatedAt is a parseable ISO timestamp
+	generatedAt, ok := body["generatedAt"].(string)
+	if !ok || generatedAt == "" {
+		t.Fatalf("generatedAt must be a non-empty string, got %v", body["generatedAt"])
+	}
+
+	// summary has all required fields
+	summary, ok := body["summary"].(map[string]any)
+	if !ok {
+		t.Fatal("summary must be an object")
+	}
+	for _, field := range []string{"add", "update", "remove", "unchanged", "destructive", "hasDrift", "hasErrors"} {
+		if _, ok := summary[field]; !ok {
+			t.Fatalf("summary missing field: %s", field)
+		}
+	}
+
+	// operations, errors, warnings are arrays
+	if _, ok := body["operations"].([]any); !ok {
+		t.Fatalf("operations must be an array, got %T", body["operations"])
+	}
+	if _, ok := body["errors"].([]any); !ok {
+		t.Fatalf("errors must be an array, got %T", body["errors"])
+	}
+	if _, ok := body["warnings"].([]any); !ok {
+		t.Fatalf("warnings must be an array, got %T", body["warnings"])
+	}
+}
+
+func TestConfigPlanRemoveOperation(t *testing.T) {
+	configPath := writeTestConfig(t, `[
+	  {"id":"r1","name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48001,"targetHost":"127.0.0.1","targetPort":3000,"enabled":false}
+	]`)
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/plan", "application/json", strings.NewReader(`{"desired":[]}`))
+	if err != nil {
+		t.Fatalf("POST /api/config/plan failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", response.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	summary := body["summary"].(map[string]any)
+	if summary["remove"] != float64(1) {
+		t.Fatalf("remove = %v, want 1", summary["remove"])
+	}
+	ops := body["operations"].([]any)
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(ops))
+	}
+	op := ops[0].(map[string]any)
+	if op["type"] != "remove" {
+		t.Fatalf("op type = %v, want remove", op["type"])
+	}
+	if op["destructive"] != true {
+		t.Fatal("remove operation must be destructive")
+	}
+
+	// REMOVE_EXISTING warning
+	warnings := body["warnings"].([]any)
+	if len(warnings) == 0 {
+		t.Fatal("expected REMOVE_EXISTING warning")
+	}
+	w := warnings[0].(map[string]any)
+	if w["code"] != "REMOVE_EXISTING" {
+		t.Fatalf("warning code = %v, want REMOVE_EXISTING", w["code"])
+	}
+}

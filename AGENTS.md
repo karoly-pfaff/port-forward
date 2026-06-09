@@ -156,7 +156,7 @@ Coverage outputs (gitignored):
 - `coverage/shared/`, `coverage/server/`, `coverage/client/` — vitest json-summary + text
 - `coverage/` — Go .out profiles (written and removed per run)
 
-Baseline (v1.4.0): cli 92.7%, client 90.56%, service 82.5%, shared 82.1%, server 82.88%.
+Baseline (v1.5 Slice 3): cli 92.7%, client 94.71%, service 85.8%, shared 100%, server 88.63%.
 See `docs/coverage-baseline.md` for full breakdown and ratchet plan.
 
 Gates (in `scripts/validate-coverage.js`, set at v1.4.0):
@@ -404,7 +404,7 @@ v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cl
 
 v1.4 delivered the Live Connection Inspector: `GET /api/connections` in both runtimes, TCP and UDP session tracking, rule summaries, and a dedicated Live Connections UI view (TCP/UDP/Summary tabs, filters, auto-refresh). Coverage hardened before the feature was built; 116/116 contract checks pass. Tagged 1.4.0.
 
-v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. Slices 1–2 complete: shared types, API contract, matching semantics, and planned CLI commands documented; pure plan engine and `POST /api/config/plan` implemented in TypeScript server; `validate:contract` TS assertions live; API Docs parity badge added. Go service parity (Slice 3), CLI commands (Slices 4–5), and Settings UI preview (Slice 6) pending. See `docs/roadmap.md`.
+v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. Slices 1–3 complete: shared types, API contract, matching semantics, and planned CLI commands documented; pure plan engine and `POST /api/config/plan` implemented in TypeScript server (Slice 2) and Go service (Slice 3); `validate:contract` runs all 11 plan assertions against both runtimes (138 passed, 2 skipped); API Docs parity badge removed. CLI commands (Slices 4–5) and Settings UI preview (Slice 6) pending. See `docs/roadmap.md`.
 
 Quality target for v1.4 and v1.5: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This coverage push is a deliberate prerequisite for v1.6.
 

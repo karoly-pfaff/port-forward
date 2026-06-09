@@ -13,6 +13,7 @@ import (
 
 	"portier/service/sources/activity"
 	"portier/service/sources/advisory"
+	"portier/service/sources/configplan"
 	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 	"portier/service/sources/manager"
@@ -140,6 +141,11 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost && r.URL.Path == "/api/config/import" {
 		h.importConfig(w, r)
+		return
+	}
+
+	if r.Method == http.MethodPost && r.URL.Path == "/api/config/plan" {
+		h.configPlan(w, r)
 		return
 	}
 
@@ -330,6 +336,32 @@ func (h *Handler) reorderForwards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, rulesToResponses(h.manager.ListRules()))
+}
+
+func (h *Handler) configPlan(w http.ResponseWriter, r *http.Request) {
+	raw, err := readBody(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {err.Error()}})
+		return
+	}
+
+	var body struct {
+		Desired *json.RawMessage `json:"desired"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {err.Error()}})
+		return
+	}
+	if body.Desired == nil {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {"desired is required."}})
+		return
+	}
+
+	plan := configplan.BuildConfigPlan(configplan.Input{
+		CurrentRules: h.manager.ListRules(),
+		DesiredRaw:   *body.Desired,
+	})
+	writeJSON(w, http.StatusOK, plan)
 }
 
 func (h *Handler) importConfig(w http.ResponseWriter, r *http.Request) {
