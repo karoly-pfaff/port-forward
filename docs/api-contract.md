@@ -383,11 +383,11 @@ Field notes:
 - UDP `one-way` mode: per-client session metadata may be limited; see UDP mode notes.
 - UDP `bidirectional-last-client` mode: only the most recent client session is available.
 
-## `POST /api/config/plan` — Implemented (TypeScript server); Go service parity pending (v1.5 Slice 3)
+## `POST /api/config/plan` — Implemented (both runtimes, v1.5)
 
 Purpose: compare a desired config against the currently running Portier configuration and return a structured plan showing adds, updates, removes, and unchanged rules. Read-only — does not modify state.
 
-Implemented in v1.5 Slice 2 in the TypeScript server. Go service parity is pending v1.5 Slice 3.
+Implemented in v1.5 Slice 2 (TypeScript server) and v1.5 Slice 3 (Go service). Both runtimes pass all contract assertions.
 
 Request body:
 

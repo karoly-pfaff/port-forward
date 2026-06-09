@@ -1,6 +1,6 @@
 # E2E Coverage
 
-Workflow coverage baseline for Portier E2E tests (Playwright). Updated at v1.5 pre-release (2026-06-09).
+Workflow coverage baseline for Portier E2E tests (Playwright). Updated at v1.5.0 (2026-06-09).
 
 ## Setup
 
@@ -15,41 +15,45 @@ Workflow coverage baseline for Portier E2E tests (Playwright). Updated at v1.5 p
 
 | File | Tests | Description |
 | ---- | ----: | ----------- |
-| `tests/e2e/portier.spec.ts` | 13 | App shell, CRUD, activity, settings import, API docs, mobile, dashboard, form validation, diagnose, API docs connections |
-| `tests/e2e/settings.spec.ts` | 4 | Replace import, invalid JSON, export shape, runtime info |
+| `tests/e2e/portier.spec.ts` | 7 | App shell, CRUD, start/stop, merge import, form validation |
+| `tests/e2e/settings.spec.ts` | 6 | Replace import, invalid JSON, export shape, runtime info, plan preview, plan apply |
 | `tests/e2e/connections.spec.ts` | 8 | Live Connections view (v1.4): title/tabs, empty states, switching, stats bar, filters, auto-refresh, footer counts, rule filter |
-| `tests/e2e/tcp.spec.ts` | 2 | Real TCP forwarding, TCP activity events |
-| `tests/e2e/udp.spec.ts` | 4 | UDP one-way, bidirectional-last-client, multi-client, UDP activity events |
-| **Total** | **31** | |
+| `tests/e2e/activity.spec.ts` | 1 | Activity log view opens and shows events |
+| `tests/e2e/apidocs.spec.ts` | 2 | Endpoint list renders, GET /api/connections listed |
+| `tests/e2e/dashboard.spec.ts` | 1 | Dashboard stat cards render |
+| `tests/e2e/mobile.spec.ts` | 1 | Mobile hamburger / sidebar toggle |
+| `tests/e2e/tcp.spec.ts` | 1 | Real TCP forwarding |
+| `tests/e2e/udp.spec.ts` | 5 | UDP one-way, bidirectional-last-client, multi-client, UDP activity events, TCP activity events |
+| **Total** | **32** | |
 
 ## Workflow Coverage Matrix
 
 | Area | Workflow | E2E coverage | Priority | Notes |
 | ---- | -------- | :----------: | -------- | ----- |
-| App shell | navigation / sidebar loads | yes | high | portier.spec.ts A |
-| App shell | mobile hamburger / sidebar | yes | medium | portier.spec.ts I |
-| App shell | dashboard stat cards | yes | medium | portier.spec.ts dashboard |
-| Rules | create rule (full form) | yes | high | portier.spec.ts B |
-| Rules | edit rule (pre-filled, save) | yes | high | portier.spec.ts C |
-| Rules | delete rule (confirmation) | yes | high | portier.spec.ts E |
-| Rules | start / stop rule | yes | high | portier.spec.ts D |
-| Rules | form validation — name required | yes | high | portier.spec.ts J |
+| App shell | navigation / sidebar loads | yes | high | portier.spec.ts |
+| App shell | mobile hamburger / sidebar | yes | medium | mobile.spec.ts |
+| App shell | dashboard stat cards | yes | medium | dashboard.spec.ts |
+| Rules | create rule (full form) | yes | high | portier.spec.ts |
+| Rules | edit rule (pre-filled, save) | yes | high | portier.spec.ts |
+| Rules | delete rule (confirmation) | yes | high | portier.spec.ts |
+| Rules | start / stop rule | yes | high | portier.spec.ts |
+| Rules | form validation — name required | yes | high | portier.spec.ts |
 | Rules | form validation — duplicate binding server error | no | medium | future: create duplicate, expect friendlyErrorMessage |
 | Rules | drag-to-reorder | no | low | not currently E2E tested |
 | Rules | search / filter in rule list | no | low | UI filter, low risk |
-| Activity | view opens, events shown | yes | medium | portier.spec.ts F |
-| Activity | filter by rule ID via API | yes | medium | portier.spec.ts F (API check) |
-| Diagnostics | diagnose rule, panel shows results | yes | high | portier.spec.ts K |
+| Activity | view opens, events shown | yes | medium | activity.spec.ts |
+| Activity | filter by rule ID via API | yes | medium | activity.spec.ts (API check) |
+| Diagnostics | diagnose rule, panel shows results | yes | high | portier.spec.ts |
 | Diagnostics | close diagnostics panel | no | low | trivial; covered by unit tests |
-| Config | export config — download shape | yes | high | settings.spec.ts C |
-| Config | import config — merge mode | yes | high | portier.spec.ts G, settings.spec.ts A |
-| Config | import config — replace mode (confirm dialog) | yes | high | settings.spec.ts A (v1.5 dependency) |
-| Config | import config — invalid JSON rejected | yes | high | settings.spec.ts B (v1.5 dependency) |
-| Settings | Runtime/Environment section | yes | medium | settings.spec.ts D |
+| Config | export config — download shape | yes | high | settings.spec.ts |
+| Config | import config — merge mode | yes | high | portier.spec.ts, settings.spec.ts |
+| Config | import config — replace mode (confirm dialog) | yes | high | settings.spec.ts |
+| Config | import config — invalid JSON rejected | yes | high | settings.spec.ts |
+| Settings | Runtime/Environment section | yes | medium | settings.spec.ts |
 | Settings | copy management URL / config path | no | low | clipboard tests are brittle |
 | Settings | diagnostics export bundle | no | medium | future: capture download, check shape |
-| API Docs | endpoint list renders | yes | medium | portier.spec.ts H |
-| API Docs | GET /api/connections listed | yes | high | portier.spec.ts L (v1.4 parity) |
+| API Docs | endpoint list renders | yes | medium | apidocs.spec.ts |
+| API Docs | GET /api/connections listed | yes | high | apidocs.spec.ts (v1.4 parity) |
 | Live Connections | page loads with title and tabs | yes | high | connections.spec.ts A (v1.4) |
 | Live Connections | TCP tab empty state | yes | high | connections.spec.ts B (v1.4) |
 | Live Connections | tab switching TCP/UDP/Summary | yes | high | connections.spec.ts C (v1.4) |
@@ -99,13 +103,14 @@ The `tests/e2e/fixtures/` directory is currently empty; use `tests/fixtures/conf
 
 ## E2E Gaps and v1.5 Readiness Notes
 
-### Covered for v1.5 prerequisites
+### Covered for v1.5 (complete)
 - Config export / import merge / import replace with confirmation — all covered.
 - Validation error display (name required) — covered.
 - Settings page renders and shows config/runtime area — covered.
-- Rule list state after import — covered in settings.spec.ts A (replace) and portier.spec.ts G (merge).
+- Rule list state after import — covered in settings.spec.ts (replace) and portier.spec.ts (merge).
 - Live Connections page and all tab/filter/toggle controls — covered (8 tests).
 - API Docs lists `/api/connections` — covered.
+- Plan & Apply UI: plan preview, apply, success message — covered in settings.spec.ts.
 
 ### Known gaps (non-blocking for v1.5 feature work)
 - **Server offline / API error state**: no test exercises the error banner shown when the backend is unreachable. Add in a future slice.

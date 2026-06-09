@@ -69,7 +69,7 @@ Shared and TypeScript coverage:
 - [x] **TypeScript server UDP session tracking (v1.4 Slice 4)** — added `UdpSessionRegistry` (`server/sources/connections/udp-session-registry.ts`): runtime-local UUID IDs, composite session keys (`ruleId:mode:clientAddress:clientPort`), `openOrTouchSession`/`recordInbound`/`recordOutbound`/`closeSession`/`closeSessionsForRule`/`pruneExpired`/`snapshot`/`snapshotForRule` API. Constants: `UDP_SESSION_IDLE_MS = 30_000`, `UDP_SESSION_EXPIRE_MS = 300_000`. `snapshot` filters expired sessions without pruning; `pruneExpired` removes them explicitly. Wired into `UdpForwarder`: one-way and last-client tracked via inbound packet handler (last-client change detects new client, closes old session, opens new); multi-client tracked per client endpoint in `handleMultiClientMessage`; `recordOutbound` called on target responses in last-client and multi-client; `closeSession` called on multi-client timeout; `closeSessionsForRule` called in `stop()`. `ForwardManager` owns shared `UdpSessionRegistry`, injects via 4th constructor parameter, exposes `getLiveUdpSessions()` for internal use. No public `GET /api/connections` endpoint added yet. Registry: 100% stmts/branch/funcs; 49 unit tests. `udp-forwarder.ts`: 86.3% stmts (up from 84.3%), 84% branch, 100% funcs; 9 new integration tests. Server overall: 80.55% → 82.21% stmts.
 - [x] **Go service TCP live tracking (v1.4 Slice 5)** — added `TcpConnectionRegistry` (`service/sources/connections/tcp_connection_registry.go`): runtime-local UUID IDs, `OpenConnection`/`AddBytesIn`/`AddBytesOut`/`CloseConnection`/`CloseConnectionsForRule`/`Snapshot`/`SnapshotForRule` API, concurrency-safe (mutex for map ops, atomic ops for byte counters), serializable `TcpConnectionInfo` snapshots with `durationMs` at snapshot time. `NewTCPForwarderWithRegistry` constructor added; `countingWriter` extended with `onBytes` callback; `CloseConnectionsForRule` called in `Stop()` after `wg.Wait()` as belt-and-suspenders cleanup. `Manager` owns shared `TcpConnectionRegistry`, passes it to each `TCPForwarder` via `NewTCPForwarderWithRegistry`, exposes `GetLiveTCPConnections()` for internal use. No public `GET /api/connections` endpoint added yet. Registry: 98.1% stmts (100% all public methods; 1 untestable `rand.Read` error path in private `generateConnectionID`); 26 unit tests. Forwarder: 8 new integration tests. Service overall: 79.7% → 80.6% stmts.
 
-Playwright E2E coverage (31 tests across 5 spec files — see `docs/e2e-coverage.md` for full matrix):
+Playwright E2E coverage (32 tests across 9 spec files — see `docs/e2e-coverage.md` for full matrix):
 
 - [x] App load, sidebar navigation, mobile hamburger/sidebar, Dashboard stat cards
 - [x] Add/edit/delete rule flows
@@ -158,17 +158,17 @@ Pass `--no-build` to reuse an existing `build/portier/` and skip the package bui
 - macOS `.app` bundle or Homebrew formula.
 - Linux hardening beyond the example systemd unit.
 
-## Coverage Baseline (v1.5 pre-release)
+## Coverage Baseline (v1.5.0)
 
-Updated at v1.5 pre-release (2026-06-09). See `docs/coverage-baseline.md` for full per-file breakdown and ratchet plan.
+Updated at v1.5.0 release (2026-06-09). See `docs/coverage-baseline.md` for full per-file breakdown and ratchet plan.
 
 | Component  | Statements | Branch | Functions |      Gate | Run command                      |
 | ---------- | ---------: | -----: | --------: | --------: | -------------------------------- |
-| tools/cli  |      92.7% |      — |         — |       92% | `npm run coverage:cli`           |
-| client     |     94.71% | 90.0%+ |    78%+   |  94/90/78 | `npm run coverage:client`        |
-| service    |      84.8% |      — |         — |       84% | `npm run coverage:service`       |
+| tools/cli  |      93.2% |      — |     98.6% |       93% | `npm run coverage:cli`           |
+| client     |     95.1%  | 90.1%  |    79.9%  |  94/90/79 | `npm run coverage:client`        |
+| service    |      85.8% |      — |     93.2% |       85% | `npm run coverage:service`       |
 | shared     |     100.0% |  100%  |    100%   | 100/100/100 | `npm run coverage:shared`      |
-| server     |     87.11% | 89.0%+ |    99.0%+ |  87/89/99 | `npm run coverage:server`        |
+| server     |     88.7%  | 91.0%  |    99.1%  |  88/90/99 | `npm run coverage:server`        |
 | scripts    |        N/M |      — |         — |      none | not yet measured                 |
 
 Gate format: `stmts/branch/funcs` thresholds. All gates enforced at v1.4.0.
@@ -227,8 +227,8 @@ Checklist items to add per slice as work proceeds:
 - [x] **Slice 4** — CLI `config plan` and `config diff` commands; `--json` output; `--fail-on-drift` with exit code 4; 100% meaningful coverage. `portier config plan <file>` and `portier config diff <file>` added. Both validate the file locally then call `POST /api/config/plan`. Plan: structured summary + per-operation listing with field-level changes and `[destructive]` flag. Diff: `+`/`~`/`-`/`=` prefixed visual output; `--show-unchanged` flag. `--fail-on-drift` exits 4 when drift and no plan errors; plan errors take priority (exit 1). `--json` prints raw `ConfigPlanResponse`. New client types: `ConfigPlanRuleSnapshot`, `ConfigPlanChange`, `ConfigPlanOperation`, `ConfigPlanSummary`, `ConfigPlanError`, `ConfigPlanWarning`, `ConfigPlanResponse`, `ConfigPlanDesired`, `ConfigPlanRequest`, `PlanConfig` method. `configcmd.go` extended with `RunConfigPlan`, `RunConfigDiff`, all formatting helpers. New test file `configplancmd_test.go` (35 tests) + 5 client tests. CLI coverage: 92.7% → 93.2% (gate 92%). All 5 coverage gates pass.
 - [x] **Slice 5** — CLI `config apply` with `--yes`, `--dry-run`, `--backup-out`; `POST /api/config/apply` in TypeScript server and Go service. Handler logic: plan errors → 200 ok:false (no mutation); dryRun → 200 ok:true (no mutation, no yes required); destructive without yes → 400; drift → replace import with current ruleId injected for key-matched rules; no drift → 200 ok:true no import. Response: `ConfigApplyResponse { ok, dryRun, appliedAt, plan, applied }`. CLI: local file validation, backup export (skipped on dry-run), human output ("Nothing to apply" / "Dry run complete" / "Config applied"). 25 `configapplycmd_test.go` tests + 7 client tests + 11 Go API tests. `validate:contract` 156/156. API Docs updated, `docs/api-contract.md` updated. All 5 coverage gates pass.
 - [x] **Slice 6** — Settings UI Plan & Apply: `planHelpers.ts` (4 helpers, 17 tests); `planConfig`/`applyConfig` API helpers with tests; Plan & Apply section in SettingsView with file picker, plan preview (summary counts, errors, warnings, operation list, destructive checkbox), apply (yes:true, ok:false handling, form clear on success); 23 new unit tests; E2E test in `settings.spec.ts`; E2E file label exact-match fix in portier.spec.ts/settings.spec.ts; client branch 90.1% (gate 90%); all 5 coverage gates pass; 32/32 E2E pass.
-- [ ] **Slice 7** — Contract/config validation and coverage gates: `validate:contract` fully checks both endpoints; coverage gates raised.
-- [ ] **Slice 8** — v1.5 readiness audit, version bump, changelog, tag.
+- [x] **Slice 7** — Contract/config validation and coverage gate hardening: `validate:contract` 156/156 assertions pass against both runtimes for all plan and apply scenarios. Coverage gates ratcheted to v1.5.0 values: cli ≥93%, server ≥88/90/99, client ≥94/90/79, service ≥85%, shared 100%. All new v1.5 code verified at 100% meaningful coverage.
+- [x] **Slice 8** — v1.5 readiness audit, version bump to 1.5.0, changelog finalized. Full validation suite passed: lint, typecheck, 756 unit tests, all 5 coverage gates, 156/156 contract assertions, 32/32 E2E. `validate:runtime:smoke` passed. `build:release:current` produced release artifacts. Tag v1.5.0 ready.
 
 ---
 

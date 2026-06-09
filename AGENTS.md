@@ -89,10 +89,15 @@ E2E server binds to `127.0.0.1:47890`. Do not include `test:e2e` in `npm run tes
 
 Files:
 - `playwright.config.ts` — webServer, browser, reporter config
-- `tests/e2e/portier.spec.ts` — UI flow tests (app load, CRUD, start/stop, merge import, activity, mobile)
-- `tests/e2e/settings.spec.ts` — Settings import/export: replace-mode fixture import, invalid-JSON rejection, export download shape
-- `tests/e2e/tcp.spec.ts` — TCP real forwarding E2E
-- `tests/e2e/udp.spec.ts` — UDP one-way, last-client, multi-client E2E; activity assertions
+- `tests/e2e/portier.spec.ts` — App shell, CRUD, start/stop, merge import, form validation, diagnose
+- `tests/e2e/settings.spec.ts` — Replace import, invalid JSON, export shape, runtime info, plan preview, plan apply
+- `tests/e2e/connections.spec.ts` — Live Connections view: title/tabs, empty states, switching, stats bar, filters, auto-refresh, footer counts, rule filter
+- `tests/e2e/activity.spec.ts` — Activity log view opens and shows events
+- `tests/e2e/apidocs.spec.ts` — Endpoint list renders, GET /api/connections listed
+- `tests/e2e/dashboard.spec.ts` — Dashboard stat cards render
+- `tests/e2e/mobile.spec.ts` — Mobile hamburger / sidebar toggle
+- `tests/e2e/tcp.spec.ts` — Real TCP forwarding E2E
+- `tests/e2e/udp.spec.ts` — UDP one-way, last-client, multi-client E2E; UDP and TCP activity assertions
 - `tests/e2e/helpers/port.ts` — `getFreePort`, `getFreeTcpPort`, `getFreeUdpPort`
 - `tests/e2e/helpers/network.ts` — TCP/UDP echo servers, receivers, clients
 - `tests/e2e/helpers/ui.ts` — `addRuleViaUI`, `startRuleViaUI`, `stopRuleViaUI`
@@ -156,15 +161,15 @@ Coverage outputs (gitignored):
 - `coverage/shared/`, `coverage/server/`, `coverage/client/` — vitest json-summary + text
 - `coverage/` — Go .out profiles (written and removed per run)
 
-Baseline (v1.5 Slice 4): cli 93.2%, client 94.71%, service 85.8%, shared 100%, server 88.63%.
+Baseline (v1.5.0): cli 93.2%, client 95.1%/90.1%/79.9%, service 85.8%, shared 100%, server 88.7%/91.0%/99.1%.
 See `docs/coverage-baseline.md` for full breakdown and ratchet plan.
 
-Gates (in `scripts/validate-coverage.js`, set at v1.4.0):
-- cli: statements ≥ 92%
-- client: statements ≥ 90%, branches ≥ 89%, functions ≥ 76%
-- server: statements ≥ 82%, branches ≥ 86%, functions ≥ 97%
-- service: statements ≥ 82%
-- shared: statements ≥ 82%, branches ≥ 54%, functions ≥ 90%
+Gates (in `scripts/validate-coverage.js`, ratcheted at v1.5.0):
+- cli: statements ≥ 93%
+- client: statements ≥ 94%, branches ≥ 90%, functions ≥ 79%
+- server: statements ≥ 88%, branches ≥ 90%, functions ≥ 99%
+- service: statements ≥ 85%
+- shared: statements ≥ 100%, branches ≥ 100%, functions ≥ 100%
 
 Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.5 and v1.6. Existing baselines ratcheted incrementally. Do not lower gates without explicit rationale. Do not remove gates to make a release pass.
 
@@ -404,7 +409,7 @@ v1.3 targets native CLI and automation: a Go-based `portier` CLI under `tools/cl
 
 v1.4 delivered the Live Connection Inspector: `GET /api/connections` in both runtimes, TCP and UDP session tracking, rule summaries, and a dedicated Live Connections UI view (TCP/UDP/Summary tabs, filters, auto-refresh). Coverage hardened before the feature was built; 116/116 contract checks pass. Tagged 1.4.0.
 
-v1.5 targets declarative config and drift control: plan/diff/apply workflows so users can compare desired config files with the running configuration, preview changes, and apply them safely from the CLI or UI. Slices 1–6 complete: shared types, API contract, matching semantics (Slice 1); pure plan engine and `POST /api/config/plan` in TypeScript server (Slice 2) and Go service (Slice 3); `portier config plan` and `portier config diff` CLI commands (Slice 4); `POST /api/config/apply` in both runtimes and `portier config apply --yes/--dry-run/--backup-out` CLI command (Slice 5); Settings UI Plan & Apply section — `planHelpers.ts`, `planConfig`/`applyConfig` API helpers, full plan preview with summary counts/errors/warnings/operations/destructive confirm, apply flow with form-clear-on-success (Slice 6); `validate:contract` 156/156; 230+ CLI tests; 32/32 E2E tests pass; all 5 coverage gates pass. Remaining: contract/config validation and coverage gate hardening (Slice 7), readiness audit and release (Slice 8). See `docs/roadmap.md`.
+v1.5 delivered declarative config and drift control. All 8 slices complete: shared types, API contract, matching semantics (Slice 1); pure plan engine and `POST /api/config/plan` in TypeScript server (Slice 2) and Go service (Slice 3); `portier config plan` and `portier config diff` CLI commands (Slice 4); `POST /api/config/apply` in both runtimes and `portier config apply --yes/--dry-run/--backup-out` CLI command (Slice 5); Settings UI Plan & Apply section — `planHelpers.ts`, `planConfig`/`applyConfig` API helpers, full plan preview with summary counts/errors/warnings/operations/destructive confirm, apply flow with form-clear-on-success (Slice 6); `validate:contract` 156/156; coverage gate hardening — all 5 gates ratcheted to v1.5.0 values (Slice 7); readiness audit, version bump to 1.5.0, changelog finalized (Slice 8). Tagged 1.5.0. See `docs/roadmap.md`.
 
 Quality target for v1.4 and v1.5: all newly added or materially changed implementation areas should reach 100% meaningful test coverage, with explicit coverage gates where practical. This coverage push is a deliberate prerequisite for v1.6.
 

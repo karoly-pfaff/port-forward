@@ -1,17 +1,15 @@
 # Coverage Baseline
 
-Measured at v1.5 pre-release (2026-06-09). Updated from v1.4.0 (cli 92.7%, client 90.56%, service 82.5%, shared 82.1%, server 82.88%). CLI updated at v1.5 Slice 4 (92.7% → 93.2%).
+Measured at v1.5.0 release (2026-06-09). Updated from v1.4.0 (cli 92.7%, client 90.56%, service 82.5%, shared 82.1%, server 82.88%). CLI updated at v1.5 Slice 4 (92.7% → 93.2%). Gates ratcheted at v1.5.0 release.
 
-## v1.5 Pre-Release Gates (ratcheted from v1.4.0)
-
-Gates ratcheted after v1.5 coverage uplift pass. Raise them as coverage improves. Do not lower gates without explicit rationale.
+## v1.5.0 Release Gates
 
 | Component | Statements | Branch | Functions | Gate (stmts/branch/funcs) | Status |
 | --------- | ---------: | -----: | --------: | ------------------------: | ------ |
-| tools/cli |      93.2% |      — |      98.6% |                       92% | gated  |
-| client    |     94.71% | 90.19% |     78.26% |                  94/90/78 | gated  |
-| server    |     88.63% | 91.24% |     99.09% |                  87/89/99 | gated  |
-| service   |      85.8% |      — |      92.5% |                       84% | gated  |
+| tools/cli |      93.2% |      — |      98.6% |                       93% | gated  |
+| client    |     95.1%  | 90.1%  |     79.9%  |                  94/90/79 | gated  |
+| server    |     88.7%  | 91.0%  |     99.1%  |                  88/90/99 | gated  |
+| service   |      85.8% |      — |      92.5% |                       85% | gated  |
 | shared    |    100.00% |100.00% |    100.00% |             100/100/100   | gated  |
 
 Gates are enforced by `npm run validate:coverage` (`scripts/validate-coverage.js`). Per-component: `npm run validate:coverage:<component>`.
@@ -20,11 +18,11 @@ Gates are enforced by `npm run validate:coverage` (`scripts/validate-coverage.js
 
 | Component     | Statements | Branch | Functions |         Gate | Tooling                           |
 | ------------- | ---------: | -----: | --------: | -----------: | --------------------------------- |
-| tools/cli     |      93.2% |      — |      98.6% |          92% | `go test` + validate-coverage --only cli |
-| client        |     94.71% | 90.19% |     78.26% |     94/90/78 | vitest + @vitest/coverage-v8    |
-| service       |      85.8% |      — |      92.5% |          84% | `go test -coverpkg`               |
+| tools/cli     |      93.2% |      — |      98.6% |          93% | `go test` + validate-coverage --only cli |
+| client        |     95.1%  | 90.1%  |     79.9%  |     94/90/79 | vitest + @vitest/coverage-v8    |
+| service       |      85.8% |      — |      92.5% |          85% | `go test -coverpkg`               |
 | shared        |    100.00% |100.00% |    100.00% | 100/100/100  | vitest + @vitest/coverage-v8    |
-| server        |     88.63% | 91.24% |     99.09% |     87/89/99 | vitest + @vitest/coverage-v8    |
+| server        |     88.7%  | 91.0%  |     99.1%  |     88/90/99 | vitest + @vitest/coverage-v8    |
 | scripts       |        N/M |      — |          — |         none | not yet measured                  |
 
 Coverage commands:
@@ -204,7 +202,7 @@ Coverage measurement for scripts is not currently feasible without dedicated tes
 
 These are not part of statement coverage but are important for overall test confidence:
 
-- **E2E (Playwright)**: 5 spec files, 31 tests total. Covers app load, CRUD, form validation, diagnostics, import/export, settings runtime info, API docs (including `/api/connections`), Live Connections view (all tabs, filters, auto-refresh, rule filter), TCP real forwarding, and 3 UDP modes. Runs against the real TypeScript server. Does not produce statement coverage metrics. See `docs/e2e-coverage.md` for the full workflow matrix.
+- **E2E (Playwright)**: 9 spec files, 32 tests total. Covers app load, CRUD, form validation, diagnostics, import/export, settings runtime info, plan & apply preview workflow, API docs (including `/api/connections`), Live Connections view (all tabs, filters, auto-refresh, rule filter), TCP real forwarding, and 3 UDP modes. Runs against the real TypeScript server. Does not produce statement coverage metrics. See `docs/e2e-coverage.md` for the full workflow matrix.
 - **validate:contract**: API parity between TypeScript server and Go service. Runs when Go binary is present.
 - **validate:config**: Fixture-based config compatibility (load, import, export, rejection, UDP defaults). 8 valid fixtures, multiple invalid fixtures.
 - **validate:binary**: Runtime binary smoke tests (start, health, static, shutdown).
