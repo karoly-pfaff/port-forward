@@ -29,6 +29,15 @@ describe("ConfigStore", () => {
     await expect(store.load()).rejects.toThrow();
   });
 
+  it("throws when the config file contains a non-array JSON value", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "portier-config-"));
+    tempDirs.push(dir);
+    const filePath = join(dir, "forwards.json");
+    await writeFile(filePath, JSON.stringify({ rules: [] }), "utf8");
+    const store = new ConfigStore(filePath);
+    await expect(store.load()).rejects.toThrow("Config file must contain an array of forward rules.");
+  });
+
   it("throws when the config file contains an invalid rule", async () => {
     const dir = await mkdtemp(join(tmpdir(), "portier-config-"));
     tempDirs.push(dir);

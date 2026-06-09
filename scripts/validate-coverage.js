@@ -58,12 +58,14 @@ const coverDir = join(repoRoot, "coverage");
 // All specified thresholds must pass for the component to PASS.
 // Go components (service, cli): branches are "Unknown"; only gate statements.
 //
-// Set at v1.4.0 release (2026-06-09). Raise these when coverage improves.
+// Ratcheted at v1.5 pre-release (2026-06-09). Raise these when coverage improves.
+// Actuals at ratchet: shared 100/100/100, server 87.1/89.9/99.0,
+//   client 94.7/90.2/78.3, service 84.8, cli 92.7
 const GATES = {
-  shared:  { statements: 82, branches: 54, functions: 90 },
-  server:  { statements: 82, branches: 86, functions: 97 },
-  client:  { statements: 90, branches: 89, functions: 76 },
-  service: { statements: 82 },
+  shared:  { statements: 100, branches: 100, functions: 100 },
+  server:  { statements: 87, branches: 89, functions: 99 },
+  client:  { statements: 94, branches: 90, functions: 78 },
+  service: { statements: 84 },
   cli:     { statements: 92 },
 };
 

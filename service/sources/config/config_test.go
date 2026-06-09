@@ -162,6 +162,17 @@ func TestSaveRejectsInvalidRulesWithoutOverwriting(t *testing.T) {
 	}
 }
 
+func TestObjectWithoutRulesKeyReturnsError(t *testing.T) {
+	configPath := writeConfig(t, `{"version": "1", "exportedAt": "2026-01-01T00:00:00.000Z"}`)
+	_, err := NewStore(configPath).Load()
+	if err == nil {
+		t.Fatal("expected error for object without rules key")
+	}
+	if !strings.Contains(err.Error(), "Config file must contain an array of forward rules.") {
+		t.Fatalf("error = %q, want array error", err)
+	}
+}
+
 func writeConfig(t *testing.T, content string) string {
 	t.Helper()
 	configPath := filepath.Join(t.TempDir(), "forwards.json")

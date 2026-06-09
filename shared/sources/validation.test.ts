@@ -3,6 +3,7 @@ import {
   getCommonPortInfo,
   getPortAdvisories,
   isRecommendedForwardPort,
+  listenKey,
   validateForwardRule,
   validateForwardRulePatch
 } from "./index.js";
@@ -68,6 +69,216 @@ describe("ForwardRule validation", () => {
   });
 });
 
+describe("listenKey", () => {
+  it("formats protocol:host:port", () => {
+    expect(listenKey({ protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48001 })).toBe("tcp:127.0.0.1:48001");
+    expect(listenKey({ protocol: "udp", listenHost: "0.0.0.0", listenPort: 9000 })).toBe("udp:0.0.0.0:9000");
+  });
+});
+
+describe("validateForwardRulePatch trimming and optional fields", () => {
+  it("trims string fields when provided", () => {
+    const result = validateForwardRulePatch({
+      name: "  My Rule  ",
+      listenHost: "  127.0.0.1  ",
+      targetHost: "  example.com  "
+    });
+    expect(result.valid).toBe(true);
+    expect(result.value?.name).toBe("My Rule");
+    expect(result.value?.listenHost).toBe("127.0.0.1");
+    expect(result.value?.targetHost).toBe("example.com");
+  });
+
+  it("accepts optional id when provided as non-empty string", () => {
+    const result = validateForwardRulePatch({ id: "rule-abc" });
+    expect(result.valid).toBe(true);
+    expect(result.value?.id).toBe("rule-abc");
+  });
+
+  it("rejects empty string id", () => {
+    expect(validateForwardRulePatch({ id: "  " }).valid).toBe(false);
+  });
+
+  it("accepts absent fields without error", () => {
+    const result = validateForwardRulePatch({ listenPort: 48001 });
+    expect(result.valid).toBe(true);
+    expect(result.value?.name).toBeUndefined();
+    expect(result.value?.listenHost).toBeUndefined();
+    expect(result.value?.targetHost).toBeUndefined();
+  });
+
+  it("rejects enabled non-boolean", () => {
+    const result = validateForwardRulePatch({ enabled: "yes" as unknown as boolean });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("enabled must be a boolean.");
+  });
+
+  it("rejects empty string targetHost", () => {
+    expect(validateForwardRulePatch({ targetHost: "" }).valid).toBe(false);
+    expect(validateForwardRulePatch({ targetHost: "" }).errors).toContain(
+      "targetHost must be a non-empty string."
+    );
+  });
+
+  it("rejects invalid targetPort", () => {
+    expect(validateForwardRulePatch({ targetPort: 0 }).valid).toBe(false);
+    expect(validateForwardRulePatch({ targetPort: 0 }).errors).toContain(
+      "targetPort must be an integer from 1 to 65535."
+    );
+  });
+
+  it("rejects empty string listenHost", () => {
+    expect(validateForwardRulePatch({ listenHost: "" }).valid).toBe(false);
+    expect(validateForwardRulePatch({ listenHost: "" }).errors).toContain(
+      "listenHost must be a non-empty string."
+    );
+  });
+
+  it("rejects non-object input", () => {
+    expect(validateForwardRulePatch(null).valid).toBe(false);
+    expect(validateForwardRulePatch("string").valid).toBe(false);
+  });
+
+  it("rejects empty string name", () => {
+    expect(validateForwardRulePatch({ name: "" }).valid).toBe(false);
+    expect(validateForwardRulePatch({ name: "" }).errors).toContain(
+      "name must be a non-empty string."
+    );
+  });
+
+  it("rejects invalid protocol", () => {
+    expect(validateForwardRulePatch({ protocol: "http" as never }).valid).toBe(false);
+    expect(validateForwardRulePatch({ protocol: "http" as never }).errors).toContain(
+      "protocol must be tcp or udp."
+    );
+  });
+
+  it("accepts valid udpMode in patch", () => {
+    const result = validateForwardRulePatch({ udpMode: "bidirectional-last-client" });
+    expect(result.valid).toBe(true);
+    expect(result.value?.udpMode).toBe("bidirectional-last-client");
+  });
+
+  it("rejects invalid udpMode in patch", () => {
+    const result = validateForwardRulePatch({ udpMode: "invalid-mode" as never });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "udpMode must be one-way, bidirectional-last-client, or bidirectional-multi-client."
+    );
+  });
+});
+
+describe("validateForwardRule id and optional-id edge cases", () => {
+  it("rejects empty-string id", () => {
+    const result = validateForwardRule({
+      id: "  ",
+      name: "Test",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48001,
+      targetHost: "127.0.0.1",
+      targetPort: 3000,
+      enabled: true
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("id must be a non-empty string when provided.");
+  });
+
+  it("accepts rule without id (generates uuid externally)", () => {
+    const result = validateForwardRule({
+      name: "No ID",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48001,
+      targetHost: "127.0.0.1",
+      targetPort: 3000,
+      enabled: true
+    });
+    expect(result.valid).toBe(true);
+    expect(result.value?.id).toBeUndefined();
+  });
+
+  it("rejects non-object input", () => {
+    expect(validateForwardRule(null).valid).toBe(false);
+    expect(validateForwardRule("string").valid).toBe(false);
+    expect(validateForwardRule(42).valid).toBe(false);
+  });
+
+  it("rejects empty or missing listenHost", () => {
+    const result = validateForwardRule({
+      name: "Test",
+      protocol: "tcp",
+      listenHost: "",
+      listenPort: 48001,
+      targetHost: "127.0.0.1",
+      targetPort: 3000,
+      enabled: true
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("listenHost is required.");
+  });
+
+  it("rejects udpMode on TCP rule", () => {
+    const result = validateForwardRule({
+      name: "Test",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48001,
+      targetHost: "127.0.0.1",
+      targetPort: 3000,
+      enabled: true,
+      udpMode: "one-way"
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("udpMode is only valid for UDP rules.");
+  });
+
+  it("accepts explicit udpMode on UDP rule", () => {
+    const result = validateForwardRule({
+      name: "Stats",
+      protocol: "udp",
+      listenHost: "127.0.0.1",
+      listenPort: 9000,
+      targetHost: "127.0.0.1",
+      targetPort: 9001,
+      enabled: false,
+      udpMode: "bidirectional-multi-client"
+    });
+    expect(result.valid).toBe(true);
+    expect(result.value?.udpMode).toBe("bidirectional-multi-client");
+  });
+
+  it("rejects invalid udpMode on UDP rule", () => {
+    const result = validateForwardRule({
+      name: "Stats",
+      protocol: "udp",
+      listenHost: "127.0.0.1",
+      listenPort: 9000,
+      targetHost: "127.0.0.1",
+      targetPort: 9001,
+      enabled: false,
+      udpMode: "chatty" as never
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("trims whitespace from string fields on success", () => {
+    const result = validateForwardRule({
+      name: "  My Rule  ",
+      protocol: "tcp",
+      listenHost: "  127.0.0.1  ",
+      listenPort: 48001,
+      targetHost: "  example.com  ",
+      targetPort: 80,
+      enabled: true
+    });
+    expect(result.valid).toBe(true);
+    expect(result.value?.name).toBe("My Rule");
+    expect(result.value?.listenHost).toBe("127.0.0.1");
+    expect(result.value?.targetHost).toBe("example.com");
+  });
+});
+
 describe("Port advisories", () => {
   it("looks up common port metadata", () => {
     expect(getCommonPortInfo(5173)).toMatchObject({
@@ -126,5 +337,38 @@ describe("Port advisories", () => {
         })
       ])
     );
+  });
+
+  it("returns both COMMON_PORT and PRIVILEGED_PORT for port 80 forwarding", () => {
+    const advisories = getPortAdvisories({ port: 80, purpose: "forward" });
+    const codes = advisories.map((a) => a.code);
+    expect(codes).toContain("COMMON_PORT");
+    expect(codes).toContain("PRIVILEGED_PORT");
+    expect(codes).toContain("OUTSIDE_RECOMMENDED_RANGE");
+  });
+
+  it("does not return OUTSIDE_RECOMMENDED_RANGE for management purpose", () => {
+    const advisories = getPortAdvisories({ port: 9999, purpose: "management" });
+    expect(advisories.every((a) => a.code !== "OUTSIDE_RECOMMENDED_RANGE")).toBe(true);
+  });
+
+  it("does not return LAN_EXPOSURE for 127.0.0.1 forward port", () => {
+    const advisories = getPortAdvisories({ port: 48001, listenHost: "127.0.0.1", purpose: "forward" });
+    expect(advisories.every((a) => a.code !== "LAN_EXPOSURE")).toBe(true);
+  });
+
+  it("returns no advisories for a clean recommended forwarding port", () => {
+    const advisories = getPortAdvisories({ port: 48500, listenHost: "127.0.0.1", purpose: "forward" });
+    expect(advisories).toHaveLength(0);
+  });
+
+  it("returns LAN_EXPOSURE and MANAGEMENT_LAN_EXPOSURE only for their respective purposes", () => {
+    const forward = getPortAdvisories({ port: 48001, listenHost: "0.0.0.0", purpose: "forward" });
+    expect(forward.some((a) => a.code === "LAN_EXPOSURE")).toBe(true);
+    expect(forward.every((a) => a.code !== "MANAGEMENT_LAN_EXPOSURE")).toBe(true);
+
+    const management = getPortAdvisories({ port: 47831, listenHost: "0.0.0.0", purpose: "management" });
+    expect(management.some((a) => a.code === "MANAGEMENT_LAN_EXPOSURE")).toBe(true);
+    expect(management.every((a) => a.code !== "LAN_EXPOSURE")).toBe(true);
   });
 });

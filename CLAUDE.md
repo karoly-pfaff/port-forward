@@ -118,9 +118,9 @@ npm run validate:coverage:cli      # cli only
 
 Coverage outputs written to `coverage/` (gitignored). Vitest writes json-summary per workspace; Go profiles are written and removed per run. Gates are defined in `scripts/validate-coverage.js`.
 
-Baseline (v1.4.0): cli 92.7% (gate 92%), client 90.56% (gate 90%), service 82.5% (gate 82%), shared 82.1% (gate 82%), server 82.88% (gate 82%). See `docs/coverage-baseline.md`.
+Baseline (v1.5 pre): cli 92.7% (gate 92%), client 94.71% (gate 94%), service 84.8% (gate 84%), shared 100% (gate 100%), server 87.11% (gate 87%). See `docs/coverage-baseline.md`.
 
-v1.4.0 gates: cli `{stmts:92}`, client `{stmts:90, branch:89, funcs:76}`, server `{stmts:82, branch:86, funcs:97}`, service `{stmts:82}`, shared `{stmts:82, branch:54, funcs:90}`.
+v1.5 pre gates: cli `{stmts:92}`, client `{stmts:94, branch:90, funcs:78}`, server `{stmts:87, branch:89, funcs:99}`, service `{stmts:84}`, shared `{stmts:100, branch:100, funcs:100}`.
 
 Coverage policy: require 100% meaningful coverage for all newly added or materially changed files in v1.5 and v1.6. Existing baselines ratcheted incrementally. Do not block unrelated work on legacy uncovered areas. Do not lower gates without explicit rationale.
 

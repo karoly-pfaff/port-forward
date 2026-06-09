@@ -779,6 +779,159 @@ func TestErrorStatusCodes(t *testing.T) {
 	}
 }
 
+func TestPortAdvisoryInvalidPort(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	for _, query := range []string{"?port=abc&purpose=forward", "?port=0&purpose=forward", "?port=99999&purpose=forward"} {
+		response, err := http.Get(server.URL + "/api/ports/advisory" + query)
+		if err != nil {
+			t.Fatalf("GET failed: %v", err)
+		}
+		response.Body.Close()
+		if response.StatusCode != http.StatusBadRequest {
+			t.Fatalf("query %s: status = %d, want 400", query, response.StatusCode)
+		}
+	}
+}
+
+func TestPortAdvisoryInvalidPurpose(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/ports/advisory?port=48001&purpose=proxy")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+}
+
+func TestImportConfigAPIInvalidMode(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/import", "application/json", strings.NewReader(`{
+  "mode": "upsert",
+  "config": {"version":"1","rules":[]}
+}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+}
+
+func TestImportConfigAPIMissingConfigField(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/import", "application/json", strings.NewReader(`{"mode":"replace"}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+}
+
+func TestImportConfigAPIInvalidConfigJSON(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/import", "application/json", strings.NewReader(`{"mode":"replace","config":123}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+}
+
+func TestImportConfigAPIInvalidVersion(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/config/import", "application/json", strings.NewReader(`{
+  "mode": "replace",
+  "config": {"version":"2","rules":[]}
+}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+}
+
+func TestGetForwardByIDReturns404(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", writeSingleRuleConfig(t)))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/forwards/rule-1")
+	if err != nil {
+		t.Fatalf("GET failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", response.StatusCode)
+	}
+}
+
+func TestForwardUnknownSubActionReturns404(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", writeSingleRuleConfig(t)))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/rule-1/unknown-action", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", response.StatusCode)
+	}
+}
+
+func TestReorderForwardsNullIDsReturns400(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", writeSingleRuleConfig(t)))
+	defer server.Close()
+
+	response, err := http.Post(server.URL+"/api/forwards/reorder", "application/json", strings.NewReader(`{"ids":null}`))
+	if err != nil {
+		t.Fatalf("POST failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+}
+
+func TestUpdateForwardEmptyBodyReturns400(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", writeSingleRuleConfig(t)))
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodPatch, server.URL+"/api/forwards/rule-1", strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH failed: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+}
+
 func newTestHandler(t *testing.T, staticDir string, configPath string) *Handler {
 	t.Helper()
 	if staticDir == "" {

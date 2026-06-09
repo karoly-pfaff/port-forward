@@ -979,6 +979,88 @@ func TestImportConfigRecordsActivity(t *testing.T) {
 	assertActivityType(t, store, activity.EventConfigImported)
 }
 
+func TestSetStartLogger(t *testing.T) {
+	m, err := New([]domain.ForwardRule{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	called := false
+	m.SetStartLogger(func(rule domain.ForwardRule) { called = true })
+	if m.onStartLog == nil {
+		t.Fatal("onStartLog should be set")
+	}
+	m.onStartLog(tcpRule())
+	if !called {
+		t.Fatal("SetStartLogger did not wire the function")
+	}
+}
+
+func TestSetEventLogger(t *testing.T) {
+	m, err := New([]domain.ForwardRule{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	called := false
+	m.SetEventLogger(func(message string, args ...any) { called = true })
+	if m.onEventLog == nil {
+		t.Fatal("onEventLog should be set")
+	}
+	m.onEventLog("test message")
+	if !called {
+		t.Fatal("SetEventLogger did not wire the function")
+	}
+}
+
+func TestListActivityNoStore(t *testing.T) {
+	m, err := New([]domain.ForwardRule{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	events := m.ListActivity(activity.ListParams{})
+	if len(events) != 0 {
+		t.Fatalf("expected empty slice, got %d events", len(events))
+	}
+}
+
+func TestClearActivityNoStore(t *testing.T) {
+	m, err := New([]domain.ForwardRule{})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	m.ClearActivity()
+}
+
+func TestImportConfigInvalidVersion(t *testing.T) {
+	m := testManager(t, nil)
+	_, err := m.ImportConfig(domain.ExportedConfig{Version: "2", Rules: nil}, "replace")
+	if err == nil {
+		t.Fatal("expected error for invalid version")
+	}
+}
+
+func TestImportConfigInvalidMode(t *testing.T) {
+	m := testManager(t, nil)
+	_, err := m.ImportConfig(domain.ExportedConfig{Version: "1", Rules: nil}, "upsert")
+	if err == nil {
+		t.Fatal("expected error for invalid mode")
+	}
+}
+
+func TestImportConfigRejectsDuplicateBindingsInImport(t *testing.T) {
+	m := testManager(t, nil)
+	rule := tcpRule()
+	ruleB := tcpRule()
+	ruleB.ID = "tcp-2"
+	ruleB.Name = "Duplicate"
+	result, err := m.ImportConfig(domain.ExportedConfig{Version: "1", Rules: []domain.ForwardRule{rule, ruleB}}, "replace")
+	if err != nil {
+		t.Fatalf("expected ImportResult with errors, got Go error: %v", err)
+	}
+	if len(result.Errors) == 0 {
+		t.Fatal("expected import errors for duplicate bindings")
+	}
+}
+
 func tcpRule() domain.ForwardRule {
 	return domain.ForwardRule{
 		ID:         "tcp-1",

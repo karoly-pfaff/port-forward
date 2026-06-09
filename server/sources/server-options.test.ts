@@ -84,4 +84,12 @@ describe("resolveServerOptions", () => {
   it("rejects invalid ports", () => {
     expect(() => resolveServerOptions(["--port", "99999"], {}, "C:\\portier")).toThrow("Invalid port");
   });
+
+  it("throws for unknown CLI arguments", () => {
+    expect(() => resolveServerOptions(["--unknown-flag"], {}, "C:\\portier")).toThrow("Unknown CLI argument");
+  });
+
+  it("throws when a flag has no value", () => {
+    expect(() => resolveServerOptions(["--port"], {}, "C:\\portier")).toThrow("requires a value");
+  });
 });
