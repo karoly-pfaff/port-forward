@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ForwardRuleResponse, ForwardStatus, RuntimeInfo } from "@portier/shared";
+import type { ConfigPlanResponse, ForwardRuleResponse, ForwardStatus, RuntimeInfo } from "@portier/shared";
 import { SettingsView } from "./SettingsView.js";
 import * as portierApi from "../../api/portierApi.js";
 import type { DiagnosisEntry } from "../forwards/ForwardRuleList.js";
@@ -12,7 +12,9 @@ vi.mock("../../api/portierApi.js", () => ({
   fetchRuntimeInfo: vi.fn().mockRejectedValue(new Error("unavailable")),
   fetchForwardRules: vi.fn().mockResolvedValue([]),
   fetchForwardStatus: vi.fn().mockResolvedValue([]),
-  fetchActivity: vi.fn().mockResolvedValue([])
+  fetchActivity: vi.fn().mockResolvedValue([]),
+  planConfig: vi.fn(),
+  applyConfig: vi.fn(),
 }));
 
 const testRuntimeInfo: RuntimeInfo = {
@@ -584,5 +586,439 @@ describe("SettingsView diagnostics export", () => {
     expect(bundle).toHaveProperty("statuses");
     expect(bundle).toHaveProperty("activity");
     expect(bundle).toHaveProperty("metadata");
+  });
+});
+
+// ── Plan & Apply fixtures ──────────────────────────────────────────────────────
+
+const noDriftPlan: ConfigPlanResponse = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  mode: "plan",
+  summary: { add: 0, update: 0, remove: 0, unchanged: 1, destructive: 0, hasDrift: false, hasErrors: false },
+  operations: [
+    { type: "unchanged", ruleId: "r1", ruleName: "My Rule", protocol: "tcp", destructive: false }
+  ],
+  errors: [],
+  warnings: []
+};
+
+const addOnlyPlan: ConfigPlanResponse = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  mode: "plan",
+  summary: { add: 1, update: 0, remove: 0, unchanged: 0, destructive: 0, hasDrift: true, hasErrors: false },
+  operations: [
+    { type: "add", ruleName: "New Rule", protocol: "tcp", destructive: false,
+      desired: { name: "New Rule", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48100,
+                 targetHost: "127.0.0.1", targetPort: 9000, enabled: false } }
+  ],
+  errors: [],
+  warnings: []
+};
+
+const destructivePlan: ConfigPlanResponse = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  mode: "plan",
+  summary: { add: 0, update: 0, remove: 1, unchanged: 0, destructive: 1, hasDrift: true, hasErrors: false },
+  operations: [
+    { type: "remove", ruleId: "r1", ruleName: "Old Rule", protocol: "tcp", destructive: true }
+  ],
+  errors: [],
+  warnings: []
+};
+
+const errorPlan: ConfigPlanResponse = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  mode: "plan",
+  summary: { add: 0, update: 0, remove: 0, unchanged: 0, destructive: 0, hasDrift: false, hasErrors: true },
+  operations: [],
+  errors: [{ code: "INVALID_DESIRED_RULE", message: "rule 1: name is required" }],
+  warnings: []
+};
+
+const warningPlan: ConfigPlanResponse = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  mode: "plan",
+  summary: { add: 1, update: 0, remove: 0, unchanged: 0, destructive: 0, hasDrift: true, hasErrors: false },
+  operations: [
+    { type: "add", ruleName: "LAN Rule", protocol: "tcp", destructive: false,
+      desired: { name: "LAN Rule", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48100,
+                 targetHost: "127.0.0.1", targetPort: 9000, enabled: false } }
+  ],
+  errors: [],
+  warnings: [{ code: "LAN_EXPOSURE", message: "Rule listens on 0.0.0.0 — exposed on LAN" }]
+};
+
+const updatePlan: ConfigPlanResponse = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  mode: "plan",
+  summary: { add: 0, update: 1, remove: 0, unchanged: 0, destructive: 0, hasDrift: true, hasErrors: false },
+  operations: [
+    { type: "update", ruleId: "r1", ruleName: "My Rule", protocol: "tcp", destructive: false,
+      changes: [{ field: "targetPort", before: 3000, after: 4000 }] }
+  ],
+  errors: [],
+  warnings: []
+};
+
+const validPlanConfig = {
+  version: "1" as const,
+  exportedAt: new Date().toISOString(),
+  rules: [
+    { id: "r1", name: "My Rule", protocol: "tcp" as const, listenHost: "127.0.0.1",
+      listenPort: 48001, targetHost: "127.0.0.1", targetPort: 3000, enabled: false }
+  ]
+};
+
+describe("SettingsView Plan & Apply section", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("renders Plan & Apply Config section heading", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText("Plan & Apply Config")).toBeInTheDocument();
+  });
+
+  it("renders file picker for plan section with distinct label", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByLabelText("Select config file for plan")).toBeInTheDocument();
+  });
+
+  it("preview button is not shown before a file is selected", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /Preview changes/ })).not.toBeInTheDocument();
+  });
+
+  it("preview button appears after a valid file is selected", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const file = new File([configJson], "desired.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"), file);
+
+    await screen.findByRole("button", { name: /Preview changes/ });
+  });
+
+  it("parse error shown for invalid JSON in plan file picker", async () => {
+    stubFileReader("{ not valid {{");
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const file = new File(["{ not valid {{"], "bad.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"), file);
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: /Preview changes/ })).not.toBeInTheDocument();
+  });
+
+  it("plan file with wrong version shows parse error", async () => {
+    const wrongVersion = JSON.stringify({ version: "99", rules: [] });
+    stubFileReader(wrongVersion);
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const file = new File([wrongVersion], "wrong.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"), file);
+    await screen.findByRole("alert");
+    expect(screen.queryByRole("button", { name: /Preview changes/ })).not.toBeInTheDocument();
+  });
+
+  it("clicking preview calls planConfig with desired rules from the file", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(noDriftPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "desired.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await waitFor(() => {
+      expect(portierApi.planConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ rules: expect.any(Array) })
+      );
+    });
+  });
+
+  it("preview shows plan summary counts", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    expect(screen.getByText(/Add: 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Update: 0/)).toBeInTheDocument();
+    expect(screen.getByText(/Remove: 0/)).toBeInTheDocument();
+  });
+
+  it("no-drift state shows in-sync message", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(noDriftPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText(/No drift detected/);
+    expect(screen.getByText(/already in sync/)).toBeInTheDocument();
+  });
+
+  it("no-drift apply button is disabled (no changes to apply)", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(noDriftPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    const applyBtn = screen.getByRole("button", { name: /No changes to apply/ });
+    expect(applyBtn).toBeDisabled();
+  });
+
+  it("preview shows operation list with rule names", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    expect(screen.getByText(/New Rule/)).toBeInTheDocument();
+    expect(screen.getAllByText(/TCP/).length).toBeGreaterThan(0);
+  });
+
+  it("update operation shows field changes", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(updatePlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    expect(screen.getByText(/targetPort/)).toBeInTheDocument();
+    expect(screen.getByText(/3000/)).toBeInTheDocument();
+    expect(screen.getByText(/4000/)).toBeInTheDocument();
+  });
+
+  it("plan errors disable apply and show error message", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(errorPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText(/Apply is disabled until plan errors are resolved/);
+    expect(screen.getByText(/INVALID_DESIRED_RULE/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Apply changes/ })).not.toBeInTheDocument();
+  });
+
+  it("warnings are shown in plan preview", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(warningPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    expect(screen.getByText(/LAN_EXPOSURE/)).toBeInTheDocument();
+    expect(screen.getAllByText(/0\.0\.0\.0/).length).toBeGreaterThan(0);
+  });
+
+  it("destructive plan shows confirmation checkbox", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(destructivePlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    expect(screen.getByLabelText("Confirm destructive changes")).toBeInTheDocument();
+  });
+
+  it("apply button is disabled for destructive plan until confirmation checked", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(destructivePlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    expect(screen.getByRole("button", { name: /Apply changes/ })).toBeDisabled();
+  });
+
+  it("apply button enabled after destructive confirmation checked", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(destructivePlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    await userEvent.click(screen.getByLabelText("Confirm destructive changes"));
+    expect(screen.getByRole("button", { name: /Apply changes/ })).not.toBeDisabled();
+  });
+
+  it("non-destructive apply button is enabled without confirmation", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    expect(screen.getByRole("button", { name: /Apply changes/ })).not.toBeDisabled();
+  });
+
+  it("apply sends yes:true and calls onRulesUpdated on success", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+    vi.mocked(portierApi.applyConfig).mockResolvedValue({
+      ok: true, dryRun: false, appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: addOnlyPlan,
+      applied: { add: 1, update: 0, remove: 0, unchanged: 0 }
+    });
+    const updatedRule: ForwardRuleResponse = {
+      id: "r2", name: "New Rule", protocol: "tcp", listenHost: "127.0.0.1",
+      listenPort: 48100, targetHost: "127.0.0.1", targetPort: 9000, enabled: false, advisories: []
+    };
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([updatedRule]);
+    const onRulesUpdated = vi.fn();
+
+    render(<SettingsView onRulesUpdated={onRulesUpdated} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+    await screen.findByText("Plan preview");
+    await userEvent.click(screen.getByRole("button", { name: /Apply changes/ }));
+
+    await waitFor(() => {
+      expect(portierApi.applyConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ yes: true })
+      );
+    });
+    await screen.findByText(/Config applied/);
+    expect(onRulesUpdated).toHaveBeenCalledWith([updatedRule]);
+  });
+
+  it("apply API error shows error message", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+    vi.mocked(portierApi.applyConfig).mockRejectedValue(new Error("network error"));
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+    await screen.findByText("Plan preview");
+    await userEvent.click(screen.getByRole("button", { name: /Apply changes/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("network error");
+    });
+  });
+
+  it("apply with ok:false shows error message", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+    vi.mocked(portierApi.applyConfig).mockResolvedValue({
+      ok: false, dryRun: false, appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: addOnlyPlan,
+      applied: { add: 0, update: 0, remove: 0, unchanged: 0 }
+    });
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+    await screen.findByText("Plan preview");
+    await userEvent.click(screen.getByRole("button", { name: /Apply changes/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent(/Apply failed/);
+    });
+  });
+
+  it("preview API error shows error message without plan result", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockRejectedValue(new Error("service unavailable"));
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("service unavailable");
+    });
+    expect(screen.queryByText("Plan preview")).not.toBeInTheDocument();
+  });
+
+  it("successful apply clears the form and shows success", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+    vi.mocked(portierApi.applyConfig).mockResolvedValue({
+      ok: true, dryRun: false, appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: addOnlyPlan,
+      applied: { add: 1, update: 0, remove: 0, unchanged: 0 }
+    });
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([]);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+    await screen.findByText("Plan preview");
+    await userEvent.click(screen.getByRole("button", { name: /Apply changes/ }));
+
+    await screen.findByText(/Config applied/);
+    // Plan preview cleared after success
+    expect(screen.queryByText("Plan preview")).not.toBeInTheDocument();
+  });
+
+  it("existing import section still works after Plan & Apply section added", () => {
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    expect(screen.getByText("Import Config")).toBeInTheDocument();
+    expect(screen.getByLabelText("Select config file")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Merge/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Replace/ })).toBeInTheDocument();
   });
 });

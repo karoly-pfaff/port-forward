@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExportedConfig, ForwardRule, ForwardRuleResponse, ForwardStatus } from "@portier/shared";
 import {
+  applyConfig,
   clearActivity,
   deleteForwardRule,
   diagnoseForwardRule,
@@ -12,6 +13,7 @@ import {
   fetchPortAdvisories,
   fetchRuntimeInfo,
   importConfig,
+  planConfig,
   reorderForwardRules,
   saveForwardRule,
   setForwardRuleRunning
@@ -220,6 +222,91 @@ describe("importConfig", () => {
     mockFetchOk({ result: { imported: 0, skipped: 0, errors: [] }, rules: [] });
     await importConfig(config, "replace");
     expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/config/import", expect.objectContaining({ method: "POST" }));
+  });
+});
+
+describe("planConfig", () => {
+  it("POSTs /api/config/plan with desired wrapper", async () => {
+    const planResp = {
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      mode: "plan",
+      summary: { add: 0, update: 0, remove: 0, unchanged: 0, destructive: 0, hasDrift: false, hasErrors: false },
+      operations: [], errors: [], warnings: []
+    };
+    mockFetchOk(planResp);
+    const result = await planConfig({ rules: [] });
+    expect(result.mode).toBe("plan");
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "/api/config/plan",
+      expect.objectContaining({ method: "POST" })
+    );
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string) as Record<string, unknown>;
+    expect(body).toHaveProperty("desired");
+  });
+
+  it("throws on 400 response", async () => {
+    mockFetchError(400, ["desired is required."]);
+    await expect(planConfig({ rules: [] })).rejects.toThrow("desired is required.");
+  });
+});
+
+describe("applyConfig", () => {
+  it("POSTs /api/config/apply and returns ConfigApplyResponse", async () => {
+    const applyResp = {
+      ok: true, dryRun: false,
+      appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: {
+        generatedAt: "2026-01-01T00:00:00.000Z", mode: "plan",
+        summary: { add: 0, update: 0, remove: 0, unchanged: 1, destructive: 0, hasDrift: false, hasErrors: false },
+        operations: [], errors: [], warnings: []
+      },
+      applied: { add: 0, update: 0, remove: 0, unchanged: 1 }
+    };
+    mockFetchOk(applyResp);
+    const result = await applyConfig({ desired: { rules: [] }, yes: false });
+    expect(result.ok).toBe(true);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "/api/config/apply",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("returns ok:false response (plan errors come as 200)", async () => {
+    const applyResp = {
+      ok: false, dryRun: false,
+      appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: {
+        generatedAt: "2026-01-01T00:00:00.000Z", mode: "plan",
+        summary: { add: 0, update: 0, remove: 0, unchanged: 0, destructive: 0, hasDrift: false, hasErrors: true },
+        operations: [], errors: [{ code: "INVALID_DESIRED_RULE", message: "rule 1: name is required" }], warnings: []
+      },
+      applied: { add: 0, update: 0, remove: 0, unchanged: 0 }
+    };
+    mockFetchOk(applyResp);
+    const result = await applyConfig({ desired: { rules: [] }, yes: false });
+    expect(result.ok).toBe(false);
+  });
+
+  it("throws on 400 — destructive without yes", async () => {
+    mockFetchError(400, ["Apply requires yes: true when destructive operations are present."]);
+    await expect(applyConfig({ desired: { rules: [] }, yes: false })).rejects.toThrow("Apply requires yes");
+  });
+
+  it("sends dryRun field when true", async () => {
+    const applyResp = {
+      ok: true, dryRun: true,
+      appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: {
+        generatedAt: "", mode: "plan",
+        summary: { add: 0, update: 0, remove: 0, unchanged: 1, destructive: 0, hasDrift: false, hasErrors: false },
+        operations: [], errors: [], warnings: []
+      },
+      applied: { add: 0, update: 0, remove: 0, unchanged: 1 }
+    };
+    mockFetchOk(applyResp);
+    await applyConfig({ desired: { rules: [] }, yes: false, dryRun: true });
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string) as Record<string, unknown>;
+    expect(body.dryRun).toBe(true);
   });
 });
 

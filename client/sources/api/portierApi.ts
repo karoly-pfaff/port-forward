@@ -2,6 +2,10 @@ import type {
   ActivityEvent,
   ActivityEventType,
   ActivitySeverity,
+  ConfigApplyRequest,
+  ConfigApplyResponse,
+  ConfigPlanResponse,
+  DesiredConfig,
   ExportedConfig,
   ForwardRule,
   ForwardRuleInput,
@@ -143,6 +147,26 @@ export async function importConfig(
   });
   await ensureOk(response);
   return (await response.json()) as ImportConfigResult;
+}
+
+export async function planConfig(desired: DesiredConfig): Promise<ConfigPlanResponse> {
+  const response = await fetch("/api/config/plan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ desired })
+  });
+  await ensureOk(response);
+  return (await response.json()) as ConfigPlanResponse;
+}
+
+export async function applyConfig(request: ConfigApplyRequest): Promise<ConfigApplyResponse> {
+  const response = await fetch("/api/config/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request)
+  });
+  await ensureOk(response);
+  return (await response.json()) as ConfigApplyResponse;
 }
 
 async function ensureOk(response: Response): Promise<void> {

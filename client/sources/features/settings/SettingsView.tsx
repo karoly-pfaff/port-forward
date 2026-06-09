@@ -1,14 +1,22 @@
 import { useRef, useState, useEffect, type ReactElement, type ChangeEvent } from "react";
-import type { ExportedConfig, ForwardRuleResponse, ImportMode, RuntimeInfo } from "@portier/shared";
+import type {
+  ConfigPlanResponse,
+  ConfigPlanRuleSnapshot,
+  ExportedConfig,
+  ForwardRuleResponse,
+  ImportMode,
+  RuntimeInfo
+} from "@portier/shared";
 import {
   PORTIER_DEFAULT_HOST,
   PORTIER_DEFAULT_PORT,
   PORTIER_RECOMMENDED_FORWARD_PORT_MAX,
   PORTIER_RECOMMENDED_FORWARD_PORT_MIN
 } from "@portier/shared";
-import { exportConfig, importConfig, fetchRuntimeInfo } from "../../api/portierApi.js";
+import { applyConfig, exportConfig, fetchForwardRules, importConfig, fetchRuntimeInfo, planConfig } from "../../api/portierApi.js";
 import type { DiagnosisEntry } from "../forwards/ForwardRuleList.js";
 import { buildDiagnosticsBundle, buildDiagnosticsFilename, downloadJson } from "./diagnosticsExport.js";
+import { formatChangeValue, formatOperationType } from "./planHelpers.js";
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -60,6 +68,19 @@ export function SettingsView({ onRulesUpdated, diagnosisMap }: SettingsViewProps
   const [diagExportSuccess, setDiagExportSuccess] = useState(false);
   const [diagExportPartial, setDiagExportPartial] = useState(false);
   const [diagExportError, setDiagExportError] = useState<string | null>(null);
+
+  // Plan & Apply section state
+  const planFileInputRef = useRef<HTMLInputElement>(null);
+  const [planSelectedFileName, setPlanSelectedFileName] = useState<string | null>(null);
+  const [planParsedConfig, setPlanParsedConfig] = useState<ExportedConfig | null>(null);
+  const [planParseError, setPlanParseError] = useState<string | null>(null);
+  const [planPreviewing, setPlanPreviewing] = useState(false);
+  const [planResult, setPlanResult] = useState<ConfigPlanResponse | null>(null);
+  const [planPreviewError, setPlanPreviewError] = useState<string | null>(null);
+  const [destructiveConfirmed, setDestructiveConfirmed] = useState(false);
+  const [planApplying, setPlanApplying] = useState(false);
+  const [planApplyResult, setPlanApplyResult] = useState<string | null>(null);
+  const [planApplyError, setPlanApplyError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRuntimeInfo()
@@ -200,6 +221,83 @@ export function SettingsView({ onRulesUpdated, diagnosisMap }: SettingsViewProps
     }
   }
 
+  function handlePlanFileChange(e: ChangeEvent<HTMLInputElement>): void {
+    setPlanParsedConfig(null);
+    setPlanParseError(null);
+    setPlanResult(null);
+    setPlanPreviewError(null);
+    setPlanApplyResult(null);
+    setPlanApplyError(null);
+    setDestructiveConfirmed(false);
+
+    const file = e.target.files?.[0];
+    setPlanSelectedFileName(file?.name ?? null);
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result;
+        if (typeof text !== "string") throw new Error("Could not read file.");
+        const parsed = JSON.parse(text) as ExportedConfig;
+        if (parsed.version !== "1" || !Array.isArray(parsed.rules)) {
+          throw new Error("Not a valid Portier config file (expected version 1 with a rules array).");
+        }
+        setPlanParsedConfig(parsed);
+      } catch (error) {
+        setPlanParseError(error instanceof Error ? error.message : "Parse error.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function handlePlanPreview(): Promise<void> {
+    if (!planParsedConfig) return;
+    setPlanPreviewing(true);
+    setPlanResult(null);
+    setPlanPreviewError(null);
+    setPlanApplyResult(null);
+    setPlanApplyError(null);
+    setDestructiveConfirmed(false);
+    try {
+      const desired = { rules: planParsedConfig.rules as unknown as ConfigPlanRuleSnapshot[] };
+      const result = await planConfig(desired);
+      setPlanResult(result);
+    } catch (error) {
+      setPlanPreviewError(error instanceof Error ? error.message : "Preview failed.");
+    } finally {
+      setPlanPreviewing(false);
+    }
+  }
+
+  async function handlePlanApply(): Promise<void> {
+    if (!planParsedConfig || !planResult) return;
+    setPlanApplying(true);
+    setPlanApplyResult(null);
+    setPlanApplyError(null);
+    try {
+      const desired = { rules: planParsedConfig.rules as unknown as ConfigPlanRuleSnapshot[] };
+      const response = await applyConfig({ desired, yes: true });
+      if (!response.ok) {
+        setPlanApplyError("Apply failed: plan has errors. Re-preview the config to see current errors.");
+        return;
+      }
+      const { add, update, remove } = response.applied;
+      setPlanApplyResult(`Config applied. ${add} added, ${update} updated, ${remove} removed.`);
+      const updatedRules = await fetchForwardRules();
+      onRulesUpdated(updatedRules);
+      setPlanParsedConfig(null);
+      setPlanResult(null);
+      setPlanSelectedFileName(null);
+      setDestructiveConfirmed(false);
+      if (planFileInputRef.current) planFileInputRef.current.value = "";
+    } catch (error) {
+      setPlanApplyError(error instanceof Error ? error.message : "Apply failed.");
+    } finally {
+      setPlanApplying(false);
+    }
+  }
+
   return (
     <div className="settings-view">
       <div className="rule-list-section" style={{ flex: 1, minHeight: 0 }}>
@@ -255,6 +353,149 @@ export function SettingsView({ onRulesUpdated, diagnosisMap }: SettingsViewProps
               {exportError && (
                 <div className="settings-error" role="alert">{exportError}</div>
               )}
+            </div>
+
+            {/* Plan & Apply Config */}
+            <div className="settings-section">
+              <div className="settings-section-title">Plan & Apply Config</div>
+              <p className="settings-desc">
+                Preview changes before applying. Select a config file to compare it with the
+                running configuration, then apply safely with explicit confirmation.
+              </p>
+
+              <div className="settings-import-controls">
+                <div className="settings-file-picker">
+                  <input
+                    ref={planFileInputRef}
+                    id="plan-file-input"
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handlePlanFileChange}
+                    aria-label="Select config file for plan"
+                    className="settings-file-input-hidden"
+                  />
+                  <label htmlFor="plan-file-input" className="settings-file-btn">
+                    Choose file
+                  </label>
+                  <span className="settings-file-name">
+                    {planSelectedFileName ?? "No file chosen"}
+                  </span>
+                </div>
+
+                {planParseError && (
+                  <div className="settings-error" role="alert">{planParseError}</div>
+                )}
+
+                {planParsedConfig && !planResult && (
+                  <button
+                    type="button"
+                    onClick={() => void handlePlanPreview()}
+                    disabled={planPreviewing}
+                  >
+                    {planPreviewing ? "Previewing…" : "Preview changes"}
+                  </button>
+                )}
+
+                {planPreviewError && (
+                  <div className="settings-error" role="alert">{planPreviewError}</div>
+                )}
+
+                {planResult && (
+                  <div className="settings-plan-preview">
+                    <div className="settings-preview-title">Plan preview</div>
+
+                    <div className="settings-plan-summary">
+                      <span>Add: {planResult.summary.add}</span>
+                      {" · "}
+                      <span>Update: {planResult.summary.update}</span>
+                      {" · "}
+                      <span>Remove: {planResult.summary.remove}</span>
+                      {" · "}
+                      <span>Unchanged: {planResult.summary.unchanged}</span>
+                    </div>
+
+                    {!planResult.summary.hasDrift && !planResult.summary.hasErrors && (
+                      <p className="settings-desc">No drift detected. This config is already in sync.</p>
+                    )}
+
+                    {planResult.errors.length > 0 && (
+                      <div className="settings-error" role="alert">
+                        <div>Apply is disabled until plan errors are resolved:</div>
+                        {planResult.errors.map((e, i) => (
+                          <div key={i}>[{e.code}] {e.message}</div>
+                        ))}
+                      </div>
+                    )}
+
+                    {planResult.warnings.length > 0 && (
+                      <div className="settings-warn" role="status">
+                        {planResult.warnings.map((w, i) => (
+                          <div key={i}>[{w.code}] {w.message}</div>
+                        ))}
+                      </div>
+                    )}
+
+                    {planResult.operations.length > 0 && (
+                      <ul className="settings-plan-ops">
+                        {planResult.operations.map((op, i) => (
+                          <li key={i} className="settings-plan-op">
+                            <span>
+                              {formatOperationType(op.type)} {op.ruleName} ({op.protocol.toUpperCase()})
+                              {op.destructive && " [destructive]"}
+                            </span>
+                            {op.changes && op.changes.length > 0 && (
+                              <ul className="settings-plan-changes">
+                                {op.changes.map((c, j) => (
+                                  <li key={j}>
+                                    {c.field}: {formatChangeValue(c.before)} → {formatChangeValue(c.after)}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {planResult.summary.destructive > 0 && !planResult.summary.hasErrors && (
+                      <label className="settings-mode-option">
+                        <input
+                          type="checkbox"
+                          checked={destructiveConfirmed}
+                          onChange={(e) => setDestructiveConfirmed(e.target.checked)}
+                          aria-label="Confirm destructive changes"
+                        />
+                        {" "}I understand this will remove or change existing rules.
+                      </label>
+                    )}
+
+                    {!planResult.summary.hasErrors && (
+                      <button
+                        type="button"
+                        className={planResult.summary.destructive > 0 ? "danger" : "primary"}
+                        disabled={
+                          planApplying ||
+                          !planResult.summary.hasDrift ||
+                          (planResult.summary.destructive > 0 && !destructiveConfirmed)
+                        }
+                        onClick={() => void handlePlanApply()}
+                      >
+                        {planApplying ? "Applying…" :
+                         !planResult.summary.hasDrift ? "No changes to apply" :
+                         "Apply changes"}
+                      </button>
+                    )}
+
+                    {planApplyError && (
+                      <div className="settings-error" role="alert">{planApplyError}</div>
+                    )}
+                  </div>
+                )}
+
+                {planApplyResult && (
+                  <div className="settings-success" role="status">{planApplyResult}</div>
+                )}
+              </div>
             </div>
 
             {/* Config import */}

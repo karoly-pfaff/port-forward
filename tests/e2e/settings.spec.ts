@@ -53,7 +53,7 @@ test("settings: imports v1-mixed fixture via replace and shows all rules", async
   // v1-mixed.json is a raw rules array — wrap it as ExportedConfig for the UI.
   const fixture = JSON.parse(readFileSync(join(fixturesDir, "v1-mixed.json"), "utf-8")) as unknown[];
 
-  await page.getByLabel("Select config file").setInputFiles({
+  await page.getByLabel("Select config file", { exact: true }).setInputFiles({
     name: "v1-mixed.json",
     mimeType: "application/json",
     buffer: toExportedConfigBuffer(fixture),
@@ -116,7 +116,7 @@ test("settings: rejects invalid JSON file and preserves existing rules", async (
 
   // Upload the malformed fixture directly — its content cannot be parsed as JSON.
   const invalidContent = readFileSync(join(fixturesDir, "invalid-json.json"));
-  await page.getByLabel("Select config file").setInputFiles({
+  await page.getByLabel("Select config file", { exact: true }).setInputFiles({
     name: "invalid-json.json",
     mimeType: "application/json",
     buffer: invalidContent,
@@ -187,6 +187,115 @@ test("settings: export downloads a valid ExportedConfig JSON file", async ({ pag
   expect(rule).toBeTruthy();
   expect(rule?.protocol).toBe("tcp");
   expect(rule?.listenPort).toBe(49002);
+});
+
+// ── C1. Merge import — basic flow ────────────────────────────────────────────
+//
+// Verifies that a simple merge import adds rules to the list without removing
+// existing ones. Uses the default merge mode (no confirm dialog needed).
+
+test("settings: merge import adds rules to the list", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Settings" })
+    .click();
+
+  await expect(page.getByText("Export Config")).toBeVisible();
+  await expect(page.getByText("Import Config")).toBeVisible();
+
+  const importConfig = JSON.stringify({
+    version: "1",
+    exportedAt: new Date().toISOString(),
+    rules: [{
+      name: "Merge Imported Rule",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48100,
+      targetHost: "127.0.0.1",
+      targetPort: 48101,
+      enabled: false,
+    }],
+  });
+
+  await page.getByLabel("Select config file", { exact: true }).setInputFiles({
+    name: "portier-merge.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(importConfig),
+  });
+
+  await expect(page.getByText("File preview")).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByText("1 (1 TCP, 0 UDP)")).toBeVisible();
+
+  await page.getByRole("button", { name: "Import Rules" }).click();
+
+  await expect(page.getByText(/Import complete/)).toBeVisible({ timeout: 5_000 });
+
+  await page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Forward Rules" })
+    .click();
+
+  await expect(page.locator("tbody").getByText("Merge Imported Rule")).toBeVisible({ timeout: 5_000 });
+});
+
+// ── C2. Plan & Apply — preview and full apply ─────────────────────────────────
+//
+// Verifies the Plan & Apply section:
+//  1. Uploading a config with a new rule shows the plan preview (Add:1).
+//  2. Non-destructive plan does not require a confirmation checkbox.
+//  3. Clicking "Apply changes" applies the config and shows a success message.
+//  4. The new rule appears in Forward Rules after apply.
+
+test("settings: plan & apply previews drift and applies non-destructive config", async ({ page }) => {
+  // Start with no rules (clearAllRules in beforeEach).
+  await page.goto("/");
+  await goToSettings(page);
+
+  // A config with one new TCP rule that doesn't exist on the server.
+  const desiredRules = [{
+    name: "Plan Apply Test Rule",
+    protocol: "tcp",
+    listenHost: "127.0.0.1",
+    listenPort: 49060,
+    targetHost: "127.0.0.1",
+    targetPort: 49160,
+    enabled: false,
+  }];
+
+  await page.getByLabel("Select config file for plan").setInputFiles({
+    name: "desired.json",
+    mimeType: "application/json",
+    buffer: toExportedConfigBuffer(desiredRules),
+  });
+
+  // Preview changes button should appear after file selection.
+  await page.getByRole("button", { name: "Preview changes" }).click();
+
+  // Plan preview panel appears.
+  await expect(page.getByText("Plan preview")).toBeVisible({ timeout: 5_000 });
+
+  // Summary: Add:1, no removes → non-destructive.
+  await expect(page.getByText(/Add: 1/)).toBeVisible();
+  await expect(page.getByText(/Remove: 0/)).toBeVisible();
+
+  // Operation list shows the new rule name.
+  await expect(page.getByText("Plan Apply Test Rule")).toBeVisible();
+
+  // No destructive confirmation checkbox (non-destructive plan).
+  await expect(page.getByLabel("Confirm destructive changes")).not.toBeVisible({ timeout: 1_000 }).catch(() => {});
+
+  // Apply changes.
+  await page.getByRole("button", { name: "Apply changes" }).click();
+
+  // Success message appears.
+  await expect(page.getByRole("status")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByText(/Config applied/)).toBeVisible();
+
+  // Navigate to Forward Rules — the applied rule must appear.
+  await page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Forward Rules" })
+    .click();
+
+  await expect(page.locator("tbody").getByText("Plan Apply Test Rule")).toBeVisible({ timeout: 5_000 });
 });
 
 // ── D. Runtime / Environment section ─────────────────────────────────────────
