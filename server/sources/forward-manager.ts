@@ -93,7 +93,14 @@ export class ForwardManager {
     };
     this.ensureNoDuplicate(rule);
     this.rules.set(rule.id, rule);
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (error) {
+      // Roll back the appended rule so a failed persist leaves no partial
+      // in-memory state (parity with Go manager.CreateRule).
+      this.rules.delete(rule.id);
+      throw error;
+    }
 
     this.activity?.add({
       type: "rule.created",
@@ -142,7 +149,19 @@ export class ForwardManager {
     }
 
     this.rules.set(existing.id, next);
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (error) {
+      // Restore the original rule and, if we stopped a running forwarder for a
+      // forwarding-field change, restart it — so a failed persist leaves no
+      // partial in-memory or running-state mutation (parity with Go
+      // manager.UpdateRule). A restart failure must not mask the persist error.
+      this.rules.set(existing.id, existing);
+      if (needsRestart) {
+        await this.startRule(existing.id).catch(() => {});
+      }
+      throw error;
+    }
 
     this.activity?.add({
       type: "rule.updated",
@@ -163,9 +182,21 @@ export class ForwardManager {
 
   async deleteRule(ruleId: string): Promise<void> {
     const rule = this.requireRule(ruleId);
+    const wasRunning = this.forwarders.has(ruleId);
     await this.stopRule(ruleId);
     this.rules.delete(ruleId);
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (error) {
+      // Restore the deleted rule and, if it was running, restart it — so a
+      // failed persist leaves no partial mutation (parity with Go
+      // manager.DeleteRule). A restart failure must not mask the persist error.
+      this.rules.set(ruleId, rule);
+      if (wasRunning) {
+        await this.startRule(ruleId).catch(() => {});
+      }
+      throw error;
+    }
 
     this.activity?.add({
       type: "rule.deleted",
@@ -288,6 +319,10 @@ export class ForwardManager {
     let imported = 0;
     let skipped = 0;
 
+    // Snapshot the current rules so a failed persist can roll back to the prior
+    // config with no partial mutation (parity with Go manager.ImportConfig).
+    const previousRules = new Map(this.rules);
+
     if (mode === "replace") {
       // Stop all running rules, replace everything.
       await this.stopAll();
@@ -298,7 +333,12 @@ export class ForwardManager {
         imported += 1;
       }
 
-      await this.persist();
+      try {
+        await this.persist();
+      } catch (error) {
+        this.rules = previousRules;
+        throw error;
+      }
 
       // Restart enabled rules.
       for (const rule of this.rules.values()) {
@@ -348,7 +388,19 @@ export class ForwardManager {
         }
       }
 
-      await this.persist();
+      try {
+        await this.persist();
+      } catch (error) {
+        // Stop any forwarders started during this merge and restore the prior
+        // rules, so a failed persist leaves no partial mutation.
+        for (const rule of toAdd) {
+          if (this.forwarders.has(rule.id)) {
+            await this.stopRule(rule.id).catch(() => {});
+          }
+        }
+        this.rules = previousRules;
+        throw error;
+      }
     }
 
     this.activity?.add({
@@ -379,8 +431,16 @@ export class ForwardManager {
       if (!newRules.has(id)) newRules.set(id, rule);
     }
 
+    const previousRules = this.rules;
     this.rules = newRules;
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (error) {
+      // Restore the original order so a failed persist leaves no partial
+      // mutation (parity with Go manager.ReorderRules).
+      this.rules = previousRules;
+      throw error;
+    }
   }
 
   private requireRule(ruleId: string): ForwardRule {

@@ -17,6 +17,37 @@ class MemoryStore implements RuleStore {
   }
 }
 
+// ControllableStore is a RuleStore fake whose save() can be made to fail on
+// demand (Test-D persist-failure rollback tests). It also records every
+// successfully-persisted snapshot so tests can assert nothing was written on a
+// failed operation. Production config-store.ts is unchanged.
+class ControllableStore implements RuleStore {
+  saveCallCount = 0;
+  readonly savedSnapshots: ForwardRule[][] = [];
+  shouldFail = false;
+  saveError: Error = new Error("simulated persist failure");
+
+  constructor(private rules: ForwardRule[] = []) {}
+
+  async load(): Promise<ForwardRule[]> {
+    return this.rules.map((rule) => ({ ...rule }));
+  }
+
+  async save(rules: ForwardRule[]): Promise<void> {
+    this.saveCallCount += 1;
+    if (this.shouldFail) {
+      throw this.saveError;
+    }
+    this.rules = rules.map((rule) => ({ ...rule }));
+    this.savedSnapshots.push(this.rules.map((rule) => ({ ...rule })));
+  }
+
+  /** The last config the store actually persisted, or null if it never persisted. */
+  lastPersisted(): ForwardRule[] | null {
+    return this.savedSnapshots.length > 0 ? this.savedSnapshots[this.savedSnapshots.length - 1] : null;
+  }
+}
+
 // Minimal TCP target server for update tests that need a running forwarder.
 function startTcpTarget(port: number): Promise<net.Server> {
   const server = net.createServer();
@@ -457,5 +488,198 @@ describe("ForwardManager duplicate listen binding detection", () => {
         enabled: false
       })
     ).resolves.toMatchObject({ id: "udp" });
+  });
+});
+
+// ── Persist-failure rollback (Test-D — runtime parity with the Go manager) ────
+//
+// The Go manager rolls back every persist path so that a failed store.Save()
+// leaves NO partial in-memory or running-state mutation
+// (service/sources/manager/manager_test.go: TestCreateRulePersistFailureRollsBack,
+// TestUpdateRulePersistFailureRollsBack,
+// TestUpdateRulePersistFailureWithRunningRuleRestartsOriginal,
+// TestDeleteRulePersistFailureRollsBack, TestReorderRulesPersistFailureRollsBack).
+// These tests prove the TypeScript ForwardManager has the same rollback semantics.
+// Why it matters: persist-failure paths are correctness paths, not optional edge
+// cases — a half-applied mutation that is not on disk diverges the two runtimes
+// and can leave the in-memory rule set inconsistent with rules.json. See the
+// durable testing rule in CLAUDE.md/AGENTS.md.
+describe("ForwardManager persist-failure rollback (Test-D, Go parity)", () => {
+  const cleanup: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    await Promise.all(cleanup.splice(0).map((fn) => fn()));
+  });
+
+  function ruleInput(
+    overrides: Partial<ForwardRule> & { id: string; listenPort: number }
+  ): ForwardRule {
+    return {
+      name: "Test",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      targetHost: "127.0.0.1",
+      targetPort: 49999,
+      enabled: false,
+      ...overrides
+    } as ForwardRule;
+  }
+
+  // A. Mirrors Go TestCreateRulePersistFailureRollsBack.
+  it("addRule removes the appended rule and persists nothing when save fails", async () => {
+    const store = new ControllableStore();
+    const activity = new ActivityStore();
+    const manager = new ForwardManager(store, activity);
+
+    store.shouldFail = true;
+    await expect(manager.addRule(ruleInput({ id: "r1", listenPort: 49000 }))).rejects.toThrow();
+
+    expect(manager.listRules()).toHaveLength(0);
+    expect(store.lastPersisted()).toBeNull();
+    // A failed create must not emit a rule.created activity event.
+    expect(activity.list({}).some((e) => e.type === "rule.created")).toBe(false);
+  });
+
+  // B. Mirrors Go TestUpdateRulePersistFailureRollsBack (non-forwarding field).
+  it("updateRule restores the original rule when a non-forwarding update fails to persist", async () => {
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    await manager.addRule(ruleInput({ id: "r1", name: "Original", listenPort: 49010 }));
+
+    store.shouldFail = true;
+    await expect(manager.updateRule("r1", { name: "Renamed" })).rejects.toThrow();
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].name).toBe("Original");
+    expect(manager.getStatus("r1").running).toBe(false);
+  });
+
+  // C. Mirrors Go TestUpdateRulePersistFailureWithRunningRuleRestartsOriginal.
+  //    Uses a real running forwarder; ports come from the Test-A free-port helper.
+  it("updateRule restores and restarts a running rule when a forwarding update fails to persist", async () => {
+    const [listenPort, targetPortA, targetPortB] = await Promise.all([
+      getFreeTcpPort(),
+      getFreeTcpPort(),
+      getFreeTcpPort()
+    ]);
+    const targetA = await startTcpTarget(targetPortA);
+    cleanup.push(() => closeTcpServer(targetA));
+
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    cleanup.push(() => manager.stopAll());
+
+    await manager.addRule(ruleInput({ id: "r1", listenPort, targetPort: targetPortA }));
+    await manager.startRule("r1");
+    expect(manager.getStatus("r1").running).toBe(true);
+
+    store.shouldFail = true;
+    await expect(manager.updateRule("r1", { targetPort: targetPortB })).rejects.toThrow();
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].targetPort).toBe(targetPortA); // original forwarding config restored
+    expect(manager.getStatus("r1").running).toBe(true); // pre-update running state restored
+  });
+
+  // D. Mirrors Go TestDeleteRulePersistFailureRollsBack.
+  it("deleteRule keeps the rule when save fails", async () => {
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    await manager.addRule(ruleInput({ id: "r1", name: "Keep", listenPort: 49020 }));
+
+    store.shouldFail = true;
+    await expect(manager.deleteRule("r1")).rejects.toThrow();
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("r1");
+    expect(rules[0].name).toBe("Keep");
+  });
+
+  // D2. Delete of a *running* rule: rollback must restore both the rule and its
+  //     running state (covers the wasRunning restart branch; Go restores the
+  //     prior runtime state in manager.DeleteRule).
+  it("deleteRule restores and restarts a running rule when save fails", async () => {
+    const [listenPort, targetPort] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
+    const target = await startTcpTarget(targetPort);
+    cleanup.push(() => closeTcpServer(target));
+
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    cleanup.push(() => manager.stopAll());
+
+    await manager.addRule(ruleInput({ id: "r1", listenPort, targetPort }));
+    await manager.startRule("r1");
+    expect(manager.getStatus("r1").running).toBe(true);
+
+    store.shouldFail = true;
+    await expect(manager.deleteRule("r1")).rejects.toThrow();
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("r1");
+    expect(manager.getStatus("r1").running).toBe(true); // running state restored
+  });
+
+  // E. Mirrors Go TestReorderRulesPersistFailureRollsBack.
+  it("reorderRules preserves the original order when save fails", async () => {
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    await manager.addRule(ruleInput({ id: "r1", listenPort: 49030 }));
+    await manager.addRule(ruleInput({ id: "r2", name: "Other", listenPort: 49031 }));
+
+    store.shouldFail = true;
+    await expect(manager.reorderRules(["r2", "r1"])).rejects.toThrow();
+
+    expect(manager.listRules().map((rule) => rule.id)).toEqual(["r1", "r2"]);
+  });
+
+  // F. TypeScript-side extension of the parity set: the Go manager has the
+  //    ImportConfig rollback branch (manager.go) but no dedicated Go test for it.
+  //    Proves the existing config survives a failed replace-import persist.
+  it("importConfig replace keeps the existing config when save fails", async () => {
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    await manager.addRule(ruleInput({ id: "r1", name: "Original", listenPort: 49040 }));
+
+    store.shouldFail = true;
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [ruleInput({ id: "r2", name: "Imported", listenPort: 49041 })]
+    };
+    await expect(manager.importConfig(config, "replace")).rejects.toThrow();
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("r1");
+    expect(rules[0].name).toBe("Original");
+  });
+
+  // F2. Merge import: a failed persist must stop any forwarder started during the
+  //     merge and restore the prior rules (covers the merge rollback branch).
+  it("importConfig merge stops started forwarders and restores config when save fails", async () => {
+    const [existingPort, incomingPort] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    cleanup.push(() => manager.stopAll());
+
+    await manager.addRule(ruleInput({ id: "r1", name: "Original", listenPort: existingPort }));
+
+    store.shouldFail = true;
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [ruleInput({ id: "r2", name: "Incoming", listenPort: incomingPort, enabled: true })]
+    };
+    await expect(manager.importConfig(config, "merge")).rejects.toThrow();
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("r1");
+    // The merged rule's forwarder must not be left running after rollback.
+    expect(manager.getStatus("r2").running).toBe(false);
   });
 });
