@@ -36,6 +36,20 @@ function receiveOne(socket: dgram.Socket): Promise<string> {
   });
 }
 
+// Deadline poll (no fixed synchronization sleep). The inner setTimeout is the
+// poll interval inside a bounded loop, not a "wait this long" sleep.
+async function waitUntil(cond: () => boolean, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (cond()) return;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error("condition was not met before timeout");
+}
+
+type SendStub = (msg: Buffer, port: number, host: string, cb: (err?: Error) => void) => void;
+const failingSend: SendStub = (_msg, _port, _host, cb) => cb(new Error("send boom"));
+
 describe("UdpForwarder one-way mode", () => {
   it("forwards UDP packets to target", async () => {
     const targetPort = await getFreeUdpPort();
@@ -831,5 +845,116 @@ describe("UdpForwarder – error handling", () => {
 
     session.targetSocket.emit("error", new Error("session error"));
     expect(forwarder.getStatus().lastError).toBe("session error");
+  });
+});
+
+describe("UdpForwarder – send-callback error handling", () => {
+  it("emits udp.packet.error and records lastError when a one-way target send fails", async () => {
+    const events: ActivityEventInput[] = [];
+    const listenPort = await getFreeUdpPort();
+    const forwarder = new UdpForwarder(makeRule({ listenPort }), (e) => events.push(e));
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    // Force the shared one-way target socket's send callback to error
+    // (instance-level injection, like the existing socket.emit("error") tests).
+    (forwarder as any).targetSocket.send = failingSend;
+
+    const client = dgram.createSocket("udp4");
+    cleanup.push(() => new Promise<void>((r) => client.close(() => r())));
+    sendPacket(client, "hi", listenPort);
+
+    await waitUntil(() => events.some((e) => e.type === "udp.packet.error"));
+    expect(events.find((e) => e.type === "udp.packet.error")?.message).toContain("UDP send error");
+    expect(forwarder.getStatus().lastError).toBe("send boom");
+  });
+
+  it("emits udp.packet.error when a multi-client session send fails on reuse", async () => {
+    const events: ActivityEventInput[] = [];
+    const listenPort = await getFreeUdpPort();
+    const targetPort = await getFreeUdpPort();
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-multi-client" }),
+      (e) => events.push(e),
+      5000
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    const client = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => client.bind(0, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((r) => client.close(() => r())));
+    const clientPort = client.address().port;
+
+    // First packet creates the session (first send succeeds).
+    sendPacket(client, "first", listenPort);
+    await waitUntil(() => (forwarder as any).sessions.size >= 1);
+
+    // Inject a send failure on the session socket, then reuse the session.
+    const session = (forwarder as any).sessions.get(`127.0.0.1:${clientPort}`);
+    expect(session).toBeDefined();
+    session.targetSocket.send = failingSend;
+    sendPacket(client, "second", listenPort);
+
+    await waitUntil(() => events.some((e) => e.type === "udp.packet.error"));
+    expect(events.find((e) => e.type === "udp.packet.error")?.message).toContain("multi-client send error");
+  });
+
+  it("emits udp.packet.error when a last-client return send fails", async () => {
+    const events: ActivityEventInput[] = [];
+    const listenPort = await getFreeUdpPort();
+    const targetPort = await getFreeUdpPort();
+
+    // Echo target replies to whatever the forwarder's target socket sends.
+    const target = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => target.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((r) => target.close(() => r())));
+    target.on("message", (_msg, rinfo) => target.send(Buffer.from("reply"), rinfo.port, rinfo.address));
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-last-client" }),
+      (e) => events.push(e)
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    // Fail only the return path (listen socket); the inbound forward still works.
+    (forwarder as any).listenSocket.send = failingSend;
+
+    const client = dgram.createSocket("udp4");
+    cleanup.push(() => new Promise<void>((r) => client.close(() => r())));
+    sendPacket(client, "hi", listenPort);
+
+    await waitUntil(() => events.some((e) => e.type === "udp.packet.error"));
+    expect(events.find((e) => e.type === "udp.packet.error")?.message).toContain("UDP return error");
+  });
+
+  it("emits udp.packet.error when a multi-client return send fails", async () => {
+    const events: ActivityEventInput[] = [];
+    const listenPort = await getFreeUdpPort();
+    const targetPort = await getFreeUdpPort();
+
+    const target = dgram.createSocket("udp4");
+    await new Promise<void>((resolve) => target.bind(targetPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((r) => target.close(() => r())));
+    target.on("message", (_msg, rinfo) => target.send(Buffer.from("reply"), rinfo.port, rinfo.address));
+
+    const forwarder = new UdpForwarder(
+      makeRule({ listenPort, targetPort, udpMode: "bidirectional-multi-client" }),
+      (e) => events.push(e),
+      5000
+    );
+    await forwarder.start();
+    cleanup.push(() => forwarder.stop());
+
+    // Fail the return path (listen socket) before the target reply arrives.
+    (forwarder as any).listenSocket.send = failingSend;
+
+    const client = dgram.createSocket("udp4");
+    cleanup.push(() => new Promise<void>((r) => client.close(() => r())));
+    sendPacket(client, "hi", listenPort);
+
+    await waitUntil(() => events.some((e) => e.type === "udp.packet.error"));
+    expect(events.find((e) => e.type === "udp.packet.error")?.message).toContain("multi-client return error");
   });
 });

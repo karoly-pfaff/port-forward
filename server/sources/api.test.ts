@@ -1334,6 +1334,43 @@ describe("POST /api/config/apply", () => {
       expect(body.applied.remove).toBe(body.plan.summary.remove);
     }, { rules: [applyRule] });
   });
+
+  // Parity with the Go service (Coverage Slice D): a manager persist failure
+  // during apply-with-drift must surface as 500, and the catch → error handler
+  // path in api.ts must map it to the error-body shape.
+  it("returns 500 when applying drift fails to persist", async () => {
+    const failingStore: RuleStore = {
+      load: async () => [],
+      save: async () => {
+        throw new Error("simulated persist failure");
+      }
+    };
+    const manager = new ForwardManager(failingStore);
+    const server = http.createServer(createApp(manager));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Expected a TCP address.");
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          desired: [{
+            name: "New", protocol: "tcp", listenHost: "127.0.0.1",
+            listenPort: 49555, targetHost: "127.0.0.1", targetPort: 49556, enabled: false
+          }],
+          yes: true
+        })
+      });
+      expect(response.status).toBe(500);
+      const body = (await response.json()) as { errors: string[] };
+      expect(Array.isArray(body.errors)).toBe(true);
+      expect(body.errors[0]).toContain("simulated persist failure");
+    } finally {
+      await manager.stopAll();
+      await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    }
+  });
 });
 
 describe("GET /api/connections", () => {
