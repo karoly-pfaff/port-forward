@@ -223,3 +223,28 @@ func TestRun_DiagnosticsDispatch_NoSubcommand(t *testing.T) {
 		t.Errorf("exit code = %d, want 2", code)
 	}
 }
+
+// TestRun_InvalidURL_AllDispatches covers the repeated ResolveURL-error arm in
+// run() for every subcommand: an invalid --url must fail fast with exit 2
+// before any client is constructed. (runtime is already covered by
+// TestRun_InvalidURL; this covers the remaining dispatch arms.)
+func TestRun_InvalidURL_AllDispatches(t *testing.T) {
+	subcommands := [][]string{
+		{"list"},
+		{"status"},
+		{"activity"},
+		{"start", "rule-1"},
+		{"stop", "rule-1"},
+		{"diagnose", "rule-1"},
+		{"config", "export"},
+		{"diagnostics", "export"},
+	}
+	for _, sub := range subcommands {
+		t.Run(sub[0], func(t *testing.T) {
+			args := append([]string{"--url", "ftp://bad-scheme"}, sub...)
+			if code := run(args); code != 2 {
+				t.Errorf("run(%v) exit = %d, want 2", args, code)
+			}
+		})
+	}
+}
