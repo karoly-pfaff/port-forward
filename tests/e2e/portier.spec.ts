@@ -180,10 +180,13 @@ test("diagnose: clicking Diagnose on a rule opens the diagnostics panel with res
 
   await ruleRow.getByRole("button", { name: "Diagnose" }).click();
 
-  await expect(page.locator(".diag-panel-title")).toBeVisible({ timeout: 5_000 });
+  // The panel is open (its close affordance has an accessible name).
+  await expect(page.getByRole("button", { name: "Close diagnostics" })).toBeVisible({ timeout: 5_000 });
+  // Diagnostics finish and render real, user-visible check results — the
+  // "Listen address" check is always present — rather than asserting a styling
+  // container by CSS class.
   await expect(page.getByText("Running diagnostics…")).not.toBeVisible({ timeout: 10_000 });
-  await expect(page.locator(".diag-panel-body")).toBeVisible({ timeout: 5_000 });
-  await expect(page.getByRole("button", { name: "Close diagnostics" })).toBeVisible();
+  await expect(page.getByText("Listen address", { exact: true })).toBeVisible({ timeout: 5_000 });
 });
 
 // ── Helper ────────────────────────────────────────────────────────────────────

@@ -1,6 +1,8 @@
-import { test, expect } from "@playwright/test";
-import { clearAllRules, createRule } from "./helpers/api.js";
+import { connect } from "node:net";
+import { test, expect, type Page } from "@playwright/test";
+import { clearAllRules, createRule, startRule } from "./helpers/api.js";
 import { getFreePort } from "./helpers/port.js";
+import { startTcpEchoServer, closeTcpServer } from "./helpers/network.js";
 
 // Reset all rules before each test for isolation.
 test.beforeEach(async ({ baseURL }) => {
@@ -8,7 +10,7 @@ test.beforeEach(async ({ baseURL }) => {
 });
 
 // Navigate to Connections view and wait for the title.
-async function goToConnections(page: Parameters<Parameters<typeof test>[1]>[0]): Promise<void> {
+async function goToConnections(page: Page): Promise<void> {
   await page.getByRole("navigation", { name: "Main navigation" })
     .getByRole("button", { name: "Connections" })
     .click();
@@ -95,17 +97,19 @@ test("connections: auto-refresh is enabled by default and can be toggled off and
   await page.goto("/");
   await goToConnections(page);
 
-  // The native checkbox is visually hidden by the custom toggle styling.
-  // Click the label to toggle the state and read the checked property directly.
-  const toggleLabel = page.locator("label.auto-refresh-toggle");
-  await expect(toggleLabel).toBeVisible({ timeout: 5_000 });
-  const toggle = page.locator('input[type="checkbox"][aria-label="Auto-refresh"]');
+  // State is read via the accessible aria-label (not a CSS-class node); the
+  // visible "Auto-refresh" label is the user-facing control to click. The native
+  // checkbox is visually hidden by the custom toggle styling, so it is toggled by
+  // clicking its label rather than the input directly.
+  const toggle = page.locator('input[aria-label="Auto-refresh"]');
+  const toggleControl = page.getByText("Auto-refresh", { exact: true });
+  await expect(toggleControl).toBeVisible({ timeout: 5_000 });
   await expect(toggle).toBeChecked();
 
-  await toggleLabel.click();
+  await toggleControl.click();
   await expect(toggle).not.toBeChecked();
 
-  await toggleLabel.click();
+  await toggleControl.click();
   await expect(toggle).toBeChecked();
 });
 
@@ -166,4 +170,78 @@ test("connections: started rule appears in rule filter dropdown after traffic", 
   // <option> elements are always hidden in a closed <select>; use toHaveCount instead.
   const ruleSelect = page.getByLabel("Filter by rule");
   await expect(ruleSelect.locator("option").filter({ hasText: "Connections Filter Rule" })).toHaveCount(1);
+});
+
+// ── I. Populated TCP table with a live connection ─────────────────────────────
+//
+// Proves the primary value of the view: a real forwarded TCP connection renders
+// as a populated row (rule name, endpoints, Active status), and the empty state
+// disappears. Uses the real E2E runtime — a TCP rule forwarding to an in-process
+// echo server, with a client socket held open across the page fetch.
+
+test("connections: a live TCP connection appears as a populated table row", async ({ page, baseURL }) => {
+  const targetPort = await getFreePort();
+  const echo = await startTcpEchoServer(targetPort);
+  const listenPort = await getFreePort();
+
+  const { id } = await createRule(baseURL!, {
+    name: "Live TCP Inspect",
+    protocol: "tcp",
+    listenHost: "127.0.0.1",
+    listenPort,
+    targetHost: "127.0.0.1",
+    targetPort,
+    enabled: false,
+  });
+  await startRule(baseURL!, id);
+
+  // Open and hold a TCP connection through the forwarded listen port so the
+  // service tracks it while the browser polls /api/connections.
+  const held = connect(listenPort, "127.0.0.1");
+  await new Promise<void>((resolve, reject) => {
+    held.once("connect", () => resolve());
+    held.once("error", reject);
+  });
+
+  try {
+    await page.goto("/");
+    await goToConnections(page);
+
+    // TCP tab is active by default; auto-refresh (2 s) fetches the live data.
+    const table = page.getByRole("table", { name: "TCP connections" });
+    await expect(table).toBeVisible({ timeout: 12_000 });
+
+    const row = table.locator("tbody tr").filter({ hasText: "Live TCP Inspect" });
+    await expect(row).toBeVisible({ timeout: 12_000 });
+    await expect(row.getByText("Active")).toBeVisible();
+    await expect(row.getByText(/127\.0\.0\.1/).first()).toBeVisible();
+
+    // Empty state is gone, and the summary/footer reflect the connection.
+    await expect(page.getByText("No active TCP connections.")).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: /^TCP \(/ })).toContainText(/TCP \([1-9]/);
+  } finally {
+    held.destroy();
+    await closeTcpServer(echo);
+  }
+});
+
+// ── J. API failure shows a user-visible error banner ──────────────────────────
+//
+// Intercepts the connections API at the browser layer and forces it to fail,
+// proving the view surfaces a role="alert" error banner (not a crash or a stuck
+// spinner). Uses Playwright route interception — the rest of the app loads from
+// the real server.
+
+test("connections: shows an error banner when the connections API fails", async ({ page }) => {
+  await page.route("**/api/connections*", (route) => route.abort());
+
+  await page.goto("/");
+  await goToConnections(page);
+
+  const alert = page.getByRole("alert");
+  await expect(alert).toBeVisible({ timeout: 10_000 });
+  await expect(alert).not.toBeEmpty();
+
+  // The app does not crash: navigation and the view tabs remain usable.
+  await expect(page.getByRole("tab", { name: /^UDP/ })).toBeVisible();
 });
