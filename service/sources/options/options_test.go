@@ -139,3 +139,11 @@ func TestFromOSEnv(t *testing.T) {
 	// empty key ("") — that is expected behavior, not a bug.
 	_ = env
 }
+
+// TestResolveRejectsPositionalArg covers parseCLI's unknown-positional-argument
+// branch (distinct from an unknown --flag): a bare positional token is rejected.
+func TestResolveRejectsPositionalArg(t *testing.T) {
+	if _, err := Resolve([]string{"unexpected-positional"}, Env{}, t.TempDir()); err == nil {
+		t.Fatal("expected error for unknown positional CLI argument")
+	}
+}
