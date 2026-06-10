@@ -62,6 +62,14 @@ npm run validate:coverage:cli      # cli only
 
 All coverage output lands in `coverage/` (gitignored). TypeScript workspaces write `coverage-summary.json` per component; Go profiles are temporary and cleaned up after reporting.
 
+## v1.6 Testing Slice Test-D — ForwardManager rollback parity (2026-06-09)
+
+Test-D added persist-failure rollback tests to `server/sources/forward-manager.test.ts` (via a `ControllableStore` fake) and a minimal product fix to `server/sources/forward-manager.ts` (create/update/delete/reorder/import now roll back in-memory state on a failed `store.save()`, matching the Go manager). This closed a real correctness/parity bug, not just a coverage gap. `forward-manager.ts` per-file coverage improved 99.4%/88.7% → **99.5%/90.4%** (stmts/branch), 100% funcs; aggregate server coverage 95.3%/92.0% → **95.4%/92.2%**. **Coverage gates are unchanged** (server stays 89/91/99): the branch headroom (92.2% vs 91% gate) was intentionally not ratcheted mid-slice to stay clear of the documented Windows vitest ±1% ghost-entry fluctuation. The remaining ~0.5% stmts / ~9.6% branch gap in `forward-manager.ts` is dominated by the best-effort `await this.startRule(...).catch(() => {})` restart-failure paths inside rollback (a restart must itself fail during a rollback — not deterministically triggerable) and the long-standing defensive merge/validation branches noted below.
+
+## v1.6 Testing Slice Test-A — Coverage-run stability (2026-06-09)
+
+Test-A stabilized the socket-binding test suites against the EADDRINUSE/TOCTOU flake identified in `audits/v1.6-testing-audit-1.md` (a `coverage:service` `go test` run failed once under concurrent load during the testing audit and passed on isolated re-runs). The `free*Port` test helpers allocate→close→return an ephemeral port; a parallel test/process can grab it before the forwarder/manager binds, surfacing as a transient bind failure that can fail a coverage run non-deterministically. Test-A adds bounded bind-retry helpers (`isAddrInUse` + `startTCPForwarderOnFreePort`/`startUDPForwarderOnFreePort` in `service/sources/forwarders/portretry_test.go`, `startRuleStable` in `service/sources/manager/portretry_test.go`, `startForwarderOnFreePort` in `server/sources/test-helpers.ts`) and migrates the Go forwarder/manager and TS `tcp-forwarder` happy-path binds. **No coverage numbers or gates change** — this is a test-stability fix only; production code is untouched. Residual follow-ups (TS `udp-forwarder.test.ts`, the api HTTP `/start` sites, E2E `port.ts`) are tracked in the changelog. Run `npm run validate:coverage` twice consecutively to confirm determinism after this slice.
+
 ## v1.6 Coverage Methodology — Slice A Tooling Stabilization (2026-06-09)
 
 ### Structural-zero files
@@ -103,21 +111,30 @@ No product logic is hidden by these exclusions. The policy is: exclusions are al
 
 ---
 
-## tools/cli — 93.2% statements (gate: 92%)
+## tools/cli — 97.7% statements (gate: 95%)
 
-| Package                    | Coverage |
-| -------------------------- | -------: |
-| portier/cli/sources        |    ~29%* |
-| portier/cli/sources/client |    ~9%*  |
-| portier/cli/sources/commands |  ~85%* |
-| portier/cli/sources/output |     ~2%* |
-| **Total (cross-package)**  |  **93.2%** |
+Updated at **v1.6 Coverage Slice C** (2026-06-10): 93.2% → **97.7%** (cross-package), gate raised 93 → 95. The uplift is failure-path/exit-code tests only — no CLI behavior change; the CLI remains a pure API client (no server/service imports). Tests added:
 
-\* Per-package numbers reflect cross-package instrumentation totals; the combined 93.2% is the meaningful figure. Updated at v1.5 Slice 4: `configplancmd_test.go` (35 tests) + 5 client PlanConfig tests added; `config plan` and `config diff` commands fully covered.
+- `commands/jsonerr_test.go` — a shared `failingWriter` (every `Write` returns `os.ErrClosed`) drives the `output.PrintJSON → "Error encoding JSON" → exit 1` branch in every JSON-emitting command (runtime, list, status, start, stop, diagnose, activity, config export/validate/plan/diff/apply/import, diagnostics export). Behavior asserted: exit 1 + stderr message.
+- `commands/helpers_internal_test.go` — white-box (`package commands`) tests for `formatChangeValue` (nil, integer-valued float, non-integer float, string, bool) and `opEndpoint` (Current present, Desired fallback, both-nil em-dash).
+- `main_test.go` — `TestRun_InvalidURL_AllDispatches` asserts an invalid `--url` exits 2 for every subcommand (the repeated `ResolveURL`-error arm in `run()`).
 
-Gate: 93%. Enforced by `npm run validate:coverage:cli` (scripts/validate-coverage.js --only cli). Ratcheted to v1.6-pre value (93%) from v1.5.0 (92%).
+After Slice C, every `Run*` command function reaches ≥ ~94% with the JSON-error and exit-code paths covered; `run()` and the formatting helpers reach 100%.
 
-Known untestable branches documented in scripts/validate-coverage.js: `main()` os.Exit, `http.NewRequest` error, `json.Marshal` error on CLI types, `json.NewEncoder(stdout).Encode` errors, and repeated `validateURL` branches across commands.
+Gate: 95%. Enforced by `npm run validate:coverage:cli` (scripts/validate-coverage.js --only cli). Go coverage is a deterministic cross-package number (no Windows vitest ghost-entry effect); repeated `npm run coverage:cli` runs both report 97.7%. The 2.7% headroom above the gate is intentional buffer.
+
+### Structurally-unreachable CLI branches (documented, not chased)
+
+These remain below 100% by design — they cannot be triggered without contorting production code or adding fake unmarshalable DTOs (forbidden by the "CLI stays a pure API client" rule):
+
+| Location | Branch | Why unreachable |
+| -------- | ------ | --------------- |
+| `sources/main.go:main` | `os.Exit(run(...))` | Calling `os.Exit` from a test would abort the test binary; `run()` itself is fully tested. |
+| `sources/client/client.go:doWithBody` | `json.Marshal(body)` error | The request bodies are concrete CLI DTOs that always marshal; no unmarshalable value can reach it. |
+| `sources/client/client.go:do` | `http.NewRequest` error / response-body read error | `NewRequest` only errors on a malformed method/URL the CLI never produces; the read error needs a mid-stream transport failure not reproducible with `httptest`. |
+| `sources/commands/configcmd.go:writePrettyJSON` | `json.MarshalIndent` error | Same as `doWithBody` — the bundle/config values always marshal. The `os.WriteFile` error branch IS covered (invalid `--out`/`--backup-out` path tests). |
+
+Do not add product types solely to hit these — they are accepted permanent gaps.
 
 ---
 
@@ -149,30 +166,44 @@ Gate: 94/89/78. Enforced by `npm run validate:coverage:client`. (Branch/funcs ga
 
 ---
 
-## server — 88.63% statements, 91.24% branch, 99.09% functions
+## server — 98.9% statements, 93.6% branch, 100% functions
 
-Updated at v1.5 Slice 2 (2026-06-09). Previous: 87.11% (v1.5 pre-release). Before that: 82.88% stmts (v1.4.0). Baseline (v1.3.0): 71.9% stmts.
+Updated at **Coverage Slice E** (2026-06-10): 95.4/92.2/100 → **98.9/93.6/100**. Previous milestones: v1.5 Slice 2 88.63%; v1.5 pre 87.11%; v1.4.0 82.88%; v1.3.0 71.9%.
 
 "All files" figure from `npm run coverage:server`.
 
 | File                                                  | Stmts  | Branch | Funcs  | Notes                                            |
 | ----------------------------------------------------- | -----: | -----: | -----: | ------------------------------------------------ |
-| sources/index.ts                                      |     0% |      0%|      0%| app entry/wiring, not unit-tested                |
+| sources/index.ts                                      |     0% |      0%|      0%| app entry/wiring, not unit-tested (E2E/contract) |
 | sources/forwarders/types.ts                           |     0% |      — |      — | interface-only file, no executable code          |
-| sources/diagnose.ts                                   |  85.9% |  86.5% |   100% | timeout paths (2s) not unit-tested               |
-| sources/forwarders/udp-forwarder.ts                   |  86.3% |  84.0% |   100% | send error callbacks require specific timing     |
-| sources/forward-manager.ts                            |  99.4% |  88.7% |   100% | v1.5 pre: 9 new tests; 1 unreachable path at 129-130 |
-| sources/api.ts                                        |  92.8% |  87.0% |   100% | platform detection branches (Windows-only env)  |
-| sources/config-plan.ts                                |  100%  |  100%  |   100% | v1.5 Slice 2: pure plan engine, 65 unit tests   |
-| sources/logger.ts                                     |   100% |   100% |   100% | v1.5 pre: 6 unit tests added                    |
-| sources/config-store.ts                               |   100% |   100% |   100% | v1.5 pre: non-array JSON test added              |
-| sources/server-options.ts                             |   100% |   100% |   100% | v1.5 pre: unknown flag + missing value tests     |
+| sources/diagnose.ts                                   |  98.0% |  91.4% |   100% | Slice E: TCP bind/connect/DNS + advisory tests. Gap = 2 s `tryTcpBind`/`tryUdpBind`/`tryTcpConnect` timeout branches |
+| sources/forwarders/udp-forwarder.ts                   |  99.4% |  89.6% |   100% | Slice E: 4 send-callback error branches. Gap = post-stop/pre-client reply race guards |
+| sources/forward-manager.ts                            |  99.5% |  90.6% |   100% | Test-D rollback; `.catch(() => {})` restart-on-rollback failure paths uncovered |
+| sources/api.ts                                        |  96.0% |  91.9% |   100% | Slice E: apply-drift persist-failure → 500. Gap = platform-normalize branches (Windows-only env) |
+| sources/config-plan.ts                                |  99.3%  |  98.8%  |  100% | pure plan engine                                |
+| sources/logger.ts                                     |   100% |   100% |   100% |                                                  |
+| sources/config-store.ts                               |   100% |   100% |   100% |                                                  |
+| sources/server-options.ts                             |   100% |   100% |   100% |                                                  |
 | sources/connections/tcp-connection-registry.ts        |   100% |   100% |   100% |                                                  |
 | sources/connections/udp-session-registry.ts           |   100% |   100% |   100% |                                                  |
-| sources/forwarders/tcp-forwarder.ts                   |   100% |    90% |   100% | branch gap = optional registry param             |
+| sources/forwarders/tcp-forwarder.ts                   |   100% |    90% |   100% | branch gap = optional registry param (by-design) |
 | sources/activity/activity-store.ts                    |   100% |   100% |   100% |                                                  |
 
-Gate: 89/91/99. Enforced by `npm run validate:coverage:server`. Ratcheted to v1.6-pre values (89/91/99) from v1.5.0 (88/90/99).
+Gate: **95/92/99**. Enforced by `npm run validate:coverage:server`. Ratcheted 88/90/99 (v1.5.0) → 89/91/99 (v1.6-pre) → **95/92/99 (Coverage Slice E)**. Three consecutive `coverage:server` runs all reported 98.9/93.6/100; the Slice-A ghost-entry dedup keeps the server number deterministic, so a 95/92 gate retains ~3.9%/~1.6% buffer.
+
+### Coverage Slice E — remaining server blockers (documented, not chased)
+
+These branches are structurally hard to trigger deterministically without brittle internals monkeypatching or real timing; they are documented rather than force-covered, and the surrounding behavior is covered by stop/cleanup/contract tests:
+
+| Area | Branch | Why not covered |
+| ---- | ------ | --------------- |
+| `diagnose.ts` | `tryTcpBind`/`tryUdpBind`/`tryTcpConnect` **2 s timeout** events | Triggering a real bind/connect that hangs ~2 s is nondeterministic and slow; the success and error (refused/in-use) paths ARE covered. |
+| `forwarders/udp-forwarder.ts` | `if (!this.listenSocket) return` (target reply arrives after stop); `if (!this.lastClient) return` (target reply before any client packet) | Both are post-stop / pre-client **race guards** reachable only via an impossible-to-time reply ordering; covered indirectly by stop/cleanup tests. The send-callback error branches ARE now covered via clean instance-level `.send` injection. |
+| `forwarders/tcp-forwarder.ts` | optional-registry guard (`if (connId)`) — 90% branch | By-design optional API path: when no registry is passed, `connId` is undefined and the right-hand side is never reached. Not a meaningful test gap. |
+| `api.ts` | `normalizePlatform`/`normalizeArch` darwin/linux/unknown arms | Windows-only environment — the non-win32 branches cannot run on the dev/CI host. Covered cross-platform by the Go service equivalents + `validate:contract`. |
+| `index.ts`, `forwarders/types.ts` | entry/composition root; interface-only | E2E/contract territory; interface compiles to nothing. |
+
+Do not add `dgram` prototype monkeypatches or real-timeout waits to hit these — accept them as documented gaps. A clean instance-level `.send`/`.emit` override on a specific socket is the sanctioned injection technique (used for the send-callback error tests).
 
 Notes:
 - `index.ts` bootstrap is integration-tested via E2E and `validate:contract`; 0% here is expected.
@@ -213,11 +244,34 @@ Per-package figures (package-internal test coverage):
 | sources/static                   |        N/T  | static file helper, no test file                 |
 | sources/version                  |        N/T  | constant, no test file                           |
 | sources/ (main.go)               |        N/T  | entry point, no test file                        |
-| **Combined total (-coverpkg)**   |   **88.5%** |                                                  |
+| **Combined total (-coverpkg)**   |   **90.3%** |  Coverage Slice D                                |
 
 N/T = no test file. Most of these are thin wrappers, type definitions, or OS-integration code.
 
-Gate: 88%. Enforced by `npm run validate:coverage:service`. Ratcheted 85% (v1.5.0) → 87% (v1.6-pre) → 88% (Slice B: 9 new tests for manager rollback and config error paths). Arch-C2 (manager activity-emission dedupe) nudged the statement total 88.6% → 88.5% by removing covered duplicate lines; the gate is unchanged and full rule-event payloads are now asserted in `manager_test.go`.
+Gate: 90%. Enforced by `npm run validate:coverage:service`. Ratcheted 85% (v1.5.0) → 87% (v1.6-pre) → 88% (Slice B) → **90% (Coverage Slice D)**. Arch-C2 nudged the total 88.6% → 88.5%.
+
+### Coverage Slice D — error-path uplift (2026-06-10)
+
+Raised the combined total 88.5% → **90.3%** with tests-only additions (no product code changed; `validate:contract` 167/167). Two consecutive `coverage:service` runs both reported 90.3%; modified packages pass `go test -count=3`. New/expanded error-path tests:
+
+- `api/errorpaths_test.go` — body-read failures and malformed JSON → 400; unknown-rule `PATCH` → 404; **generic (non-typed) manager error → 500** via a `manager.NewWithStore` handler whose store path is under a regular file (so every Save fails cross-platform, no production seam, no mocking); config-apply `ImportConfig` failure → 500; `NewHandler` option defaults; `tryTCPBind`/`tryUDPBind` success+failure. (`api` package 70.8% → ~91%.)
+- `forwarders/udp_errorpaths_test.go` — public `NewUDPForwarder` constructor + `udpMode()` nil-default (one-way), via the Test-A `startUDPForwarderOnFreePort` retry helper.
+- `static/static_test.go` — `ServeClient` existing-asset vs SPA index fallback; `HasClient`.
+- `manager/errorpaths_test.go` — `StartEnabled` skips disabled rules (no socket binds); `hasIDIn` regenerates a colliding ID on merge-import.
+- `configplan/udpmode_test.go` — `udpModeEqual`/`udpModeVal` for nil↔non-nil and non-nil↔non-nil.
+- `options/options_test.go` — `parseCLI` positional-argument rejection.
+
+**Remaining service blockers (documented, not chased — would need invasive production-only seams):**
+
+| Area | Branch | Why not covered |
+| ---- | ------ | --------------- |
+| `activity/store.go:randomEventID`, `domain/id.go:NewRuleID`, `connections/.../generateConnectionID` | `crypto/rand` read-failure fallback | OS entropy never fails in tests; no injection point. |
+| `config/config.go:Save` (65.7%) | `tempFile.Write`/`Sync`/`Close` errors; `os.Rename` recovery | Need an injectable `fs.File`/writer seam. Go's `os.Rename` replaces atomically on both Windows and Linux, so the remove-and-retry recovery branch is effectively dead code. The `MkdirAll` and invalid-rule branches ARE covered. |
+| `forwarders/udp.go` | `emitPacketError` (0%), multi-client/session **write**-error branches (`handleMultiClientPacket`, `sessionReadLoop`, `targetReadLoop`, `listenLoop` read-error tails) | Require injecting a failing `net.Conn`/`PacketConn`; the forwarder constructs its own sockets. A seam here would exist only for tests — deferred as a future testability improvement, not added in this slice. |
+| `forwarders/tcp.go:acceptLoop` (80%), `setLastError`/`logInfo` | accept-error injection; nil-log guard | Same — accept errors need a mock listener; `logInfo` 50% is a trivial nil-`log` guard. |
+| `main.go`, `platform/windows.go`, `logger.New` (0%) | entry point / OS service / thin wrapper | E2E/OS-integration territory; not unit-testable. |
+
+Do not add `net.Conn` mocks or `fs.File` abstractions to production solely for these — accept them as documented gaps unless the seam independently improves the design.
 
 Notes:
 - The combined coverage run uses `-p 1` (sequential) to avoid timing flakiness in `TestTCPForwarderEmitsConnectionClosedEvent` under parallel cross-package instrumentation. The per-package test for that package passes reliably.
