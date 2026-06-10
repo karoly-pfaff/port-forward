@@ -19,11 +19,11 @@ func TestTCPForwarderForwardsBothDirectionsAndTracksStatus(t *testing.T) {
 	targetPort, stopTarget := startTestEchoServer(t, "direct")
 	defer stopTarget()
 
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarder(rule, nil, nil)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start returned error: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarder(rule, nil, nil)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -61,11 +61,11 @@ func TestTCPForwarderStopClosesListener(t *testing.T) {
 	targetPort, stopTarget := startTestEchoServer(t, "stop")
 	defer stopTarget()
 
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarder(rule, nil, nil)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start returned error: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarder(rule, nil, nil)
+	})
 	forwarder.Stop()
 
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", rule.ListenPort)), 100*time.Millisecond)
@@ -76,11 +76,11 @@ func TestTCPForwarderStopClosesListener(t *testing.T) {
 }
 
 func TestTCPForwarderRecordsTargetConnectError(t *testing.T) {
-	rule := testTCPRule(freeTestTCPPort(t), freeTestTCPPort(t))
-	forwarder := NewTCPForwarder(rule, nil, nil)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start returned error: %v", err)
-	}
+	rule := testTCPRule(0, freeTestTCPPort(t))
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarder(rule, nil, nil)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -104,11 +104,11 @@ func TestTCPForwarderEmitsConnectionOpenedEvent(t *testing.T) {
 		mu.Unlock()
 	}
 
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarder(rule, nil, onEvent)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarder(rule, nil, onEvent)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -160,11 +160,11 @@ func TestTCPForwarderEmitsConnectionClosedEvent(t *testing.T) {
 		mu.Unlock()
 	}
 
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarder(rule, nil, onEvent)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarder(rule, nil, onEvent)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -202,7 +202,7 @@ func TestTCPForwarderEmitsConnectionClosedEvent(t *testing.T) {
 
 func TestTCPForwarderEmitsConnectionErrorNotClosedOnTargetFail(t *testing.T) {
 	// Target port is closed — dial will fail, should emit error but NOT closed.
-	rule := testTCPRule(freeTestTCPPort(t), freeTestTCPPort(t))
+	rule := testTCPRule(0, freeTestTCPPort(t))
 
 	var mu sync.Mutex
 	var events []activity.ActivityEventInput
@@ -212,10 +212,10 @@ func TestTCPForwarderEmitsConnectionErrorNotClosedOnTargetFail(t *testing.T) {
 		mu.Unlock()
 	}
 
-	forwarder := NewTCPForwarder(rule, nil, onEvent)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarder(rule, nil, onEvent)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -335,11 +335,11 @@ func TestTCPForwarderWithRegistryTracksConnection(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewTcpConnectionRegistry()
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -360,11 +360,11 @@ func TestTCPForwarderWithRegistryTracksBytesIn(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewTcpConnectionRegistry()
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -392,11 +392,11 @@ func TestTCPForwarderWithRegistryTracksBytesOut(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewTcpConnectionRegistry()
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)
@@ -425,11 +425,11 @@ func TestTCPForwarderWithRegistryClosesOnDisconnect(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewTcpConnectionRegistry()
-	rule := testTCPRule(freeTestTCPPort(t), targetPort)
-	forwarder := NewTCPForwarderWithRegistry(rule, nil, nil, reg)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	rule := testTCPRule(0, targetPort)
+	forwarder, _ := startTCPForwarderOnFreePort(t, func(p int) *TCPForwarder {
+		rule.ListenPort = p
+		return NewTCPForwarderWithRegistry(rule, nil, nil, reg)
+	})
 	defer forwarder.Stop()
 
 	conn := dialTestTCP(t, rule.ListenPort)

@@ -185,9 +185,7 @@ func TestDeleteRule(t *testing.T) {
 	rule.ListenPort = freeTCPPort(t)
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
-	if _, err := manager.StartRule("tcp-1"); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 
 	if err := manager.DeleteRule("tcp-1"); err != nil {
 		t.Fatalf("DeleteRule returned error: %v", err)
@@ -303,10 +301,7 @@ func TestStartStopUDPRule(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	status, err := manager.StartRule("udp-1")
-	if err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	status := startRuleStable(t, manager, &rule)
 	if !status.Running || status.StartedAt == "" {
 		t.Fatalf("status after start = %#v", status)
 	}
@@ -314,7 +309,7 @@ func TestStartStopUDPRule(t *testing.T) {
 		t.Fatal("PacketsIn should be non-nil for UDP rule")
 	}
 
-	status, err = manager.StopRule("udp-1")
+	status, err := manager.StopRule("udp-1")
 	if err != nil {
 		t.Fatalf("StopRule returned error: %v", err)
 	}
@@ -329,9 +324,7 @@ func TestStatusReflectsUDPRunningState(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	if _, err := manager.StartRule("udp-1"); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 
 	statuses := manager.ListStatus()
 	if len(statuses) != 1 || !statuses[0].Running {
@@ -349,10 +342,7 @@ func TestTCPForwardingAndStatus(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	status, err := manager.StartRule(rule.ID)
-	if err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	status := startRuleStable(t, manager, &rule)
 	if !status.Running || status.ActiveConnections == nil || *status.ActiveConnections != 0 {
 		t.Fatalf("start status = %#v", status)
 	}
@@ -403,9 +393,7 @@ func TestTCPStopClosesListener(t *testing.T) {
 	rule.TargetPort = targetPort
 	manager := testManager(t, []domain.ForwardRule{rule})
 
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	if _, err := manager.StopRule(rule.ID); err != nil {
 		t.Fatalf("StopRule returned error: %v", err)
 	}
@@ -427,9 +415,7 @@ func TestTCPUnreachableTargetRecordsLastError(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	conn := dialTCP(t, rule.ListenPort)
 	_, _ = conn.Write([]byte("hello\n"))
 	_ = conn.Close()
@@ -468,9 +454,7 @@ func TestTCPUpdateNameDoesNotRestartListener(t *testing.T) {
 	rule.TargetPort = targetPort
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	startedAt := statusByRuleID(manager.ListStatus(), rule.ID).StartedAt
 
 	name := "Renamed TCP"
@@ -494,9 +478,7 @@ func TestTCPUpdateForwardingFieldRestartsListener(t *testing.T) {
 	rule.TargetPort = firstPort
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 
 	if got := requestThroughForwarder(t, rule.ListenPort, "ping"); got != "first:ping\n" {
 		t.Fatalf("before update response = %q", got)
@@ -517,9 +499,7 @@ func TestTCPDeleteStopsListener(t *testing.T) {
 	rule.ListenPort = freeTCPPort(t)
 	rule.TargetPort = targetPort
 	manager := testManager(t, []domain.ForwardRule{rule})
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	if err := manager.DeleteRule(rule.ID); err != nil {
 		t.Fatalf("DeleteRule returned error: %v", err)
 	}
@@ -615,10 +595,7 @@ func TestUDPForwardingAndStatus(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	status, err := manager.StartRule(rule.ID)
-	if err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	status := startRuleStable(t, manager, &rule)
 	if !status.Running || status.PacketsIn == nil {
 		t.Fatalf("start status = %#v", status)
 	}
@@ -668,9 +645,7 @@ func TestUDPStopClosesSocket(t *testing.T) {
 	}
 	manager := testManager(t, []domain.ForwardRule{rule})
 
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	if _, err := manager.StopRule(rule.ID); err != nil {
 		t.Fatalf("StopRule returned error: %v", err)
 	}
@@ -732,9 +707,7 @@ func TestUDPUpdateNameDoesNotRestartListener(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	startedAt := statusByRuleID(manager.ListStatus(), rule.ID).StartedAt
 
 	name := "Renamed UDP"
@@ -766,9 +739,7 @@ func TestUDPUpdateForwardingFieldRestartsForwarder(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	startedAt := statusByRuleID(manager.ListStatus(), rule.ID).StartedAt
 
 	secondTarget, stopSecond := startUDPEchoServer(t, "second")
@@ -801,9 +772,7 @@ func TestUDPDeleteStopsForwarder(t *testing.T) {
 	}
 	manager := testManager(t, []domain.ForwardRule{rule})
 
-	if _, err := manager.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule returned error: %v", err)
-	}
+	startRuleStable(t, manager, &rule)
 	if err := manager.DeleteRule(rule.ID); err != nil {
 		t.Fatalf("DeleteRule returned error: %v", err)
 	}
@@ -927,9 +896,7 @@ func TestStartRuleRecordsActivity(t *testing.T) {
 	rule.Enabled = false
 	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
 	defer m.StopAll()
-	if _, err := m.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule: %v", err)
-	}
+	startRuleStable(t, m, &rule)
 	assertActivityType(t, store, activity.EventRuleStarted)
 }
 
@@ -941,9 +908,7 @@ func TestStopRuleRecordsActivity(t *testing.T) {
 	rule.TargetPort = targetPort
 	rule.Enabled = false
 	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
-	if _, err := m.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule: %v", err)
-	}
+	startRuleStable(t, m, &rule)
 	if _, err := m.StopRule(rule.ID); err != nil {
 		t.Fatalf("StopRule: %v", err)
 	}
@@ -1035,9 +1000,7 @@ func TestStartStopRuleActivityPayload(t *testing.T) {
 	m, store := testManagerWithActivity(t, []domain.ForwardRule{rule})
 	defer m.StopAll()
 
-	if _, err := m.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule: %v", err)
-	}
+	startRuleStable(t, m, &rule)
 	started := findActivityEvent(t, store, activity.EventRuleStarted)
 	assertRuleEventPayload(t, started, activity.EventRuleStarted, activity.SeveritySuccess, rule, `Rule "TCP" started.`)
 
@@ -1620,9 +1583,7 @@ func TestUpdateRulePersistFailureWithRunningRuleRestartsOriginal(t *testing.T) {
 	m := testManager(t, []domain.ForwardRule{rule})
 	defer m.StopAll()
 
-	if _, err := m.StartRule(rule.ID); err != nil {
-		t.Fatalf("StartRule: %v", err)
-	}
+	startRuleStable(t, m, &rule)
 	if !statusByRuleID(m.ListStatus(), rule.ID).Running {
 		t.Fatal("rule should be running before update")
 	}

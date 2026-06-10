@@ -120,13 +120,12 @@ func TestUDPOneWayForwardsPacketToTarget(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(freeTestUDPPort(t), targetPort, domain.UdpModeOneWay),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, _ := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeOneWay),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	// Send a packet through the forwarder to the echo server.
@@ -152,14 +151,12 @@ func TestUDPOneWayDoesNotReturnTargetResponse(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeOneWay),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeOneWay),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	// Dial the forwarder listen port directly so we can check for a response.
@@ -179,14 +176,12 @@ func TestUDPLastClientReturnsTargetResponse(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("hello"))
@@ -216,14 +211,12 @@ func TestUDPLastClientTwoClientsDocumentedLimitation(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	// Client A sends first, then client B sends.
@@ -232,8 +225,11 @@ func TestUDPLastClientTwoClientsDocumentedLimitation(t *testing.T) {
 	clientA := sendUDPPacket(t, listenPort, []byte("from-a"))
 	defer clientA.Close()
 
-	// Small delay so A's packet is processed and forwarded first.
-	time.Sleep(20 * time.Millisecond)
+	// Wait until A's packet has actually been forwarded (deadline poll, not a
+	// fixed sleep) so the ordering this test documents is deterministic.
+	waitForUDPCondition(t, func() bool {
+		return forwarder.Status().PacketsIn != nil && *forwarder.Status().PacketsIn >= 1
+	})
 
 	clientB := sendUDPPacket(t, listenPort, []byte("from-b"))
 	defer clientB.Close()
@@ -258,14 +254,12 @@ func TestUDPMultiClientRouteResponseToCorrectClient(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	clientA := sendUDPPacket(t, listenPort, []byte("msgA"))
@@ -291,14 +285,12 @@ func TestUDPMultiClientActiveSessionsCountsAndDecrementsOnTimeout(t *testing.T) 
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	clientA := sendUDPPacket(t, listenPort, []byte("hello"))
@@ -326,14 +318,12 @@ func TestUDPMultiClientStatsUpdate(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("stat-test"))
@@ -364,14 +354,12 @@ func TestUDPStopClosesListenerAndPreventsForwarding(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, nil, testSessionTimeout,
+		)
+	})
 
 	// Verify it is working before stop.
 	client := sendUDPPacket(t, listenPort, []byte("pre-stop"))
@@ -402,14 +390,12 @@ func TestUDPMultiClientStopClearsSessionCount(t *testing.T) {
 	targetPort, stopTarget := startTestUDPEchoServer(t, "echo")
 	defer stopTarget()
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout,
+		)
+	})
 
 	client := sendUDPPacket(t, listenPort, []byte("ping"))
 	defer client.Close()
@@ -429,14 +415,12 @@ func TestUDPMultiClientStopClearsSessionCount(t *testing.T) {
 }
 
 func TestUDPStopIsIdempotent(t *testing.T) {
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, freeTestUDPPort(t), domain.UdpModeOneWay),
-		nil, nil, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, _ := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, freeTestUDPPort(t), domain.UdpModeOneWay),
+			nil, nil, testSessionTimeout,
+		)
+	})
 	forwarder.Stop()
 	forwarder.Stop() // must not panic or deadlock
 }
@@ -502,14 +486,12 @@ func TestUDPForwarderEmitsPacketForwardedEvent(t *testing.T) {
 		mu.Unlock()
 	}
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
-		nil, onEvent, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, onEvent, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("evt"))
@@ -555,14 +537,12 @@ func TestUDPForwarderEmitsPacketReturnedEvent(t *testing.T) {
 		mu.Unlock()
 	}
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
-		nil, onEvent, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, onEvent, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("ret"))
@@ -605,14 +585,12 @@ func TestUDPForwarderThrottlesPacketEvents(t *testing.T) {
 		}
 	}
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeOneWay),
-		nil, onEvent, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeOneWay),
+			nil, onEvent, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	// Send 20 packets rapidly (faster than 1-second throttle interval).
@@ -648,14 +626,12 @@ func TestUDPMultiClientEmitsSessionOpenedAndClosed(t *testing.T) {
 		mu.Unlock()
 	}
 
-	listenPort := freeTestUDPPort(t)
-	forwarder := NewUDPForwarderWithTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, onEvent, testSessionTimeout,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return NewUDPForwarderWithTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, onEvent, testSessionTimeout,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("hello"))
@@ -711,13 +687,12 @@ func TestUDPForwarderWithRegistryOneWayTracksSession(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(freeTestUDPPort(t), targetPort, domain.UdpModeOneWay),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, _ := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeOneWay),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, forwarder.rule.ListenPort, []byte("hello"))
@@ -747,13 +722,12 @@ func TestUDPForwarderWithRegistryOneWayRecordsBytesIn(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(freeTestUDPPort(t), targetPort, domain.UdpModeOneWay),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, _ := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeOneWay),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	payload := []byte("test-payload-12345")
@@ -779,13 +753,12 @@ func TestUDPForwarderWithRegistryLastClientCreatesSession(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(freeTestUDPPort(t), targetPort, domain.UdpModeBidirectionalLast),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, _ := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, forwarder.rule.ListenPort, []byte("ping"))
@@ -809,14 +782,12 @@ func TestUDPForwarderWithRegistryLastClientRecordsOutbound(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("hello"))
@@ -845,14 +816,12 @@ func TestUDPForwarderWithRegistryLastClientReplacesSession(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalLast),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalLast),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	clientA := sendUDPPacket(t, listenPort, []byte("from-a"))
@@ -890,14 +859,12 @@ func TestUDPForwarderWithRegistryMultiClientSeparateSessions(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	clientA := sendUDPPacket(t, listenPort, []byte("msgA"))
@@ -923,14 +890,12 @@ func TestUDPForwarderWithRegistryMultiClientSameClientSameSession(t *testing.T) 
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("first"))
@@ -967,14 +932,12 @@ func TestUDPForwarderWithRegistryMultiClientOutbound(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("hi"))
@@ -1003,14 +966,12 @@ func TestUDPForwarderWithRegistryStopClearsSessions(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeOneWay),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeOneWay),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 
 	client := sendUDPPacket(t, listenPort, []byte("ping"))
 	defer client.Close()
@@ -1031,14 +992,12 @@ func TestUDPForwarderWithRegistrySessionTimeoutClosesRegistrySession(t *testing.
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeBidirectionalMulti),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeBidirectionalMulti),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("hello"))
@@ -1059,14 +1018,12 @@ func TestUDPForwarderWithRegistryNoPayloadData(t *testing.T) {
 	defer stopTarget()
 
 	reg := connections.NewUdpSessionRegistry()
-	listenPort := freeTestUDPPort(t)
-	forwarder := newUDPForwarderWithRegistryAndTimeout(
-		testUDPRule(listenPort, targetPort, domain.UdpModeOneWay),
-		nil, nil, testSessionTimeout, reg,
-	)
-	if err := forwarder.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		return newUDPForwarderWithRegistryAndTimeout(
+			testUDPRule(p, targetPort, domain.UdpModeOneWay),
+			nil, nil, testSessionTimeout, reg,
+		)
+	})
 	defer forwarder.Stop()
 
 	client := sendUDPPacket(t, listenPort, []byte("secret-payload-data"))
