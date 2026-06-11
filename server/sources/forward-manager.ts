@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { ActivityEventType, ActivitySeverity, ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, ImportMode, ImportResult, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
+import type { ActivityEventType, ActivitySeverity, ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, GroupActionResult, ImportMode, ImportResult, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
 import { listenKey, validateForwardRule, validateForwardRulePatch } from "@portier/shared";
 import type { Forwarder } from "./forwarders/types.js";
 import { TcpForwarder } from "./forwarders/tcp-forwarder.js";
@@ -228,6 +228,64 @@ export class ForwardManager {
 
   async stopAll(): Promise<void> {
     await Promise.all([...this.forwarders.keys()].map((ruleId) => this.stopRule(ruleId)));
+  }
+
+  // Returns the rules whose normalized group equals `group`, in rule order.
+  // `group` is expected already-normalized (trimmed); stored rule groups are
+  // normalized on save, so an exact match is correct.
+  private rulesInGroup(group: string): ForwardRule[] {
+    return this.listRules().filter((rule) => rule.group === group);
+  }
+
+  // Starts every rule in the group, in rule order. Behaviour mirrors the
+  // single-rule start (POST /api/forwards/:id/start): an already-running rule is
+  // skipped (idempotent), and `enabled`/autostart is NOT a precondition. Returns
+  // one result per matched rule; an empty array means no rule matched the group.
+  // Does not mutate rule definitions, order, or metadata.
+  async startGroup(group: string): Promise<GroupActionResult[]> {
+    const results: GroupActionResult[] = [];
+    for (const rule of this.rulesInGroup(group)) {
+      if (this.forwarders.has(rule.id)) {
+        results.push({ ruleId: rule.id, ruleName: rule.name, status: "skipped", reason: "already_running" });
+        continue;
+      }
+      try {
+        await this.startRule(rule.id);
+        results.push({ ruleId: rule.id, ruleName: rule.name, status: "started" });
+      } catch (error) {
+        results.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          status: "failed",
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return results;
+  }
+
+  // Stops every running rule in the group, in rule order. A rule that is not
+  // running is skipped. Mirrors single-rule stop semantics.
+  async stopGroup(group: string): Promise<GroupActionResult[]> {
+    const results: GroupActionResult[] = [];
+    for (const rule of this.rulesInGroup(group)) {
+      if (!this.forwarders.has(rule.id)) {
+        results.push({ ruleId: rule.id, ruleName: rule.name, status: "skipped", reason: "not_running" });
+        continue;
+      }
+      try {
+        await this.stopRule(rule.id);
+        results.push({ ruleId: rule.id, ruleName: rule.name, status: "stopped" });
+      } catch (error) {
+        results.push({
+          ruleId: rule.id,
+          ruleName: rule.name,
+          status: "failed",
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return results;
   }
 
   async flush(): Promise<void> {

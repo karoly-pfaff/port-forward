@@ -69,6 +69,26 @@ const ENDPOINTS: EndpointDoc[] = [
     response: "ForwardRuleResponse[] (updated order)"
   },
   {
+    method: "POST",
+    path: "/api/forwards/groups/:group/start",
+    purpose:
+      "Start every rule in the group, in rule order. Already-running rules are skipped (already_running); autostart/enabled is not a precondition. Does not change rule definitions, order, or metadata.",
+    params: "Path: group (URL-encoded group label).",
+    response:
+      "GroupActionResponse { group, action, total, succeeded, skipped, failed, results[] } · 400 invalid group · 404 when no rule has the group",
+    notes: "Per-rule result status: started | skipped | failed."
+  },
+  {
+    method: "POST",
+    path: "/api/forwards/groups/:group/stop",
+    purpose:
+      "Stop every running rule in the group, in rule order. Rules that are not running are skipped (not_running). Does not change rule definitions, order, or metadata.",
+    params: "Path: group (URL-encoded group label).",
+    response:
+      "GroupActionResponse { group, action, total, succeeded, skipped, failed, results[] } · 400 invalid group · 404 when no rule has the group",
+    notes: "Per-rule result status: stopped | skipped | failed."
+  },
+  {
     method: "GET",
     path: "/api/status",
     purpose: "List runtime status for all rules.",

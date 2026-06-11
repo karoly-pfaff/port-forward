@@ -97,6 +97,47 @@ Errors:
 
 Go service: TCP and UDP rules close the listener and active sockets.
 
+## `POST /api/forwards/groups/:group/start` · `POST /api/forwards/groups/:group/stop`
+
+Purpose: start or stop **all** rules that share a `group` label (v1.8 Slice 4). These are **behaviour over existing rule metadata** — they never change rule definitions, order, `enabled`/autostart, or `group`, and duplicate-binding behaviour is unchanged. The per-rule lifecycle is identical to the single-rule `:id/start` and `:id/stop` endpoints.
+
+Path: `:group` is the URL-encoded group label. It is validated like any group label and, additionally, must be **non-empty** (a group operation needs a target): trimmed; rejected (`group is required.`) when empty/whitespace; otherwise ≤ 64 characters with no control characters. Matching uses the normalized (trimmed) group value and is exact/case-sensitive.
+
+Request body: none.
+
+Behaviour:
+
+- Rules are processed in **rule order** (the manager's stored order); `results` is deterministic.
+- **start**: each matched rule that is not already running is started — `enabled`/autostart is **not** a precondition (matching single-rule start). An already-running rule is `skipped` with reason `already_running`. A start error yields `failed` (reason = error message) and does not stop the rest of the group.
+- **stop**: each matched running rule is stopped (`stopped`); a rule that is not running is `skipped` with reason `not_running`.
+- Per-rule activity events (`rule.started`/`rule.stopped`/`rule.error`) fire exactly as for single-rule operations; no new group-level event type is introduced.
+
+Response: `200` with `GroupActionResponse`:
+
+```
+{
+  "group": "web",
+  "action": "start" | "stop",
+  "total": 2,
+  "succeeded": 2,   // started or stopped
+  "skipped": 0,
+  "failed": 0,
+  "results": [
+    { "ruleId": "...", "ruleName": "...", "status": "started" },
+    { "ruleId": "...", "ruleName": "...", "status": "skipped", "reason": "already_running" }
+  ]
+}
+```
+
+Per-rule `status` is `started` | `skipped` | `failed` (start) or `stopped` | `skipped` | `failed` (stop). `reason` carries the skip token (`already_running` / `not_running`) or, for `failed`, the error message; it is omitted on success.
+
+Errors:
+
+- `400` for an invalid group label (`group is required.`, `group must be 64 characters or fewer.`, `group must not contain control characters.`).
+- `404` (standard `{ errors: [...] }` envelope) when **no rule** has the requested group — group operations do not silently no-op on an absent target.
+
+Ungrouped bulk actions are intentionally **not** provided in this slice. The TypeScript server and Go service implement identical behaviour and response shape; `validate:contract` guards parity (`group:start`).
+
 ## `GET /api/status`
 
 Purpose: list runtime status for configured rules.

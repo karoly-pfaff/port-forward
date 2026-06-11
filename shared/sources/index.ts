@@ -30,6 +30,14 @@ export type {
   ConfigApplyResponse
 } from "./plan.js";
 
+export type {
+  GroupActionType,
+  GroupActionResultStatus,
+  GroupActionResult,
+  GroupActionResponse
+} from "./groups.js";
+export { summarizeGroupAction } from "./groups.js";
+
 export type ForwardProtocol = "tcp" | "udp";
 
 export type UdpMode = "one-way" | "bidirectional-last-client" | "bidirectional-multi-client";
@@ -404,6 +412,20 @@ export function validateGroup(group: unknown): string[] {
   const errors: string[] = [];
   collectGroupErrors(group, errors);
   return errors;
+}
+
+/**
+ * Validate a group label used as a **group-operation target** (e.g. the path of
+ * a group start/stop request). Unlike {@link validateGroup}, an empty or
+ * whitespace-only value is rejected (`group is required.`) — you cannot act on
+ * "no group". A present value must still satisfy the normal length/character
+ * rules. Returns error messages (empty when valid). Both runtimes apply this.
+ */
+export function validateGroupName(group: unknown): string[] {
+  if (typeof group !== "string" || group.trim().length === 0) {
+    return ["group is required."];
+  }
+  return validateGroup(group.trim());
 }
 
 function collectGroupErrors(group: unknown, errors: string[]): void {

@@ -1681,3 +1681,112 @@ describe("normalizeArch", () => {
     expect(normalizeArch("")).toBe("unknown");
   });
 });
+
+describe("Group operations (v1.8 Slice 4)", () => {
+  // Adds a stopped rule on a free listen port. Rules are identified by `name`
+  // in assertions (ids are generated UUIDs).
+  async function addRule(
+    manager: ForwardManager,
+    name: string,
+    group: string | undefined
+  ): Promise<void> {
+    const listenPort = await getFreeTcpPort();
+    await manager.addRule({
+      name,
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort: 49999,
+      enabled: false,
+      ...(group !== undefined ? { group } : {})
+    } as ForwardRule);
+  }
+
+  it("POST .../groups/:group/start starts the group and returns a summary", async () => {
+    await withServer(async (port, manager) => {
+      await addRule(manager, "w1", "web");
+      await addRule(manager, "a1", "api");
+      await addRule(manager, "u1", undefined);
+
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/groups/web/start`, { method: "POST" });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        group: string; action: string; total: number; succeeded: number; skipped: number; failed: number;
+        results: Array<{ ruleName: string; status: string }>;
+      };
+      expect(body).toMatchObject({ group: "web", action: "start", total: 1, succeeded: 1, skipped: 0, failed: 0 });
+      expect(body.results.map((r) => r.ruleName)).toEqual(["w1"]);
+      expect(body.results[0].status).toBe("started");
+
+      // api/ungrouped rules untouched.
+      const a1 = manager.listRules().find((r) => r.name === "a1")!;
+      expect(manager.getStatus(a1.id).running).toBe(false);
+    });
+  });
+
+  it("skips already-running rules on a second start", async () => {
+    await withServer(async (port, manager) => {
+      await addRule(manager, "w1", "web");
+      await fetch(`http://127.0.0.1:${port}/api/forwards/groups/web/start`, { method: "POST" });
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/groups/web/start`, { method: "POST" });
+      const body = (await response.json()) as { skipped: number; results: Array<{ status: string; reason?: string }> };
+      expect(body.skipped).toBe(1);
+      expect(body.results[0]).toMatchObject({ status: "skipped", reason: "already_running" });
+    });
+  });
+
+  it("POST .../groups/:group/stop stops running rules", async () => {
+    await withServer(async (port, manager) => {
+      await addRule(manager, "w1", "web");
+      await fetch(`http://127.0.0.1:${port}/api/forwards/groups/web/start`, { method: "POST" });
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/groups/web/stop`, { method: "POST" });
+      const body = (await response.json()) as { action: string; succeeded: number; results: Array<{ status: string }> };
+      expect(body.action).toBe("stop");
+      expect(body.succeeded).toBe(1);
+      expect(body.results[0].status).toBe("stopped");
+      const w1 = manager.listRules().find((r) => r.name === "w1")!;
+      expect(manager.getStatus(w1.id).running).toBe(false);
+    });
+  });
+
+  it("returns 404 when no rule has the group", async () => {
+    await withServer(async (port, manager) => {
+      await addRule(manager, "w1", "web");
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/groups/ghost/start`, { method: "POST" });
+      expect(response.status).toBe(404);
+      const body = (await response.json()) as { errors: string[] };
+      expect(body.errors[0]).toMatch(/No rules found in group/);
+    });
+  });
+
+  it("rejects an over-long group with 400", async () => {
+    await withServer(async (port) => {
+      const longGroup = "x".repeat(65);
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/groups/${longGroup}/start`, { method: "POST" });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { errors: string[] };
+      expect(body.errors).toContain("group must be 64 characters or fewer.");
+    });
+  });
+
+  it("rejects a whitespace-only group with 400", async () => {
+    await withServer(async (port) => {
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/groups/%20%20/start`, { method: "POST" });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { errors: string[] };
+      expect(body.errors).toContain("group is required.");
+    });
+  });
+
+  it("matches a URL-encoded group name with a space", async () => {
+    await withServer(async (port, manager) => {
+      await addRule(manager, "w1", "web team");
+      const response = await fetch(`http://127.0.0.1:${port}/api/forwards/groups/web%20team/start`, { method: "POST" });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { group: string; succeeded: number };
+      expect(body.group).toBe("web team");
+      expect(body.succeeded).toBe(1);
+    });
+  });
+});

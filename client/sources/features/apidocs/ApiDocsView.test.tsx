@@ -88,6 +88,18 @@ describe("ApiDocsView", () => {
     expect(screen.getByText("/api/runtime")).toBeInTheDocument();
   });
 
+  it("lists the group start/stop endpoints", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("/api/forwards/groups/:group/start")).toBeInTheDocument();
+    expect(screen.getByText("/api/forwards/groups/:group/stop")).toBeInTheDocument();
+  });
+
+  it("documents the GroupActionResponse shape", () => {
+    const { container } = render(<ApiDocsView />);
+    expect(container.textContent).toMatch(/GroupActionResponse/);
+    expect(container.textContent).toMatch(/succeeded.*skipped.*failed/);
+  });
+
   it("documents all expected public API endpoints", () => {
     render(<ApiDocsView />);
     const expectedPaths = [

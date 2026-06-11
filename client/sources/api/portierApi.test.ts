@@ -16,7 +16,8 @@ import {
   planConfig,
   reorderForwardRules,
   saveForwardRule,
-  setForwardRuleRunning
+  setForwardRuleRunning,
+  setGroupRunning
 } from "./portierApi.js";
 
 function mockFetchOk(jsonData: unknown): void {
@@ -127,6 +128,32 @@ describe("reorderForwardRules", () => {
     const result = await reorderForwardRules(["r1"]);
     expect(result).toEqual(data);
     expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/forwards/reorder", expect.objectContaining({ method: "POST" }));
+  });
+});
+
+describe("setGroupRunning", () => {
+  it("POSTs the group start endpoint (URL-encoded) when running=true", async () => {
+    mockFetchOk({ group: "web team", action: "start", total: 1, succeeded: 1, skipped: 0, failed: 0, results: [] });
+    const result = await setGroupRunning("web team", true);
+    expect(result.action).toBe("start");
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "/api/forwards/groups/web%20team/start",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("POSTs the group stop endpoint when running=false", async () => {
+    mockFetchOk({ group: "web", action: "stop", total: 0, succeeded: 0, skipped: 0, failed: 0, results: [] });
+    await setGroupRunning("web", false);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "/api/forwards/groups/web/stop",
+      expect.objectContaining({ method: "POST" })
+    );
+  });
+
+  it("throws on an error response", async () => {
+    mockFetchError(404, ['No rules found in group "ghost".']);
+    await expect(setGroupRunning("ghost", true)).rejects.toThrow();
   });
 });
 

@@ -448,6 +448,24 @@ func TestPatchRejectsInvalidGroup(t *testing.T) {
 	}
 }
 
+func TestValidateGroupName(t *testing.T) {
+	if got, errs := ValidateGroupName("  web  "); got != "web" || len(errs) > 0 {
+		t.Fatalf("ValidateGroupName(web) = %q, %#v", got, errs)
+	}
+	if _, errs := ValidateGroupName("   "); !hasError(errs, "group is required.") {
+		t.Fatalf("whitespace group errors = %#v", errs)
+	}
+	if _, errs := ValidateGroupName(""); !hasError(errs, "group is required.") {
+		t.Fatalf("empty group errors = %#v", errs)
+	}
+	if _, errs := ValidateGroupName(strings.Repeat("x", domain.GroupMaxLength+1)); !hasError(errs, "group must be 64 characters or fewer.") {
+		t.Fatalf("too-long group errors = %#v", errs)
+	}
+	if _, errs := ValidateGroupName("bad" + string(rune(1)) + "grp"); !hasError(errs, "group must not contain control characters.") {
+		t.Fatalf("control-char group errors = %#v", errs)
+	}
+}
+
 func validInput(protocol domain.ForwardProtocol) ForwardRuleInput {
 	id := "rule-1"
 	name := "Local app"

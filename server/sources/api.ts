@@ -11,7 +11,8 @@ import type {
   ActivityEventType,
   ActivitySeverity
 } from "@portier/shared";
-import { getPortAdvisories, PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT } from "@portier/shared";
+import { getPortAdvisories, PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT, summarizeGroupAction, validateGroupName } from "@portier/shared";
+import type { GroupActionType } from "@portier/shared";
 import type { ForwardManager } from "./forward-manager.js";
 import { ConflictError, NotFoundError, ValidationError } from "./forward-manager.js";
 import { diagnoseRule } from "./diagnose.js";
@@ -101,6 +102,36 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
       next(error);
     }
   });
+
+  // ── Group operations (v1.8) ───────────────────────────────────────────────
+  // Start/stop every rule sharing a `group` label. Behaviour over existing rule
+  // metadata — never mutates rule definitions, order, enabled, or group. The
+  // 4-segment path cannot collide with /api/forwards/:id/start (3 segments).
+
+  const handleGroupAction = (action: GroupActionType) =>
+    async (request: express.Request, response: express.Response, next: express.NextFunction): Promise<void> => {
+      try {
+        const group = decodeURIComponent(String(request.params.group)).trim();
+        const errors = validateGroupName(group);
+        if (errors.length > 0) {
+          response.status(400).json({ errors });
+          return;
+        }
+        const results = action === "start"
+          ? await manager.startGroup(group)
+          : await manager.stopGroup(group);
+        if (results.length === 0) {
+          response.status(404).json({ errors: [`No rules found in group "${group}".`] });
+          return;
+        }
+        response.json(summarizeGroupAction(group, action, results));
+      } catch (error) {
+        next(error);
+      }
+    };
+
+  app.post("/api/forwards/groups/:group/start", handleGroupAction("start"));
+  app.post("/api/forwards/groups/:group/stop", handleGroupAction("stop"));
 
   app.post("/api/forwards/:id/diagnose", async (request, response, next) => {
     try {

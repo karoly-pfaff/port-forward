@@ -1012,3 +1012,117 @@ describe("ForwardManager rule group metadata (v1.8 Slice 1)", () => {
     expect(fresh.getRule("g7")?.group).toBe("payments");
   });
 });
+
+describe("ForwardManager group operations (v1.8 Slice 4)", () => {
+  const cleanup: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    await Promise.all(cleanup.splice(0).map((fn) => fn()));
+  });
+
+  async function addRule(
+    manager: ForwardManager,
+    overrides: Partial<ForwardRule> & { id: string; group?: string }
+  ): Promise<ForwardRule> {
+    const listenPort = await getFreeTcpPort();
+    return manager.addRule({
+      name: overrides.id,
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort: 49999,
+      enabled: false,
+      ...overrides
+    } as ForwardRule);
+  }
+
+  it("starts all stopped rules in a group, in rule order, leaving other groups untouched", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    await addRule(manager, { id: "w1", group: "web" });
+    await addRule(manager, { id: "a1", group: "api" });
+    await addRule(manager, { id: "w2", group: "web" });
+    await addRule(manager, { id: "u1" }); // ungrouped
+
+    const results = await manager.startGroup("web");
+
+    expect(results.map((r) => r.ruleId)).toEqual(["w1", "w2"]); // rule order, only "web"
+    expect(results.every((r) => r.status === "started")).toBe(true);
+    expect(manager.getStatus("w1").running).toBe(true);
+    expect(manager.getStatus("w2").running).toBe(true);
+    expect(manager.getStatus("a1").running).toBe(false); // other group untouched
+    expect(manager.getStatus("u1").running).toBe(false); // ungrouped untouched
+  });
+
+  it("skips already-running rules on start", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    await addRule(manager, { id: "w1", group: "web" });
+    await startRuleStable(manager, "w1", getFreeTcpPort);
+
+    const results = await manager.startGroup("web");
+    expect(results).toEqual([
+      { ruleId: "w1", ruleName: "w1", status: "skipped", reason: "already_running" }
+    ]);
+  });
+
+  it("stops running rules and skips stopped ones", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    await addRule(manager, { id: "w1", group: "web" });
+    await addRule(manager, { id: "w2", group: "web" });
+    await startRuleStable(manager, "w1", getFreeTcpPort); // only w1 running
+
+    const results = await manager.stopGroup("web");
+    expect(results).toEqual([
+      { ruleId: "w1", ruleName: "w1", status: "stopped" },
+      { ruleId: "w2", ruleName: "w2", status: "skipped", reason: "not_running" }
+    ]);
+    expect(manager.getStatus("w1").running).toBe(false);
+  });
+
+  it("returns an empty result list when no rule matches the group", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    await addRule(manager, { id: "w1", group: "web" });
+
+    expect(await manager.startGroup("ghost")).toEqual([]);
+    expect(await manager.stopGroup("ghost")).toEqual([]);
+  });
+
+  it("reports a failed start while still starting the rest of the group (partial)", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+
+    // Occupy a port so a rule bound to it fails to start.
+    const { server: blocker, port: occupied } = await startTcpServerOnFreePort();
+    cleanup.push(() => closeTcpServer(blocker));
+
+    await manager.addRule({
+      id: "bad", name: "bad", protocol: "tcp", listenHost: "127.0.0.1",
+      listenPort: occupied, targetHost: "127.0.0.1", targetPort: 49999, enabled: false, group: "web"
+    } as ForwardRule);
+    await addRule(manager, { id: "good", group: "web" });
+
+    const results = await manager.startGroup("web");
+    expect(results[0].ruleId).toBe("bad");
+    expect(results[0].status).toBe("failed");
+    expect(results[0].reason).toBeTruthy();
+    expect(results[1]).toEqual({ ruleId: "good", ruleName: "good", status: "started" });
+    expect(manager.getStatus("good").running).toBe(true);
+  });
+
+  it("does not mutate rule definitions, order, or metadata", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    await addRule(manager, { id: "w1", group: "web" });
+    await addRule(manager, { id: "a1", group: "api" });
+    const before = JSON.stringify(manager.listRules());
+
+    await manager.startGroup("web");
+    await manager.stopGroup("web");
+
+    expect(JSON.stringify(manager.listRules())).toBe(before);
+  });
+});

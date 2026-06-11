@@ -11,6 +11,7 @@ import type {
   ForwardRuleInput,
   ForwardRuleResponse,
   ForwardStatus,
+  GroupActionResponse,
   ImportMode,
   ImportResult,
   LiveConnectionsResponse,
@@ -60,6 +61,17 @@ export async function reorderForwardRules(ids: string[]): Promise<ForwardRuleRes
   });
   await ensureOk(response);
   return (await response.json()) as ForwardRuleResponse[];
+}
+
+// Start/stop every rule in a group (v1.8 Slice 4). Typed client surface for
+// future UI/CLI work; no UI wiring in this slice. `group` is URL-encoded.
+export async function setGroupRunning(group: string, running: boolean): Promise<GroupActionResponse> {
+  const response = await fetch(
+    `/api/forwards/groups/${encodeURIComponent(group)}/${running ? "start" : "stop"}`,
+    { method: "POST" }
+  );
+  await ensureOk(response);
+  return (await response.json()) as GroupActionResponse;
 }
 
 export async function fetchPortAdvisories(input: {

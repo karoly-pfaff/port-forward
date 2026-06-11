@@ -428,6 +428,51 @@ func (m *Manager) StopRule(ruleID string) (domain.ForwardStatus, error) {
 	return m.statusForRule(rule), nil
 }
 
+// StartGroup starts every rule whose normalized group equals `group`, in rule
+// order. Behaviour mirrors single-rule StartRule (POST /api/forwards/:id/start):
+// an already-running rule is skipped (idempotent) and `Enabled`/autostart is NOT
+// a precondition. Returns one result per matched rule; an empty slice means no
+// rule matched. Does not mutate rule definitions, order, or metadata.
+func (m *Manager) StartGroup(group string) []domain.GroupActionResult {
+	results := make([]domain.GroupActionResult, 0)
+	for _, rule := range m.rules {
+		if rule.Group == nil || *rule.Group != group {
+			continue
+		}
+		if m.runtime[rule.ID].running {
+			results = append(results, domain.GroupActionResult{RuleID: rule.ID, RuleName: rule.Name, Status: "skipped", Reason: "already_running"})
+			continue
+		}
+		if _, err := m.StartRule(rule.ID); err != nil {
+			results = append(results, domain.GroupActionResult{RuleID: rule.ID, RuleName: rule.Name, Status: "failed", Reason: err.Error()})
+			continue
+		}
+		results = append(results, domain.GroupActionResult{RuleID: rule.ID, RuleName: rule.Name, Status: "started"})
+	}
+	return results
+}
+
+// StopGroup stops every running rule whose normalized group equals `group`, in
+// rule order. A rule that is not running is skipped. Mirrors single-rule StopRule.
+func (m *Manager) StopGroup(group string) []domain.GroupActionResult {
+	results := make([]domain.GroupActionResult, 0)
+	for _, rule := range m.rules {
+		if rule.Group == nil || *rule.Group != group {
+			continue
+		}
+		if !m.runtime[rule.ID].running {
+			results = append(results, domain.GroupActionResult{RuleID: rule.ID, RuleName: rule.Name, Status: "skipped", Reason: "not_running"})
+			continue
+		}
+		if _, err := m.StopRule(rule.ID); err != nil {
+			results = append(results, domain.GroupActionResult{RuleID: rule.ID, RuleName: rule.Name, Status: "failed", Reason: err.Error()})
+			continue
+		}
+		results = append(results, domain.GroupActionResult{RuleID: rule.ID, RuleName: rule.Name, Status: "stopped"})
+	}
+	return results
+}
+
 func (m *Manager) stopRuntime(rule domain.ForwardRule) {
 	state := m.runtime[rule.ID]
 	if state.forwarder != nil {

@@ -41,6 +41,29 @@ type PortAdvisory struct {
 	Message  string `json:"message"`
 }
 
+// GroupActionResult is the per-rule outcome of a group start/stop operation
+// (v1.8 Slice 4). Status is started/stopped (succeeded), skipped, or failed;
+// Reason carries the skip token (already_running / not_running) or, for a
+// failure, the error message.
+type GroupActionResult struct {
+	RuleID   string `json:"ruleId"`
+	RuleName string `json:"ruleName"`
+	Status   string `json:"status"`
+	Reason   string `json:"reason,omitempty"`
+}
+
+// GroupActionResponse summarizes a group start/stop operation. Results follow
+// the manager's rule order. Mirrors the TypeScript GroupActionResponse.
+type GroupActionResponse struct {
+	Group     string              `json:"group"`
+	Action    string              `json:"action"`
+	Total     int                 `json:"total"`
+	Succeeded int                 `json:"succeeded"`
+	Skipped   int                 `json:"skipped"`
+	Failed    int                 `json:"failed"`
+	Results   []GroupActionResult `json:"results"`
+}
+
 type ForwardRuleResponse struct {
 	ID         string          `json:"id"`
 	Name       string          `json:"name"`

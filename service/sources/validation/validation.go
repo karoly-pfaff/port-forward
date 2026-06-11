@@ -264,6 +264,20 @@ func validateGroup(group *string) []string {
 	return errs
 }
 
+// ValidateGroupName validates a group label used as a group-operation target
+// (e.g. the :group path of a group start/stop request) and returns the trimmed
+// value plus any error messages. Unlike validateGroup, an empty/whitespace value
+// is rejected ("group is required.") — you cannot act on "no group". Mirrors the
+// TypeScript validateGroupName; same error wording (parity-tested).
+func ValidateGroupName(raw string) (string, []string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", []string{"group is required."}
+	}
+	g := trimmed
+	return trimmed, validateGroup(&g)
+}
+
 // normalizeGroup trims a group label and returns nil when the result is empty,
 // so an ungrouped rule omits the field. Assumes the value passed validateGroup.
 func normalizeGroup(group *string) *string {

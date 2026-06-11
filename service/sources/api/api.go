@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strconv"
@@ -111,6 +113,11 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost && r.URL.Path == "/api/forwards/reorder" {
 		h.reorderForwards(w, r)
+		return
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/api/forwards/groups/") {
+		h.serveGroupAction(w, r)
 		return
 	}
 
@@ -276,6 +283,80 @@ func (h *Handler) deleteForward(w http.ResponseWriter, ruleID string) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// serveGroupAction handles POST /api/forwards/groups/:group/{start,stop}.
+// The :group segment is parsed from the escaped path so an encoded "/" inside a
+// group name stays a single segment. Behaviour over existing rule metadata —
+// never mutates rule definitions, order, or metadata.
+func (h *Handler) serveGroupAction(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusNotFound, map[string][]string{"errors": {notFoundMessage}})
+		return
+	}
+
+	remainder := strings.TrimPrefix(r.URL.EscapedPath(), "/api/forwards/groups/")
+	parts := strings.Split(remainder, "/")
+	if len(parts) != 2 {
+		writeJSON(w, http.StatusNotFound, map[string][]string{"errors": {notFoundMessage}})
+		return
+	}
+	action := parts[1]
+	if action != "start" && action != "stop" {
+		writeJSON(w, http.StatusNotFound, map[string][]string{"errors": {notFoundMessage}})
+		return
+	}
+
+	rawGroup, err := url.PathUnescape(parts[0])
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {"group is required."}})
+		return
+	}
+	group, errs := validation.ValidateGroupName(rawGroup)
+	if len(errs) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": errs})
+		return
+	}
+
+	var results []domain.GroupActionResult
+	if action == "start" {
+		results = h.manager.StartGroup(group)
+	} else {
+		results = h.manager.StopGroup(group)
+	}
+	if len(results) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string][]string{
+			"errors": {fmt.Sprintf("No rules found in group %q.", group)},
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, buildGroupActionResponse(group, action, results))
+}
+
+// buildGroupActionResponse computes the summary counts from the ordered per-rule
+// results. Mirrors the TypeScript summarizeGroupAction (parity-tested).
+func buildGroupActionResponse(group, action string, results []domain.GroupActionResult) domain.GroupActionResponse {
+	succeeded, skipped, failed := 0, 0, 0
+	for _, result := range results {
+		switch result.Status {
+		case "started", "stopped":
+			succeeded++
+		case "skipped":
+			skipped++
+		case "failed":
+			failed++
+		}
+	}
+	return domain.GroupActionResponse{
+		Group:     group,
+		Action:    action,
+		Total:     len(results),
+		Succeeded: succeeded,
+		Skipped:   skipped,
+		Failed:    failed,
+		Results:   results,
+	}
 }
 
 func (h *Handler) startForward(w http.ResponseWriter, ruleID string) {
