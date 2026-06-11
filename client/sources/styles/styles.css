@@ -833,6 +833,24 @@ td strong {
   margin-top: 3px;
 }
 
+/* Subtle group label shown beneath a rule's name. Metadata only — kept quiet
+   so it does not compete with status/protocol/endpoints. */
+.rule-group-label {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-muted, rgba(127, 127, 127, 0.12));
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
 /* ==============================================
    Endpoint Cells
    ============================================== */
@@ -1206,37 +1224,66 @@ select[aria-invalid="true"] {
   margin-top: 2px;
 }
 
+/* Full-width "Listen host" presets block sitting below the Host/Port row. */
+.listen-host-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: -4px;
+}
+
+/* Segmented "Listen host" toggle: an inset track holding two equal segments.
+   Risk is colour-coded — Local only (safe) reads green when active, LAN exposed
+   (reachable from the network) reads amber. */
 .listen-host-presets {
   display: flex;
-  gap: 6px;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  width: 100%;
 }
 
 .preset-btn {
+  flex: 1;
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-control);
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color 0.1s, background 0.1s, color 0.1s;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.preset-btn svg {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .preset-btn:hover:not(:disabled) {
-  border-color: var(--blue);
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-.preset-btn--active {
-  border-color: var(--blue);
-  background: var(--blue-bg);
-  color: var(--blue-dim);
+.preset-btn--local.preset-btn--active {
+  background: var(--green-bg);
+  border-color: var(--green-border);
+  color: var(--green);
+}
+
+.preset-btn--lan.preset-btn--active {
+  background: var(--amber-bg);
+  border-color: var(--amber-border);
+  color: var(--amber);
 }
 
 .check {

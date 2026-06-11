@@ -75,7 +75,8 @@ export function ForwardRuleList({
         String(rule.listenPort).includes(q) ||
         rule.targetHost.includes(q) ||
         String(rule.targetPort).includes(q) ||
-        rule.protocol.includes(q);
+        rule.protocol.includes(q) ||
+        (rule.group?.toLowerCase().includes(q) ?? false);
       if (!matches) return false;
     }
     if (statusFilter !== "all") {
@@ -202,6 +203,11 @@ export function ForwardRuleList({
                       </td>
                       <td>
                         {rule.name}
+                        {rule.group && (
+                          <span className="rule-group-label" title={`Group: ${rule.group}`}>
+                            {rule.group}
+                          </span>
+                        )}
                         <AdvisoryList advisories={rule.advisories.filter((a) => a.code !== "LAN_EXPOSURE")} compact />
                       </td>
                       <td>

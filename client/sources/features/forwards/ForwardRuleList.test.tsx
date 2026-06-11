@@ -158,6 +158,42 @@ describe("ForwardRuleList", () => {
     expect(screen.getByText("No")).toBeInTheDocument();
   });
 
+  it("displays the group label when a rule has a group", () => {
+    renderList({
+      rules: [{ ...tcpRule, group: "web-team" }],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    expect(screen.getByText("web-team")).toBeInTheDocument();
+  });
+
+  it("does not render a group label when a rule has no group", () => {
+    const { container } = renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    expect(container.querySelector(".rule-group-label")).toBeNull();
+  });
+
+  it("matches rules by group in the search box", async () => {
+    const user = userEvent.setup();
+    renderList({
+      rules: [
+        { ...tcpRule, id: "r1", name: "Alpha", group: "payments" },
+        { ...tcpRule, id: "r2", name: "Beta", listenPort: 48010 }
+      ],
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    await user.type(screen.getByRole("searchbox", { name: "Search rules" }), "payments");
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+  });
+
   it("displays TCP active connections stat", () => {
     renderList({
       rules: [tcpRule],

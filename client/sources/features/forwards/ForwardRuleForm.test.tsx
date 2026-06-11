@@ -121,6 +121,99 @@ describe("ForwardRuleForm", () => {
     );
   });
 
+  it("renders an optional Group field", () => {
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    const group = screen.getByRole("textbox", { name: "Group" });
+    expect(group).toBeInTheDocument();
+    expect(group).toHaveValue("");
+    expect(group).toHaveAttribute("maxLength", "64");
+  });
+
+  it("submits the group when set on create", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "Grouped App");
+    await user.type(screen.getByRole("textbox", { name: "Group" }), "web-team");
+    await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ name: "Grouped App", group: "web-team" })
+    );
+  });
+
+  it("pre-fills the group when editing a grouped rule", () => {
+    render(
+      <ForwardRuleForm
+        editingRule={{ ...existingRule, group: "api-team" }}
+        onSave={vi.fn()}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    expect(screen.getByRole("textbox", { name: "Group" })).toHaveValue("api-team");
+  });
+
+  it("sends an empty group to clear it on edit", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ForwardRuleForm
+        editingRule={{ ...existingRule, group: "api-team" }}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.clear(screen.getByRole("textbox", { name: "Group" }));
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    expect(onSave).toHaveBeenCalledWith(
+      "r1",
+      expect.objectContaining({ group: "" })
+    );
+  });
+
+  it("rejects a group containing control characters on submit", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "Bad Group");
+    // Control characters can only arrive via paste (maxLength blocks typing length,
+    // not control chars), so paste a tab into the group field.
+    const group = screen.getByRole("textbox", { name: "Group" });
+    group.focus();
+    await user.paste("bad\tgroup");
+    await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/group must not contain control characters/i)
+    ).toBeInTheDocument();
+  });
+
   it("disables UDP Mode when protocol is TCP and enables it when switched to UDP", async () => {
     const user = userEvent.setup();
     render(

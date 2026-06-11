@@ -11,6 +11,7 @@ export type RuleFormState = {
   targetPort: string;
   enabled: boolean;
   udpMode: UdpMode;
+  group: string;
 };
 
 export const emptyForm: RuleFormState = {
@@ -21,7 +22,8 @@ export const emptyForm: RuleFormState = {
   targetHost: "127.0.0.1",
   targetPort: "80",
   enabled: false,
-  udpMode: "one-way"
+  udpMode: "one-way",
+  group: ""
 };
 
 export function ruleToForm(rule: ForwardRule): RuleFormState {
@@ -34,7 +36,8 @@ export function ruleToForm(rule: ForwardRule): RuleFormState {
     targetHost: rule.targetHost,
     targetPort: String(rule.targetPort),
     enabled: rule.enabled,
-    udpMode: rule.udpMode ?? "one-way"
+    udpMode: rule.udpMode ?? "one-way",
+    group: rule.group ?? ""
   };
 }
 
@@ -47,6 +50,10 @@ export function formToPayload(form: RuleFormState): ForwardRuleInput {
     targetHost: form.targetHost,
     targetPort: Number(form.targetPort),
     enabled: form.enabled,
-    udpMode: form.protocol === "udp" ? form.udpMode : undefined
+    udpMode: form.protocol === "udp" ? form.udpMode : undefined,
+    // Always send `group` so the API contract handles all three cases: an
+    // empty string clears the group on PATCH (and normalizes to absent on
+    // create), a non-empty value sets it. The server trims/normalizes.
+    group: form.group
   };
 }

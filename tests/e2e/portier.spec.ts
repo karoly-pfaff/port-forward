@@ -85,6 +85,51 @@ test("edit rule: drawer opens pre-filled, changes saved, list updates", async ({
   await expect(page.locator("tbody").getByText("E2E Edit Original")).not.toBeVisible();
 });
 
+// ── Rule group metadata (v1.8) ───────────────────────────────────────────────
+
+test("rule group: set on create, shown in list, cleared on edit", async ({ page, baseURL }) => {
+  const listenPort = await getFreePort();
+  const targetPort = await getFreePort();
+  const ruleName = "E2E Group Test";
+
+  // Create a rule with a group via the UI.
+  await page.goto("/");
+  await page.getByRole("button", { name: "+ Add Rule" }).click();
+
+  const addDrawer = page.getByRole("complementary", { name: "Add Forward Rule" });
+  await expect(addDrawer).toBeVisible();
+  await addDrawer.getByLabel("Name").fill(ruleName);
+  await addDrawer.getByLabel("Group").fill("web-team");
+  await addDrawer.getByRole("textbox", { name: "Listen Host" }).fill("127.0.0.1");
+  await addDrawer.getByLabel("Listen Port").fill(String(listenPort));
+  await addDrawer.getByLabel("Target Host").fill("127.0.0.1");
+  await addDrawer.getByLabel("Target Port").fill(String(targetPort));
+  await addDrawer.getByRole("button", { name: "Add Rule", exact: true }).click();
+  await expect(addDrawer).not.toBeVisible({ timeout: 5_000 });
+
+  // Group label is shown in the list, and persisted via the API.
+  const ruleRow = page.locator("tr", { hasText: ruleName });
+  await expect(ruleRow.getByText("web-team")).toBeVisible({ timeout: 5_000 });
+
+  const created = (await (await fetch(`${baseURL}/api/forwards`)).json()) as Array<{ name: string; group?: string }>;
+  expect(created.find((r) => r.name === ruleName)?.group).toBe("web-team");
+
+  // Edit the rule and clear the group.
+  await ruleRow.getByRole("button", { name: "Edit" }).click();
+  const editDrawer = page.getByRole("complementary", { name: "Edit Forward Rule" });
+  await expect(editDrawer).toBeVisible();
+  await expect(editDrawer.getByLabel("Group")).toHaveValue("web-team");
+  await editDrawer.getByLabel("Group").fill("");
+  await editDrawer.getByRole("button", { name: "Save Changes" }).click();
+  await expect(editDrawer).not.toBeVisible({ timeout: 5_000 });
+
+  // Group label is gone from the list, and the API reports no group.
+  await expect(page.locator("tr", { hasText: ruleName }).getByText("web-team")).not.toBeVisible();
+
+  const cleared = (await (await fetch(`${baseURL}/api/forwards`)).json()) as Array<{ name: string; group?: string }>;
+  expect(cleared.find((r) => r.name === ruleName)?.group).toBeUndefined();
+});
+
 // ── Start/Stop flow ────────────────────────────────────────────────────────
 
 test("start/stop: rule transitions between Running and Stopped", async ({ page, baseURL }) => {

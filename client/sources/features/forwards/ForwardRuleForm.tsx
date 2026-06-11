@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactElement } from "react";
+import { Globe, Lock } from "lucide-react";
 import type { ForwardProtocol, ForwardRule, ForwardRuleInput, RuntimeInfo, UdpMode } from "@portier/shared";
 import {
+  PORTIER_GROUP_MAX_LENGTH,
   PORTIER_RECOMMENDED_FORWARD_PORT_MAX,
   PORTIER_RECOMMENDED_FORWARD_PORT_MIN,
   getPortAdvisories,
@@ -196,6 +198,22 @@ export function ForwardRuleForm({
             )}
           </label>
 
+          <label htmlFor="rule-group">
+            Group
+            <input
+              id="rule-group"
+              aria-label="Group"
+              value={form.group}
+              onChange={(e) => setField("group", e.target.value)}
+              maxLength={PORTIER_GROUP_MAX_LENGTH}
+              autoComplete="off"
+              aria-describedby="rule-group-hint"
+            />
+            <span id="rule-group-hint" className="label-hint">
+              Optional label to organize rules (up to {PORTIER_GROUP_MAX_LENGTH} characters). Leave blank for no group.
+            </span>
+          </label>
+
           <div className="form-row">
             <label htmlFor="rule-protocol">
               Protocol
@@ -232,22 +250,6 @@ export function ForwardRuleForm({
           <div className="form-row">
             <label htmlFor="rule-listen-host">
               Listen Host
-              <div className="listen-host-presets" role="group" aria-label="Listen host presets">
-                <button
-                  type="button"
-                  className={`preset-btn${form.listenHost === "127.0.0.1" ? " preset-btn--active" : ""}`}
-                  onClick={() => setField("listenHost", "127.0.0.1")}
-                >
-                  Local only
-                </button>
-                <button
-                  type="button"
-                  className={`preset-btn${form.listenHost === "0.0.0.0" ? " preset-btn--active" : ""}`}
-                  onClick={() => setField("listenHost", "0.0.0.0")}
-                >
-                  LAN exposed
-                </button>
-              </div>
               <input
                 id="rule-listen-host"
                 aria-label="Listen Host"
@@ -261,12 +263,6 @@ export function ForwardRuleForm({
                 <span id="listen-host-error" className="field-error" role="alert">
                   Must be a valid IP or hostname
                 </span>
-              )}
-              {!showListenHostError && form.listenHost === "127.0.0.1" && (
-                <span className="label-hint">Only this computer can connect to this forwarded port.</span>
-              )}
-              {!showListenHostError && form.listenHost === "0.0.0.0" && (
-                <span className="label-hint">Other devices on your network may be able to connect if firewall rules allow it.</span>
               )}
             </label>
 
@@ -288,6 +284,35 @@ export function ForwardRuleForm({
                 </span>
               )}
             </label>
+          </div>
+
+          <div className="listen-host-field">
+            <div className="listen-host-presets" role="group" aria-label="Listen host presets">
+              <button
+                type="button"
+                className={`preset-btn preset-btn--local${form.listenHost === "127.0.0.1" ? " preset-btn--active" : ""}`}
+                onClick={() => setField("listenHost", "127.0.0.1")}
+                aria-pressed={form.listenHost === "127.0.0.1"}
+              >
+                <Lock size={13} aria-hidden="true" />
+                Local only
+              </button>
+              <button
+                type="button"
+                className={`preset-btn preset-btn--lan${form.listenHost === "0.0.0.0" ? " preset-btn--active" : ""}`}
+                onClick={() => setField("listenHost", "0.0.0.0")}
+                aria-pressed={form.listenHost === "0.0.0.0"}
+              >
+                <Globe size={13} aria-hidden="true" />
+                LAN exposed
+              </button>
+            </div>
+            {!showListenHostError && form.listenHost === "127.0.0.1" && (
+              <span className="label-hint">Only this computer can connect to this forwarded port.</span>
+            )}
+            {!showListenHostError && form.listenHost === "0.0.0.0" && (
+              <span className="label-hint">Other devices on your network may be able to connect if firewall rules allow it.</span>
+            )}
           </div>
 
           {form.listenHost === "0.0.0.0" && (
