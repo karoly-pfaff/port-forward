@@ -36,7 +36,7 @@
  *     for string literals.
  *   - json.Marshal() error in client.doWithBody() — requires a value that cannot
  *     be marshalled; none of the API request types contain such values.
- *   - json.MarshalIndent() error in configcmd.writePrettyJSON() — same reason.
+ *   - json.MarshalIndent() error in config.writePrettyJSON() — same reason.
  *   - json.NewEncoder(stdout).Encode() errors in RunRuntime, RunList, RunStart,
  *     RunStop, and related commands — require a broken stdout writer; not possible
  *     in unit tests without replacing os.Stdout.

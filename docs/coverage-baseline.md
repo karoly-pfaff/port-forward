@@ -132,7 +132,7 @@ These remain below 100% by design — they cannot be triggered without contortin
 | `sources/main.go:main` | `os.Exit(run(...))` | Calling `os.Exit` from a test would abort the test binary; `run()` itself is fully tested. |
 | `sources/client/client.go:doWithBody` | `json.Marshal(body)` error | The request bodies are concrete CLI DTOs that always marshal; no unmarshalable value can reach it. |
 | `sources/client/client.go:do` | `http.NewRequest` error / response-body read error | `NewRequest` only errors on a malformed method/URL the CLI never produces; the read error needs a mid-stream transport failure not reproducible with `httptest`. |
-| `sources/commands/configcmd.go:writePrettyJSON` | `json.MarshalIndent` error | Same as `doWithBody` — the bundle/config values always marshal. The `os.WriteFile` error branch IS covered (invalid `--out`/`--backup-out` path tests). |
+| `sources/commands/config.go:writePrettyJSON` | `json.MarshalIndent` error | Same as `doWithBody` — the bundle/config values always marshal. The `os.WriteFile` error branch IS covered (invalid `--out`/`--backup-out` path tests). |
 
 Do not add product types solely to hit these — they are accepted permanent gaps.
 
