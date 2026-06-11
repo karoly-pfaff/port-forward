@@ -4,6 +4,14 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — v1.7 — Cleanup & Maintainability
+
+### Changed
+
+- **v1.7 Slice 1 — `validate-contract.js` outer child-cleanup guard (Resilience-F)** — Hardened the contract validation runner so spawned runtime children are always terminated, including the failure paths the per-runtime `try/finally` does not cover (a thrown/unexpected error reaching `main().catch`, an early `process.exit`, a startup that never becomes ready, or an interrupt signal). This is the deferred outer-guard item that Fix Slice 4 explicitly left out of scope. **Script/runtime-hygiene only — no product code, API, contract behavior, scenario, or coverage-gate change; `validate:contract` stays exactly 185/185** (run with both runtimes; Go parity green). Added a module-level `activeChildren` set that every spawned server is registered into in `startServer` (and removed from on its `exit` event and in `cleanup`), plus a synchronous `killAllChildren()` belt-and-suspenders net wired to three places: `process.on("exit")` (drains any still-tracked child on normal or early exit), `SIGINT`/`SIGTERM` handlers (kill then exit 130 so an interrupted run does not orphan a child holding its listen port), and the outer `main().catch` (kill before exiting 1 on an unexpected throw). The primary, ordered per-runtime `cleanup(ts)`/`cleanup(go)` `try/finally` path is unchanged — the set merely makes those cleanups idempotent and adds coverage for the paths that bypass them. The file's intentional embedded `\x00` sort-key separators in the `normalize*` helpers are preserved. Validated with `validate:contract` (185/185), `validate:scripts` (48 passed), `lint`, and `typecheck` — all green. `npm run test` (Vitest + Go unit) does not exercise this build script, so it was not relied on for this slice. Source: `audits/v1.6-resilience-audit-1.md` (Resilience-F), deferred at Fix Slice 4.
+
+---
+
 ## [1.6.0] — 2026-06-11 — Architecture, Quality & Maintainability Audit
 
 ### Goal
