@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, Fragment, type ReactElement } from "react";
 import { Activity, Pencil, Stethoscope } from "lucide-react";
-import type { ForwardRule, ForwardRuleResponse, ForwardStatus, RuleDiagnosticsResult } from "@portier/shared";
+import type { ForwardRule, ForwardRuleResponse, ForwardStatus, GroupActionResponse, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
 import { RuleDiagnosticsPanel } from "./RuleDiagnosticsPanel.js";
@@ -32,6 +32,7 @@ interface ForwardRuleListProps {
   onClearDiagnosis: (ruleId: string) => void;
   onReorder?: (ids: string[]) => void;
   onGoToActivity?: (ruleId: string) => void;
+  onGroupAction?: (group: string, action: "start" | "stop") => Promise<GroupActionResponse>;
   onAddRule: () => void;
   onRefresh: () => void;
   autoRefresh: boolean;
@@ -55,6 +56,7 @@ export function ForwardRuleList({
   onClearDiagnosis,
   onReorder,
   onGoToActivity,
+  onGroupAction,
   onAddRule,
   onRefresh,
   autoRefresh,
@@ -66,6 +68,9 @@ export function ForwardRuleList({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "running" | "stopped" | "error">("all");
   const [groupFilter, setGroupFilter] = useState<string>(ALL_GROUPS);
+  const [groupActionBusy, setGroupActionBusy] = useState<"" | "start" | "stop">("");
+  const [groupActionResult, setGroupActionResult] =
+    useState<{ tone: "info" | "warn" | "error"; text: string } | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
 
@@ -133,6 +138,42 @@ export function ForwardRuleList({
     onDelete(rule);
   }
 
+  // Group start/stop actions are only meaningful for a single concrete group —
+  // never "All Groups" and never "Ungrouped" (no ungrouped bulk action exists).
+  const groupActionInFlight = groupActionBusy !== "";
+  const showGroupActions =
+    !!onGroupAction && groupFilterActive && activeGroupFilter !== UNGROUPED;
+
+  function changeGroupFilter(value: string): void {
+    setGroupFilter(value);
+    setGroupActionResult(null); // result is scoped to the previously selected group
+  }
+
+  async function runGroupAction(action: "start" | "stop"): Promise<void> {
+    if (!onGroupAction || groupActionInFlight) return;
+    if (activeGroupFilter === ALL_GROUPS || activeGroupFilter === UNGROUPED) return;
+    const group = activeGroupFilter;
+    setGroupActionBusy(action);
+    setGroupActionResult(null);
+    try {
+      const res = await onGroupAction(group, action);
+      const verb = res.action === "start" ? "Started" : "Stopped";
+      const parts = [`${res.succeeded} succeeded`, `${res.skipped} skipped`];
+      if (res.failed > 0) parts.push(`${res.failed} failed`);
+      setGroupActionResult({
+        tone: res.failed > 0 ? "warn" : "info",
+        text: `${verb} group "${res.group}": ${parts.join(", ")} (${res.total} total)`,
+      });
+    } catch (error) {
+      setGroupActionResult({
+        tone: "error",
+        text: error instanceof Error ? error.message : "Group action failed.",
+      });
+    } finally {
+      setGroupActionBusy("");
+    }
+  }
+
   return (
     <section className="rule-list-section">
       {/* Header */}
@@ -175,7 +216,7 @@ export function ForwardRuleList({
             <select
               className="filter-select"
               value={activeGroupFilter}
-              onChange={(e) => setGroupFilter(e.target.value)}
+              onChange={(e) => changeGroupFilter(e.target.value)}
               aria-label="Filter by group"
             >
               <option value={ALL_GROUPS}>All Groups</option>
@@ -192,6 +233,40 @@ export function ForwardRuleList({
           </button>
         </div>
       </div>
+
+      {/* Group action toolbar — only when filtered to one concrete group */}
+      {showGroupActions && (
+        <div
+          className="group-action-bar"
+          role="group"
+          aria-label={`Group actions for ${activeGroupFilter}`}
+        >
+          <button
+            type="button"
+            className="group-action-btn"
+            onClick={() => void runGroupAction("start")}
+            disabled={groupActionInFlight}
+          >
+            {groupActionBusy === "start" ? "Starting…" : `Start group "${activeGroupFilter}"`}
+          </button>
+          <button
+            type="button"
+            className="group-action-btn"
+            onClick={() => void runGroupAction("stop")}
+            disabled={groupActionInFlight}
+          >
+            {groupActionBusy === "stop" ? "Stopping…" : `Stop group "${activeGroupFilter}"`}
+          </button>
+          {groupActionResult && (
+            <span
+              className={`group-action-status group-action-status--${groupActionResult.tone}`}
+              role={groupActionResult.tone === "info" ? "status" : "alert"}
+            >
+              {groupActionResult.text}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Table */}
       <div className="rule-list-body">

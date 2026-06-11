@@ -9,6 +9,7 @@ import {
   reorderForwardRules,
   saveForwardRule,
   setForwardRuleRunning,
+  setGroupRunning,
 } from "../api/portierApi.js";
 import type { DiagnosisEntry } from "../features/forwards/ForwardRuleList.js";
 import { ForwardRuleForm } from "../features/forwards/ForwardRuleForm.js";
@@ -169,6 +170,15 @@ export function App(): ReactElement {
     } finally {
       removeBusyRule(rule.id);
     }
+  }
+
+  // Start/stop every rule in a group (v1.8 Slice 6). Returns the summary so the
+  // rule list can show an inline result; refreshes rule/status data on success.
+  // Errors propagate to the caller (the list shows them inline near the buttons).
+  async function handleGroupAction(group: string, action: "start" | "stop") {
+    const result = await setGroupRunning(group, action === "start");
+    await refreshAll();
+    return result;
   }
 
   async function handleDelete(rule: ForwardRule): Promise<void> {
@@ -353,6 +363,7 @@ export function App(): ReactElement {
                 onClearDiagnosis={handleClearDiagnosis}
                 onReorder={handleReorder}
                 onGoToActivity={handleGoToActivity}
+                onGroupAction={handleGroupAction}
                 onAddRule={handleAddRule}
                 onRefresh={refreshAll}
                 autoRefresh={autoRefresh}

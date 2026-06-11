@@ -480,6 +480,151 @@ describe("ForwardRuleList group filter", () => {
   });
 });
 
+describe("ForwardRuleList group actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const groupedRules: ForwardRuleResponse[] = [
+    { ...tcpRule, id: "r1", name: "Alpha", listenPort: 48001, group: "web" },
+    { ...tcpRule, id: "r2", name: "Beta", listenPort: 48002, group: "api" },
+    { ...tcpRule, id: "r3", name: "Gamma", listenPort: 48003 } // ungrouped
+  ];
+
+  function groupResponse(over: Partial<{ action: "start" | "stop"; total: number; succeeded: number; skipped: number; failed: number }> = {}) {
+    return {
+      group: "web",
+      action: over.action ?? "start",
+      total: over.total ?? 2,
+      succeeded: over.succeeded ?? 2,
+      skipped: over.skipped ?? 0,
+      failed: over.failed ?? 0,
+      results: []
+    };
+  }
+
+  function renderGroupActions(onGroupAction = vi.fn().mockResolvedValue(groupResponse())) {
+    const utils = renderList({
+      rules: groupedRules,
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false,
+      onGroupAction
+    });
+    return { ...utils, onGroupAction };
+  }
+
+  async function selectGroup(group: string): Promise<void> {
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), group);
+  }
+
+  it("shows no group action buttons for All Groups (default)", () => {
+    renderGroupActions();
+    expect(screen.queryByRole("button", { name: /Start group/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Stop group/ })).not.toBeInTheDocument();
+  });
+
+  it("shows no group action buttons when onGroupAction is not provided", async () => {
+    renderList({ rules: groupedRules, statusMap: new Map(), busyRuleIds: new Set(), loading: false });
+    await selectGroup("web");
+    expect(screen.queryByRole("button", { name: /Start group/ })).not.toBeInTheDocument();
+  });
+
+  it("shows Start/Stop group buttons when a specific group is selected", async () => {
+    renderGroupActions();
+    await selectGroup("web");
+    expect(screen.getByRole("button", { name: 'Start group "web"' })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: 'Stop group "web"' })).toBeInTheDocument();
+  });
+
+  it("shows no group action buttons for Ungrouped", async () => {
+    renderGroupActions();
+    await selectGroup("Ungrouped");
+    expect(screen.queryByRole("button", { name: /Start group/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Stop group/ })).not.toBeInTheDocument();
+  });
+
+  it("calls onGroupAction with the group and 'start' when Start is clicked", async () => {
+    const user = userEvent.setup();
+    const { onGroupAction } = renderGroupActions();
+    await selectGroup("web");
+    await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
+    expect(onGroupAction).toHaveBeenCalledWith("web", "start");
+  });
+
+  it("calls onGroupAction with the group and 'stop' when Stop is clicked", async () => {
+    const user = userEvent.setup();
+    const { onGroupAction } = renderGroupActions(vi.fn().mockResolvedValue(groupResponse({ action: "stop" })));
+    await selectGroup("web");
+    await user.click(screen.getByRole("button", { name: 'Stop group "web"' }));
+    expect(onGroupAction).toHaveBeenCalledWith("web", "stop");
+  });
+
+  it("shows a success summary after a successful action", async () => {
+    const user = userEvent.setup();
+    renderGroupActions(vi.fn().mockResolvedValue(groupResponse({ succeeded: 2, skipped: 1, total: 3 })));
+    await selectGroup("web");
+    await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      'Started group "web": 2 succeeded, 1 skipped (3 total)'
+    );
+  });
+
+  it("shows a warning summary (alert) when some rules failed", async () => {
+    const user = userEvent.setup();
+    renderGroupActions(vi.fn().mockResolvedValue(groupResponse({ succeeded: 1, skipped: 0, failed: 1, total: 2 })));
+    await selectGroup("web");
+    await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("1 failed");
+    expect(alert.className).toContain("group-action-status--warn");
+  });
+
+  it("shows an error message when the action rejects (e.g. 404)", async () => {
+    const user = userEvent.setup();
+    renderGroupActions(vi.fn().mockRejectedValue(new Error('No rules found in group "web".')));
+    await selectGroup("web");
+    await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("No rules found in group");
+    expect(alert.className).toContain("group-action-status--error");
+  });
+
+  it("disables both buttons while a request is in flight (no double submit)", async () => {
+    const user = userEvent.setup();
+    let resolve!: (v: ReturnType<typeof groupResponse>) => void;
+    const pending = new Promise<ReturnType<typeof groupResponse>>((r) => { resolve = r; });
+    const onGroupAction = vi.fn().mockReturnValue(pending);
+    renderGroupActions(onGroupAction);
+    await selectGroup("web");
+
+    const startBtn = screen.getByRole("button", { name: 'Start group "web"' });
+    await user.click(startBtn);
+
+    expect(screen.getByRole("button", { name: "Starting…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: 'Stop group "web"' })).toBeDisabled();
+
+    // A second click while in flight must not trigger another call.
+    await user.click(screen.getByRole("button", { name: "Starting…" }));
+    expect(onGroupAction).toHaveBeenCalledTimes(1);
+
+    resolve(groupResponse());
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+  });
+
+  it("clears the previous result when the group selection changes", async () => {
+    const user = userEvent.setup();
+    renderGroupActions();
+    await selectGroup("web");
+    await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "api");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+
 const diagPassResult: RuleDiagnosticsResult = {
   ruleId: "r1",
   ruleName: "Test Rule",

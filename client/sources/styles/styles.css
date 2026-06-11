@@ -568,6 +568,53 @@ button.danger:hover:not(:disabled) {
   margin-left: 10px;
 }
 
+/* Group action toolbar — shown under the header when filtered to one group. */
+.group-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+
+.group-action-btn {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-control);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.group-action-btn:hover:not(:disabled) {
+  border-color: var(--blue);
+  background: var(--bg-hover);
+}
+
+.group-action-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.group-action-status {
+  font-size: 0.78rem;
+}
+
+.group-action-status--info {
+  color: var(--green);
+}
+
+.group-action-status--warn {
+  color: var(--amber);
+}
+
+.group-action-status--error {
+  color: var(--red);
+}
+
 .search-input {
   width: 190px;
   min-height: 30px;

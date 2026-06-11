@@ -10,6 +10,7 @@ vi.mock("../api/portierApi.js", () => ({
   saveForwardRule: vi.fn(),
   deleteForwardRule: vi.fn(),
   setForwardRuleRunning: vi.fn(),
+  setGroupRunning: vi.fn(),
   reorderForwardRules: vi.fn(),
   fetchActivity: vi.fn().mockResolvedValue([]),
   diagnoseForwardRule: vi.fn(),
@@ -398,5 +399,65 @@ describe("App error banners", () => {
 
     await screen.findByText("Delete failed");
     expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+describe("App group actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const webRules = [
+    { id: "r1", name: "Web One", protocol: "tcp" as const, listenHost: "127.0.0.1", listenPort: 48001, targetHost: "127.0.0.1", targetPort: 3000, enabled: false, group: "web", advisories: [] },
+    { id: "r2", name: "Web Two", protocol: "tcp" as const, listenHost: "127.0.0.1", listenPort: 48002, targetHost: "127.0.0.1", targetPort: 3001, enabled: false, group: "web", advisories: [] }
+  ];
+
+  it("starts a group via the API and refreshes rules afterward", async () => {
+    const user = userEvent.setup();
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue(webRules);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
+      { ruleId: "r1", running: false, bytesIn: 0, bytesOut: 0 },
+      { ruleId: "r2", running: false, bytesIn: 0, bytesOut: 0 }
+    ]);
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+    vi.mocked(portierApi.setGroupRunning).mockResolvedValue({
+      group: "web", action: "start", total: 2, succeeded: 2, skipped: 0, failed: 0, results: []
+    });
+
+    render(<App />);
+    await screen.findByText("Web One");
+
+    const fetchCallsBefore = vi.mocked(portierApi.fetchForwardRules).mock.calls.length;
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "web");
+    await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
+
+    expect(portierApi.setGroupRunning).toHaveBeenCalledWith("web", true);
+    // refreshAll re-fetches rules after the action.
+    await screen.findByRole("status");
+    expect(vi.mocked(portierApi.fetchForwardRules).mock.calls.length).toBeGreaterThan(fetchCallsBefore);
+    expect(screen.getByRole("status")).toHaveTextContent('Started group "web"');
+  });
+
+  it("stops a group via the API", async () => {
+    const user = userEvent.setup();
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue(webRules);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
+      { ruleId: "r1", running: true, bytesIn: 0, bytesOut: 0 },
+      { ruleId: "r2", running: true, bytesIn: 0, bytesOut: 0 }
+    ]);
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+    vi.mocked(portierApi.setGroupRunning).mockResolvedValue({
+      group: "web", action: "stop", total: 2, succeeded: 2, skipped: 0, failed: 0, results: []
+    });
+
+    render(<App />);
+    await screen.findByText("Web One");
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "web");
+    await user.click(screen.getByRole("button", { name: 'Stop group "web"' }));
+
+    expect(portierApi.setGroupRunning).toHaveBeenCalledWith("web", false);
+    await screen.findByRole("status");
   });
 });

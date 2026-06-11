@@ -161,6 +161,35 @@ test("rule group filter: filters the list by group and ungrouped", async ({ page
   await expect(tbody.getByText("Loose One")).toBeVisible();
 });
 
+test("rule group actions: start and stop every rule in a selected group", async ({ page, baseURL }) => {
+  const base = { protocol: "tcp" as const, listenHost: "127.0.0.1", targetHost: "127.0.0.1", targetPort: 9999 };
+  await createRule(baseURL!, { ...base, name: "Ops One", listenPort: await getFreePort(), group: "ops" });
+  await createRule(baseURL!, { ...base, name: "Ops Two", listenPort: await getFreePort(), group: "ops" });
+
+  await page.goto("/");
+  const opsOne = page.locator("tr", { hasText: "Ops One" });
+  const opsTwo = page.locator("tr", { hasText: "Ops Two" });
+  await expect(opsOne.getByText("Stopped")).toBeVisible();
+
+  // No group action buttons until a concrete group is filtered.
+  await expect(page.getByRole("button", { name: /^Start group/ })).toHaveCount(0);
+
+  await page.getByLabel("Filter by group").selectOption("ops");
+  const startBtn = page.getByRole("button", { name: 'Start group "ops"' });
+  await expect(startBtn).toBeVisible();
+
+  await startBtn.click();
+  // Result summary appears and both rules transition to Running.
+  await expect(page.getByRole("status")).toContainText('Started group "ops"');
+  await expect(opsOne.getByText("Running")).toBeVisible({ timeout: 10_000 });
+  await expect(opsTwo.getByText("Running")).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: 'Stop group "ops"' }).click();
+  await expect(page.getByRole("status")).toContainText('Stopped group "ops"');
+  await expect(opsOne.getByText("Stopped")).toBeVisible({ timeout: 10_000 });
+  await expect(opsTwo.getByText("Stopped")).toBeVisible({ timeout: 10_000 });
+});
+
 // ── Start/Stop flow ────────────────────────────────────────────────────────
 
 test("start/stop: rule transitions between Running and Stopped", async ({ page, baseURL }) => {
