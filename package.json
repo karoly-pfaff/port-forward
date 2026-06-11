@@ -26,7 +26,7 @@
     "test:shared": "npm test -w shared",
     "test:server": "npm test -w server",
     "test:client": "npm test -w client",
-    "test:service": "go -C service test -o ../build/tests/ ./...",
+    "test:service": "node scripts/coverage-service.js --test-only",
     "test:cli": "go -C tools/cli test ./...",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
