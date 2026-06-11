@@ -130,6 +130,37 @@ test("rule group: set on create, shown in list, cleared on edit", async ({ page,
   expect(cleared.find((r) => r.name === ruleName)?.group).toBeUndefined();
 });
 
+test("rule group filter: filters the list by group and ungrouped", async ({ page, baseURL }) => {
+  const base = { protocol: "tcp" as const, listenHost: "127.0.0.1", targetHost: "127.0.0.1", targetPort: 9999 };
+  await createRule(baseURL!, { ...base, name: "Web One", listenPort: await getFreePort(), group: "web" });
+  await createRule(baseURL!, { ...base, name: "Api One", listenPort: await getFreePort(), group: "api" });
+  await createRule(baseURL!, { ...base, name: "Loose One", listenPort: await getFreePort() });
+
+  await page.goto("/");
+  const tbody = page.locator("tbody");
+  await expect(tbody.getByText("Web One")).toBeVisible();
+
+  const groupFilter = page.getByLabel("Filter by group");
+  await expect(groupFilter).toBeVisible();
+
+  // Filter to the "web" group.
+  await groupFilter.selectOption("web");
+  await expect(tbody.getByText("Web One")).toBeVisible();
+  await expect(tbody.getByText("Api One")).not.toBeVisible();
+  await expect(tbody.getByText("Loose One")).not.toBeVisible();
+
+  // Filter to Ungrouped.
+  await groupFilter.selectOption({ label: "Ungrouped" });
+  await expect(tbody.getByText("Loose One")).toBeVisible();
+  await expect(tbody.getByText("Web One")).not.toBeVisible();
+
+  // Back to All Groups restores everything.
+  await groupFilter.selectOption({ label: "All Groups" });
+  await expect(tbody.getByText("Web One")).toBeVisible();
+  await expect(tbody.getByText("Api One")).toBeVisible();
+  await expect(tbody.getByText("Loose One")).toBeVisible();
+});
+
 // ── Start/Stop flow ────────────────────────────────────────────────────────
 
 test("start/stop: rule transitions between Running and Stopped", async ({ page, baseURL }) => {

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ForwardRuleResponse, ForwardStatus, RuleDiagnosticsResult } from "@portier/shared";
@@ -159,13 +159,15 @@ describe("ForwardRuleList", () => {
   });
 
   it("displays the group label when a rule has a group", () => {
-    renderList({
+    const { container } = renderList({
       rules: [{ ...tcpRule, group: "web-team" }],
       statusMap: makeMap(stoppedStatus),
       busyRuleIds: new Set(),
       loading: false
     });
-    expect(screen.getByText("web-team")).toBeInTheDocument();
+    const chip = container.querySelector(".rule-group-label");
+    expect(chip).not.toBeNull();
+    expect(chip).toHaveTextContent("web-team");
   });
 
   it("does not render a group label when a rule has no group", () => {
@@ -371,6 +373,110 @@ describe("ForwardRuleList", () => {
     });
     await user.click(screen.getByRole("checkbox", { name: "Auto-refresh" }));
     expect(onToggle).toHaveBeenCalled();
+  });
+});
+
+describe("ForwardRuleList group filter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const groupedRules: ForwardRuleResponse[] = [
+    { ...tcpRule, id: "r1", name: "Alpha", listenPort: 48001, group: "web" },
+    { ...tcpRule, id: "r2", name: "Beta", listenPort: 48002, group: "api" },
+    { ...tcpRule, id: "r3", name: "Gamma", listenPort: 48003, group: "web" },
+    { ...tcpRule, id: "r4", name: "Delta", listenPort: 48004 } // ungrouped
+  ];
+
+  function renderGrouped(extra: Partial<Parameters<typeof ForwardRuleList>[0]> = {}) {
+    return renderList({
+      rules: groupedRules,
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false,
+      ...extra
+    });
+  }
+
+  it("does not render the group filter when no rule has a group", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    expect(screen.queryByRole("combobox", { name: "Filter by group" })).not.toBeInTheDocument();
+  });
+
+  it("lists the distinct groups (sorted) plus All Groups and Ungrouped", () => {
+    renderGrouped();
+    const select = screen.getByRole("combobox", { name: "Filter by group" });
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["All Groups", "api", "web", "Ungrouped"]);
+  });
+
+  it("filters to a single group when selected", async () => {
+    const user = userEvent.setup();
+    renderGrouped();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "web");
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.getByText("Gamma")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+    expect(screen.queryByText("Delta")).not.toBeInTheDocument();
+  });
+
+  it("filters to ungrouped rules", async () => {
+    const user = userEvent.setup();
+    renderGrouped();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "Ungrouped");
+    expect(screen.getByText("Delta")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+  });
+
+  it("restores all rules when the filter is cleared back to All Groups", async () => {
+    const user = userEvent.setup();
+    renderGrouped();
+    const select = screen.getByRole("combobox", { name: "Filter by group" });
+    await user.selectOptions(select, "api");
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    await user.selectOptions(select, "All Groups");
+    for (const name of ["Alpha", "Beta", "Gamma", "Delta"]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
+
+  it("combines the group filter with the search box", async () => {
+    const user = userEvent.setup();
+    renderGrouped();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "web");
+    await user.type(screen.getByRole("searchbox", { name: "Search rules" }), "Alpha");
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Gamma")).not.toBeInTheDocument(); // same group, excluded by search
+  });
+
+  it("shows the no-match empty state when a group filter excludes every rule", async () => {
+    const user = userEvent.setup();
+    renderGrouped();
+    // Search for a name only in "web", then filter to "api" → no overlap.
+    await user.type(screen.getByRole("searchbox", { name: "Search rules" }), "Alpha");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "api");
+    expect(screen.getByText("No rules match the current filter.")).toBeInTheDocument();
+  });
+
+  it("omits the Ungrouped option when every rule has a group", () => {
+    renderList({
+      rules: [
+        { ...tcpRule, id: "r1", name: "Alpha", group: "web" },
+        { ...tcpRule, id: "r2", name: "Beta", listenPort: 48002, group: "api" }
+      ],
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    const select = screen.getByRole("combobox", { name: "Filter by group" });
+    const options = within(select).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["All Groups", "api", "web"]);
   });
 });
 

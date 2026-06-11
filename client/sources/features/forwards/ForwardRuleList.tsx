@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment, type ReactElement } from "react";
+import { useMemo, useState, useRef, Fragment, type ReactElement } from "react";
 import { Activity, Pencil, Stethoscope } from "lucide-react";
 import type { ForwardRule, ForwardRuleResponse, ForwardStatus, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
@@ -10,6 +10,12 @@ export type DiagnosisEntry =
   | { state: "pending" }
   | { state: "done"; result: RuleDiagnosticsResult }
   | { state: "error"; message: string };
+
+// Sentinel values for the group filter <select>. Real group names cannot be
+// empty (trimmed/normalized away) and these wrapped tokens cannot collide with
+// a user-entered group, so they are safe non-group selections.
+const ALL_GROUPS = "__all__";
+const UNGROUPED = "__ungrouped__";
 
 interface ForwardRuleListProps {
   rules: ForwardRuleResponse[];
@@ -59,9 +65,34 @@ export function ForwardRuleList({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "running" | "stopped" | "error">("all");
+  const [groupFilter, setGroupFilter] = useState<string>(ALL_GROUPS);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
-  const canReorder = !!onReorder && !searchQuery.trim() && statusFilter === "all";
+
+  // Distinct, normalized group names present in the current rules, sorted
+  // locale-insensitive alphabetical. Derived from rules only — never persisted.
+  const groupOptions = useMemo(() => {
+    const seen = new Set<string>();
+    for (const rule of rules) {
+      const g = rule.group?.trim();
+      if (g) seen.add(g);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  }, [rules]);
+  const hasUngrouped = useMemo(() => rules.some((r) => !r.group?.trim()), [rules]);
+
+  // Clamp a stale selection (e.g. the last rule in a group was deleted) back to
+  // "all groups" so the control never shows a value with no matching option.
+  const activeGroupFilter =
+    groupFilter === ALL_GROUPS ||
+    groupFilter === UNGROUPED ||
+    groupOptions.includes(groupFilter)
+      ? groupFilter
+      : ALL_GROUPS;
+
+  const groupFilterActive = activeGroupFilter !== ALL_GROUPS;
+  const canReorder =
+    !!onReorder && !searchQuery.trim() && statusFilter === "all" && !groupFilterActive;
 
   const runningCount = rules.filter((r) => statusMap.get(r.id)?.running).length;
   const errorCount = rules.filter((r) => !!statusMap.get(r.id)?.lastError).length;
@@ -84,6 +115,14 @@ export function ForwardRuleList({
       if (statusFilter === "running" && !status?.running) return false;
       if (statusFilter === "stopped" && status?.running) return false;
       if (statusFilter === "error" && !status?.lastError) return false;
+    }
+    if (groupFilterActive) {
+      const g = rule.group?.trim() ?? "";
+      if (activeGroupFilter === UNGROUPED) {
+        if (g !== "") return false;
+      } else if (g !== activeGroupFilter) {
+        return false;
+      }
     }
     return true;
   });
@@ -132,6 +171,22 @@ export function ForwardRuleList({
             <option value="stopped">Stopped</option>
             <option value="error">Error</option>
           </select>
+          {groupOptions.length > 0 && (
+            <select
+              className="filter-select"
+              value={activeGroupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              aria-label="Filter by group"
+            >
+              <option value={ALL_GROUPS}>All Groups</option>
+              {groupOptions.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+              {hasUngrouped && <option value={UNGROUPED}>Ungrouped</option>}
+            </select>
+          )}
           <button type="button" className="primary rule-list-add-btn" onClick={onAddRule}>
             + Add Rule
           </button>

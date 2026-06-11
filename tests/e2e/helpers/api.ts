@@ -19,6 +19,7 @@ export interface RuleInput {
   targetHost: string;
   targetPort: number;
   enabled?: boolean;
+  group?: string;
 }
 
 export async function createRule(

@@ -100,6 +100,7 @@ Playwright E2E coverage (32 tests across 9 spec files — see `docs/e2e-coverage
 - [x] Start/stop rule flow
 - [x] Rule form validation — name required error
 - [x] Rule group metadata (v1.8 Slice 2) — set group on create (chip shown in list + API persists it), edit to clear group (chip gone + API reports no group)
+- [x] Rule group filtering (v1.8 Slice 3) — Filter by group control appears when groups exist; filtering to a group / Ungrouped narrows the list; combines with search/status; All Groups restores everything
 - [x] Diagnose rule — panel opens, results shown, close button
 - [x] Settings config import (merge — inline 1 TCP rule)
 - [x] Settings config import (replace — v1-mixed fixture, 4 rules; verify Forward Rules view)
