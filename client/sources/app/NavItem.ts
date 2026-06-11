@@ -8,7 +8,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { id: "rules", label: "Forward Rules", Icon: ArrowLeftRight },
   { id: "activity", label: "Activity", Icon: Activity },
-  { id: "connections", label: "Connections", Icon: Network },
+  { id: "connections", label: "Live Connections", Icon: Network },
   { id: "settings", label: "Settings", Icon: Settings },
   { id: "api-docs", label: "API Docs", Icon: FileCode },
 ];

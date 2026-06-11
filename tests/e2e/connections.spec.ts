@@ -9,12 +9,14 @@ test.beforeEach(async ({ baseURL }) => {
   await clearAllRules(baseURL!);
 });
 
-// Navigate to Connections view and wait for the title.
+// Navigate to Live Connections view and wait for it to load. The nav label and
+// the view title are both "Live Connections", so confirm arrival via the unique
+// tablist role rather than the (now-ambiguous) title text.
 async function goToConnections(page: Page): Promise<void> {
   await page.getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name: "Connections" })
+    .getByRole("button", { name: "Live Connections" })
     .click();
-  await expect(page.getByText("Live Connections")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByRole("tablist", { name: "Connection views" })).toBeVisible({ timeout: 5_000 });
 }
 
 // ── A. Page loads with title and tabs ─────────────────────────────────────────
