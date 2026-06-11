@@ -4,7 +4,11 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — v1.7 — Cleanup & Maintainability
+## [1.7.0] — 2026-06-11 — Cleanup & Maintainability
+
+### Goal
+
+A focused cleanup and maintainability release following the v1.6 architecture/quality audit. Nine slices reduce duplication and clarify structure across every component — the contract runner, the Go service, the TypeScript server, the CLI, and the web client — without adding features or changing public behavior. Highlights: an outer child-cleanup guard for the contract validation runner; responsibility-based CLI command-file names; a small Go `forwarders.Forwarder` interface + `NewForwarder` factory that removes per-protocol branching from the manager; a co-located UDP activity-event emit facade in the TypeScript server; the diagnose flow split into mirrored, ordered, named check-phase helpers in both runtimes (with new check-ordering regression tests); shared CLI config load/validate/mapping helpers; a reviewed and documented CLI exit-code policy; the 736-line `SettingsView` decomposed into focused panels and hooks (DOM byte-identical); and a glossary-aligned UI wording fix ("Connections" → "Live Connections" in the nav). The single intentional behavior change is in the CLI: `config import` now exits `2` (not `1`) for local input/read/parse/validation errors, matching `config apply`/`plan`/`diff` and the documented policy. `validate:contract` stays **185/185**, all five coverage gates hold (none lowered), and the public API/DTO/config contract is unchanged.
 
 ### Changed
 

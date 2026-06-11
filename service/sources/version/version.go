@@ -5,5 +5,5 @@ package version
 // version package and the package.json version). Build scripts may also inject
 // it at compile time:
 //
-//	go build -ldflags "-X portier/service/sources/version.Version=1.6.0" ...
-var Version = "1.6.0"
+//	go build -ldflags "-X portier/service/sources/version.Version=1.7.0" ...
+var Version = "1.7.0"
