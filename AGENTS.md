@@ -152,7 +152,7 @@ npm run coverage:shared     # shared TypeScript (vitest + v8)
 npm run coverage:server     # server TypeScript (vitest + v8)
 npm run coverage:client     # client TypeScript/React (vitest + v8)
 npm run coverage:service    # Go service (go test -p 1 -coverpkg) — takes ~30s
-npm run coverage:cli        # Go CLI reporting only (scripts/coverage-cli.js)
+npm run coverage:cli        # Go CLI reporting only (scripts/coverage-tools-cli.js)
 npm run coverage:baseline   # all five in sequence (reporting only)
 npm run validate:coverage   # runs all + enforces all gates; exits 1 if any gate fails
 npm run validate:coverage:shared   # shared only

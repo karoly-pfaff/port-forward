@@ -44,12 +44,20 @@ if (!existsSync(coverDir)) mkdirSync(coverDir, { recursive: true });
 
 const coverProfile = join(coverDir, `service-coverage-${randomUUID()}.out`);
 
+// Write the compiled test binaries to a stable directory (build/tests/) instead
+// of go's default per-run temp path. Some service tests (e.g. the diagnose
+// lan-exposure test) genuinely bind 0.0.0.0, which triggers a Windows Firewall
+// prompt; the firewall rule is keyed by executable path, so a stable path lets a
+// single "allow" decision persist across runs instead of re-prompting every time.
+const testBinDir = join(repoRoot, "build", "tests");
+mkdirSync(testBinDir, { recursive: true });
+
 console.log("[coverage-service] Running service tests with coverage (sequential, -p 1)...\n");
 
 const testResult = spawnSync(
   "go",
   [
-    "test", "-count=1", "-p", "1", "-timeout", "120s",
+    "test", "-count=1", "-p", "1", "-timeout", "120s", "-o", testBinDir,
     `-coverprofile=${coverProfile}`, "-coverpkg=./sources/...", "./sources/...",
   ],
   { cwd: serviceDir, stdio: "inherit", encoding: "utf8" }

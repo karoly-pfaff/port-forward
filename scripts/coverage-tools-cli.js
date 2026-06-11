@@ -16,7 +16,7 @@
  * The gate is enforced by scripts/validate-coverage.js.
  *
  * Usage:
- *   node scripts/coverage-cli.js
+ *   node scripts/coverage-tools-cli.js
  *
  * Exit codes:
  *   0  Tests passed and coverage summary was written.
@@ -34,7 +34,7 @@ const repoRoot = resolve(scriptDir, "..");
 const cliDir = join(repoRoot, "tools", "cli");
 
 if (!existsSync(cliDir)) {
-  console.error(`[coverage-cli] CLI directory not found: ${cliDir}`);
+  console.error(`[coverage-tools-cli] CLI directory not found: ${cliDir}`);
   process.exit(1);
 }
 
@@ -51,7 +51,7 @@ const coverpkg = [
   "portier/cli/sources/output",
 ].join(",");
 
-console.log("[coverage-cli] Running CLI tests with coverage...\n");
+console.log("[coverage-tools-cli] Running CLI tests with coverage...\n");
 
 const testResult = spawnSync(
   "go",
@@ -61,7 +61,7 @@ const testResult = spawnSync(
 
 if ((testResult.status ?? 1) !== 0) {
   try { rmSync(coverProfile); } catch { /* best-effort */ }
-  console.error("\n[coverage-cli] FAILED: go test returned non-zero exit code.");
+  console.error("\n[coverage-tools-cli] FAILED: go test returned non-zero exit code.");
   process.exit(1);
 }
 
@@ -76,20 +76,20 @@ const coverResult = spawnSync(
 try { rmSync(coverProfile); } catch { /* best-effort */ }
 
 if ((coverResult.status ?? 1) !== 0) {
-  console.error("[coverage-cli] FAILED: go tool cover returned non-zero exit code.");
+  console.error("[coverage-tools-cli] FAILED: go tool cover returned non-zero exit code.");
   process.exit(1);
 }
 
 const coverOutput = coverResult.stdout || "";
 const totalLine = coverOutput.split("\n").find((l) => l.startsWith("total:"));
 if (!totalLine) {
-  console.error("[coverage-cli] FAILED: could not find total coverage line.");
+  console.error("[coverage-tools-cli] FAILED: could not find total coverage line.");
   process.exit(1);
 }
 
 const pctMatch = totalLine.match(/(\d+\.\d+)%/);
 if (!pctMatch) {
-  console.error(`[coverage-cli] FAILED: could not parse total% from: ${totalLine}`);
+  console.error(`[coverage-tools-cli] FAILED: could not parse total% from: ${totalLine}`);
   process.exit(1);
 }
 
@@ -98,7 +98,7 @@ const { funcTotal, funcCovered } = parseFunctions(coverOutput);
 
 writeSummary(join(coverDir, "cli"), stmtTotal, stmtCovered, stmtPct, funcTotal, funcCovered);
 
-console.log(`\n[coverage-cli] Total CLI coverage: ${stmtPct}% (statements, cross-package)\n`);
+console.log(`\n[coverage-tools-cli] Total CLI coverage: ${stmtPct}% (statements, cross-package)\n`);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

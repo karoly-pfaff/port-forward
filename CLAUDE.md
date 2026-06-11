@@ -229,6 +229,8 @@ npm run validate:scripts           # installer script static analysis + dry-run 
 
 Do not add these to `npm run test` or `npm run check`.
 
+Go test binary path (Windows Firewall stability): `test:service` and `coverage:service` pass `-o build/tests/` so the compiled Go test binaries (`api.test.exe`, etc.) are written to a stable, gitignored path instead of go's per-run temp dir. Some service tests genuinely bind `0.0.0.0` (e.g. `TestDiagnoseLANExposureWarns`, which exercises the real diagnose listen-bind on a `0.0.0.0` rule), which triggers a Windows Firewall prompt; the firewall rule is keyed by executable path, so a fixed path lets one "allow" decision persist instead of re-prompting every run. Do not remove the `-o build/tests/` flag — and do not change the diagnose test to loopback (the `0.0.0.0` bind is faithful product behavior, not a test artifact).
+
 Naming convention:
 - `npm run test` = unit/integration test runner (Vitest + Go test)
 - `npm run test:e2e` = Playwright browser E2E tests
