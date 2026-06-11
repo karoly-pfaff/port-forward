@@ -280,50 +280,12 @@ func RunConfigImport(c *client.Client, jsonOutput bool, args []string, stdout, s
 		return 2
 	}
 
-	filePath := fs.Arg(0)
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
-		return 1
+	rules, code, ok := loadConfigForCommand(fs.Arg(0), "import", 1, stderr)
+	if !ok {
+		return code
 	}
 
-	rules, parseErr := parseLocalConfig(data)
-	if parseErr != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
-		return 1
-	}
-	vr := validateLocalConfig(rules)
-	if !vr.Valid {
-		fmt.Fprintln(stderr, "Config is invalid — import aborted.")
-		for _, e := range vr.Errors {
-			fmt.Fprintf(stderr, "  %s\n", e)
-		}
-		return 1
-	}
-
-	configRules := make([]client.ConfigRule, len(rules))
-	for i, r := range rules {
-		configRules[i] = client.ConfigRule{
-			ID:         r.ID,
-			Name:       r.Name,
-			Protocol:   r.Protocol,
-			ListenHost: r.ListenHost,
-			ListenPort: r.ListenPort,
-			TargetHost: r.TargetHost,
-			TargetPort: r.TargetPort,
-			Enabled:    r.Enabled,
-			UDPMode:    r.UDPMode,
-		}
-	}
-	importReq := client.ConfigImportRequest{
-		Mode: *flagMode,
-		Config: client.ConfigExportResponse{
-			Version: "1",
-			Rules:   configRules,
-		},
-	}
-
-	resp, err := c.ImportConfig(importReq)
+	resp, err := c.ImportConfig(buildImportRequest(rules, *flagMode))
 	if err != nil {
 		return exitWithError(err, stderr)
 	}
@@ -562,6 +524,37 @@ func validateLocalConfig(rules []rawConfigRule) configValidationResult {
 	}
 }
 
+// loadConfigForCommand reads, parses, and validates a local config file for the
+// import/plan/diff/apply commands, writing the standard error output to stderr.
+// On any failure (unreadable file, parse error, or invalid rules) it returns
+// ok=false and the exit code the caller should return (errExit); verb names the
+// command for the "Config is invalid — <verb> aborted." message. RunConfigValidate
+// keeps its own JSON-aware flow and does not use this helper.
+func loadConfigForCommand(filePath, verb string, errExit int, stderr io.Writer) ([]rawConfigRule, int, bool) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
+		return nil, errExit, false
+	}
+
+	rules, parseErr := parseLocalConfig(data)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
+		return nil, errExit, false
+	}
+
+	vr := validateLocalConfig(rules)
+	if !vr.Valid {
+		fmt.Fprintf(stderr, "Config is invalid — %s aborted.\n", verb)
+		for _, e := range vr.Errors {
+			fmt.Fprintf(stderr, "  %s\n", e)
+		}
+		return nil, errExit, false
+	}
+
+	return rules, 0, true
+}
+
 // writePrettyJSON marshals v as indented JSON and writes it to path.
 // The file is only written after a successful marshal, so no partial writes occur.
 func writePrettyJSON(path string, v any) error {
@@ -600,25 +593,9 @@ func RunConfigPlan(c *client.Client, jsonOutput bool, args []string, stdout, std
 		return 2
 	}
 
-	filePath := fs.Arg(0)
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
-		return 2
-	}
-
-	rules, parseErr := parseLocalConfig(data)
-	if parseErr != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
-		return 2
-	}
-	vr := validateLocalConfig(rules)
-	if !vr.Valid {
-		fmt.Fprintln(stderr, "Config is invalid — plan aborted.")
-		for _, e := range vr.Errors {
-			fmt.Fprintf(stderr, "  %s\n", e)
-		}
-		return 2
+	rules, code, ok := loadConfigForCommand(fs.Arg(0), "plan", 2, stderr)
+	if !ok {
+		return code
 	}
 
 	plan, err := c.PlanConfig(buildPlanRequest(rules))
@@ -660,25 +637,9 @@ func RunConfigDiff(c *client.Client, jsonOutput bool, args []string, stdout, std
 		return 2
 	}
 
-	filePath := fs.Arg(0)
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
-		return 2
-	}
-
-	rules, parseErr := parseLocalConfig(data)
-	if parseErr != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
-		return 2
-	}
-	vr := validateLocalConfig(rules)
-	if !vr.Valid {
-		fmt.Fprintln(stderr, "Config is invalid — diff aborted.")
-		for _, e := range vr.Errors {
-			fmt.Fprintf(stderr, "  %s\n", e)
-		}
-		return 2
+	rules, code, ok := loadConfigForCommand(fs.Arg(0), "diff", 2, stderr)
+	if !ok {
+		return code
 	}
 
 	plan, err := c.PlanConfig(buildPlanRequest(rules))
@@ -700,6 +661,35 @@ func RunConfigDiff(c *client.Client, jsonOutput bool, args []string, stdout, std
 
 // buildPlanRequest converts local config rules into a ConfigPlanRequest.
 func buildPlanRequest(rules []rawConfigRule) client.ConfigPlanRequest {
+	return client.ConfigPlanRequest{
+		Desired: client.ConfigPlanDesired{Rules: toConfigRules(rules)},
+	}
+}
+
+// buildApplyRequest converts local config rules and apply flags into a ConfigApplyRequest.
+func buildApplyRequest(rules []rawConfigRule, yes, dryRun bool) client.ConfigApplyRequest {
+	return client.ConfigApplyRequest{
+		Desired: client.ConfigPlanDesired{Rules: toConfigRules(rules)},
+		Yes:     yes,
+		DryRun:  dryRun,
+	}
+}
+
+// buildImportRequest converts local config rules and a mode into a ConfigImportRequest.
+func buildImportRequest(rules []rawConfigRule, mode string) client.ConfigImportRequest {
+	return client.ConfigImportRequest{
+		Mode: mode,
+		Config: client.ConfigExportResponse{
+			Version: "1",
+			Rules:   toConfigRules(rules),
+		},
+	}
+}
+
+// toConfigRules maps locally-parsed config rules to the API ConfigRule DTO.
+// Shared by the import, apply, and plan/diff request builders so the field
+// mapping cannot drift between them.
+func toConfigRules(rules []rawConfigRule) []client.ConfigRule {
 	configRules := make([]client.ConfigRule, len(rules))
 	for i, r := range rules {
 		configRules[i] = client.ConfigRule{
@@ -714,9 +704,7 @@ func buildPlanRequest(rules []rawConfigRule) client.ConfigPlanRequest {
 			UDPMode:    r.UDPMode,
 		}
 	}
-	return client.ConfigPlanRequest{
-		Desired: client.ConfigPlanDesired{Rules: configRules},
-	}
+	return configRules
 }
 
 // planExitCode determines the exit code for plan/diff commands.
@@ -908,25 +896,9 @@ func RunConfigApply(c *client.Client, jsonOutput bool, args []string, stdout, st
 		return 2
 	}
 
-	filePath := fs.Arg(0)
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
-		return 2
-	}
-
-	rules, parseErr := parseLocalConfig(data)
-	if parseErr != nil {
-		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
-		return 2
-	}
-	vr := validateLocalConfig(rules)
-	if !vr.Valid {
-		fmt.Fprintln(stderr, "Config is invalid — apply aborted.")
-		for _, e := range vr.Errors {
-			fmt.Fprintf(stderr, "  %s\n", e)
-		}
-		return 2
+	rules, code, ok := loadConfigForCommand(fs.Arg(0), "apply", 2, stderr)
+	if !ok {
+		return code
 	}
 
 	// Export backup before applying if --backup-out was specified.
@@ -947,28 +919,7 @@ func RunConfigApply(c *client.Client, jsonOutput bool, args []string, stdout, st
 		}
 	}
 
-	configRules := make([]client.ConfigRule, len(rules))
-	for i, r := range rules {
-		configRules[i] = client.ConfigRule{
-			ID:         r.ID,
-			Name:       r.Name,
-			Protocol:   r.Protocol,
-			ListenHost: r.ListenHost,
-			ListenPort: r.ListenPort,
-			TargetHost: r.TargetHost,
-			TargetPort: r.TargetPort,
-			Enabled:    r.Enabled,
-			UDPMode:    r.UDPMode,
-		}
-	}
-
-	applyReq := client.ConfigApplyRequest{
-		Desired: client.ConfigPlanDesired{Rules: configRules},
-		Yes:     *flagYes,
-		DryRun:  *flagDryRun,
-	}
-
-	resp, err := c.ApplyConfig(applyReq)
+	resp, err := c.ApplyConfig(buildApplyRequest(rules, *flagYes, *flagDryRun))
 	if err != nil {
 		return exitWithError(err, stderr)
 	}
