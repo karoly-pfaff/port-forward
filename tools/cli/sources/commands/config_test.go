@@ -576,8 +576,10 @@ func TestRunConfigImport_InvalidLocalFile_NoAPICall(t *testing.T) {
 	c := client.New(srv.URL)
 	var out, errBuf strings.Builder
 	code := commands.RunConfigImport(c, false, []string{"--mode", "merge", file}, &out, &errBuf)
-	if code == 0 {
-		t.Error("expected non-zero exit code for invalid config")
+	// Local config validation failure → exit 2 (invalid local input), matching
+	// config apply/plan/diff. v1.7 Slice 7 normalized this from 1.
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
 	}
 	if apiCalled {
 		t.Error("API should not be called when local validation fails")
@@ -632,8 +634,10 @@ func TestRunConfigImport_FileNotFound(t *testing.T) {
 	c := client.New(srv.URL)
 	var out, errBuf strings.Builder
 	code := commands.RunConfigImport(c, false, []string{"--mode", "merge", "/nonexistent/config.json"}, &out, &errBuf)
-	if code == 0 {
-		t.Error("expected non-zero exit code for missing file")
+	// Unreadable/missing local file → exit 2 (invalid local input), matching
+	// config apply/plan/diff. v1.7 Slice 7 normalized this from 1.
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
 	}
 	if !strings.Contains(errBuf.String(), "Error reading") {
 		t.Errorf("stderr missing 'Error reading': %s", errBuf.String())
@@ -662,8 +666,10 @@ func TestRunConfigImport_MalformedJSONFile(t *testing.T) {
 	c := client.New(srv.URL)
 	var out, errBuf strings.Builder
 	code := commands.RunConfigImport(c, false, []string{"--mode", "merge", file}, &out, &errBuf)
-	if code == 0 {
-		t.Error("expected non-zero exit code for malformed JSON")
+	// Malformed local file → exit 2 (invalid local input), matching config
+	// apply/plan/diff. v1.7 Slice 7 normalized this from 1.
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
 	}
 }
 

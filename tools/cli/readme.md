@@ -208,6 +208,8 @@ Human output: `Imported config using merge mode.` / `Imported config using repla
 
 With `--json`: prints `{ "ok": true, "mode": "merge"|"replace" }`.
 
+Exit codes: `0` success, `1` API error, `2` usage / invalid local config file (unreadable, malformed, validation failure) / missing `--yes` for replace, `3` connection error. (Local-input errors use `2`, consistent with `config plan`/`diff`/`apply`.)
+
 ### Rule identity
 
 All commands that target a rule accept:
@@ -411,9 +413,16 @@ portier -h
 |---|---|
 | `0` | Success |
 | `1` | General error or API error |
-| `2` | Invalid arguments or usage error |
+| `2` | Invalid arguments or usage error, including an invalid local **input** config file (unreadable, malformed, or failing local validation) for `config import`/`plan`/`diff`/`apply` |
 | `3` | Connection failure — Portier service unreachable |
 | `4` | Drift detected — used by `portier config plan --fail-on-drift` and `portier config diff --fail-on-drift` |
+
+Policy notes (intentional, not inconsistencies):
+
+- **Local input vs local output.** A bad local *input* config file (read/parse/validation) is a user-input error → `2`. A failed local *output* write (`config export`, `config apply --backup-out`, `diagnostics export`) is an I/O/operation failure → `1`.
+- **`config validate` is a validator.** Its exit code *is* its result: `0` valid, `1` invalid **or** unreadable, `2` missing the file-path argument. So `validate` reports an invalid/unreadable file as `1`, unlike the config-consuming commands above (which use `2`).
+- **Rule selectors.** A rule `<id|name>` that matches nothing exits `1` (the target does not exist, like an API 404); one that matches multiple names exits `2` (the selector is ambiguous and fixable — the matching IDs are listed).
+- **API vs connection.** Any server-side rejection/error is `1`; an unreachable service is `3`.
 
 ## Runtime Package
 

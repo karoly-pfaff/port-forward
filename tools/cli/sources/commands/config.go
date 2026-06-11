@@ -130,6 +130,12 @@ Modes:
   replace   Remove all existing rules and replace with the imported set.
             Requires --yes to confirm.
 
+Exit codes:
+  0  Import succeeded
+  1  API error — the server rejected the import or returned an error
+  2  Invalid file, missing argument, invalid local config, or missing --yes for replace
+  3  Connection failure — Portier service unreachable
+
 Examples:
   portier config import rules-backup.json --mode merge
   portier config import rules-backup.json --mode replace --yes
@@ -280,7 +286,7 @@ func RunConfigImport(c *client.Client, jsonOutput bool, args []string, stdout, s
 		return 2
 	}
 
-	rules, code, ok := loadConfigForCommand(fs.Arg(0), "import", 1, stderr)
+	rules, code, ok := loadConfigForCommand(fs.Arg(0), "import", 2, stderr)
 	if !ok {
 		return code
 	}
