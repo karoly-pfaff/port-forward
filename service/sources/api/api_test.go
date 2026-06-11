@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"portier/service/sources/activity"
+	"portier/service/sources/configplan"
 	"portier/service/sources/manager"
 	"portier/service/sources/options"
 )
@@ -2809,6 +2810,86 @@ func TestConfigApplyPlanErrorsDoNotMutate(t *testing.T) {
 	}
 	if len(rules) != 1 {
 		t.Fatalf("plan-error apply mutated config: expected 1 rule, got %d", len(rules))
+	}
+}
+
+func TestApplyImportErrorResponse(t *testing.T) {
+	// Covers the construction of the config-apply import-error response
+	// (Resilience-C defensive branch). The handler branch that calls this is
+	// structurally unreachable (reachable import errors are pre-blocked by the
+	// plan engine), so the construction is verified directly here; the TS twin is
+	// covered end-to-end via a fake-manager subclass in api.test.ts.
+	plan := configplan.Response{Summary: configplan.Summary{HasErrors: false}}
+	zero := map[string]int{"add": 0, "update": 0, "remove": 0, "unchanged": 2}
+	resp := applyImportErrorResponse(plan, []string{"forced import error"}, "2026-01-01T00:00:00Z", zero)
+
+	if resp.Ok {
+		t.Fatal("Ok must be false when import reports errors")
+	}
+	if !resp.Plan.Summary.HasErrors {
+		t.Fatal("Plan.Summary.HasErrors must be true")
+	}
+	found := false
+	for _, e := range resp.Plan.Errors {
+		if e.Code == "IMPORT_ERROR" && e.Message == "forced import error" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Plan.Errors must include the IMPORT_ERROR entry; got %+v", resp.Plan.Errors)
+	}
+	if resp.Applied["add"] != 0 || resp.Applied["unchanged"] != 2 {
+		t.Fatalf("Applied must be the passed zero counts; got %+v", resp.Applied)
+	}
+}
+
+func TestConfigApplyDuplicateDesiredBindingPreBlocked(t *testing.T) {
+	server := httptest.NewServer(newTestHandler(t, "", "missing"))
+	defer server.Close()
+
+	// Two desired rules share protocol+listenHost+listenPort — a plan-level error
+	// (detectDuplicateKeys → Summary.HasErrors). Apply must stop before
+	// ImportConfig (parity with the TS api.test.ts duplicate-binding apply test).
+	desired := `{"desired":[` +
+		`{"name":"Dup A","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49340,"targetHost":"127.0.0.1","targetPort":49341,"enabled":false},` +
+		`{"name":"Dup B","protocol":"tcp","listenHost":"127.0.0.1","listenPort":49340,"targetHost":"10.0.0.9","targetPort":49342,"enabled":false}` +
+		`],"yes":true}`
+	response, err := http.Post(server.URL+"/api/config/apply", "application/json", strings.NewReader(desired))
+	if err != nil {
+		t.Fatalf("POST /api/config/apply failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200 with ok:false", response.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["ok"] != false {
+		t.Fatalf("ok = %v, want false for duplicate desired bindings", body["ok"])
+	}
+	summary := body["plan"].(map[string]any)["summary"].(map[string]any)
+	if summary["hasErrors"] != true {
+		t.Fatal("plan.summary.hasErrors must be true for duplicate desired bindings")
+	}
+	if applied := body["applied"].(map[string]any); applied["add"].(float64) != 0 {
+		t.Fatalf("applied.add = %v, want 0 (pre-blocked before import)", applied["add"])
+	}
+
+	// Nothing was created — apply stopped before ImportConfig.
+	rulesResp, err := http.Get(server.URL + "/api/forwards")
+	if err != nil {
+		t.Fatalf("GET /api/forwards failed: %v", err)
+	}
+	defer rulesResp.Body.Close()
+	var rules []any
+	if err := json.NewDecoder(rulesResp.Body).Decode(&rules); err != nil {
+		t.Fatalf("decode rules: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("duplicate-binding apply created rules: got %d", len(rules))
 	}
 }
 

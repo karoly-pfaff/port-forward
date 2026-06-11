@@ -4,6 +4,8 @@ This document covers the REST API currently used by the Portier client. The Type
 
 Errors are returned as JSON with an `errors: string[]` property for validation, conflict, not found, unknown API route, and unexpected server errors.
 
+For canonical terminology used in this document (forward rule, runtime `node`/`go`, config plan/apply/import, advisory vs warning, live connection vs UDP session, etc.), see `docs/glossary.md`.
+
 ## `GET /api/forwards`
 
 Purpose: list configured forwarding rules.
@@ -152,7 +154,8 @@ Request body:
 
 Behavior:
 - `replace`: stops all running rules, removes all existing rules, applies imported rules, restarts enabled ones.
-- `merge`: adds imported rules. IDs that clash with existing rules are regenerated. Listen binding conflicts reject the entire import.
+- `merge`: adds imported rules. IDs that clash with existing rules are regenerated. Listen binding conflicts with existing rules reject the entire import.
+- Both modes: two rules **within the imported set** that share a listen binding (`protocol + listenHost + listenPort`) reject the entire import — even when their IDs differ. Both runtimes enforce this identically.
 
 Response: `{ result: ImportResult, rules: ForwardRuleResponse[] }`.
 
@@ -161,6 +164,7 @@ Errors:
 - `400` when `mode` is not `replace` or `merge`.
 - `400` when `config` is missing or not a valid Portier v1 config.
 - `422` when any rule fails validation; no rules are imported.
+- `422` when the imported set contains a duplicate listen binding (`protocol + listenHost + listenPort`); no rules are imported. Body is `{ errors: [...], result }` with `result.imported === 0`.
 
 ## `GET /api/activity`
 
@@ -180,6 +184,13 @@ Response:
 ```
 
 Events are returned newest first.
+
+**`ActivityEventType` values (17, contract values — not cosmetic labels):**
+`rule.created`, `rule.updated`, `rule.deleted`, `rule.started`, `rule.stopped`, `rule.error`, `tcp.connection.opened`, `tcp.connection.closed`, `tcp.connection.error`, `udp.packet.forwarded`, `udp.packet.returned`, `udp.packet.error`, `udp.session.opened`, `udp.session.closed`, `config.exported`, `config.imported`, `config.import.failed`.
+
+**`ActivitySeverity` values (4):** `info`, `success`, `warning`, `error`.
+
+Both runtimes must declare and emit exactly this set. `validate:contract` guards value membership and cross-runtime parity (the declared TS union, the declared Go consts, and the runtime-emitted values), so a rename/typo/drift in either runtime — not just a shape mismatch — fails the contract. Adding a new event type or severity requires updating `@portier/shared` (`shared/sources/activity.ts`), the Go consts (`service/sources/activity/activity.go`), this list, and the `validate:contract` expected sets together.
 
 **Limitations:**
 - Activity is stored in memory only. Restarting the server clears all activity.
@@ -490,11 +501,12 @@ Response: `ConfigApplyResponse`.
 
 Behavior:
 
-- Plan errors → `200 ok:false`, no mutation.
+- Plan errors → `200 ok:false`, no mutation. Plan errors include duplicate desired listen bindings (`protocol + listenHost + listenPort`), which are caught by the plan engine **before** any import — apply never silently succeeds on a duplicate-binding desired config.
 - `dryRun: true` → `200 ok:true`, no mutation (does not require `yes`).
 - Destructive operations without `yes: true` → `400`.
 - No drift → `200 ok:true`, no import called.
 - Drift present → replace import using desired rules; key-matched rules (unchanged/update) have their current `ruleId` injected to preserve IDs.
+- **Invariant:** apply never reports `ok:true` when the underlying import reports errors. Reachable import errors are pre-blocked as plan errors (above); as a defensive guard against future drift, if the import step itself returns errors, apply responds `200 ok:false` with the errors surfaced in `plan.errors` (code `IMPORT_ERROR`) and `plan.summary.hasErrors: true`, and zero applied counts. Both runtimes behave identically.
 
 ## `GET /api/health`
 

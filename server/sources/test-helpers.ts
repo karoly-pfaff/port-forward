@@ -61,3 +61,77 @@ export async function startForwarderOnFreePort<F extends StartableForwarder>(
   }
   throw new Error(`could not bind a free listen port after ${maxAttempts} attempts: ${String(lastErr)}`);
 }
+
+// startTcpServerOnFreePort binds a TCP server to port 0 (the OS picks a free
+// port) and returns the LIVE server plus its actual bound port. Because the
+// listener is never closed-and-rebound, there is no allocate-close-rebind TOCTOU
+// window: the port cannot be stolen between allocation and use. Prefer this over
+// getFreeTcpPort()+listen(port) for test target servers.
+export async function startTcpServerOnFreePort(
+  onConnection?: (socket: net.Socket) => void
+): Promise<{ server: net.Server; port: number }> {
+  const server = net.createServer(onConnection);
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => reject(error);
+    server.once("error", onError);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", onError);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Unable to bind TCP server on a free port.");
+  }
+  return { server, port: address.port };
+}
+
+// bindUdpSocketOnFreePort binds a UDP socket to port 0 and returns the LIVE
+// socket plus its actual bound port — same handoff guarantee as
+// startTcpServerOnFreePort, for UDP target/echo sockets.
+export async function bindUdpSocketOnFreePort(): Promise<{ socket: dgram.Socket; port: number }> {
+  const socket = dgram.createSocket("udp4");
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => reject(error);
+    socket.once("error", onError);
+    socket.bind(0, "127.0.0.1", () => {
+      socket.off("error", onError);
+      resolve();
+    });
+  });
+  return { socket, port: socket.address().port };
+}
+
+interface RestartableManager {
+  startRule(ruleId: string): Promise<unknown>;
+  updateRule(ruleId: string, input: { listenPort: number }): Promise<unknown>;
+}
+
+// startRuleStable starts ruleId on a ForwardManager and, if the listen bind
+// raced with another process (EADDRINUSE), rebinds the rule to a fresh free port
+// via updateRule and retries — mirroring the Go service test helper of the same
+// name (service/sources/manager/portretry_test.go). It retries ONLY the setup
+// bind, ONLY on EADDRINUSE, with a bounded count; any other error is rethrown
+// immediately so a genuine start failure is never masked. Use in place of a bare
+// manager.startRule when the rule binds an ephemeral listen port from
+// getFree*Port. Intentional-conflict tests (which hold a port to force
+// EADDRINUSE) must NOT use this helper.
+export async function startRuleStable(
+  manager: RestartableManager,
+  ruleId: string,
+  freePort: () => Promise<number>
+): Promise<void> {
+  const maxAttempts = 10;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      await manager.startRule(ruleId);
+      return;
+    } catch (err) {
+      if (!isAddrInUse(err)) throw err;
+      lastErr = err;
+      await manager.updateRule(ruleId, { listenPort: await freePort() });
+    }
+  }
+  throw new Error(`could not start ${ruleId} on a free listen port after ${maxAttempts} attempts: ${String(lastErr)}`);
+}

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ExportedConfig, ForwardRule } from "@portier/shared";
 import { ConflictError, ForwardManager, NotFoundError, ValidationError, type RuleStore } from "./forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
-import { getFreeTcpPort } from "./test-helpers.js";
+import { getFreeTcpPort, startRuleStable, startTcpServerOnFreePort } from "./test-helpers.js";
 
 class MemoryStore implements RuleStore {
   constructor(private rules: ForwardRule[] = []) {}
@@ -48,12 +48,8 @@ class ControllableStore implements RuleStore {
   }
 }
 
-// Minimal TCP target server for update tests that need a running forwarder.
-function startTcpTarget(port: number): Promise<net.Server> {
-  const server = net.createServer();
-  return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve(server)));
-}
-
+// Closes a TCP target server opened via startTcpServerOnFreePort (which binds a
+// live listener on a free port, avoiding the allocate-close-rebind race).
 function closeTcpServer(server: net.Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
@@ -65,7 +61,11 @@ describe("ForwardManager updateRule behavior", () => {
     await Promise.all(cleanup.splice(0).map((fn) => fn()));
   });
 
-  async function startedRule(manager: ForwardManager, listenPort: number, targetPort: number) {
+  // Creates a stopped rule on a fresh listen port and starts it via the Test-A
+  // bind-retry helper (startRuleStable rebinds on EADDRINUSE only), so the
+  // listen bind cannot lose a TOCTOU race with a parallel test.
+  async function startedRule(manager: ForwardManager, targetPort: number) {
+    const listenPort = await getFreeTcpPort();
     const rule = await manager.addRule({
       id: "r1",
       name: "Test",
@@ -76,18 +76,17 @@ describe("ForwardManager updateRule behavior", () => {
       targetPort,
       enabled: false
     });
-    await manager.startRule(rule.id);
+    await startRuleStable(manager, rule.id, getFreeTcpPort);
     cleanup.push(() => manager.stopAll());
     return rule;
   }
 
   it("does not restart a running rule when only enabled changes to false", async () => {
-    const [listenPort, targetPort] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
-    const target = await startTcpTarget(targetPort);
+    const { server: target, port: targetPort } = await startTcpServerOnFreePort();
     cleanup.push(() => closeTcpServer(target));
 
     const manager = new ForwardManager(new MemoryStore());
-    const rule = await startedRule(manager, listenPort, targetPort);
+    const rule = await startedRule(manager, targetPort);
     expect(manager.getStatus(rule.id).running).toBe(true);
 
     const updated = await manager.updateRule(rule.id, { enabled: false });
@@ -96,12 +95,11 @@ describe("ForwardManager updateRule behavior", () => {
   });
 
   it("does not restart a running rule when only name changes", async () => {
-    const [listenPort, targetPort] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
-    const target = await startTcpTarget(targetPort);
+    const { server: target, port: targetPort } = await startTcpServerOnFreePort();
     cleanup.push(() => closeTcpServer(target));
 
     const manager = new ForwardManager(new MemoryStore());
-    const rule = await startedRule(manager, listenPort, targetPort);
+    const rule = await startedRule(manager, targetPort);
     expect(manager.getStatus(rule.id).running).toBe(true);
 
     const updated = await manager.updateRule(rule.id, { name: "Renamed" });
@@ -110,16 +108,13 @@ describe("ForwardManager updateRule behavior", () => {
   });
 
   it("restarts a running rule when a forwarding field changes", async () => {
-    const [listenPort, targetPortA, targetPortB] = await Promise.all([
-      getFreeTcpPort(), getFreeTcpPort(), getFreeTcpPort()
-    ]);
-    const targetA = await startTcpTarget(targetPortA);
-    const targetB = await startTcpTarget(targetPortB);
+    const { server: targetA, port: targetPortA } = await startTcpServerOnFreePort();
+    const { server: targetB, port: targetPortB } = await startTcpServerOnFreePort();
     cleanup.push(() => closeTcpServer(targetA));
     cleanup.push(() => closeTcpServer(targetB));
 
     const manager = new ForwardManager(new MemoryStore());
-    const rule = await startedRule(manager, listenPort, targetPortA);
+    const rule = await startedRule(manager, targetPortA);
     expect(manager.getStatus(rule.id).running).toBe(true);
 
     const updated = await manager.updateRule(rule.id, { targetPort: targetPortB });
@@ -155,10 +150,8 @@ describe("ForwardManager reorderRules behavior", () => {
   });
 
   it("reorders rules without restarting running rules", async () => {
-    const [listenPort1, listenPort2, targetPort] = await Promise.all([
-      getFreeTcpPort(), getFreeTcpPort(), getFreeTcpPort()
-    ]);
-    const target = await startTcpTarget(targetPort);
+    const [listenPort1, listenPort2] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
+    const { server: target, port: targetPort } = await startTcpServerOnFreePort();
     cleanup.push(() => closeTcpServer(target));
 
     const manager = new ForwardManager(new MemoryStore());
@@ -175,7 +168,7 @@ describe("ForwardManager reorderRules behavior", () => {
     });
     cleanup.push(() => manager.stopAll());
 
-    await manager.startRule(r1.id);
+    await startRuleStable(manager, r1.id, getFreeTcpPort);
     expect(manager.getStatus(r1.id).running).toBe(true);
 
     await manager.reorderRules([r2.id, r1.id]);
@@ -285,7 +278,7 @@ describe("ForwardManager with ActivityStore", () => {
       targetPort: 49999,
       enabled: false
     });
-    await manager.startRule("act-r1");
+    await startRuleStable(manager, "act-r1", getFreeTcpPort);
 
     const events = activity.list({});
     expect(events.some((e) => e.type === "rule.started")).toBe(true);
@@ -314,6 +307,135 @@ describe("ForwardManager with ActivityStore", () => {
     await expect(manager.startRule("fail-r1")).rejects.toThrow();
     const events = activity.list({});
     expect(events.some((e) => e.type === "rule.error")).toBe(true);
+  });
+});
+
+describe("ForwardManager rule-scoped activity payloads (emitRuleEvent, Go parity)", () => {
+  // Locks the exact payload the private emitRuleEvent helper produces for every
+  // rule-scoped event, so the helper refactor cannot drift ruleId/ruleName/
+  // protocol/severity/message from the prior inline blocks. Mirrors the Go
+  // manager's Test*ActivityPayload tests. Generated id/timestamp are not asserted.
+  const cleanup: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    await Promise.all(cleanup.splice(0).map((fn) => fn()));
+  });
+
+  function lastOfType(activity: ActivityStore, type: string) {
+    return activity.list({}).filter((e) => e.type === type).at(-1);
+  }
+
+  it("emits exact payloads for create / update / delete (no sockets)", async () => {
+    const activity = new ActivityStore();
+    const manager = new ForwardManager(new MemoryStore(), activity);
+
+    await manager.addRule({
+      id: "p1",
+      name: "Payload Rule",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 49600,
+      targetHost: "127.0.0.1",
+      targetPort: 49601,
+      enabled: false
+    });
+    expect(lastOfType(activity, "rule.created")).toMatchObject({
+      type: "rule.created",
+      severity: "success",
+      ruleId: "p1",
+      ruleName: "Payload Rule",
+      protocol: "tcp",
+      message: 'Rule "Payload Rule" created.'
+    });
+
+    await manager.updateRule("p1", { name: "Renamed Rule" });
+    expect(lastOfType(activity, "rule.updated")).toMatchObject({
+      type: "rule.updated",
+      severity: "info",
+      ruleId: "p1",
+      ruleName: "Renamed Rule",
+      protocol: "tcp",
+      message: 'Rule "Renamed Rule" updated.'
+    });
+
+    await manager.deleteRule("p1");
+    expect(lastOfType(activity, "rule.deleted")).toMatchObject({
+      type: "rule.deleted",
+      severity: "warning",
+      ruleId: "p1",
+      ruleName: "Renamed Rule",
+      protocol: "tcp",
+      message: 'Rule "Renamed Rule" deleted.'
+    });
+  });
+
+  it("emits exact rule.started and rule.stopped payloads for a real forwarder", async () => {
+    const activity = new ActivityStore();
+    const manager = new ForwardManager(new MemoryStore(), activity);
+    cleanup.push(() => manager.stopAll());
+
+    const listenPort = await getFreeTcpPort();
+    await manager.addRule({
+      id: "p2",
+      name: "Live Rule",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort: 49999,
+      enabled: false
+    });
+    await startRuleStable(manager, "p2", getFreeTcpPort);
+    expect(lastOfType(activity, "rule.started")).toMatchObject({
+      type: "rule.started",
+      severity: "success",
+      ruleId: "p2",
+      ruleName: "Live Rule",
+      protocol: "tcp",
+      message: 'Rule "Live Rule" started.'
+    });
+
+    await manager.stopRule("p2");
+    expect(lastOfType(activity, "rule.stopped")).toMatchObject({
+      type: "rule.stopped",
+      severity: "info",
+      ruleId: "p2",
+      ruleName: "Live Rule",
+      protocol: "tcp",
+      message: 'Rule "Live Rule" stopped.'
+    });
+  });
+
+  it("emits an exact rule.error payload (severity error) when a start fails", async () => {
+    const occupiedPort = await getFreeTcpPort();
+    const occupier = net.createServer();
+    await new Promise<void>((resolve) => occupier.listen(occupiedPort, "127.0.0.1", resolve));
+    cleanup.push(() => new Promise<void>((resolve) => occupier.close(() => resolve())));
+
+    const activity = new ActivityStore();
+    const manager = new ForwardManager(new MemoryStore(), activity);
+    await manager.addRule({
+      id: "p3",
+      name: "Doomed Rule",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: occupiedPort,
+      targetHost: "127.0.0.1",
+      targetPort: 49999,
+      enabled: false
+    });
+
+    await expect(manager.startRule("p3")).rejects.toThrow();
+    const errorEvent = lastOfType(activity, "rule.error");
+    expect(errorEvent).toMatchObject({
+      type: "rule.error",
+      severity: "error",
+      ruleId: "p3",
+      ruleName: "Doomed Rule",
+      protocol: "tcp"
+    });
+    // Message is "Rule "<name>" failed to start: <os error>" — assert the stable prefix.
+    expect(errorEvent?.message).toMatch(/^Rule "Doomed Rule" failed to start: /);
   });
 });
 
@@ -412,6 +534,151 @@ describe("ForwardManager importConfig replace mode", () => {
     expect(result.imported).toBe(1);
     expect(result.errors).toHaveLength(0);
     expect(manager.getStatus("r-replace").running).toBe(true);
+  });
+});
+
+describe("ForwardManager importConfig duplicate listen binding parity (Go parity)", () => {
+  // The Go service rejects duplicate listen bindings within the imported set
+  // for BOTH replace and merge modes (manager.ImportConfig →
+  // ensureNoDuplicateBindings). These tests pin the TypeScript runtime to the
+  // same behavior so the two runtimes cannot drift. A listen binding is
+  // protocol + listenHost + listenPort; targetHost/targetPort/name/enabled do
+  // not matter.
+
+  function duplicateBindingConfig(): ExportedConfig {
+    // Two rules with distinct ids and names, different targets, but the SAME
+    // protocol/listenHost/listenPort — an invalid set neither runtime accepts.
+    return {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [
+        {
+          id: "alpha",
+          name: "Alpha",
+          protocol: "tcp",
+          listenHost: "127.0.0.1",
+          listenPort: 48020,
+          targetHost: "127.0.0.1",
+          targetPort: 49001,
+          enabled: false
+        },
+        {
+          id: "beta",
+          name: "Beta",
+          protocol: "tcp",
+          listenHost: "127.0.0.1",
+          listenPort: 48020,
+          targetHost: "10.0.0.5",
+          targetPort: 49002,
+          enabled: false
+        }
+      ]
+    };
+  }
+
+  it("rejects replace import with duplicate listen bindings without mutating or persisting", async () => {
+    const store = new ControllableStore();
+    const activity = new ActivityStore();
+    const manager = new ForwardManager(store, activity);
+
+    // A known-good existing config that must survive the rejected import.
+    await manager.addRule({
+      id: "existing",
+      name: "Existing",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48010,
+      targetHost: "127.0.0.1",
+      targetPort: 49000,
+      enabled: false
+    });
+    const savesAfterSetup = store.saveCallCount;
+
+    const result = await manager.importConfig(duplicateBindingConfig(), "replace");
+
+    // Rejected with a binding error naming the colliding endpoint and both rules.
+    expect(result.imported).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toBe(
+      'a tcp rule is already listening on 127.0.0.1:48020 (rules "Alpha" and "Beta")'
+    );
+
+    // No mutation: the original config is intact, the imported ids are absent.
+    expect(manager.listRules().map((r) => r.id)).toEqual(["existing"]);
+    expect(manager.getRule("alpha")).toBeUndefined();
+    expect(manager.getRule("beta")).toBeUndefined();
+
+    // No persist and no forwarders started/stopped.
+    expect(store.saveCallCount).toBe(savesAfterSetup);
+
+    // The failure is surfaced as config.import.failed (error), not a misleading
+    // config.imported success — with the exact intended payload (no details).
+    const events = activity.list({});
+    expect(events.some((e) => e.type === "config.imported")).toBe(false);
+    const failures = events.filter((e) => e.type === "config.import.failed");
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      type: "config.import.failed",
+      severity: "error",
+      message:
+        'Config import rejected: a tcp rule is already listening on 127.0.0.1:48020 (rules "Alpha" and "Beta")'
+    });
+    expect(failures[0].details).toBeUndefined();
+  });
+
+  it("rejects merge import with duplicate listen bindings within the imported set", async () => {
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    const savesBefore = store.saveCallCount;
+
+    const result = await manager.importConfig(duplicateBindingConfig(), "merge");
+
+    expect(result.imported).toBe(0);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toBe(
+      'a tcp rule is already listening on 127.0.0.1:48020 (rules "Alpha" and "Beta")'
+    );
+    // No rules added, no persist.
+    expect(manager.listRules()).toHaveLength(0);
+    expect(store.saveCallCount).toBe(savesBefore);
+  });
+
+  it("accepts replace import with distinct listen bindings", async () => {
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [
+        {
+          id: "alpha",
+          name: "Alpha",
+          protocol: "tcp",
+          listenHost: "127.0.0.1",
+          listenPort: 48030,
+          targetHost: "127.0.0.1",
+          targetPort: 49001,
+          enabled: false
+        },
+        {
+          id: "beta",
+          name: "Beta",
+          protocol: "tcp",
+          listenHost: "127.0.0.1",
+          listenPort: 48031,
+          targetHost: "127.0.0.1",
+          targetPort: 49002,
+          enabled: false
+        }
+      ]
+    };
+
+    const result = await manager.importConfig(config, "replace");
+    expect(result.errors).toHaveLength(0);
+    expect(result.imported).toBe(2);
+    expect(manager.listRules().map((r) => r.id)).toEqual(["alpha", "beta"]);
+    expect(store.lastPersisted()?.map((r) => r.id)).toEqual(["alpha", "beta"]);
   });
 });
 
@@ -558,12 +825,8 @@ describe("ForwardManager persist-failure rollback (Test-D, Go parity)", () => {
   // C. Mirrors Go TestUpdateRulePersistFailureWithRunningRuleRestartsOriginal.
   //    Uses a real running forwarder; ports come from the Test-A free-port helper.
   it("updateRule restores and restarts a running rule when a forwarding update fails to persist", async () => {
-    const [listenPort, targetPortA, targetPortB] = await Promise.all([
-      getFreeTcpPort(),
-      getFreeTcpPort(),
-      getFreeTcpPort()
-    ]);
-    const targetA = await startTcpTarget(targetPortA);
+    const [listenPort, targetPortB] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
+    const { server: targetA, port: targetPortA } = await startTcpServerOnFreePort();
     cleanup.push(() => closeTcpServer(targetA));
 
     const store = new ControllableStore();
@@ -571,7 +834,7 @@ describe("ForwardManager persist-failure rollback (Test-D, Go parity)", () => {
     cleanup.push(() => manager.stopAll());
 
     await manager.addRule(ruleInput({ id: "r1", listenPort, targetPort: targetPortA }));
-    await manager.startRule("r1");
+    await startRuleStable(manager, "r1", getFreeTcpPort);
     expect(manager.getStatus("r1").running).toBe(true);
 
     store.shouldFail = true;
@@ -602,8 +865,8 @@ describe("ForwardManager persist-failure rollback (Test-D, Go parity)", () => {
   //     running state (covers the wasRunning restart branch; Go restores the
   //     prior runtime state in manager.DeleteRule).
   it("deleteRule restores and restarts a running rule when save fails", async () => {
-    const [listenPort, targetPort] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
-    const target = await startTcpTarget(targetPort);
+    const listenPort = await getFreeTcpPort();
+    const { server: target, port: targetPort } = await startTcpServerOnFreePort();
     cleanup.push(() => closeTcpServer(target));
 
     const store = new ControllableStore();
@@ -611,7 +874,7 @@ describe("ForwardManager persist-failure rollback (Test-D, Go parity)", () => {
     cleanup.push(() => manager.stopAll());
 
     await manager.addRule(ruleInput({ id: "r1", listenPort, targetPort }));
-    await manager.startRule("r1");
+    await startRuleStable(manager, "r1", getFreeTcpPort);
     expect(manager.getStatus("r1").running).toBe(true);
 
     store.shouldFail = true;

@@ -258,7 +258,29 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
           exportedAt: appliedAt,
           rules: rulesForImport,
         };
-        await manager.importConfig(importCfg, "replace");
+        const result = await manager.importConfig(importCfg, "replace");
+        // Invariant (Resilience-C): apply must never report ok:true when the
+        // underlying import reports errors. Every currently-reachable import
+        // error path is pre-blocked before this point — duplicate listen bindings
+        // via the plan engine's detectDuplicateKeys (→ summary.hasErrors), invalid
+        // desired rules via plan validation, and persist failures throw (→ 500) —
+        // so this is a belt-and-suspenders guard against future drift. Surface the
+        // import errors through the existing plan.errors field; no applied counts.
+        if (result.errors.length > 0) {
+          const planWithErrors = {
+            ...plan,
+            errors: [...plan.errors, ...result.errors.map((message) => ({ code: "IMPORT_ERROR", message }))],
+            summary: { ...plan.summary, hasErrors: true },
+          };
+          response.json({
+            ok: false,
+            dryRun: false,
+            appliedAt,
+            plan: planWithErrors,
+            applied: { add: 0, update: 0, remove: 0, unchanged: plan.summary.unchanged },
+          });
+          return;
+        }
       }
 
       response.json({ ok: true, dryRun: false, appliedAt, plan, applied });

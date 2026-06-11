@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import type { ForwardRule } from "@portier/shared";
+import type { ForwardRule, ImportResult } from "@portier/shared";
 import { createApp, normalizePlatform, normalizeArch, type RuntimeInfoOptions } from "./api.js";
 import { ForwardManager, type RuleStore } from "./forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
@@ -19,6 +19,17 @@ class MemoryStore implements RuleStore {
 
   async save(rules: ForwardRule[]): Promise<void> {
     this.rules = rules;
+  }
+}
+
+// ImportErrorManager forces importConfig to return ImportResult.errors WITHOUT
+// throwing, so the config-apply defensive branch (Resilience-C) is reachable in
+// a unit test. Test-only seam (subclass override); no production change. listRules
+// stays empty so a valid desired rule produces a clean drift plan (hasErrors:false,
+// hasDrift:true) that reaches the importConfig call.
+class ImportErrorManager extends ForwardManager {
+  override async importConfig(): Promise<ImportResult> {
+    return { imported: 0, skipped: 0, errors: ["forced import error"] };
   }
 }
 
@@ -1199,6 +1210,66 @@ describe("POST /api/config/apply", () => {
       const body = (await response.json()) as { errors: string[] };
       expect(body.errors[0]).toContain("yes: true");
     }, { rules: [applyRule] });
+  });
+
+  it("returns 200 ok:false (hasErrors) without importing when desired has duplicate listen bindings", async () => {
+    await withServer(async (port) => {
+      // Two desired rules share protocol+listenHost+listenPort — a plan-level
+      // error (detectDuplicateKeys). Apply must stop before importConfig.
+      const desired = [
+        { name: "Dup A", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 49340, targetHost: "127.0.0.1", targetPort: 49341, enabled: false },
+        { name: "Dup B", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 49340, targetHost: "10.0.0.9", targetPort: 49342, enabled: false }
+      ];
+      const response = await fetch(`http://127.0.0.1:${port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired, yes: true })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ok: boolean; plan: { summary: { hasErrors: boolean } }; applied: { add: number } };
+      expect(body.ok).toBe(false);
+      expect(body.plan.summary.hasErrors).toBe(true);
+      expect(body.applied.add).toBe(0);
+      // Pre-blocked before import: nothing was created.
+      const list = (await (await fetch(`http://127.0.0.1:${port}/api/forwards`)).json()) as unknown[];
+      expect(list).toHaveLength(0);
+    });
+  });
+
+  it("returns 200 ok:false and surfaces import errors when importConfig reports errors (defensive, Resilience-C)", async () => {
+    // Reachable import-error paths are pre-blocked by the plan engine, so this
+    // belt-and-suspenders branch is exercised via a fake manager whose
+    // importConfig returns errors without throwing.
+    const manager = new ImportErrorManager(new MemoryStore());
+    const app = createApp(manager);
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("Expected a TCP address.");
+      const desired = [{ name: "New", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 49350, targetHost: "127.0.0.1", targetPort: 49351, enabled: false }];
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/config/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ desired, yes: true })
+      });
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        ok: boolean;
+        plan: { summary: { hasErrors: boolean }; errors: Array<{ code: string; message: string }> };
+        applied: { add: number; update: number; remove: number };
+      };
+      expect(body.ok).toBe(false);
+      expect(body.plan.summary.hasErrors).toBe(true);
+      expect(body.plan.errors.some((e) => e.code === "IMPORT_ERROR" && e.message === "forced import error")).toBe(true);
+      // No misleading applied counts.
+      expect(body.applied.add).toBe(0);
+      expect(body.applied.update).toBe(0);
+      expect(body.applied.remove).toBe(0);
+    } finally {
+      await manager.stopAll();
+      await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    }
   });
 
   it("returns 200 ok:true dryRun:true without mutating state", async () => {

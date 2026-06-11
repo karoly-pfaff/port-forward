@@ -655,10 +655,23 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if plan.Summary.HasDrift {
-		if _, err := h.manager.ImportConfig(domain.ExportedConfig{
+		result, err := h.manager.ImportConfig(domain.ExportedConfig{
 			Version: "1", Rules: applyResult.Rules,
-		}, "replace"); err != nil {
+		}, "replace")
+		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string][]string{"errors": {err.Error()}})
+			return
+		}
+		// Invariant (Resilience-C): apply must never report ok:true when the
+		// underlying import reports errors. Every currently-reachable import error
+		// path is pre-blocked before this point — duplicate listen bindings via the
+		// plan engine's detectDuplicateKeys (→ Summary.HasErrors), invalid desired
+		// rules via plan validation, and persist failures throw (→ 500) — so this
+		// is a belt-and-suspenders guard against future drift, mirroring TS api.ts.
+		// Surface the import errors through the existing Plan.Errors field; no
+		// applied counts.
+		if len(result.Errors) > 0 {
+			writeJSON(w, http.StatusOK, applyImportErrorResponse(plan, result.Errors, appliedAt, zeroCounts))
 			return
 		}
 	}
@@ -666,6 +679,22 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, applyResponse{
 		Ok: true, DryRun: false, AppliedAt: appliedAt, Plan: plan, Applied: applyResult.Applied,
 	})
+}
+
+// applyImportErrorResponse builds the ok:false config-apply response that
+// surfaces import-level errors through the existing Plan.Errors field, with no
+// applied counts (Resilience-C invariant). Extracted so the construction is unit
+// testable even though the handler branch that calls it is structurally
+// unreachable today — every reachable import-error path is pre-blocked by the
+// plan engine (duplicate bindings, invalid rules) or throws (persist).
+func applyImportErrorResponse(plan configplan.Response, errs []string, appliedAt string, zeroCounts map[string]int) applyResponse {
+	for _, msg := range errs {
+		plan.Errors = append(plan.Errors, configplan.PlanError{Code: "IMPORT_ERROR", Message: msg})
+	}
+	plan.Summary.HasErrors = true
+	return applyResponse{
+		Ok: false, DryRun: false, AppliedAt: appliedAt, Plan: plan, Applied: zeroCounts,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

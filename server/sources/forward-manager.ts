@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, ImportMode, ImportResult, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
+import type { ActivityEventType, ActivitySeverity, ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, ImportMode, ImportResult, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
 import { listenKey, validateForwardRule, validateForwardRulePatch } from "@portier/shared";
 import type { Forwarder } from "./forwarders/types.js";
 import { TcpForwarder } from "./forwarders/tcp-forwarder.js";
@@ -102,14 +102,7 @@ export class ForwardManager {
       throw error;
     }
 
-    this.activity?.add({
-      type: "rule.created",
-      severity: "success",
-      ruleId: rule.id,
-      ruleName: rule.name,
-      protocol: rule.protocol,
-      message: `Rule "${rule.name}" created.`
-    });
+    this.emitRuleEvent("rule.created", "success", rule, `Rule "${rule.name}" created.`);
 
     if (rule.enabled) {
       await this.startRule(rule.id);
@@ -163,14 +156,7 @@ export class ForwardManager {
       throw error;
     }
 
-    this.activity?.add({
-      type: "rule.updated",
-      severity: "info",
-      ruleId: next.id,
-      ruleName: next.name,
-      protocol: next.protocol,
-      message: `Rule "${next.name}" updated.`
-    });
+    this.emitRuleEvent("rule.updated", "info", next, `Rule "${next.name}" updated.`);
 
     if (needsRestart) {
       // If start fails the rule stays stopped with the new config; error propagates to caller.
@@ -198,14 +184,7 @@ export class ForwardManager {
       throw error;
     }
 
-    this.activity?.add({
-      type: "rule.deleted",
-      severity: "warning",
-      ruleId: rule.id,
-      ruleName: rule.name,
-      protocol: rule.protocol,
-      message: `Rule "${rule.name}" deleted.`
-    });
+    this.emitRuleEvent("rule.deleted", "warning", rule, `Rule "${rule.name}" deleted.`);
   }
 
   async startRule(ruleId: string): Promise<ForwardStatus> {
@@ -226,26 +205,12 @@ export class ForwardManager {
 
     try {
       await forwarder.start();
-      this.activity?.add({
-        type: "rule.started",
-        severity: "success",
-        ruleId: rule.id,
-        ruleName: rule.name,
-        protocol: rule.protocol,
-        message: `Rule "${rule.name}" started.`
-      });
+      this.emitRuleEvent("rule.started", "success", rule, `Rule "${rule.name}" started.`);
       return forwarder.getStatus();
     } catch (error) {
       this.forwarders.delete(ruleId);
       const message = error instanceof Error ? error.message : String(error);
-      this.activity?.add({
-        type: "rule.error",
-        severity: "error",
-        ruleId: rule.id,
-        ruleName: rule.name,
-        protocol: rule.protocol,
-        message: `Rule "${rule.name}" failed to start: ${message}`
-      });
+      this.emitRuleEvent("rule.error", "error", rule, `Rule "${rule.name}" failed to start: ${message}`);
       throw error;
     }
   }
@@ -256,14 +221,7 @@ export class ForwardManager {
     if (forwarder) {
       await forwarder.stop();
       this.forwarders.delete(ruleId);
-      this.activity?.add({
-        type: "rule.stopped",
-        severity: "info",
-        ruleId: rule.id,
-        ruleName: rule.name,
-        protocol: rule.protocol,
-        message: `Rule "${rule.name}" stopped.`
-      });
+      this.emitRuleEvent("rule.stopped", "info", rule, `Rule "${rule.name}" stopped.`);
     }
     return this.getStatus(ruleId);
   }
@@ -314,6 +272,22 @@ export class ForwardManager {
         details: { errors: errors.join("; ") }
       });
       return { imported: 0, skipped: 0, errors };
+    }
+
+    // Reject duplicate listen bindings within the imported set before any
+    // mutation, for both replace and merge modes (parity with Go
+    // manager.ImportConfig → ensureNoDuplicateBindings). A listen binding is
+    // protocol + listenHost + listenPort; two imported rules with distinct ids
+    // but the same binding cannot both run, so the import is rejected with no
+    // in-memory mutation, no persist, and no forwarder start/stop.
+    const bindingError = ensureNoDuplicateBindings(validated);
+    if (bindingError) {
+      this.activity?.add({
+        type: "config.import.failed",
+        severity: "error",
+        message: `Config import rejected: ${bindingError}`
+      });
+      return { imported: 0, skipped: 0, errors: [bindingError] };
     }
 
     let imported = 0;
@@ -475,9 +449,51 @@ export class ForwardManager {
     );
   }
 
+  // Records a rule-scoped activity event, populating ruleId/ruleName/protocol
+  // from the given rule. Single emission path for rule-scoped events
+  // (created/updated/deleted/started/stopped/error) so their payload shape
+  // cannot drift between call sites — mirrors the Go manager's emitRuleEvent
+  // (Arch-C2). Config-level events (export/import) are not rule-scoped and keep
+  // calling this.activity?.add directly with their own details.
+  private emitRuleEvent(
+    type: ActivityEventType,
+    severity: ActivitySeverity,
+    rule: ForwardRule,
+    message: string
+  ): void {
+    this.activity?.add({
+      type,
+      severity,
+      ruleId: rule.id,
+      ruleName: rule.name,
+      protocol: rule.protocol,
+      message
+    });
+  }
+
   private async persist(): Promise<void> {
     await this.store.save(this.listRules());
   }
+}
+
+/**
+ * Returns an error message if two rules in the set share the same listen
+ * binding (protocol + listenHost + listenPort), or undefined if all bindings
+ * are unique. Mirrors the Go service `manager.ensureNoDuplicateBindings` —
+ * including message wording — so config-import rejects the same intra-set
+ * duplicate bindings in both runtimes.
+ */
+function ensureNoDuplicateBindings(rules: ForwardRule[]): string | undefined {
+  const seen = new Map<string, ForwardRule>();
+  for (const rule of rules) {
+    const key = listenKey(rule);
+    const existing = seen.get(key);
+    if (existing) {
+      return `a ${rule.protocol} rule is already listening on ${rule.listenHost}:${rule.listenPort} (rules "${existing.name}" and "${rule.name}")`;
+    }
+    seen.set(key, rule);
+  }
+  return undefined;
 }
 
 export class ValidationError extends Error {
