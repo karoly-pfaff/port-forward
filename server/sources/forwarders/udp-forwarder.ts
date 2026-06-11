@@ -1,6 +1,12 @@
 import dgram from "node:dgram";
 import type { RemoteInfo } from "node:dgram";
-import type { ForwardRule, ForwardStatus, ActivityEventInput } from "@portier/shared";
+import type {
+  ForwardRule,
+  ForwardStatus,
+  ActivityEventInput,
+  ActivityEventType,
+  ActivitySeverity
+} from "@portier/shared";
 import type { Forwarder } from "./types.js";
 import type { UdpSessionRegistry } from "../connections/udp-session-registry.js";
 
@@ -23,14 +29,16 @@ export class UdpForwarder implements Forwarder {
   private lastForwardLogAt = 0;
   private lastReturnLogAt = 0;
   private readonly sessionTimeoutMs: number;
+  private readonly events: UdpEventEmitter;
 
   constructor(
     private readonly rule: ForwardRule,
-    private readonly onEvent?: (event: ActivityEventInput) => void,
+    onEvent?: (event: ActivityEventInput) => void,
     sessionTimeoutMs?: number,
     private readonly registry?: UdpSessionRegistry
   ) {
     this.sessionTimeoutMs = sessionTimeoutMs ?? DEFAULT_SESSION_TIMEOUT_MS;
+    this.events = new UdpEventEmitter(rule, onEvent);
     this.status = {
       ruleId: rule.id,
       running: false,
@@ -91,35 +99,23 @@ export class UdpForwarder implements Forwarder {
         targetSocket.send(message, this.rule.targetPort, this.rule.targetHost, (error) => {
           if (error) {
             this.status.lastError = error.message;
-            this.onEvent?.({
-              type: "udp.packet.error",
-              severity: "error",
-              ruleId: this.rule.id,
-              ruleName: this.rule.name,
-              protocol: "udp",
-              message: `UDP send error: ${error.message}`
-            });
+            this.events.packetError(`UDP send error: ${error.message}`);
             return;
           }
 
           const now = Date.now();
           if (now - this.lastForwardLogAt >= UDP_LOG_INTERVAL_MS) {
             this.lastForwardLogAt = now;
-            this.onEvent?.({
-              type: "udp.packet.forwarded",
-              severity: "info",
-              ruleId: this.rule.id,
-              ruleName: this.rule.name,
-              protocol: "udp",
-              message: `UDP packet forwarded from ${remote.address}:${remote.port} to ${this.rule.targetHost}:${this.rule.targetPort}.`,
-              details: {
+            this.events.packetForwarded(
+              `UDP packet forwarded from ${remote.address}:${remote.port} to ${this.rule.targetHost}:${this.rule.targetPort}.`,
+              {
                 fromAddress: remote.address,
                 fromPort: remote.port,
                 targetHost: this.rule.targetHost,
                 targetPort: this.rule.targetPort,
                 bytes: message.length
               }
-            });
+            );
           }
         });
       });
@@ -138,33 +134,21 @@ export class UdpForwarder implements Forwarder {
           listenSocket.send(message, client.port, client.address, (error) => {
             if (error) {
               this.status.lastError = error.message;
-              this.onEvent?.({
-                type: "udp.packet.error",
-                severity: "error",
-                ruleId: this.rule.id,
-                ruleName: this.rule.name,
-                protocol: "udp",
-                message: `UDP return error: ${error.message}`
-              });
+              this.events.packetError(`UDP return error: ${error.message}`);
               return;
             }
 
             const now = Date.now();
             if (now - this.lastReturnLogAt >= UDP_LOG_INTERVAL_MS) {
               this.lastReturnLogAt = now;
-              this.onEvent?.({
-                type: "udp.packet.returned",
-                severity: "info",
-                ruleId: this.rule.id,
-                ruleName: this.rule.name,
-                protocol: "udp",
-                message: `UDP reply returned to ${client.address}:${client.port}.`,
-                details: {
+              this.events.packetReturned(
+                `UDP reply returned to ${client.address}:${client.port}.`,
+                {
                   toAddress: client.address,
                   toPort: client.port,
                   bytes: message.length
                 }
-              });
+              );
             }
           });
         });
@@ -260,14 +244,9 @@ export class UdpForwarder implements Forwarder {
         listenSocket.send(response, remote.port, remote.address, (error) => {
           if (error) {
             this.status.lastError = error.message;
-            this.onEvent?.({
-              type: "udp.packet.error",
-              severity: "error",
-              ruleId: this.rule.id,
-              ruleName: this.rule.name,
-              protocol: "udp",
-              message: `UDP multi-client return error for ${remote.address}:${remote.port}: ${error.message}`
-            });
+            this.events.packetError(
+              `UDP multi-client return error for ${remote.address}:${remote.port}: ${error.message}`
+            );
           }
         });
       });
@@ -284,20 +263,15 @@ export class UdpForwarder implements Forwarder {
       this.sessions.set(sessionKey, session);
       this.status.activeUdpSessions = this.sessions.size;
 
-      this.onEvent?.({
-        type: "udp.session.opened",
-        severity: "info",
-        ruleId: this.rule.id,
-        ruleName: this.rule.name,
-        protocol: "udp",
-        message: `UDP session opened for ${remote.address}:${remote.port}.`,
-        details: {
+      this.events.sessionOpened(
+        `UDP session opened for ${remote.address}:${remote.port}.`,
+        {
           clientAddress: remote.address,
           clientPort: remote.port,
           targetHost: this.rule.targetHost,
           targetPort: this.rule.targetPort
         }
-      });
+      );
     } else {
       // Reset idle timer
       clearTimeout(session.timer);
@@ -311,32 +285,20 @@ export class UdpForwarder implements Forwarder {
     const now = Date.now();
     if (now - this.lastForwardLogAt >= UDP_LOG_INTERVAL_MS) {
       this.lastForwardLogAt = now;
-      this.onEvent?.({
-        type: "udp.packet.forwarded",
-        severity: "info",
-        ruleId: this.rule.id,
-        ruleName: this.rule.name,
-        protocol: "udp",
-        message: `UDP packet forwarded from ${remote.address}:${remote.port} (session).`,
-        details: {
+      this.events.packetForwarded(
+        `UDP packet forwarded from ${remote.address}:${remote.port} (session).`,
+        {
           fromAddress: remote.address,
           fromPort: remote.port,
           bytes: message.length
         }
-      });
+      );
     }
 
     session.targetSocket.send(message, this.rule.targetPort, this.rule.targetHost, (error) => {
       if (error) {
         this.status.lastError = error.message;
-        this.onEvent?.({
-          type: "udp.packet.error",
-          severity: "error",
-          ruleId: this.rule.id,
-          ruleName: this.rule.name,
-          protocol: "udp",
-          message: `UDP multi-client send error: ${error.message}`
-        });
+        this.events.packetError(`UDP multi-client send error: ${error.message}`);
       }
     });
   }
@@ -348,20 +310,70 @@ export class UdpForwarder implements Forwarder {
     if (session?.registryId) this.registry?.closeSession(session.registryId);
     clearSocket(targetSocket);
 
-    this.onEvent?.({
-      type: "udp.session.closed",
-      severity: "info",
-      ruleId: this.rule.id,
-      ruleName: this.rule.name,
-      protocol: "udp",
-      message: `UDP session expired for ${remote.address}:${remote.port} (idle timeout).`,
-      details: {
+    this.events.sessionClosed(
+      `UDP session expired for ${remote.address}:${remote.port} (idle timeout).`,
+      {
         clientAddress: remote.address,
         clientPort: remote.port
       }
+    );
+  }
+}
+
+/**
+ * UdpEventEmitter centralizes UDP activity-event construction for one rule so the
+ * forwarder's many emission sites no longer each re-spell the ruleId/ruleName/
+ * protocol envelope (and the identical udp.packet.error shape). It only builds and
+ * dispatches ActivityEventInput payloads — throttling, status mutation, and session
+ * bookkeeping stay in the forwarder. Emitted payloads are byte-identical to the
+ * previous inline object literals (same fields, same order, details omitted when
+ * not provided).
+ */
+class UdpEventEmitter {
+  constructor(
+    private readonly rule: ForwardRule,
+    private readonly onEvent?: (event: ActivityEventInput) => void
+  ) {}
+
+  packetError(message: string): void {
+    this.emit("udp.packet.error", "error", message);
+  }
+
+  packetForwarded(message: string, details: UdpEventDetails): void {
+    this.emit("udp.packet.forwarded", "info", message, details);
+  }
+
+  packetReturned(message: string, details: UdpEventDetails): void {
+    this.emit("udp.packet.returned", "info", message, details);
+  }
+
+  sessionOpened(message: string, details: UdpEventDetails): void {
+    this.emit("udp.session.opened", "info", message, details);
+  }
+
+  sessionClosed(message: string, details: UdpEventDetails): void {
+    this.emit("udp.session.closed", "info", message, details);
+  }
+
+  private emit(
+    type: ActivityEventType,
+    severity: ActivitySeverity,
+    message: string,
+    details?: UdpEventDetails
+  ): void {
+    this.onEvent?.({
+      type,
+      severity,
+      ruleId: this.rule.id,
+      ruleName: this.rule.name,
+      protocol: "udp",
+      message,
+      ...(details ? { details } : {})
     });
   }
 }
+
+type UdpEventDetails = NonNullable<ActivityEventInput["details"]>;
 
 async function closeSocket(socket: dgram.Socket | undefined): Promise<void> {
   if (!socket) {

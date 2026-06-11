@@ -745,6 +745,71 @@ describe("UdpForwarder – error handling", () => {
   });
 });
 
+describe("UdpForwarder – emitted event shape (facade regression)", () => {
+  // These lock the full ActivityEventInput payload the UdpEventEmitter facade
+  // produces (severity, ruleId, ruleName, protocol, message, and details
+  // presence/absence) through the public forwarder — the other UDP tests only
+  // assert event type + message, which would not catch a dropped/renamed field.
+
+  it("emits udp.packet.error with the full envelope and no details", async () => {
+    const events: ActivityEventInput[] = [];
+    const { forwarder, listenPort } = await startUdpForwarder({}, (e) => events.push(e));
+    cleanup.push(() => forwarder.stop());
+
+    (forwarder as any).targetSocket.send = failingSend;
+
+    const client = dgram.createSocket("udp4");
+    cleanup.push(() => closeUdpSocket(client));
+    sendPacket(client, "hi", listenPort);
+
+    await waitUntil(() => events.some((e) => e.type === "udp.packet.error"));
+    const event = events.find((e) => e.type === "udp.packet.error")!;
+    expect(event).toEqual({
+      type: "udp.packet.error",
+      severity: "error",
+      ruleId: "udp-test",
+      ruleName: "UDP test",
+      protocol: "udp",
+      message: "UDP send error: send boom"
+    });
+    expect(event.details).toBeUndefined();
+  });
+
+  it("emits udp.packet.forwarded with the full envelope and details", async () => {
+    const { socket: targetSocket, port: targetPort } = await bindUdpSocketOnFreePort();
+    cleanup.push(() => closeUdpSocket(targetSocket));
+
+    const events: ActivityEventInput[] = [];
+    const { forwarder, listenPort } = await startUdpForwarder({ targetPort }, (e) => events.push(e));
+    cleanup.push(() => forwarder.stop());
+
+    // Bind the client first so its source port is known and the message/details
+    // are deterministic.
+    const client = await bindUdpClient();
+    cleanup.push(() => closeUdpSocket(client));
+    const clientPort = (client.address() as { port: number }).port;
+    sendPacket(client, "hello", listenPort);
+
+    await waitUntil(() => events.some((e) => e.type === "udp.packet.forwarded"));
+    const event = events.find((e) => e.type === "udp.packet.forwarded")!;
+    expect(event).toEqual({
+      type: "udp.packet.forwarded",
+      severity: "info",
+      ruleId: "udp-test",
+      ruleName: "UDP test",
+      protocol: "udp",
+      message: `UDP packet forwarded from 127.0.0.1:${clientPort} to 127.0.0.1:${targetPort}.`,
+      details: {
+        fromAddress: "127.0.0.1",
+        fromPort: clientPort,
+        targetHost: "127.0.0.1",
+        targetPort,
+        bytes: 5
+      }
+    });
+  });
+});
+
 describe("UdpForwarder – send-callback error handling", () => {
   it("emits udp.packet.error and records lastError when a one-way target send fails", async () => {
     const events: ActivityEventInput[] = [];
