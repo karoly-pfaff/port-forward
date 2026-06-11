@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import type { DiagnosisEntry } from "../forwards/ForwardRuleList.js";
 import { buildDiagnosticsBundle, buildDiagnosticsFilename, downloadJson } from "./diagnosticsExport.js";
 import { SettingsSection } from "./SettingsSection.js";
@@ -16,6 +16,18 @@ export function DiagnosticsExportSection({
   const [diagExportPartial, setDiagExportPartial] = useState(false);
   const [diagExportError, setDiagExportError] = useState<string | null>(null);
 
+  // Holds the pending "clear success message" timer so it can be cancelled on
+  // unmount — otherwise its setState fires after teardown (e.g. in tests, after
+  // jsdom is gone) and throws.
+  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current !== null) {
+        clearTimeout(successTimerRef.current);
+      }
+    };
+  }, []);
+
   async function handleDiagnosticsExport(): Promise<void> {
     setDiagExporting(true);
     setDiagExportSuccess(false);
@@ -28,7 +40,10 @@ export function DiagnosticsExportSection({
         setDiagExportPartial(true);
       } else {
         setDiagExportSuccess(true);
-        setTimeout(() => setDiagExportSuccess(false), 3000);
+        if (successTimerRef.current !== null) {
+          clearTimeout(successTimerRef.current);
+        }
+        successTimerRef.current = setTimeout(() => setDiagExportSuccess(false), 3000);
       }
     } catch (error) {
       setDiagExportError(error instanceof Error ? error.message : "Export failed.");
