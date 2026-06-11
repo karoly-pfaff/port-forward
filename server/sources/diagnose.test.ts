@@ -163,3 +163,35 @@ describe("diagnoseRule advisory checks", () => {
     expect(result.checks.find((c) => c.id === "common-port")?.status).toBe("warn");
   });
 });
+
+describe("diagnoseRule check ordering", () => {
+  // Locks the exact check order/set (previously unguarded — other tests find
+  // checks by id). isRunning=true skips the listen-bind socket; the order is the
+  // same regardless of individual check statuses.
+  it("emits TCP checks in a fixed order (no udp-mode)", async () => {
+    const result = await diagnoseRule(tcpRule(), true);
+    expect(result.checks.map((c) => c.id)).toEqual([
+      "listen-host",
+      "lan-exposure",
+      "privileged-port",
+      "common-port",
+      "listen-bind",
+      "target-host",
+      "target-connect"
+    ]);
+  });
+
+  it("emits UDP checks in a fixed order (udp-mode last)", async () => {
+    const result = await diagnoseRule(udpRule(), true);
+    expect(result.checks.map((c) => c.id)).toEqual([
+      "listen-host",
+      "lan-exposure",
+      "privileged-port",
+      "common-port",
+      "listen-bind",
+      "target-host",
+      "target-connect",
+      "udp-mode"
+    ]);
+  });
+});

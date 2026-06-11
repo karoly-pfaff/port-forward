@@ -7,185 +7,22 @@ import { COMMON_PORTS } from "@portier/shared";
 const TIMEOUT_MS = 2000;
 
 export async function diagnoseRule(rule: ForwardRule, isRunning: boolean): Promise<RuleDiagnosticsResult> {
+  // Each phase appends exactly one check; order here is the response check order.
   const checks: DiagnosticCheck[] = [];
 
-  // listen-host
-  if (rule.listenHost === "0.0.0.0") {
-    checks.push({
-      id: "listen-host",
-      label: "Listen address",
-      status: "warn",
-      message: "Listening on 0.0.0.0 exposes this port on all interfaces.",
-      details: { listenHost: rule.listenHost }
-    });
-  } else {
-    checks.push({
-      id: "listen-host",
-      label: "Listen address",
-      status: "pass",
-      message: `Listen address ${rule.listenHost} is specific.`,
-      details: { listenHost: rule.listenHost }
-    });
-  }
+  checks.push(checkListenHost(rule));
+  checks.push(checkLanExposure(rule));
+  checks.push(checkPrivilegedPort(rule));
+  checks.push(checkCommonPort(rule));
+  checks.push(await checkListenBind(rule, isRunning));
 
-  // lan-exposure
-  if (rule.listenHost === "0.0.0.0") {
-    checks.push({
-      id: "lan-exposure",
-      label: "LAN exposure",
-      status: "warn",
-      message: "Rule is accessible to other devices on the network because it listens on 0.0.0.0.",
-      details: { listenHost: rule.listenHost }
-    });
-  } else {
-    checks.push({
-      id: "lan-exposure",
-      label: "LAN exposure",
-      status: "pass",
-      message: "Rule is bound to a specific interface and not exposed on the LAN.",
-      details: { listenHost: rule.listenHost }
-    });
-  }
+  const targetHostCheck = await checkTargetHost(rule);
+  checks.push(targetHostCheck);
+  const targetResolved = targetHostCheck.status === "pass";
+  checks.push(await checkTargetConnect(rule, targetResolved));
 
-  // privileged-port
-  if (rule.listenPort < 1024) {
-    checks.push({
-      id: "privileged-port",
-      label: "Privileged port",
-      status: "warn",
-      message: `Port ${rule.listenPort} is privileged and may require elevated permissions to bind.`,
-      details: { listenPort: rule.listenPort }
-    });
-  } else {
-    checks.push({
-      id: "privileged-port",
-      label: "Privileged port",
-      status: "pass",
-      message: `Port ${rule.listenPort} does not require elevated permissions.`,
-      details: { listenPort: rule.listenPort }
-    });
-  }
-
-  // common-port
-  const commonPort = COMMON_PORTS.find((p) => p.port === rule.listenPort);
-  if (commonPort) {
-    checks.push({
-      id: "common-port",
-      label: "Common port",
-      status: "warn",
-      message: `Port ${rule.listenPort} is commonly used by ${commonPort.label}.`,
-      details: { listenPort: rule.listenPort, service: commonPort.label }
-    });
-  } else {
-    checks.push({
-      id: "common-port",
-      label: "Common port",
-      status: "pass",
-      message: `Port ${rule.listenPort} is not a well-known service port.`,
-      details: { listenPort: rule.listenPort }
-    });
-  }
-
-  // listen-bind — skip if rule is already running (it owns the socket)
-  if (isRunning) {
-    checks.push({
-      id: "listen-bind",
-      label: "Listen bind",
-      status: "pass",
-      message: "Rule is currently running; the listen port is already owned by Portier.",
-      details: { listenHost: rule.listenHost, listenPort: rule.listenPort, ruleRunning: true }
-    });
-  } else {
-    const bindResult = await tryBind(rule);
-    checks.push({
-      id: "listen-bind",
-      label: "Listen bind",
-      status: bindResult.status,
-      message: bindResult.message,
-      details: { listenHost: rule.listenHost, listenPort: rule.listenPort, ruleRunning: false }
-    });
-  }
-
-  // target-host resolution
-  let targetResolved = false;
-  {
-    try {
-      await dns.lookup(rule.targetHost);
-      targetResolved = true;
-      checks.push({
-        id: "target-host",
-        label: "Target hostname",
-        status: "pass",
-        message: `Target host ${rule.targetHost} resolves successfully.`,
-        details: { targetHost: rule.targetHost }
-      });
-    } catch (err) {
-      checks.push({
-        id: "target-host",
-        label: "Target hostname",
-        status: "fail",
-        message: `Target host ${rule.targetHost} could not be resolved: ${(err as NodeJS.ErrnoException).code ?? "unknown error"}.`,
-        details: { targetHost: rule.targetHost }
-      });
-    }
-  }
-
-  // target-connect — TCP attempts connection; UDP skips (unreliable without protocol response)
-  if (rule.protocol === "tcp") {
-    if (!targetResolved) {
-      checks.push({
-        id: "target-connect",
-        label: "Target connection",
-        status: "skip",
-        message: "Skipped because target host resolution failed.",
-        details: { targetHost: rule.targetHost, targetPort: rule.targetPort }
-      });
-    } else {
-      const connectResult = await tryTcpConnect(rule.targetHost, rule.targetPort);
-      checks.push({
-        id: "target-connect",
-        label: "Target connection",
-        status: connectResult.status,
-        message: connectResult.message,
-        details: { targetHost: rule.targetHost, targetPort: rule.targetPort }
-      });
-    }
-  } else {
-    checks.push({
-      id: "target-connect",
-      label: "Target connection",
-      status: "skip",
-      message: "UDP reachability cannot be verified without a protocol-specific response from the target.",
-      details: { targetHost: rule.targetHost, targetPort: rule.targetPort, protocol: "udp" }
-    });
-  }
-
-  // udp-mode (UDP only)
   if (rule.protocol === "udp") {
-    const mode = rule.udpMode ?? "one-way";
-    if (mode === "bidirectional-last-client") {
-      checks.push({
-        id: "udp-mode",
-        label: "UDP mode",
-        status: "warn",
-        message:
-          "bidirectional-last-client sends replies to the most recently seen client only. " +
-          "Suitable for single-client use cases; not reliable for concurrent clients.",
-        details: { udpMode: mode }
-      });
-    } else {
-      const modeMsg =
-        mode === "one-way"
-          ? "one-way: packets flow from clients to the target only; replies are not forwarded."
-          : "bidirectional-multi-client: each client gets its own reply path.";
-      checks.push({
-        id: "udp-mode",
-        label: "UDP mode",
-        status: "pass",
-        message: modeMsg,
-        details: { udpMode: mode }
-      });
-    }
+    checks.push(checkUdpMode(rule));
   }
 
   const summary = buildSummary(checks);
@@ -197,6 +34,193 @@ export async function diagnoseRule(rule: ForwardRule, isRunning: boolean): Promi
     summary,
     checks,
     diagnosedAt: new Date().toISOString()
+  };
+}
+
+// checkListenHost flags whether the rule binds all interfaces (0.0.0.0) or a
+// specific address.
+function checkListenHost(rule: ForwardRule): DiagnosticCheck {
+  if (rule.listenHost === "0.0.0.0") {
+    return {
+      id: "listen-host",
+      label: "Listen address",
+      status: "warn",
+      message: "Listening on 0.0.0.0 exposes this port on all interfaces.",
+      details: { listenHost: rule.listenHost }
+    };
+  }
+  return {
+    id: "listen-host",
+    label: "Listen address",
+    status: "pass",
+    message: `Listen address ${rule.listenHost} is specific.`,
+    details: { listenHost: rule.listenHost }
+  };
+}
+
+// checkLanExposure reports whether the rule is reachable from other LAN devices.
+function checkLanExposure(rule: ForwardRule): DiagnosticCheck {
+  if (rule.listenHost === "0.0.0.0") {
+    return {
+      id: "lan-exposure",
+      label: "LAN exposure",
+      status: "warn",
+      message: "Rule is accessible to other devices on the network because it listens on 0.0.0.0.",
+      details: { listenHost: rule.listenHost }
+    };
+  }
+  return {
+    id: "lan-exposure",
+    label: "LAN exposure",
+    status: "pass",
+    message: "Rule is bound to a specific interface and not exposed on the LAN.",
+    details: { listenHost: rule.listenHost }
+  };
+}
+
+// checkPrivilegedPort flags listen ports below 1024 that may require elevation.
+function checkPrivilegedPort(rule: ForwardRule): DiagnosticCheck {
+  if (rule.listenPort < 1024) {
+    return {
+      id: "privileged-port",
+      label: "Privileged port",
+      status: "warn",
+      message: `Port ${rule.listenPort} is privileged and may require elevated permissions to bind.`,
+      details: { listenPort: rule.listenPort }
+    };
+  }
+  return {
+    id: "privileged-port",
+    label: "Privileged port",
+    status: "pass",
+    message: `Port ${rule.listenPort} does not require elevated permissions.`,
+    details: { listenPort: rule.listenPort }
+  };
+}
+
+// checkCommonPort flags listen ports that collide with a well-known service.
+function checkCommonPort(rule: ForwardRule): DiagnosticCheck {
+  const commonPort = COMMON_PORTS.find((p) => p.port === rule.listenPort);
+  if (commonPort) {
+    return {
+      id: "common-port",
+      label: "Common port",
+      status: "warn",
+      message: `Port ${rule.listenPort} is commonly used by ${commonPort.label}.`,
+      details: { listenPort: rule.listenPort, service: commonPort.label }
+    };
+  }
+  return {
+    id: "common-port",
+    label: "Common port",
+    status: "pass",
+    message: `Port ${rule.listenPort} is not a well-known service port.`,
+    details: { listenPort: rule.listenPort }
+  };
+}
+
+// checkListenBind attempts to bind the listen socket, unless the rule is already
+// running (in which case Portier already owns the port).
+async function checkListenBind(rule: ForwardRule, isRunning: boolean): Promise<DiagnosticCheck> {
+  if (isRunning) {
+    return {
+      id: "listen-bind",
+      label: "Listen bind",
+      status: "pass",
+      message: "Rule is currently running; the listen port is already owned by Portier.",
+      details: { listenHost: rule.listenHost, listenPort: rule.listenPort, ruleRunning: true }
+    };
+  }
+  const bindResult = await tryBind(rule);
+  return {
+    id: "listen-bind",
+    label: "Listen bind",
+    status: bindResult.status,
+    message: bindResult.message,
+    details: { listenHost: rule.listenHost, listenPort: rule.listenPort, ruleRunning: false }
+  };
+}
+
+// checkTargetHost resolves the target hostname via DNS. A "pass" status means the
+// host resolved (used to gate the target-connect check).
+async function checkTargetHost(rule: ForwardRule): Promise<DiagnosticCheck> {
+  try {
+    await dns.lookup(rule.targetHost);
+    return {
+      id: "target-host",
+      label: "Target hostname",
+      status: "pass",
+      message: `Target host ${rule.targetHost} resolves successfully.`,
+      details: { targetHost: rule.targetHost }
+    };
+  } catch (err) {
+    return {
+      id: "target-host",
+      label: "Target hostname",
+      status: "fail",
+      message: `Target host ${rule.targetHost} could not be resolved: ${(err as NodeJS.ErrnoException).code ?? "unknown error"}.`,
+      details: { targetHost: rule.targetHost }
+    };
+  }
+}
+
+// checkTargetConnect attempts a TCP connection to the target. UDP is always
+// skipped (reachability is not verifiable without a protocol response), and TCP
+// is skipped when the target host did not resolve.
+async function checkTargetConnect(rule: ForwardRule, targetResolved: boolean): Promise<DiagnosticCheck> {
+  if (rule.protocol !== "tcp") {
+    return {
+      id: "target-connect",
+      label: "Target connection",
+      status: "skip",
+      message: "UDP reachability cannot be verified without a protocol-specific response from the target.",
+      details: { targetHost: rule.targetHost, targetPort: rule.targetPort, protocol: "udp" }
+    };
+  }
+  if (!targetResolved) {
+    return {
+      id: "target-connect",
+      label: "Target connection",
+      status: "skip",
+      message: "Skipped because target host resolution failed.",
+      details: { targetHost: rule.targetHost, targetPort: rule.targetPort }
+    };
+  }
+  const connectResult = await tryTcpConnect(rule.targetHost, rule.targetPort);
+  return {
+    id: "target-connect",
+    label: "Target connection",
+    status: connectResult.status,
+    message: connectResult.message,
+    details: { targetHost: rule.targetHost, targetPort: rule.targetPort }
+  };
+}
+
+// checkUdpMode describes the configured UDP forwarding mode and warns on the
+// last-client mode's single-client limitation. Only called for UDP rules.
+function checkUdpMode(rule: ForwardRule): DiagnosticCheck {
+  const mode = rule.udpMode ?? "one-way";
+  if (mode === "bidirectional-last-client") {
+    return {
+      id: "udp-mode",
+      label: "UDP mode",
+      status: "warn",
+      message:
+        "bidirectional-last-client sends replies to the most recently seen client only. " +
+        "Suitable for single-client use cases; not reliable for concurrent clients.",
+      details: { udpMode: mode }
+    };
+  }
+  const modeMsg =
+    mode === "one-way"
+      ? "one-way: packets flow from clients to the target only; replies are not forwarded."
+      : "bidirectional-multi-client: each client gets its own reply path.";
+  return {
+    id: "udp-mode",
+    label: "UDP mode",
+    status: "pass",
+    message: modeMsg,
+    details: { udpMode: mode }
   };
 }
 
