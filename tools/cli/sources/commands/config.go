@@ -8,10 +8,15 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"portier/cli/sources/client"
 	"portier/cli/sources/output"
 )
+
+// groupMaxLength mirrors the server-side rule group label limit (characters).
+// The CLI does a light local pre-check; the server is authoritative.
+const groupMaxLength = 64
 
 const configHelp = `Usage: portier config <subcommand> [options]
 
@@ -408,6 +413,7 @@ type rawConfigRule struct {
 	TargetPort int    `json:"targetPort"`
 	Enabled    bool   `json:"enabled"`
 	UDPMode    string `json:"udpMode"`
+	Group      string `json:"group"`
 }
 
 // parseLocalConfig extracts forwarding rules from a config file in any supported shape:
@@ -502,6 +508,13 @@ func validateLocalConfig(rules []rawConfigRule) configValidationResult {
 		if r.Protocol == "udp" && r.UDPMode != "" && !validUDPModes[r.UDPMode] {
 			errs = append(errs, fmt.Sprintf("%s: invalid udpMode %q", prefix, r.UDPMode))
 		}
+		if g := strings.TrimSpace(r.Group); g != "" {
+			if utf8.RuneCountInString(g) > groupMaxLength {
+				errs = append(errs, fmt.Sprintf("%s: group must be %d characters or fewer", prefix, groupMaxLength))
+			} else if hasControlChar(g) {
+				errs = append(errs, fmt.Sprintf("%s: group must not contain control characters", prefix))
+			}
+		}
 
 		if r.Protocol == "tcp" {
 			tcpCount++
@@ -528,6 +541,17 @@ func validateLocalConfig(rules []rawConfigRule) configValidationResult {
 		UDPCount:  udpCount,
 		Errors:    errs,
 	}
+}
+
+// hasControlChar reports whether s contains a C0 control character (U+0000-
+// U+001F) or DEL (U+007F). Used for the local group-label pre-check.
+func hasControlChar(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 // loadConfigForCommand reads, parses, and validates a local config file for the
@@ -708,6 +732,7 @@ func toConfigRules(rules []rawConfigRule) []client.ConfigRule {
 			TargetPort: r.TargetPort,
 			Enabled:    r.Enabled,
 			UDPMode:    r.UDPMode,
+			Group:      r.Group,
 		}
 	}
 	return configRules

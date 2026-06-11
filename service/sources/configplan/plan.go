@@ -21,6 +21,7 @@ type RuleSnapshot struct {
 	TargetPort int                    `json:"targetPort"`
 	Enabled    bool                   `json:"enabled"`
 	UdpMode    *domain.UdpMode        `json:"udpMode,omitempty"`
+	Group      *string                `json:"group,omitempty"`
 }
 
 // Change records a single material field difference between current and desired.
@@ -83,6 +84,9 @@ type Input struct {
 	Now          *time.Time
 }
 
+// forwardingFields drive the active socket; a change to one makes an update
+// destructive. "group" is metadata only and is deliberately absent — a
+// group-only change is non-destructive (parity with TS FORWARDING_FIELDS).
 var forwardingFields = map[string]bool{
 	"protocol":   true,
 	"listenHost": true,
@@ -289,6 +293,7 @@ func ruleInputToSnapshot(input validation.ForwardRuleInput, rule domain.ForwardR
 		TargetPort: rule.TargetPort,
 		Enabled:    rule.Enabled,
 		UdpMode:    rule.UdpMode,
+		Group:      rule.Group,
 	}
 	if input.ID != nil {
 		id := strings.TrimSpace(*input.ID)
@@ -307,6 +312,7 @@ func ruleToSnapshot(rule domain.ForwardRule) RuleSnapshot {
 		TargetPort: rule.TargetPort,
 		Enabled:    rule.Enabled,
 		UdpMode:    rule.UdpMode,
+		Group:      rule.Group,
 	}
 	snap.ID = strPtr(rule.ID)
 	return snap
@@ -347,6 +353,9 @@ func diffMaterialFields(current, desired RuleSnapshot) []Change {
 	if !udpModeEqual(current.UdpMode, desired.UdpMode) {
 		changes = append(changes, Change{Field: "udpMode", Before: udpModeVal(current.UdpMode), After: udpModeVal(desired.UdpMode)})
 	}
+	if !groupEqual(current.Group, desired.Group) {
+		changes = append(changes, Change{Field: "group", Before: groupVal(current.Group), After: groupVal(desired.Group)})
+	}
 
 	return changes
 }
@@ -366,6 +375,23 @@ func udpModeVal(m *domain.UdpMode) any {
 		return nil
 	}
 	return string(*m)
+}
+
+func groupEqual(a, b *string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	return *a == *b
+}
+
+func groupVal(g *string) any {
+	if g == nil {
+		return nil
+	}
+	return *g
 }
 
 func isDestructiveUpdate(changes []Change) bool {
@@ -519,6 +545,7 @@ func BuildApplyImportFromPlan(plan Response, newID func() string) ApplyImportRes
 			TargetPort: snap.TargetPort,
 			Enabled:    snap.Enabled,
 			UdpMode:    snap.UdpMode,
+			Group:      snap.Group,
 		})
 	}
 

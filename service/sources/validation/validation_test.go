@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 
 	"portier/service/sources/domain"
@@ -325,6 +326,125 @@ func TestApplyPatchUdpMode(t *testing.T) {
 	}
 	if next.UdpMode == nil || *next.UdpMode != domain.UdpModeBidirectionalLast {
 		t.Fatalf("UdpMode = %v, want bidirectional-last-client", next.UdpMode)
+	}
+}
+
+func TestGroupAcceptedAndTrimmed(t *testing.T) {
+	input := validInput(domain.ProtocolTCP)
+	group := "  web-team  "
+	input.Group = &group
+	rule, errors := ValidateForwardRuleInput(input)
+	if len(errors) > 0 {
+		t.Fatalf("expected valid rule, got errors: %#v", errors)
+	}
+	if rule.Group == nil || *rule.Group != "web-team" {
+		t.Fatalf("group = %v, want web-team", rule.Group)
+	}
+}
+
+func TestGroupEmptyNormalizesToNil(t *testing.T) {
+	for _, g := range []string{"", "   "} {
+		input := validInput(domain.ProtocolTCP)
+		group := g
+		input.Group = &group
+		rule, errors := ValidateForwardRuleInput(input)
+		if len(errors) > 0 {
+			t.Fatalf("group %q expected valid, got errors: %#v", g, errors)
+		}
+		if rule.Group != nil {
+			t.Fatalf("group %q normalized to %v, want nil", g, *rule.Group)
+		}
+	}
+}
+
+func TestGroupAbsentIsNil(t *testing.T) {
+	rule := ruleFromValidInput(t, validInput(domain.ProtocolTCP))
+	if rule.Group != nil {
+		t.Fatalf("group = %v, want nil", *rule.Group)
+	}
+}
+
+func TestGroupTooLongRejected(t *testing.T) {
+	input := validInput(domain.ProtocolTCP)
+	group := strings.Repeat("x", domain.GroupMaxLength+1)
+	input.Group = &group
+	_, errors := ValidateForwardRuleInput(input)
+	if !hasError(errors, "group must be 64 characters or fewer.") {
+		t.Fatalf("errors = %#v", errors)
+	}
+}
+
+func TestGroupExactlyMaxAccepted(t *testing.T) {
+	input := validInput(domain.ProtocolTCP)
+	group := strings.Repeat("y", domain.GroupMaxLength)
+	input.Group = &group
+	rule, errors := ValidateForwardRuleInput(input)
+	if len(errors) > 0 {
+		t.Fatalf("expected valid, got errors: %#v", errors)
+	}
+	if rule.Group == nil || *rule.Group != group {
+		t.Fatalf("group = %v, want %q", rule.Group, group)
+	}
+}
+
+func TestGroupControlCharRejected(t *testing.T) {
+	input := validInput(domain.ProtocolTCP)
+	group := "bad" + string(rune(1)) + "group"
+	input.Group = &group
+	_, errors := ValidateForwardRuleInput(input)
+	if !hasError(errors, "group must not contain control characters.") {
+		t.Fatalf("errors = %#v", errors)
+	}
+}
+
+func TestPatchSetsGroup(t *testing.T) {
+	rule := ruleFromValidInput(t, validInput(domain.ProtocolTCP))
+	group := "  api-team  "
+	patch := ForwardRulePatch{Group: &group}
+	next, errors := ApplyPatch(rule, patch)
+	if len(errors) > 0 {
+		t.Fatalf("ApplyPatch errors: %#v", errors)
+	}
+	if next.Group == nil || *next.Group != "api-team" {
+		t.Fatalf("group = %v, want api-team", next.Group)
+	}
+}
+
+func TestPatchEmptyGroupClears(t *testing.T) {
+	input := validInput(domain.ProtocolTCP)
+	g := "web-team"
+	input.Group = &g
+	rule := ruleFromValidInput(t, input)
+	empty := ""
+	next, errors := ApplyPatch(rule, ForwardRulePatch{Group: &empty})
+	if len(errors) > 0 {
+		t.Fatalf("ApplyPatch errors: %#v", errors)
+	}
+	if next.Group != nil {
+		t.Fatalf("group = %v, want nil (cleared)", *next.Group)
+	}
+}
+
+func TestPatchAbsentGroupLeavesUnchanged(t *testing.T) {
+	input := validInput(domain.ProtocolTCP)
+	g := "web-team"
+	input.Group = &g
+	rule := ruleFromValidInput(t, input)
+	name := "Renamed"
+	next, errors := ApplyPatch(rule, ForwardRulePatch{Name: &name})
+	if len(errors) > 0 {
+		t.Fatalf("ApplyPatch errors: %#v", errors)
+	}
+	if next.Group == nil || *next.Group != "web-team" {
+		t.Fatalf("group = %v, want web-team (unchanged)", next.Group)
+	}
+}
+
+func TestPatchRejectsInvalidGroup(t *testing.T) {
+	group := strings.Repeat("z", domain.GroupMaxLength+1)
+	_, errors := ValidateForwardRulePatch(ForwardRuleInput{Group: &group})
+	if !hasError(errors, "group must be 64 characters or fewer.") {
+		t.Fatalf("errors = %#v", errors)
 	}
 }
 

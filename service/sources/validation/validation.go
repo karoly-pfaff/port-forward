@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"portier/service/sources/domain"
 )
@@ -18,6 +19,7 @@ type ForwardRuleInput struct {
 	TargetPort *int                    `json:"targetPort"`
 	Enabled    *bool                   `json:"enabled"`
 	UdpMode    *domain.UdpMode         `json:"udpMode"`
+	Group      *string                 `json:"group"`
 }
 
 type ForwardRulePatch struct {
@@ -30,6 +32,9 @@ type ForwardRulePatch struct {
 	TargetPort *int
 	Enabled    *bool
 	UdpMode    *domain.UdpMode
+	// Group carries the patch intent for the group label: nil = unchanged,
+	// non-nil = set to the (trimmed) value, non-nil empty/whitespace = clear.
+	Group *string
 }
 
 func DecodeAndValidateForwardRule(raw json.RawMessage) (domain.ForwardRule, []string) {
@@ -83,6 +88,7 @@ func ValidateForwardRulePatch(input ForwardRuleInput) (ForwardRulePatch, []strin
 	if input.UdpMode != nil && !isValidUdpMode(*input.UdpMode) {
 		errors = append(errors, "udpMode must be one-way, bidirectional-last-client, or bidirectional-multi-client.")
 	}
+	errors = append(errors, validateGroup(input.Group)...)
 
 	if len(errors) > 0 {
 		return ForwardRulePatch{}, errors
@@ -98,6 +104,9 @@ func ValidateForwardRulePatch(input ForwardRuleInput) (ForwardRulePatch, []strin
 		TargetPort: input.TargetPort,
 		Enabled:    input.Enabled,
 		UdpMode:    input.UdpMode,
+		// Keep the raw pointer so ApplyPatch can distinguish unchanged (nil)
+		// from clear (non-nil empty) from set (non-nil non-empty).
+		Group: input.Group,
 	}
 	return patch, nil
 }
@@ -138,6 +147,7 @@ func validateForwardRuleInput(input ForwardRuleInput, requireID bool) (domain.Fo
 	if input.Protocol != nil && *input.Protocol == domain.ProtocolTCP && input.UdpMode != nil {
 		errors = append(errors, "udpMode is only valid for UDP rules.")
 	}
+	errors = append(errors, validateGroup(input.Group)...)
 
 	if len(errors) > 0 {
 		return domain.ForwardRule{}, errors
@@ -151,6 +161,7 @@ func validateForwardRuleInput(input ForwardRuleInput, requireID bool) (domain.Fo
 		TargetHost: strings.TrimSpace(*input.TargetHost),
 		TargetPort: *input.TargetPort,
 		Enabled:    *input.Enabled,
+		Group:      normalizeGroup(input.Group),
 	}
 
 	if input.ID != nil {
@@ -179,6 +190,7 @@ func InputFromRule(rule domain.ForwardRule) ForwardRuleInput {
 		TargetPort: &rule.TargetPort,
 		Enabled:    &rule.Enabled,
 		UdpMode:    rule.UdpMode,
+		Group:      rule.Group,
 	}
 }
 
@@ -211,6 +223,11 @@ func ApplyPatch(rule domain.ForwardRule, patch ForwardRulePatch) (domain.Forward
 	if next.Protocol == domain.ProtocolTCP {
 		next.UdpMode = nil
 	}
+	if patch.Group != nil {
+		// non-nil: set (or clear when empty/whitespace). normalizeGroup returns
+		// nil for empty/whitespace, which clears the group.
+		next.Group = normalizeGroup(patch.Group)
+	}
 
 	return ValidateForwardRuleInput(InputFromRule(next))
 }
@@ -223,6 +240,52 @@ func isValidUdpMode(mode domain.UdpMode) bool {
 	return mode == domain.UdpModeOneWay ||
 		mode == domain.UdpModeBidirectionalLast ||
 		mode == domain.UdpModeBidirectionalMulti
+}
+
+// validateGroup returns error messages for an invalid group label (mirrors the
+// TypeScript collectGroupErrors). nil/empty/whitespace are accepted (they
+// normalize to "no group"); a present non-empty value must be at most
+// domain.GroupMaxLength characters with no control characters.
+func validateGroup(group *string) []string {
+	if group == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*group)
+	if trimmed == "" {
+		return nil
+	}
+	errs := make([]string, 0)
+	if utf8.RuneCountInString(trimmed) > domain.GroupMaxLength {
+		errs = append(errs, fmt.Sprintf("group must be %d characters or fewer.", domain.GroupMaxLength))
+	}
+	if hasControlChar(trimmed) {
+		errs = append(errs, "group must not contain control characters.")
+	}
+	return errs
+}
+
+// normalizeGroup trims a group label and returns nil when the result is empty,
+// so an ungrouped rule omits the field. Assumes the value passed validateGroup.
+func normalizeGroup(group *string) *string {
+	if group == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*group)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+// hasControlChar reports whether s contains a C0 control character (U+0000-
+// U+001F) or DEL (U+007F).
+func hasControlChar(s string) bool {
+	for _, r := range s {
+		if r < 0x20 || r == 0x7f {
+			return true
+		}
+	}
+	return false
 }
 
 func trimOptional(value *string) *string {

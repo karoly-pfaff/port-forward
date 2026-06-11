@@ -316,6 +316,74 @@ func TestListenPortChangeValue(t *testing.T) {
 	}
 }
 
+// ── Rule group metadata (v1.8 Slice 1) ───────────────────────────────────────
+
+func TestGroupChangeIsNonDestructiveUpdate(t *testing.T) {
+	g := "before-team"
+	current := tcpRule("r1", "App", 9001, 9002)
+	current.Group = &g
+	resp := buildPlan([]domain.ForwardRule{current}, `[{"id":"r1","name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9002,"enabled":true,"group":"after-team"}]`)
+	if resp.Summary.Update != 1 || resp.Summary.Destructive != 0 {
+		t.Fatalf("summary = %#v, want update=1 destructive=0", resp.Summary)
+	}
+	op := resp.Operations[0]
+	if op.Destructive {
+		t.Fatal("group-only change must not be destructive")
+	}
+	var groupChange *Change
+	for i, c := range op.Changes {
+		if c.Field == "group" {
+			groupChange = &op.Changes[i]
+		}
+	}
+	if groupChange == nil {
+		t.Fatal("expected a group change")
+	}
+	if groupChange.Before != "before-team" || groupChange.After != "after-team" {
+		t.Fatalf("group change = %#v, want before-team → after-team", groupChange)
+	}
+}
+
+func TestNoGroupOnBothSidesIsUnchanged(t *testing.T) {
+	current := []domain.ForwardRule{tcpRule("r1", "App", 9001, 9002)}
+	resp := buildPlan(current, `[{"id":"r1","name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9002,"enabled":true}]`)
+	if resp.Summary.HasDrift {
+		t.Fatalf("expected no drift, got summary %#v", resp.Summary)
+	}
+	if resp.Operations[0].Type != "unchanged" {
+		t.Fatalf("operation type = %q, want unchanged", resp.Operations[0].Type)
+	}
+}
+
+func TestAddingGroupToUngroupedRule(t *testing.T) {
+	current := []domain.ForwardRule{tcpRule("r1", "App", 9001, 9002)}
+	resp := buildPlan(current, `[{"id":"r1","name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9002,"enabled":true,"group":"ops"}]`)
+	op := resp.Operations[0]
+	if op.Type != "update" || op.Destructive {
+		t.Fatalf("op = %#v, want non-destructive update", op)
+	}
+	var groupChange *Change
+	for i, c := range op.Changes {
+		if c.Field == "group" {
+			groupChange = &op.Changes[i]
+		}
+	}
+	if groupChange == nil || groupChange.Before != nil || groupChange.After != "ops" {
+		t.Fatalf("group change = %#v, want nil → ops", groupChange)
+	}
+}
+
+func TestApplyImportPreservesGroup(t *testing.T) {
+	resp := buildPlan(nil, `[{"name":"App","protocol":"tcp","listenHost":"127.0.0.1","listenPort":9001,"targetHost":"127.0.0.1","targetPort":9002,"enabled":true,"group":"payments"}]`)
+	result := BuildApplyImportFromPlan(resp, func() string { return "fixed-id" })
+	if len(result.Rules) != 1 {
+		t.Fatalf("expected 1 rule, got %d", len(result.Rules))
+	}
+	if result.Rules[0].Group == nil || *result.Rules[0].Group != "payments" {
+		t.Fatalf("group = %v, want payments", result.Rules[0].Group)
+	}
+}
+
 // ── Matching semantics ────────────────────────────────────────────────────────
 
 func TestMatchByIDWhenProvided(t *testing.T) {

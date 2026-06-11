@@ -533,6 +533,7 @@ func toRuleResponse(rule domain.ForwardRule) domain.ForwardRuleResponse {
 		TargetPort: rule.TargetPort,
 		Enabled:    rule.Enabled,
 		UdpMode:    rule.UdpMode,
+		Group:      rule.Group,
 		Advisories: advisory.GetPortAdvisories(advisory.Input{
 			Port:       rule.ListenPort,
 			ListenHost: rule.ListenHost,

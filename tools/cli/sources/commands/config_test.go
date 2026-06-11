@@ -908,3 +908,63 @@ func TestRunConfigValidate_InvalidTargetPort(t *testing.T) {
 		t.Errorf("output missing 'targetPort': %s", out.String())
 	}
 }
+
+// --- Rule group metadata (v1.8 Slice 1) ---
+
+func TestRunConfigValidate_AcceptsGroup(t *testing.T) {
+	content := `[{"name":"API","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48000,"targetHost":"10.0.0.1","targetPort":8080,"enabled":true,"group":"web-team"}]`
+	file := writeTempConfig(t, content)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0; stdout: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "Config is valid") {
+		t.Errorf("output missing 'Config is valid': %s", out.String())
+	}
+}
+
+func TestRunConfigValidate_RejectsTooLongGroup(t *testing.T) {
+	longGroup := strings.Repeat("x", 65)
+	content := `[{"name":"API","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48000,"targetHost":"10.0.0.1","targetPort":8080,"enabled":true,"group":"` + longGroup + `"}]`
+	file := writeTempConfig(t, content)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigValidate(false, []string{file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !strings.Contains(out.String(), "group must be 64 characters or fewer") {
+		t.Errorf("output missing group length error: %s", out.String())
+	}
+}
+
+// TestRunConfigPlan_PreservesGroup proves toConfigRules forwards the local
+// rule's group to the API in the plan request body (the CLI stays a pure API
+// client; the server is authoritative for plan semantics).
+func TestRunConfigPlan_PreservesGroup(t *testing.T) {
+	var captured client.ConfigPlanRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/api/config/plan" {
+			_ = json.NewDecoder(r.Body).Decode(&captured)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(planNoDriftFixture())
+			return
+		}
+		t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	content := `[{"name":"API","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48000,"targetHost":"10.0.0.1","targetPort":8080,"enabled":true,"group":"web-team"}]`
+	file := writeTempConfig(t, content)
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	commands.RunConfigPlan(c, false, []string{file}, &out, &errBuf)
+
+	if len(captured.Desired.Rules) != 1 {
+		t.Fatalf("expected 1 desired rule, got %d", len(captured.Desired.Rules))
+	}
+	if captured.Desired.Rules[0].Group != "web-team" {
+		t.Errorf("forwarded group = %q, want web-team", captured.Desired.Rules[0].Group)
+	}
+}

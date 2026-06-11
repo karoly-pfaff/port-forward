@@ -98,7 +98,18 @@ export interface ForwardRule {
   targetPort: number;
   enabled: boolean;
   udpMode?: UdpMode;
+  /**
+   * Optional, behavior-neutral grouping label for the rule. Used only as
+   * operator-facing metadata (v1.8 Operator Power Tools) — it does NOT affect
+   * forwarding, duplicate-binding, lifecycle, or status behavior. Absent when
+   * the rule has no group. See {@link PORTIER_GROUP_MAX_LENGTH} and
+   * {@link validateGroup} for the normalization/validation rules.
+   */
+  group?: string;
 }
+
+/** Maximum length (characters) of a normalized rule group label. */
+export const PORTIER_GROUP_MAX_LENGTH = 64;
 
 export interface ForwardStatus {
   ruleId: string;
@@ -221,10 +232,13 @@ export function validateForwardRule(input: unknown): ValidationResult<ForwardRul
   if (value.protocol === "tcp" && value.udpMode !== undefined) {
     errors.push("udpMode is only valid for UDP rules.");
   }
+  collectGroupErrors(value.group, errors);
 
   if (errors.length > 0) {
     return { valid: false, errors };
   }
+
+  const group = normalizeGroup(value.group);
 
   return {
     valid: true,
@@ -238,7 +252,10 @@ export function validateForwardRule(input: unknown): ValidationResult<ForwardRul
       targetHost: value.targetHost!.trim(),
       targetPort: value.targetPort!,
       enabled: value.enabled!,
-      udpMode: value.protocol === "udp" ? value.udpMode ?? "one-way" : undefined
+      udpMode: value.protocol === "udp" ? value.udpMode ?? "one-way" : undefined,
+      // Omit the key entirely when there is no group, so exported configs and
+      // API responses stay byte-identical to legacy (no-group) rules.
+      ...(group !== undefined ? { group } : {})
     }
   };
 }
@@ -283,24 +300,33 @@ export function validateForwardRulePatch(input: unknown): ValidationResult<Parti
   ) {
     errors.push("udpMode must be one-way, bidirectional-last-client, or bidirectional-multi-client.");
   }
+  collectGroupErrors(value.group, errors);
 
   if (errors.length > 0) {
     return { valid: false, errors };
   }
 
-  return {
-    valid: true,
-    errors: [],
-    value: {
-      ...value,
-      // Only include trimmed strings when the field was present in the patch.
-      // Absent fields must not appear as `undefined` — that would overwrite the
-      // existing rule's value when the caller spreads this result.
-      ...(value.name !== undefined ? { name: value.name.trim() } : undefined),
-      ...(value.listenHost !== undefined ? { listenHost: value.listenHost.trim() } : undefined),
-      ...(value.targetHost !== undefined ? { targetHost: value.targetHost.trim() } : undefined),
-    }
+  const patch: Partial<ForwardRuleInput> = {
+    ...value,
+    // Only include trimmed strings when the field was present in the patch.
+    // Absent fields must not appear as `undefined` — that would overwrite the
+    // existing rule's value when the caller spreads this result.
+    ...(value.name !== undefined ? { name: value.name.trim() } : undefined),
+    ...(value.listenHost !== undefined ? { listenHost: value.listenHost.trim() } : undefined),
+    ...(value.targetHost !== undefined ? { targetHost: value.targetHost.trim() } : undefined),
   };
+
+  // Group patch semantics (mirrors Go ApplyPatch):
+  //   - key absent or null  → unchanged (drop the key so the spread won't touch it)
+  //   - non-empty string    → set to the trimmed value
+  //   - empty/whitespace    → clear (set undefined so the merge removes the group)
+  if (value.group === undefined || value.group === null) {
+    delete patch.group;
+  } else {
+    patch.group = normalizeGroup(value.group);
+  }
+
+  return { valid: true, errors: [], value: patch };
 }
 
 export function listenKey(rule: Pick<ForwardRule, "protocol" | "listenHost" | "listenPort">): string {
@@ -364,6 +390,67 @@ export function getPortAdvisories(input: {
   }
 
   return advisories;
+}
+
+/**
+ * Validate a candidate rule group label, returning error messages (empty when
+ * valid). Optional metadata: `undefined`/`null`/empty/whitespace are all
+ * accepted (they normalize to "no group"); a present non-empty value must be a
+ * string of at most {@link PORTIER_GROUP_MAX_LENGTH} characters with no control
+ * characters. Exported for reuse and documentation; the TypeScript and Go
+ * runtimes apply the same rule (parity-tested via validate:contract).
+ */
+export function validateGroup(group: unknown): string[] {
+  const errors: string[] = [];
+  collectGroupErrors(group, errors);
+  return errors;
+}
+
+function collectGroupErrors(group: unknown, errors: string[]): void {
+  if (group === undefined || group === null) {
+    return;
+  }
+  if (typeof group !== "string") {
+    errors.push("group must be a string.");
+    return;
+  }
+  const trimmed = group.trim();
+  if (trimmed.length === 0) {
+    return; // normalized to absent
+  }
+  if (trimmed.length > PORTIER_GROUP_MAX_LENGTH) {
+    errors.push(`group must be ${PORTIER_GROUP_MAX_LENGTH} characters or fewer.`);
+  }
+  if (hasControlChar(trimmed)) {
+    errors.push("group must not contain control characters.");
+  }
+}
+
+// Control characters: C0 range (U+0000-U+001F) plus DEL (U+007F). Rejected in
+// group labels so the metadata stays a simple human-readable name. Checked with
+// charCodeAt rather than a regex literal to keep the source free of embedded
+// control bytes.
+function hasControlChar(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code < 0x20 || code === 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Normalize a group label to its stored form: trims whitespace and returns
+ * `undefined` when the result is empty (so a "no group" rule omits the field).
+ * Assumes the value already passed {@link validateGroup}.
+ */
+function normalizeGroup(group: unknown): string | undefined {
+  if (typeof group !== "string") {
+    return undefined;
+  }
+  const trimmed = group.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function isNonEmptyString(value: unknown): value is string {

@@ -16,6 +16,8 @@ export interface ConfigPlanRuleSnapshot {
   targetPort: number;
   enabled: boolean;
   udpMode?: "one-way" | "bidirectional-last-client" | "bidirectional-multi-client";
+  /** Optional, behavior-neutral group label (v1.8). Absent when ungrouped. */
+  group?: string;
 }
 
 export interface ConfigPlanOperation {

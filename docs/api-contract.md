@@ -16,6 +16,18 @@ Response: `ForwardRuleResponse[]`.
 
 `ForwardRuleResponse` is a `ForwardRule` plus `advisories: PortAdvisory[]`.
 
+### Optional rule group metadata (v1.8)
+
+A forward rule MAY carry an optional `group` label — operator-facing, **behavior-neutral** metadata introduced in v1.8 as the foundation for rule grouping/profiles. It does **not** affect forwarding, lifecycle, duplicate-binding (still `protocol + listenHost + listenPort` only), or status behavior.
+
+- `group`: optional string. Omitted (not `null`, not empty) when the rule has no group — legacy rules without a `group` remain valid and are returned unchanged.
+- Validation (identical in the TypeScript and Go runtimes, parity-tested via `validate:contract`):
+  - Whitespace is trimmed. An empty or whitespace-only value normalizes to **absent** (the rule has no group; the field is omitted).
+  - A present (non-empty, post-trim) value must be **≤ 64 characters** and contain **no control characters** (C0 range `U+0000`–`U+001F` or DEL `U+007F`); otherwise the rule is rejected with `group must be 64 characters or fewer.` / `group must not contain control characters.`
+  - A non-string value is rejected with `group must be a string.`
+- `PATCH /api/forwards/:id` semantics: `group: ""` (or whitespace) **clears** the group; a non-empty string **sets** it (trimmed); omitting the field, or sending `null`, leaves the existing group **unchanged**.
+- Preserved across config export/import and config plan/apply. In a plan, `group` is a **material** field (a group-only change is reported as an `update`) but **not** a forwarding field, so the update is **non-destructive** (no socket restart).
+
 ## `POST /api/forwards`
 
 Purpose: create a forwarding rule.
@@ -453,11 +465,11 @@ Matching semantics:
 - If matched and all material fields are equal, the operation is `unchanged`.
 
 Material fields (those that trigger `update` and potentially `destructive: true`):
-- `name`, `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, `enabled`, `udpMode`
+- `name`, `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, `enabled`, `udpMode`, `group`
 
 Destructive operations:
 - `remove` is always destructive.
-- `update` is destructive when any of `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, or `udpMode` changes.
+- `update` is destructive when any of `protocol`, `listenHost`, `listenPort`, `targetHost`, `targetPort`, or `udpMode` changes. `name`, `enabled`, and `group` are non-destructive (metadata only — no socket restart).
 
 Error conditions:
 - `400` when `desired.rules` is not a valid array.

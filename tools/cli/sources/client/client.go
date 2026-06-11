@@ -142,6 +142,7 @@ type ForwardRuleResponse struct {
 	TargetPort int            `json:"targetPort"`
 	Enabled    bool           `json:"enabled"`
 	UDPMode    string         `json:"udpMode,omitempty"`
+	Group      string         `json:"group,omitempty"`
 	Advisories []PortAdvisory `json:"advisories"`
 }
 
@@ -234,6 +235,7 @@ type ConfigRule struct {
 	TargetPort int    `json:"targetPort"`
 	Enabled    bool   `json:"enabled"`
 	UDPMode    string `json:"udpMode,omitempty"`
+	Group      string `json:"group,omitempty"`
 }
 
 // ConfigExportResponse mirrors the response from GET /api/config/export.
@@ -273,6 +275,7 @@ type ConfigPlanRuleSnapshot struct {
 	TargetPort int    `json:"targetPort"`
 	Enabled    bool   `json:"enabled"`
 	UDPMode    string `json:"udpMode,omitempty"`
+	Group      string `json:"group,omitempty"`
 }
 
 // ConfigPlanChange describes a field-level change in a plan update operation.

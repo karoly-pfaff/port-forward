@@ -654,6 +654,44 @@ describe("buildApplyImportFromPlan", () => {
     expect(rules[0].udpMode).toBe("bidirectional-multi-client");
   });
 
+  it("preserves group on the desired rule and omits it when absent", () => {
+    const grouped = buildConfigPlan({ currentRules: [], desiredRaw: [makeTcpDesired({ group: "web-team" })], now: NOW });
+    expect(buildApplyImportFromPlan(grouped, seqId).rules[0].group).toBe("web-team");
+
+    const ungrouped = buildConfigPlan({ currentRules: [], desiredRaw: [makeTcpDesired()], now: NOW });
+    expect("group" in buildApplyImportFromPlan(ungrouped, seqId).rules[0]).toBe(false);
+  });
+});
+
+describe("buildConfigPlan — group metadata drift", () => {
+  it("treats a group-only change as a non-destructive update", () => {
+    const current: ForwardRule = { ...tcpRule, group: "before-team" };
+    const desired = makeTcpDesired({ id: "r1", group: "after-team" });
+    const plan = buildConfigPlan({ currentRules: [current], desiredRaw: [desired], now: NOW });
+
+    expect(plan.summary.update).toBe(1);
+    expect(plan.summary.destructive).toBe(0);
+    const op = plan.operations.find((o) => o.type === "update");
+    expect(op?.destructive).toBe(false);
+    const change = op?.changes?.find((c) => c.field === "group");
+    expect(change).toEqual({ field: "group", before: "before-team", after: "after-team" });
+  });
+
+  it("produces no drift when neither current nor desired has a group (legacy parity)", () => {
+    const desired = makeTcpDesired({ id: "r1" });
+    const plan = buildConfigPlan({ currentRules: [tcpRule], desiredRaw: [desired], now: NOW });
+    expect(plan.summary.hasDrift).toBe(false);
+    expect(plan.operations[0].type).toBe("unchanged");
+  });
+
+  it("detects adding a group to a previously ungrouped rule", () => {
+    const desired = makeTcpDesired({ id: "r1", group: "ops" });
+    const plan = buildConfigPlan({ currentRules: [tcpRule], desiredRaw: [desired], now: NOW });
+    const op = plan.operations.find((o) => o.type === "update");
+    expect(op?.changes?.find((c) => c.field === "group")).toEqual({ field: "group", before: undefined, after: "ops" });
+    expect(op?.destructive).toBe(false);
+  });
+
   it("default id generator produces unique ids for adds (no injected generator)", () => {
     const a = { name: "A", protocol: "tcp" as const, listenHost: "127.0.0.1", listenPort: 9100, targetHost: "127.0.0.1", targetPort: 9200, enabled: true };
     const b = { name: "B", protocol: "tcp" as const, listenHost: "127.0.0.1", listenPort: 9101, targetHost: "127.0.0.1", targetPort: 9201, enabled: true };

@@ -5,8 +5,19 @@ import {
   isRecommendedForwardPort,
   listenKey,
   validateForwardRule,
-  validateForwardRulePatch
+  validateForwardRulePatch,
+  validateGroup
 } from "./index.js";
+
+const baseTcpRule = {
+  name: "Grouped",
+  protocol: "tcp" as const,
+  listenHost: "127.0.0.1",
+  listenPort: 48001,
+  targetHost: "127.0.0.1",
+  targetPort: 3000,
+  enabled: true
+};
 
 describe("ForwardRule validation", () => {
   it("accepts a valid TCP rule", () => {
@@ -276,6 +287,97 @@ describe("validateForwardRule id and optional-id edge cases", () => {
     expect(result.value?.name).toBe("My Rule");
     expect(result.value?.listenHost).toBe("127.0.0.1");
     expect(result.value?.targetHost).toBe("example.com");
+  });
+});
+
+describe("rule group metadata", () => {
+  it("omits group when absent", () => {
+    const result = validateForwardRule(baseTcpRule);
+    expect(result.valid).toBe(true);
+    expect("group" in (result.value ?? {})).toBe(false);
+  });
+
+  it("trims and stores a valid group", () => {
+    const result = validateForwardRule({ ...baseTcpRule, group: "  web-team  " });
+    expect(result.valid).toBe(true);
+    expect(result.value?.group).toBe("web-team");
+  });
+
+  it("normalizes an empty/whitespace group to absent", () => {
+    for (const group of ["", "   "]) {
+      const result = validateForwardRule({ ...baseTcpRule, group });
+      expect(result.valid).toBe(true);
+      expect("group" in (result.value ?? {})).toBe(false);
+    }
+  });
+
+  it("rejects a group longer than 64 characters", () => {
+    const result = validateForwardRule({ ...baseTcpRule, group: "x".repeat(65) });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("group must be 64 characters or fewer.");
+  });
+
+  it("accepts a group of exactly 64 characters", () => {
+    const result = validateForwardRule({ ...baseTcpRule, group: "y".repeat(64) });
+    expect(result.valid).toBe(true);
+    expect(result.value?.group).toBe("y".repeat(64));
+  });
+
+  it("rejects a group with control characters", () => {
+    const result = validateForwardRule({ ...baseTcpRule, group: "bad\u0001group" });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("group must not contain control characters.");
+  });
+
+  it("rejects a non-string group", () => {
+    const result = validateForwardRule({ ...baseTcpRule, group: 42 as unknown as string });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("group must be a string.");
+  });
+
+  it("patch: setting a non-empty group stores the trimmed value", () => {
+    const result = validateForwardRulePatch({ group: "  api-team  " });
+    expect(result.valid).toBe(true);
+    expect(result.value?.group).toBe("api-team");
+  });
+
+  it("patch: an empty-string group clears it (group key present, undefined)", () => {
+    const result = validateForwardRulePatch({ group: "" });
+    expect(result.valid).toBe(true);
+    expect("group" in (result.value ?? {})).toBe(true);
+    expect(result.value?.group).toBeUndefined();
+  });
+
+  it("patch: an absent group leaves the field untouched (key omitted)", () => {
+    const result = validateForwardRulePatch({ name: "Renamed" });
+    expect(result.valid).toBe(true);
+    expect("group" in (result.value ?? {})).toBe(false);
+  });
+
+  it("patch: a null group is treated as unchanged (key omitted)", () => {
+    const result = validateForwardRulePatch({ group: null as unknown as string });
+    expect(result.valid).toBe(true);
+    expect("group" in (result.value ?? {})).toBe(false);
+  });
+
+  it("patch: rejects an invalid group", () => {
+    const result = validateForwardRulePatch({ group: "z".repeat(65) });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain("group must be 64 characters or fewer.");
+  });
+
+  it("validateGroup returns no errors for accepted values", () => {
+    expect(validateGroup(undefined)).toEqual([]);
+    expect(validateGroup(null)).toEqual([]);
+    expect(validateGroup("")).toEqual([]);
+    expect(validateGroup("   ")).toEqual([]);
+    expect(validateGroup("ops")).toEqual([]);
+  });
+
+  it("validateGroup reports each violation", () => {
+    expect(validateGroup("x".repeat(65))).toContain("group must be 64 characters or fewer.");
+    expect(validateGroup("a\u0007b")).toContain("group must not contain control characters.");
+    expect(validateGroup(123)).toContain("group must be a string.");
   });
 });
 

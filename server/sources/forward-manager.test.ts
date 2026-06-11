@@ -946,3 +946,69 @@ describe("ForwardManager persist-failure rollback (Test-D, Go parity)", () => {
     expect(manager.getStatus("r2").running).toBe(false);
   });
 });
+
+describe("ForwardManager rule group metadata (v1.8 Slice 1)", () => {
+  function groupRuleInput(overrides: Partial<ForwardRule> & { id: string }): ForwardRule {
+    return {
+      name: "Grouped",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48201,
+      targetHost: "127.0.0.1",
+      targetPort: 49999,
+      enabled: false,
+      ...overrides
+    } as ForwardRule;
+  }
+
+  it("stores a group on create and returns it", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    const rule = await manager.addRule(groupRuleInput({ id: "g1", group: "  web-team  " }));
+    expect(rule.group).toBe("web-team");
+    expect(manager.getRule("g1")?.group).toBe("web-team");
+  });
+
+  it("omits group when none is provided", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    const rule = await manager.addRule(groupRuleInput({ id: "g2" }));
+    expect("group" in rule).toBe(false);
+  });
+
+  it("updates a group via patch without restarting (metadata only)", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    await manager.addRule(groupRuleInput({ id: "g3", group: "web-team" }));
+    const updated = await manager.updateRule("g3", { group: "api-team" });
+    expect(updated.group).toBe("api-team");
+  });
+
+  it("clears a group when patched with an empty string", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    await manager.addRule(groupRuleInput({ id: "g4", group: "web-team" }));
+    const updated = await manager.updateRule("g4", { group: "" });
+    expect("group" in updated).toBe(false);
+  });
+
+  it("leaves the group untouched when the patch omits it", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    await manager.addRule(groupRuleInput({ id: "g5", group: "web-team" }));
+    const updated = await manager.updateRule("g5", { name: "Renamed" });
+    expect(updated.group).toBe("web-team");
+    expect(updated.name).toBe("Renamed");
+  });
+
+  it("rejects an invalid group on create", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    await expect(manager.addRule(groupRuleInput({ id: "g6", group: "x".repeat(65) }))).rejects.toThrow(ValidationError);
+  });
+
+  it("round-trips a group through export and import", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    await manager.addRule(groupRuleInput({ id: "g7", group: "payments" }));
+    const exported = manager.exportConfig();
+    expect(exported.rules[0].group).toBe("payments");
+
+    const fresh = new ForwardManager(new MemoryStore());
+    await fresh.importConfig(exported, "replace");
+    expect(fresh.getRule("g7")?.group).toBe("payments");
+  });
+});

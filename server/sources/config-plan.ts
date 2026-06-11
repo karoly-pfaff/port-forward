@@ -16,9 +16,12 @@ type SnapshotKey = keyof ConfigPlanRuleSnapshot;
 
 const MATERIAL_FIELDS: SnapshotKey[] = [
   "name", "protocol", "listenHost", "listenPort",
-  "targetHost", "targetPort", "enabled", "udpMode",
+  "targetHost", "targetPort", "enabled", "udpMode", "group",
 ];
 
+// Forwarding fields drive the active socket; changing one of them makes an
+// update destructive (it stops/restarts the forwarder). `group` is metadata
+// only, so it is deliberately NOT here — a group-only change is non-destructive.
 const FORWARDING_FIELDS = new Set<string>([
   "protocol", "listenHost", "listenPort", "targetHost", "targetPort", "udpMode",
 ]);
@@ -194,6 +197,7 @@ function validatedToSnapshot(value: ForwardRuleInput): ConfigPlanRuleSnapshot {
     targetPort: value.targetPort!,
     enabled: value.enabled!,
     udpMode: value.udpMode,
+    group: value.group,
   };
 }
 
@@ -208,6 +212,7 @@ function ruleToSnapshot(rule: ForwardRule): ConfigPlanRuleSnapshot {
     targetPort: rule.targetPort,
     enabled: rule.enabled,
     udpMode: rule.udpMode,
+    group: rule.group,
   };
 }
 
@@ -352,6 +357,7 @@ export function buildApplyImportFromPlan(
       targetPort: desired.targetPort,
       enabled: desired.enabled,
       ...(desired.udpMode !== undefined ? { udpMode: desired.udpMode } : {}),
+      ...(desired.group !== undefined ? { group: desired.group } : {}),
     });
   }
 

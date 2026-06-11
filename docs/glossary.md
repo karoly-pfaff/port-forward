@@ -13,6 +13,7 @@ Source: `audits/v1.6-readability-naming-audit-1.md` (Naming-A).
 | Term | Meaning | Notes / frozen exceptions |
 | --- | --- | --- |
 | **Forward rule** (short: **rule**) | A configured TCP/UDP port forward: `protocol + listenHost:listenPort → targetHost:targetPort`, with `enabled` and (for UDP) `udpMode`. | Domain type `ForwardRule`; UI nav "Forward Rules". Prefer "forward rule" / "rule"; avoid "forward" alone as a noun. |
+| **Group** | An optional, behavior-neutral label on a forward rule (`ForwardRule.group`) used to organize rules (v1.8 Operator Power Tools foundation). Metadata only — does **not** affect forwarding, lifecycle, duplicate-binding, or status. Optional; trimmed; empty normalizes to absent; ≤ 64 chars, no control characters. | Added v1.8 Slice 1. A material (drift-producing) but **non-destructive** plan field. Not a "tag" or "profile" (those are not multi-valued/separate concepts yet). Frozen field name `group`. |
 | **`/api/forwards`** | The REST collection of forward rules (`GET`/`POST`/`PATCH`/`DELETE /api/forwards[/:id]`). | **Frozen REST path** — the one place "forward" is the noun. Do not rename. |
 | **Config** | Overloaded prefix — always qualify it. Distinct meanings: rule persistence (`rules.json`), the plan/apply engine, the export/import DTO, and the desired-state input. The bare word "config" alone is ambiguous; use one of the qualified terms below. | — |
 | **Exported config** | The serialized bundle of all current rules: `{ version: "1", exportedAt, rules: [...] }`. | DTO `ExportedConfig`; `GET /api/config/export`. |

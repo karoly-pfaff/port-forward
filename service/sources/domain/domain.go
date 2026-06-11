@@ -25,7 +25,15 @@ type ForwardRule struct {
 	TargetPort int             `json:"targetPort"`
 	Enabled    bool            `json:"enabled"`
 	UdpMode    *UdpMode        `json:"udpMode,omitempty"`
+	// Group is an optional, behavior-neutral grouping label (v1.8 Operator
+	// Power Tools). It is operator-facing metadata only — it does NOT affect
+	// forwarding, duplicate-binding, lifecycle, or status behavior. nil when
+	// the rule has no group. Normalized/validated by the validation package.
+	Group *string `json:"group,omitempty"`
 }
+
+// GroupMaxLength is the maximum length (runes) of a normalized rule group label.
+const GroupMaxLength = 64
 
 type PortAdvisory struct {
 	Code     string `json:"code"`
@@ -43,6 +51,7 @@ type ForwardRuleResponse struct {
 	TargetPort int             `json:"targetPort"`
 	Enabled    bool            `json:"enabled"`
 	UdpMode    *UdpMode        `json:"udpMode,omitempty"`
+	Group      *string         `json:"group,omitempty"`
 	Advisories []PortAdvisory  `json:"advisories"`
 }
 
