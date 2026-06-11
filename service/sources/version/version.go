@@ -1,7 +1,9 @@
 package version
 
 // Version is the current Portier service version.
-// Build scripts inject this at compile time:
+// This source default is bumped per release (kept in lockstep with the CLI
+// version package and the package.json version). Build scripts may also inject
+// it at compile time:
 //
-//	go build -ldflags "-X portier/service/sources/version.Version=1.4.0" ...
-var Version = "dev"
+//	go build -ldflags "-X portier/service/sources/version.Version=1.6.0" ...
+var Version = "1.6.0"
