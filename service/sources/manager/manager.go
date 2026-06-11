@@ -28,8 +28,7 @@ type runtimeState struct {
 	running   bool
 	startedAt string
 	lastError string
-	tcp       *forwarders.TCPForwarder
-	udp       *forwarders.UDPForwarder
+	forwarder forwarders.Forwarder
 }
 
 func New(rules []domain.ForwardRule) (*Manager, error) {
@@ -388,48 +387,28 @@ func (m *Manager) StartRule(ruleID string) (domain.ForwardStatus, error) {
 		return m.statusForRule(rule), nil
 	}
 
-	onEvent := m.activityEventFunc()
-
-	if rule.Protocol == domain.ProtocolTCP {
-		tcpForwarder := forwarders.NewTCPForwarderWithRegistry(rule, m.onEventLog, onEvent, m.tcpRegistry)
-		if err := tcpForwarder.Start(); err != nil {
-			state.running = false
-			state.startedAt = ""
-			state.lastError = err.Error()
-			state.tcp = nil
-			m.runtime[ruleID] = state
-			m.emitRuleEvent(activity.EventRuleError, activity.SeverityError, rule, fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()))
-			return m.statusForRule(rule), err
-		}
-		state.running = true
-		state.startedAt = tcpForwarder.Status().StartedAt
-		state.lastError = ""
-		state.tcp = tcpForwarder
-		m.runtime[ruleID] = state
-		m.emitRuleEvent(activity.EventRuleStarted, activity.SeveritySuccess, rule, fmt.Sprintf(`Rule "%s" started.`, rule.Name))
+	forwarder := forwarders.NewForwarder(rule, m.onEventLog, m.activityEventFunc(), m.tcpRegistry, m.udpRegistry)
+	if forwarder == nil {
+		// Unrecognized protocol: no runtime to start (unchanged no-op behavior).
 		return m.statusForRule(rule), nil
 	}
 
-	if rule.Protocol == domain.ProtocolUDP {
-		udpForwarder := forwarders.NewUDPForwarderWithRegistry(rule, m.onEventLog, onEvent, m.udpRegistry)
-		if err := udpForwarder.Start(); err != nil {
-			state.running = false
-			state.startedAt = ""
-			state.lastError = err.Error()
-			state.udp = nil
-			m.runtime[ruleID] = state
-			m.emitRuleEvent(activity.EventRuleError, activity.SeverityError, rule, fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()))
-			return m.statusForRule(rule), err
-		}
-		state.running = true
-		state.startedAt = udpForwarder.Status().StartedAt
-		state.lastError = ""
-		state.udp = udpForwarder
+	if err := forwarder.Start(); err != nil {
+		state.running = false
+		state.startedAt = ""
+		state.lastError = err.Error()
+		state.forwarder = nil
 		m.runtime[ruleID] = state
-		m.emitRuleEvent(activity.EventRuleStarted, activity.SeveritySuccess, rule, fmt.Sprintf(`Rule "%s" started.`, rule.Name))
-		return m.statusForRule(rule), nil
+		m.emitRuleEvent(activity.EventRuleError, activity.SeverityError, rule, fmt.Sprintf(`Rule "%s" failed to start: %s`, rule.Name, err.Error()))
+		return m.statusForRule(rule), err
 	}
 
+	state.running = true
+	state.startedAt = forwarder.Status().StartedAt
+	state.lastError = ""
+	state.forwarder = forwarder
+	m.runtime[ruleID] = state
+	m.emitRuleEvent(activity.EventRuleStarted, activity.SeveritySuccess, rule, fmt.Sprintf(`Rule "%s" started.`, rule.Name))
 	return m.statusForRule(rule), nil
 }
 
@@ -451,18 +430,13 @@ func (m *Manager) StopRule(ruleID string) (domain.ForwardStatus, error) {
 
 func (m *Manager) stopRuntime(rule domain.ForwardRule) {
 	state := m.runtime[rule.ID]
-	if state.tcp != nil {
-		state.tcp.Stop()
-		state.lastError = state.tcp.Status().LastError
-	}
-	if state.udp != nil {
-		state.udp.Stop()
-		state.lastError = state.udp.Status().LastError
+	if state.forwarder != nil {
+		state.forwarder.Stop()
+		state.lastError = state.forwarder.Status().LastError
 	}
 	state.running = false
 	state.startedAt = ""
-	state.tcp = nil
-	state.udp = nil
+	state.forwarder = nil
 	if state.lastError == "" {
 		delete(m.runtime, rule.ID)
 		return
@@ -481,11 +455,8 @@ func ForwardingFieldsChanged(a domain.ForwardRule, b domain.ForwardRule) bool {
 
 func (m *Manager) statusForRule(rule domain.ForwardRule) domain.ForwardStatus {
 	state := m.runtime[rule.ID]
-	if rule.Protocol == domain.ProtocolTCP && state.tcp != nil {
-		return state.tcp.Status()
-	}
-	if rule.Protocol == domain.ProtocolUDP && state.udp != nil {
-		return state.udp.Status()
+	if state.forwarder != nil {
+		return state.forwarder.Status()
 	}
 
 	status := domain.ForwardStatus{
