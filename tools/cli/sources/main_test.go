@@ -46,7 +46,7 @@ func makeDispatchServer(t *testing.T) *httptest.Server {
 			json.NewEncoder(w).Encode(map[string]any{
 				"ruleId": "r1", "ruleName": "Dev", "protocol": "tcp",
 				"summary": map[string]any{"status": "pass", "message": "All checks passed."},
-				"checks": []any{}, "diagnosedAt": "2026-01-01T00:00:00Z",
+				"checks":  []any{}, "diagnosedAt": "2026-01-01T00:00:00Z",
 			})
 		case r.URL.Path == "/api/config/export":
 			json.NewEncoder(w).Encode(map[string]any{
@@ -237,6 +237,7 @@ func TestRun_InvalidURL_AllDispatches(t *testing.T) {
 		{"stop", "rule-1"},
 		{"diagnose", "rule-1"},
 		{"config", "export"},
+		{"group", "list"},
 		{"diagnostics", "export"},
 	}
 	for _, sub := range subcommands {

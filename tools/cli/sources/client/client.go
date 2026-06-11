@@ -452,6 +452,46 @@ func (c *Client) StopForward(id string) error {
 	return c.do(http.MethodPost, "/api/forwards/"+id+"/stop", nil)
 }
 
+// GroupActionResult mirrors a per-rule entry in a GroupActionResponse (v1.8 Slice 4).
+type GroupActionResult struct {
+	RuleID   string `json:"ruleId"`
+	RuleName string `json:"ruleName"`
+	Status   string `json:"status"`
+	Reason   string `json:"reason,omitempty"`
+}
+
+// GroupActionResponse mirrors the response from the group start/stop endpoints.
+type GroupActionResponse struct {
+	Group     string              `json:"group"`
+	Action    string              `json:"action"`
+	Total     int                 `json:"total"`
+	Succeeded int                 `json:"succeeded"`
+	Skipped   int                 `json:"skipped"`
+	Failed    int                 `json:"failed"`
+	Results   []GroupActionResult `json:"results"`
+}
+
+// StartGroup calls POST /api/forwards/groups/:group/start and returns the summary.
+func (c *Client) StartGroup(group string) (*GroupActionResponse, error) {
+	return c.groupAction(group, "start")
+}
+
+// StopGroup calls POST /api/forwards/groups/:group/stop and returns the summary.
+func (c *Client) StopGroup(group string) (*GroupActionResponse, error) {
+	return c.groupAction(group, "stop")
+}
+
+func (c *Client) groupAction(group, action string) (*GroupActionResponse, error) {
+	var resp GroupActionResponse
+	// PathEscape keeps a "/" inside a group name as %2F so it stays one path
+	// segment; the service unescapes it back to the literal group.
+	path := "/api/forwards/groups/" + url.PathEscape(group) + "/" + action
+	if err := c.do(http.MethodPost, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // DiagnoseForward calls POST /api/forwards/:id/diagnose and returns the result.
 func (c *Client) DiagnoseForward(id string) (*RuleDiagnosticsResult, error) {
 	var result RuleDiagnosticsResult

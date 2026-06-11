@@ -314,6 +314,28 @@ Exit codes: `0` success, `1` plan errors or API error, `2` usage/local validatio
 
 With `--json`: prints raw `ConfigApplyResponse { ok, dryRun, appliedAt, plan, applied }` from the API.
 
+### `portier group <list|start|stop>`
+
+Operate on forwarding rules by their optional `group` label (v1.8). Group operations act on **existing rules only** — they never create, delete, or modify rule definitions, order, or metadata; they reuse the per-rule start/stop lifecycle.
+
+```
+portier group list
+portier group start <group>
+portier group stop <group>
+portier --json group list
+portier --json group start <group>
+```
+
+- **`group list`** — derives the distinct non-empty groups from the current rules (alphabetical) with per-group rule and running counts. Prints `No rule groups configured.` (exit `0`) when no rule has a group. Human output is a `GROUP / RULES / RUNNING` table; `--json` prints `{ "groups": [ { "group", "total", "running" } ] }`.
+- **`group start <group>`** — calls `POST /api/forwards/groups/:group/start`. Starts every rule in the group (in rule order); already-running rules are reported `skipped` (`already_running`); a per-rule start failure is reported `failed` without aborting the rest.
+- **`group stop <group>`** — calls `POST /api/forwards/groups/:group/stop`. Stops every running rule in the group; rules that are not running are reported `skipped` (`not_running`).
+
+Human output for start/stop is a summary line (`N succeeded, N skipped, N failed (N total)`) followed by a `RULE / STATUS / REASON` table. With `--json`: prints the full `GroupActionResponse { group, action, total, succeeded, skipped, failed, results[{ ruleId, ruleName, status, reason? }] }`.
+
+The group argument is trimmed and validated locally (non-empty, ≤ 64 characters, no control characters) before the request; the server remains authoritative.
+
+Exit codes: `0` success — **including** rules skipped for `already_running` / `not_running`; `1` API/runtime error, **no matching group** (the API returns `404`), or one or more rules `failed`; `2` missing or invalid group argument; `3` connection error.
+
 ### `portier diagnostics export`
 
 Build a JSON diagnostics bundle from the running Portier service.

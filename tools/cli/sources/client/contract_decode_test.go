@@ -216,6 +216,21 @@ func assertRuntimeFixtures(t *testing.T, dir string) {
 		}
 	}
 
+	// POST /api/forwards/groups/:group/start → GroupActionResponse
+	{
+		var ga client.GroupActionResponse
+		decodeStrict(t, p("group-start.json"), &ga)
+		if ga.Group != "cli-contract" || ga.Action != "start" {
+			t.Errorf("group-start = {group:%q action:%q}, want {cli-contract start}", ga.Group, ga.Action)
+		}
+		if ga.Total < 1 || ga.Succeeded < 1 {
+			t.Errorf("group-start counts = %+v, want total>=1 succeeded>=1", ga)
+		}
+		if len(ga.Results) < 1 || ga.Results[0].RuleID == "" || ga.Results[0].Status == "" {
+			t.Errorf("group-start results missing fields: %+v", ga.Results)
+		}
+	}
+
 	// POST /api/forwards/:id/diagnose → RuleDiagnosticsResult (captured only when present)
 	if _, err := os.Stat(p("diagnose.json")); err == nil {
 		var diag client.RuleDiagnosticsResult

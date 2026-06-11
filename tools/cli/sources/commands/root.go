@@ -33,6 +33,7 @@ Commands:
   stop <id|name>       Stop a forwarding rule
   diagnose <id|name>   Run diagnostics against a forwarding rule
   config               Manage config: validate, export, import (run 'portier config help')
+  group                Operate on rules by group: list, start, stop (run 'portier group help')
   diagnostics          Build diagnostics support bundles (run 'portier diagnostics help')
   version              Show CLI version
   help                 Show this help message

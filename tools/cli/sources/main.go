@@ -116,6 +116,14 @@ func run(args []string) int {
 		}
 		c := client.New(managementURL)
 		return commands.RunConfig(c, *flagJSON, remaining[1:], os.Stdout, os.Stderr)
+	case "group":
+		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 2
+		}
+		c := client.New(managementURL)
+		return commands.RunGroup(c, *flagJSON, remaining[1:], os.Stdout, os.Stderr)
 	case "diagnostics":
 		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
 		if err != nil {
