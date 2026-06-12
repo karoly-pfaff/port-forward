@@ -298,6 +298,80 @@ test("settings: plan & apply previews drift and applies non-destructive config",
   await expect(page.locator("tbody").getByText("Plan Apply Test Rule")).toBeVisible({ timeout: 5_000 });
 });
 
+// ── C3. Plan & Apply — group-only (metadata) change preview ───────────────────
+//
+// A group-only change is material (drift) but non-destructive. The preview must
+// show the Group change, mark it "Metadata only", and not require destructive
+// confirmation. Applying it must succeed and surface the new group chip.
+
+test("settings: plan & apply shows a group-only change as metadata-only", async ({ page, baseURL }) => {
+  // Seed one rule with no group.
+  await createRule(baseURL!, {
+    name: "Group Plan Rule",
+    protocol: "tcp",
+    listenHost: "127.0.0.1",
+    listenPort: 49070,
+    targetHost: "127.0.0.1",
+    targetPort: 49170,
+    enabled: false,
+  });
+
+  // Read the seeded rule back so we can resend it unchanged except for group.
+  const seeded = (await (await fetch(`${baseURL}/api/forwards`)).json()) as Array<{
+    id: string; name: string; protocol: string; listenHost: string; listenPort: number;
+    targetHost: string; targetPort: number; enabled: boolean;
+  }>;
+  const rule = seeded.find((r) => r.name === "Group Plan Rule")!;
+
+  await page.goto("/");
+  await goToSettings(page);
+
+  // Desired config: same rule (by id) with a group added — a metadata-only edit.
+  // Only the snapshot fields are sent (no advisories from the response).
+  const desiredRules = [{
+    id: rule.id,
+    name: rule.name,
+    protocol: rule.protocol,
+    listenHost: rule.listenHost,
+    listenPort: rule.listenPort,
+    targetHost: rule.targetHost,
+    targetPort: rule.targetPort,
+    enabled: rule.enabled,
+    group: "backend",
+  }];
+  await page.getByLabel("Select config file for plan").setInputFiles({
+    name: "group-change.json",
+    mimeType: "application/json",
+    buffer: toExportedConfigBuffer(desiredRules),
+  });
+
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect(page.getByText("Plan preview")).toBeVisible({ timeout: 5_000 });
+
+  // Update:1, non-destructive.
+  await expect(page.getByText(/Update: 1/)).toBeVisible();
+  await expect(page.getByText(/Destructive: 1/)).not.toBeVisible({ timeout: 1_000 }).catch(() => {});
+
+  // The Group change is shown and marked metadata-only with no restart.
+  await expect(page.getByText("Group", { exact: true })).toBeVisible();
+  await expect(page.getByText(/\(none\) → backend/)).toBeVisible();
+  await expect(page.getByText("Metadata only", { exact: true })).toBeVisible();
+  await expect(page.getByText(/the forwarder is not restarted/)).toBeVisible();
+
+  // No destructive confirmation required.
+  await expect(page.getByLabel("Confirm destructive changes")).not.toBeVisible({ timeout: 1_000 }).catch(() => {});
+
+  // Apply and verify the group chip appears on the rule.
+  await page.getByRole("button", { name: "Apply changes" }).click();
+  await expect(page.getByText(/Config applied/)).toBeVisible({ timeout: 5_000 });
+
+  await page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("button", { name: "Forward Rules" })
+    .click();
+  const ruleRow = page.locator("tr", { hasText: "Group Plan Rule" });
+  await expect(ruleRow.locator(".rule-group-label")).toHaveText("backend", { timeout: 5_000 });
+});
+
 // ── D. Runtime / Environment section ─────────────────────────────────────────
 //
 // Verifies that the Settings view fetches and renders the /api/runtime response.

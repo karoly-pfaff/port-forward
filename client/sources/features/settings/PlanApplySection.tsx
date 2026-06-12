@@ -6,7 +6,14 @@ import type {
   ForwardRuleResponse
 } from "@portier/shared";
 import { applyConfig, fetchForwardRules, planConfig } from "../../api/portierApi.js";
-import { formatChangeValue, formatOperationType } from "./planHelpers.js";
+import {
+  changeImpact,
+  describeOperationImpact,
+  formatChangeValue,
+  formatFieldLabel,
+  formatOperationType,
+  isMetadataOnlyUpdate
+} from "./planHelpers.js";
 import { SettingsSection } from "./SettingsSection.js";
 
 // PlanApplySection renders the "Plan & Apply Config" panel: pick a config file,
@@ -163,6 +170,14 @@ export function PlanApplySection({
               <span>Remove: {planResult.summary.remove}</span>
               {" · "}
               <span>Unchanged: {planResult.summary.unchanged}</span>
+              {planResult.summary.destructive > 0 && (
+                <>
+                  {" · "}
+                  <span className="settings-plan-summary-destructive">
+                    Destructive: {planResult.summary.destructive}
+                  </span>
+                </>
+              )}
             </div>
 
             {!planResult.summary.hasDrift && !planResult.summary.hasErrors && (
@@ -189,16 +204,38 @@ export function PlanApplySection({
             {planResult.operations.length > 0 && (
               <ul className="settings-plan-ops">
                 {planResult.operations.map((op, i) => (
-                  <li key={i} className="settings-plan-op">
-                    <span>
-                      {formatOperationType(op.type)} {op.ruleName} ({op.protocol.toUpperCase()})
-                      {op.destructive && " [destructive]"}
-                    </span>
+                  <li key={i} className={`settings-plan-op settings-plan-op--${op.type}`}>
+                    <div className="settings-plan-op-head">
+                      <span className={`plan-op-badge plan-op-badge--${op.type}`}>
+                        {formatOperationType(op.type)}
+                      </span>
+                      <span className="settings-plan-op-name">
+                        {op.ruleName}{" "}
+                        <span className="settings-plan-op-proto">({op.protocol.toUpperCase()})</span>
+                      </span>
+                      {op.destructive && (
+                        <span className="plan-op-tag plan-op-tag--destructive">Destructive</span>
+                      )}
+                      {isMetadataOnlyUpdate(op) && (
+                        <span className="plan-op-tag plan-op-tag--metadata">Metadata only</span>
+                      )}
+                    </div>
+                    <div className="settings-plan-op-impact">{describeOperationImpact(op)}</div>
                     {op.changes && op.changes.length > 0 && (
                       <ul className="settings-plan-changes">
                         {op.changes.map((c, j) => (
-                          <li key={j}>
-                            {c.field}: {formatChangeValue(c.before)} → {formatChangeValue(c.after)}
+                          <li key={j} className="settings-plan-change">
+                            <span className="settings-plan-change-field">
+                              {formatFieldLabel(c.field)}
+                            </span>
+                            <span
+                              className={`plan-change-impact plan-change-impact--${changeImpact(c.field)}`}
+                            >
+                              {changeImpact(c.field)}
+                            </span>
+                            <span className="settings-plan-change-values">
+                              {formatChangeValue(c.before)} → {formatChangeValue(c.after)}
+                            </span>
                           </li>
                         ))}
                       </ul>

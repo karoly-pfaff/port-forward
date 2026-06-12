@@ -11,6 +11,17 @@ const HEALTH_LABEL: Record<RuleHealth, string> = {
   error: "Error — see last error"
 };
 
+// Short, one-word label for the dedicated Health column (paired with the dot).
+const HEALTH_SHORT_LABEL: Record<RuleHealth, string> = {
+  healthy: "Healthy",
+  warning: "Warning",
+  error: "Error"
+};
+
+export function healthShortLabel(health: RuleHealth): string {
+  return HEALTH_SHORT_LABEL[health];
+}
+
 export function RuleHealthBadge({ health }: { health: RuleHealth }): ReactElement {
   return (
     <span

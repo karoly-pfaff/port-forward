@@ -3,7 +3,7 @@ import { Activity, Copy, Pencil, Stethoscope } from "lucide-react";
 import type { ForwardRule, ForwardRuleResponse, ForwardStatus, GroupActionResponse, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
-import { RuleHealthBadge } from "./RuleHealthBadge.js";
+import { RuleHealthBadge, healthShortLabel } from "./RuleHealthBadge.js";
 import { RuleDiagnosticsPanel } from "./RuleDiagnosticsPanel.js";
 import { formatBytes, formatUdpModeLabel } from "../../utils/format.js";
 
@@ -286,6 +286,7 @@ export function ForwardRuleList({
                 <th scope="col">Target Endpoint</th>
                 <th scope="col">Autostart</th>
                 <th scope="col">Status</th>
+                <th scope="col">Health</th>
                 <th scope="col">Traffic</th>
                 <th scope="col">Actions</th>
                 <th scope="col" className="delete-cell" />
@@ -365,13 +366,24 @@ export function ForwardRuleList({
                         </span>
                       </td>
                       <td>
-                        <span className="status-cell">
-                          <ForwardStatusBadge
-                            status={status}
-                            onErrorClick={onGoToActivity ? () => onGoToActivity(rule.id) : undefined}
-                          />
-                          {status && <RuleHealthBadge health={status.health} />}
-                        </span>
+                        <ForwardStatusBadge
+                          status={status}
+                          onErrorClick={onGoToActivity ? () => onGoToActivity(rule.id) : undefined}
+                        />
+                      </td>
+                      <td>
+                        {status ? (
+                          <span className="health-cell">
+                            <RuleHealthBadge health={status.health} />
+                            <span className="health-cell-label" aria-hidden="true">
+                              {healthShortLabel(status.health)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="health-cell-empty" aria-hidden="true">
+                            —
+                          </span>
+                        )}
                       </td>
                       <td className="traffic-cell">
                         {rule.protocol === "tcp" && (
@@ -484,7 +496,7 @@ export function ForwardRuleList({
                     </tr>
                     {diagEntry && (
                       <tr className="diag-row">
-                        <td colSpan={10} className="diag-row-cell">
+                        <td colSpan={11} className="diag-row-cell">
                           <RuleDiagnosticsPanel
                             loading={diagEntry.state === "pending"}
                             result={diagEntry.state === "done" ? diagEntry.result : undefined}
@@ -499,7 +511,7 @@ export function ForwardRuleList({
               })}
               {filteredRules.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={10} className="empty">
+                  <td colSpan={11} className="empty">
                     {rules.length === 0
                       ? "No forwarding rules yet. Click + Add Rule to create one."
                       : "No rules match the current filter."}

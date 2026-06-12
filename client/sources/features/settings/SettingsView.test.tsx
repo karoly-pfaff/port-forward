@@ -660,6 +660,21 @@ const updatePlan: ConfigPlanResponse = {
   warnings: []
 };
 
+// A group-only update: material (drift) but non-destructive (no forwarding
+// field changed). The preview should mark it "Metadata only" and not imply a
+// restart.
+const groupOnlyUpdatePlan: ConfigPlanResponse = {
+  generatedAt: "2026-01-01T00:00:00.000Z",
+  mode: "plan",
+  summary: { add: 0, update: 1, remove: 0, unchanged: 0, destructive: 0, hasDrift: true, hasErrors: false },
+  operations: [
+    { type: "update", ruleId: "r1", ruleName: "My Rule", protocol: "tcp", destructive: false,
+      changes: [{ field: "group", before: undefined, after: "backend" }] }
+  ],
+  errors: [],
+  warnings: []
+};
+
 const validPlanConfig = {
   version: "1" as const,
   exportedAt: new Date().toISOString(),
@@ -811,9 +826,50 @@ describe("SettingsView Plan & Apply section", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
 
     await screen.findByText("Plan preview");
-    expect(screen.getByText(/targetPort/)).toBeInTheDocument();
-    expect(screen.getByText(/3000/)).toBeInTheDocument();
-    expect(screen.getByText(/4000/)).toBeInTheDocument();
+    expect(screen.getByText("Target port")).toBeInTheDocument();
+    expect(screen.getByText(/3000 → 4000/)).toBeInTheDocument();
+    // A forwarding-field update is marked as restarting the forwarder.
+    expect(screen.getByText(/the forwarder will restart/)).toBeInTheDocument();
+  });
+
+  it("group-only update is shown as a metadata-only change with no restart", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(groupOnlyUpdatePlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    // The changed field is the Group, shown with its before → after values.
+    expect(screen.getByText("Group")).toBeInTheDocument();
+    expect(screen.getByText(/\(none\) → backend/)).toBeInTheDocument();
+    // It is labelled metadata-only and explicitly does not restart the forwarder.
+    expect(screen.getByText("Metadata only")).toBeInTheDocument();
+    expect(screen.getByText(/the forwarder is not restarted/)).toBeInTheDocument();
+    // Non-destructive: no confirmation checkbox, apply enabled.
+    expect(screen.queryByLabelText("Confirm destructive changes")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Apply changes/ })).not.toBeDisabled();
+  });
+
+  it("destructive remove is clearly labelled (not by colour alone)", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(destructivePlan);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await screen.findByText("Plan preview");
+    // The remove operation carries a text "Destructive" tag and an impact note,
+    // and the summary surfaces the destructive count — none of which is colour-only.
+    expect(screen.getByText("Destructive")).toBeInTheDocument();
+    expect(screen.getByText(/Removes this existing rule/)).toBeInTheDocument();
+    expect(screen.getByText(/Destructive: 1/)).toBeInTheDocument();
   });
 
   it("plan errors disable apply and show error message", async () => {

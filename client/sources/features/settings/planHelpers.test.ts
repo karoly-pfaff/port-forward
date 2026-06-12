@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
-import type { ConfigPlanResponse } from "@portier/shared";
-import { formatChangeValue, formatOperationType, hasPlanErrors, isDestructivePlan } from "./planHelpers.js";
+import type { ConfigPlanOperation, ConfigPlanResponse } from "@portier/shared";
+import {
+  changeImpact,
+  describeOperationImpact,
+  formatChangeValue,
+  formatFieldLabel,
+  formatOperationType,
+  hasPlanErrors,
+  isDestructivePlan,
+  isMetadataOnlyUpdate
+} from "./planHelpers.js";
+
+function makeOp(overrides: Partial<ConfigPlanOperation> = {}): ConfigPlanOperation {
+  return {
+    type: "update",
+    ruleName: "Rule",
+    protocol: "tcp",
+    destructive: false,
+    ...overrides
+  };
+}
 
 function makePlan(overrides: Partial<ConfigPlanResponse["summary"]> = {}): ConfigPlanResponse {
   return {
@@ -49,4 +68,89 @@ describe("hasPlanErrors", () => {
     expect(hasPlanErrors(makePlan({ hasErrors: false }))).toBe(false));
   it("returns true when hasErrors=true", () =>
     expect(hasPlanErrors(makePlan({ hasErrors: true }))).toBe(true));
+});
+
+describe("formatFieldLabel", () => {
+  it("maps known snapshot fields to friendly labels", () => {
+    expect(formatFieldLabel("listenPort")).toBe("Listen port");
+    expect(formatFieldLabel("targetHost")).toBe("Target host");
+    expect(formatFieldLabel("enabled")).toBe("Autostart");
+    expect(formatFieldLabel("group")).toBe("Group");
+    expect(formatFieldLabel("udpMode")).toBe("UDP mode");
+  });
+  it("falls back to the raw field name for unknown fields", () => {
+    expect(formatFieldLabel("somethingNew")).toBe("somethingNew");
+  });
+});
+
+describe("changeImpact", () => {
+  it("classifies forwarding fields", () => {
+    for (const f of ["protocol", "listenHost", "listenPort", "targetHost", "targetPort", "udpMode"]) {
+      expect(changeImpact(f)).toBe("forwarding");
+    }
+  });
+  it("classifies metadata fields (including group, name, enabled)", () => {
+    for (const f of ["group", "name", "enabled"]) {
+      expect(changeImpact(f)).toBe("metadata");
+    }
+  });
+});
+
+describe("isMetadataOnlyUpdate", () => {
+  it("is true for a group-only update", () => {
+    expect(
+      isMetadataOnlyUpdate(makeOp({ changes: [{ field: "group", before: undefined, after: "web" }] }))
+    ).toBe(true);
+  });
+  it("is true when every change is metadata (group + name + enabled)", () => {
+    expect(
+      isMetadataOnlyUpdate(
+        makeOp({
+          changes: [
+            { field: "group", before: "a", after: "b" },
+            { field: "name", before: "x", after: "y" },
+            { field: "enabled", before: false, after: true }
+          ]
+        })
+      )
+    ).toBe(true);
+  });
+  it("is false when any change is a forwarding field", () => {
+    expect(
+      isMetadataOnlyUpdate(
+        makeOp({
+          changes: [
+            { field: "group", before: "a", after: "b" },
+            { field: "listenPort", before: 1, after: 2 }
+          ]
+        })
+      )
+    ).toBe(false);
+  });
+  it("is false for non-update operations", () => {
+    expect(isMetadataOnlyUpdate(makeOp({ type: "add", changes: undefined }))).toBe(false);
+    expect(isMetadataOnlyUpdate(makeOp({ type: "remove", destructive: true }))).toBe(false);
+  });
+  it("is false for an update with no changes", () => {
+    expect(isMetadataOnlyUpdate(makeOp({ changes: [] }))).toBe(false);
+    expect(isMetadataOnlyUpdate(makeOp({ changes: undefined }))).toBe(false);
+  });
+});
+
+describe("describeOperationImpact", () => {
+  it("describes add/remove/unchanged", () => {
+    expect(describeOperationImpact(makeOp({ type: "add" }))).toMatch(/Creates a new rule/);
+    expect(describeOperationImpact(makeOp({ type: "remove", destructive: true }))).toMatch(/Removes/);
+    expect(describeOperationImpact(makeOp({ type: "unchanged" }))).toMatch(/No changes/);
+  });
+  it("describes a metadata-only update as not restarting the forwarder", () => {
+    const op = makeOp({ destructive: false, changes: [{ field: "group", before: undefined, after: "web" }] });
+    expect(describeOperationImpact(op)).toMatch(/Metadata only/);
+    expect(describeOperationImpact(op)).toMatch(/not restarted/);
+    expect(describeOperationImpact(op)).not.toMatch(/will restart/);
+  });
+  it("describes a forwarding update as restarting the forwarder", () => {
+    const op = makeOp({ destructive: true, changes: [{ field: "listenPort", before: 1, after: 2 }] });
+    expect(describeOperationImpact(op)).toMatch(/forwarder will restart/);
+  });
 });

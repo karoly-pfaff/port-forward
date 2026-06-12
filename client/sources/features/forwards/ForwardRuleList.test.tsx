@@ -158,7 +158,17 @@ describe("ForwardRuleList", () => {
     expect(screen.getByText("No")).toBeInTheDocument();
   });
 
-  it("renders a health badge reflecting the rule's status health", () => {
+  it("renders a Health column header", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    expect(screen.getByRole("columnheader", { name: "Health" })).toBeInTheDocument();
+  });
+
+  it("renders a health badge and short label in the Health column", () => {
     const warningStatus: ForwardStatus = { ...stoppedStatus, health: "warning" };
     renderList({
       rules: [tcpRule],
@@ -169,6 +179,19 @@ describe("ForwardRuleList", () => {
     expect(
       screen.getByRole("img", { name: "Health: Warning — enabled but not running" })
     ).toBeInTheDocument();
+    // The dedicated column also shows a one-word text label (not colour-only).
+    expect(screen.getByText("Warning")).toBeInTheDocument();
+  });
+
+  it("shows a placeholder in the Health column when a rule has no status yet", () => {
+    const { container } = renderList({
+      rules: [tcpRule],
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    expect(container.querySelector(".health-cell-empty")).not.toBeNull();
+    expect(screen.queryByRole("img", { name: /Health:/ })).not.toBeInTheDocument();
   });
 
   it("displays the group label when a rule has a group", () => {

@@ -880,11 +880,21 @@ td strong {
   margin-top: 3px;
 }
 
-/* Status cell holds the lifecycle status badge plus the compact health dot. */
-.status-cell {
+/* Health column — operator interpretation, in its own column next to Status. */
+.health-cell {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+
+.health-cell-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.health-cell-empty {
+  color: var(--text-muted);
 }
 
 /* Health dot — operator interpretation, distinct from the status badge. */
@@ -1992,6 +2002,150 @@ select[aria-invalid="true"] {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* Plan preview: per-operation rows with action badges, impact notes, and
+   per-field change rows tagged forwarding vs metadata. */
+.settings-plan-summary-destructive {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.settings-plan-ops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-plan-op {
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--bg-control);
+}
+
+.settings-plan-op-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plan-op-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.plan-op-badge--add {
+  color: var(--green);
+  border-color: var(--green-border);
+  background: var(--green-bg);
+}
+
+.plan-op-badge--update {
+  color: var(--blue);
+  border-color: var(--blue);
+  background: transparent;
+}
+
+.plan-op-badge--remove {
+  color: var(--red);
+  border-color: var(--red-border);
+  background: var(--red-bg);
+}
+
+.plan-op-badge--unchanged {
+  color: var(--text-muted);
+}
+
+.settings-plan-op-name {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.settings-plan-op-proto {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.plan-op-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+}
+
+.plan-op-tag--destructive {
+  color: var(--red);
+  border-color: var(--red-border);
+  background: var(--red-bg);
+}
+
+.plan-op-tag--metadata {
+  color: var(--text-muted);
+}
+
+.settings-plan-op-impact {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.settings-plan-changes {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.settings-plan-change {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.settings-plan-change-field {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.plan-change-impact {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
+}
+
+.plan-change-impact--forwarding {
+  color: var(--amber);
+  border-color: var(--amber-border);
+}
+
+.settings-plan-change-values {
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  color: var(--text-secondary);
 }
 
 .settings-mode-row {
