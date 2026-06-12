@@ -32,6 +32,17 @@ All notable changes to Portier are documented here.
 - CLI coverage **97.4% → 97.6%** statements (functions 99.0% → 99.1%); gate 95% holds. No coverage gate lowered. Every new doctor function is 100% covered.
 - No target reachability probing, no background monitoring, no auto-fix, no server-side doctor endpoint, no UI doctor panel.
 
+### Added — Slice 3: Doctor explain codes
+
+- **`portier explain <code>` command.** Prints a deterministic, **offline** explanation of any stable doctor/check code — its meaning, what to do next, and related codes. Static reference data: no runtime contact, no external docs fetch, no AI, no remediation. `--json` emits the explanation; `portier explain --list` lists all known codes (human or JSON).
+- **Explanations for all 20 stable codes** from Slices 1–2 (8 config-doctor + 12 live-doctor), keyed by the existing code constants so the strings can't drift. An internal guard test asserts every doctor code constant is explainable, the registry has no extra/duplicate entries, each entry's `Code` matches its key, required fields are present with a valid severity, and no `related` reference dangles.
+- **Unknown/missing code → exit 2** with a clear error and a pointer to `--list` (never a generic explanation). Single-code success exits `0`.
+
+### Notes (Slice 3)
+
+- CLI-only change; pure offline reference command (no client, no API call — `explain` ignores `--url`). No shared/server/service/client change, no new endpoints/DTOs. `validate:contract` unchanged at **234/234**.
+- CLI coverage **97.6% → 97.7%** statements (functions 99.1%); gate 95% holds. No coverage gate lowered. Every new explain function is 100% covered.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools

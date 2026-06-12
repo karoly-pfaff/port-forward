@@ -203,6 +203,21 @@ func TestRun_DoctorDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_ExplainDispatch(t *testing.T) {
+	// explain is fully offline — no server needed, and an invalid --url is ignored.
+	code := run([]string{"--url", "ftp://bad-scheme", "explain", "config.valid"})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
+func TestRun_ExplainListDispatch(t *testing.T) {
+	code := run([]string{"explain", "--list"})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
 func TestRun_ConfigDispatch_NoSubcommand(t *testing.T) {
 	srv := makeDispatchServer(t)
 	defer srv.Close()

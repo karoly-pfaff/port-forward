@@ -33,6 +33,7 @@ Commands:
   stop <id|name>       Stop a forwarding rule
   diagnose <id|name>   Run diagnostics against a forwarding rule
   doctor               Run live runtime diagnostic checks (reachability, version, health)
+  explain <code>       Explain a doctor/check code (offline; 'portier explain --list')
   config               Manage config: validate, doctor, export, import (run 'portier config help')
   group                Operate on rules by group: list, start, stop (run 'portier group help')
   diagnostics          Build diagnostics support bundles (run 'portier diagnostics help')

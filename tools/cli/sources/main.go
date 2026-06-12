@@ -52,6 +52,9 @@ func run(args []string) int {
 	case "version":
 		commands.PrintVersion(os.Stdout)
 		return 0
+	case "explain":
+		// explain is fully offline (static reference data) — no runtime needed.
+		return commands.RunExplain(*flagJSON, remaining[1:], os.Stdout, os.Stderr)
 	case "runtime":
 		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
 		if err != nil {

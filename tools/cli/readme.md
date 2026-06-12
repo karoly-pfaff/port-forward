@@ -471,6 +471,34 @@ Exit codes: `0` doctor completed with no error-severity checks (**warnings alone
 
 > **Unreachable-runtime exit code:** unlike the other live commands (which exit `3` on connection failure), `portier doctor` reports an unreachable runtime as a `runtime.unreachable` **check** and exits `1` — the doctor always completes and emits a report, and an unreachable runtime is an error-severity finding. This is an intentional, documented deviation specific to the doctor command.
 
+### `portier explain <code>`
+
+Explain a stable doctor/check code: what it means and what to do next. Fully **offline** — static reference data, no runtime contact, no external lookup, no AI, and nothing is changed or fixed.
+
+```
+portier explain <code> [--json]
+portier explain --list [--json]
+```
+
+Covers all stable codes emitted by `portier doctor` and `portier config doctor` (the 8 config-doctor codes from Slice 1 and the 12 live-doctor codes from Slice 2). Human output:
+
+```
+config.duplicate_binding
+
+Meaning:
+Two or more rules use the same protocol, listen host, and listen port.
+
+What to do:
+Change one of the conflicting rules so each active binding (protocol + listen host + listen port) is unique.
+
+Related:
+- config.validation_failed
+```
+
+With `--json`, prints the explanation `{ "code", "title", "meaning", "action", "severity", "related": [...] }`. `portier explain --list` prints all known codes sorted (with titles), and `portier --json explain --list` prints the full array of explanations.
+
+Exit codes: `0` explanation (or list) printed; `2` unknown code, missing code argument, or usage error. An unknown code prints a clear error pointing to `--list` and never returns a generic explanation.
+
 ### `portier version`
 
 Show the CLI version.
