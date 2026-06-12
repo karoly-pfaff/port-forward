@@ -109,6 +109,18 @@ All notable changes to Portier are documented here.
 - Human output is essentially unchanged (details are a JSON concern); the aggregated advisory titles read `Rule "X" listens on 0.0.0.0` for one rule and `N rules listen on 0.0.0.0` for several.
 - CLI coverage **held at 97.5%** statements (functions 99.2%); gate 95% holds, none lowered. Every new detail builder (`findDuplicateBindings`, `toRuleDetail`, the aggregated advisories, titles) is 100% covered; the ratio is unchanged because the fully-covered additions are proportional to existing coverage.
 
+### Added — Slice 9: Config doctor summary + machine-readable counts
+
+- **Top-level `config` summary on config doctor JSON.** `portier config doctor --json` now emits a compact, deterministic, machine-readable config summary so CI/tooling can understand a config's shape without parsing individual checks: `{ ruleCount, enabledRuleCount, disabledRuleCount, protocols: { tcp, udp }, groupCount, groups: [ { name, ruleCount, enabledRuleCount, disabledRuleCount } ], ungroupedRuleCount }`.
+- **Lowest-risk placement:** an optional `config` field on the shared doctor JSON wrapper (`doctorReportJSON`), populated **only by config doctor** and `omitempty`. The live `portier doctor` and the support bundle never set it, so their JSON is byte-identical to before. The `checks` array shape is unchanged.
+- **Deterministic & offline:** groups are sorted by (trimmed) name; empty/whitespace groups count as ungrouped; protocol counts use a stable `{ tcp, udp }` shape (unknown protocols simply aren't counted); the summary is derived **only from the offline config** (no environment/runtime/filesystem data) and does **not** repeat full rule data (Slice 8 details already identify affected rules). Present whenever the file parses — including an empty config (`ruleCount: 0`) and a validation-failure config; absent on read/parse failure.
+- **Composes cleanly:** flows through `--out` (and `--json --out` stdout/file stays byte-identical); `--explain` stays presentation-only and does not alter the summary; `--strict` only changes the result/exit code, not the summary. **No new check codes.**
+
+### Notes (Slice 9)
+
+- CLI-only change. No shared/server/service/client change, no new endpoints/DTOs/codes, no support-bundle change (it runs the live doctor). `validate:contract` unchanged at **234/234**. Human output is unchanged (the summary is a JSON concern); `listenHostCount`/`listenPortCount` were intentionally omitted to keep the summary compact.
+- CLI coverage **97.5% → 97.6%** statements (functions 99.2%); gate 95% holds, none lowered. The new `buildConfigSummary` builder is 100% covered.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools

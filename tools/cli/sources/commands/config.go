@@ -481,17 +481,19 @@ func RunConfigDoctor(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 		return 2
 	}
 
-	report := runConfigDoctorChecks(fs.Arg(0))
+	report, summary := runConfigDoctorChecks(fs.Arg(0))
 	return emitDoctorReport("Portier Config Doctor", report, doctorEmitOptions{
-		strict: *flagStrict, explain: *flagExplain, json: jsonOutput, outPath: *flagOut,
+		strict: *flagStrict, explain: *flagExplain, json: jsonOutput, outPath: *flagOut, config: summary,
 	}, stdout, stderr)
 }
 
 // runConfigDoctorChecks performs the offline analysis of a config file and
-// returns a deterministic doctor report. Read and parse failures short-circuit
-// (no later checks are meaningful); otherwise validation, duplicate-binding,
-// emptiness, validity, and the LAN-exposure / privileged-port advisories run.
-func runConfigDoctorChecks(filePath string) DoctorReport {
+// returns a deterministic doctor report plus a compact config summary. Read and
+// parse failures short-circuit (no later checks are meaningful, and the summary
+// is nil because no rules could be parsed); otherwise the summary is derived
+// from the parsed rules and validation, duplicate-binding, emptiness, validity,
+// and the LAN-exposure / privileged-port advisories run.
+func runConfigDoctorChecks(filePath string) (DoctorReport, *configSummary) {
 	checks := []DoctorCheckResult{}
 
 	data, err := os.ReadFile(filePath)
@@ -503,7 +505,7 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 			Message:  fmt.Sprintf("Reading %s failed: %v", filePath, err),
 			Details:  map[string]any{"path": filePath},
 		})
-		return newDoctorReport(checks)
+		return newDoctorReport(checks), nil
 	}
 
 	rules, parseErr := parseLocalConfig(data)
@@ -515,8 +517,12 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 			Message:  parseErr.Error(),
 			Details:  map[string]any{"path": filePath},
 		})
-		return newDoctorReport(checks)
+		return newDoctorReport(checks), nil
 	}
+
+	// The summary is available whenever parsing succeeded (including an empty
+	// config or a config with validation errors).
+	summary := buildConfigSummary(rules)
 
 	if len(rules) == 0 {
 		checks = append(checks, DoctorCheckResult{
@@ -526,7 +532,7 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 			Message:  "The config file parsed successfully but defines no forwarding rules.",
 			Details:  map[string]any{"ruleCount": 0},
 		})
-		return newDoctorReport(checks)
+		return newDoctorReport(checks), &summary
 	}
 
 	// Field validation and duplicate bindings are reported separately so an
@@ -568,7 +574,82 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 	// meaningful even when other fields are wrong.
 	checks = append(checks, configDoctorAdvisories(rules)...)
 
-	return newDoctorReport(checks)
+	return newDoctorReport(checks), &summary
+}
+
+// configSummary is a compact, deterministic, machine-readable description of a
+// parsed config. It is derived ONLY from the offline config contents (no
+// environment, runtime, or filesystem data) and intentionally does not repeat
+// full rule data (Slice 8 finding details already identify affected rules).
+type configSummary struct {
+	RuleCount          int            `json:"ruleCount"`
+	EnabledRuleCount   int            `json:"enabledRuleCount"`
+	DisabledRuleCount  int            `json:"disabledRuleCount"`
+	Protocols          protocolCounts `json:"protocols"`
+	GroupCount         int            `json:"groupCount"`
+	Groups             []groupSummary `json:"groups"`
+	UngroupedRuleCount int            `json:"ungroupedRuleCount"`
+}
+
+// protocolCounts counts rules per protocol in a stable field order.
+type protocolCounts struct {
+	TCP int `json:"tcp"`
+	UDP int `json:"udp"`
+}
+
+// groupSummary is the per-group rollup inside a configSummary.
+type groupSummary struct {
+	Name              string `json:"name"`
+	RuleCount         int    `json:"ruleCount"`
+	EnabledRuleCount  int    `json:"enabledRuleCount"`
+	DisabledRuleCount int    `json:"disabledRuleCount"`
+}
+
+// buildConfigSummary computes the deterministic config summary from parsed
+// rules. Group names are trimmed; empty/whitespace groups count as ungrouped;
+// the groups list is sorted by name. Unknown protocols are simply not counted
+// under tcp/udp (so ruleCount may exceed tcp+udp for an invalid config).
+func buildConfigSummary(rules []rawConfigRule) configSummary {
+	s := configSummary{RuleCount: len(rules)}
+	groups := map[string]*groupSummary{}
+	for _, r := range rules {
+		if r.Enabled {
+			s.EnabledRuleCount++
+		} else {
+			s.DisabledRuleCount++
+		}
+		switch r.Protocol {
+		case "tcp":
+			s.Protocols.TCP++
+		case "udp":
+			s.Protocols.UDP++
+		}
+
+		g := strings.TrimSpace(r.Group)
+		if g == "" {
+			s.UngroupedRuleCount++
+			continue
+		}
+		gs, ok := groups[g]
+		if !ok {
+			gs = &groupSummary{Name: g}
+			groups[g] = gs
+		}
+		gs.RuleCount++
+		if r.Enabled {
+			gs.EnabledRuleCount++
+		} else {
+			gs.DisabledRuleCount++
+		}
+	}
+
+	s.GroupCount = len(groups)
+	s.Groups = make([]groupSummary, 0, len(groups))
+	for _, gs := range groups {
+		s.Groups = append(s.Groups, *gs)
+	}
+	sort.Slice(s.Groups, func(i, j int) bool { return s.Groups[i].Name < s.Groups[j].Name })
+	return s
 }
 
 // configDoctorAdvisories returns the LAN-exposure and privileged-port advisory

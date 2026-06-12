@@ -198,6 +198,25 @@ Human output groups the checks under a `Portier Config Doctor` heading with `[IN
 
 These details flow through `--out` and are surfaced inline by `--explain`; the live `portier doctor` and the support bundle are unaffected.
 
+**Config summary (JSON).** When the file parses, the config doctor JSON report also carries a compact, deterministic top-level `config` summary describing the config's shape (derived only from the offline config — no environment/runtime/filesystem data, and no repeat of full rule data):
+
+```
+"config": {
+  "ruleCount": 4,
+  "enabledRuleCount": 3,
+  "disabledRuleCount": 1,
+  "protocols": { "tcp": 3, "udp": 1 },
+  "groupCount": 2,
+  "groups": [
+    { "name": "admin",   "ruleCount": 1, "enabledRuleCount": 1, "disabledRuleCount": 0 },
+    { "name": "backend", "ruleCount": 2, "enabledRuleCount": 1, "disabledRuleCount": 1 }
+  ],
+  "ungroupedRuleCount": 1
+}
+```
+
+Groups are sorted by (trimmed) name; an empty/whitespace group counts as ungrouped. The summary is present for an empty config (`ruleCount: 0`) and for a validation-failure config (parse succeeded), and absent on read/parse failure. It is unchanged by `--explain` and `--strict`, flows through `--out`, and appears **only** for `config doctor` (the live `portier doctor` JSON has no `config` field).
+
 Exit codes: `0` doctor completed with no error-severity checks (**warnings alone exit `0`** unless `--strict`), `1` one or more error-severity checks **or any warning when `--strict`**, `2` missing file-path argument or usage error.
 
 **`--strict`** treats warnings as failures (a warning-only report exits `1`). It changes only the exit-code interpretation — the same checks run and nothing is modified.

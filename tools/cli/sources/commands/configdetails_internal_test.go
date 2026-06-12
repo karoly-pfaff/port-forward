@@ -90,6 +90,54 @@ func TestToRuleDetail_TrimsGroupAndKeepsFields(t *testing.T) {
 	}
 }
 
+func TestBuildConfigSummary_Counts(t *testing.T) {
+	s := buildConfigSummary([]rawConfigRule{
+		{Name: "A", Protocol: "tcp", Enabled: true, Group: "backend"},
+		{Name: "B", Protocol: "tcp", Enabled: false, Group: " backend "}, // trimmed → same group
+		{Name: "C", Protocol: "udp", Enabled: true, Group: "admin"},
+		{Name: "D", Protocol: "tcp", Enabled: true, Group: ""},   // ungrouped
+		{Name: "E", Protocol: "tcp", Enabled: true, Group: "  "}, // whitespace → ungrouped
+	})
+	if s.RuleCount != 5 || s.EnabledRuleCount != 4 || s.DisabledRuleCount != 1 {
+		t.Errorf("counts wrong: %+v", s)
+	}
+	if s.Protocols.TCP != 4 || s.Protocols.UDP != 1 {
+		t.Errorf("protocols wrong: %+v", s.Protocols)
+	}
+	if s.GroupCount != 2 || s.UngroupedRuleCount != 2 {
+		t.Errorf("group/ungrouped wrong: groupCount=%d ungrouped=%d", s.GroupCount, s.UngroupedRuleCount)
+	}
+	// Sorted by name: admin, backend.
+	if len(s.Groups) != 2 || s.Groups[0].Name != "admin" || s.Groups[1].Name != "backend" {
+		t.Fatalf("groups not sorted: %+v", s.Groups)
+	}
+	if s.Groups[1].RuleCount != 2 || s.Groups[1].EnabledRuleCount != 1 || s.Groups[1].DisabledRuleCount != 1 {
+		t.Errorf("backend rollup wrong: %+v", s.Groups[1])
+	}
+}
+
+func TestBuildConfigSummary_Empty(t *testing.T) {
+	s := buildConfigSummary(nil)
+	if s.RuleCount != 0 || s.GroupCount != 0 || s.UngroupedRuleCount != 0 {
+		t.Errorf("empty summary nonzero: %+v", s)
+	}
+	if s.Groups == nil || len(s.Groups) != 0 {
+		t.Errorf("groups should be a non-nil empty slice, got %v", s.Groups)
+	}
+}
+
+func TestBuildConfigSummary_UnknownProtocolNotCounted(t *testing.T) {
+	s := buildConfigSummary([]rawConfigRule{
+		{Name: "X", Protocol: "sctp", Enabled: true},
+	})
+	if s.Protocols.TCP != 0 || s.Protocols.UDP != 0 {
+		t.Errorf("unknown protocol should not be counted: %+v", s.Protocols)
+	}
+	if s.RuleCount != 1 {
+		t.Errorf("ruleCount should still count the rule: %d", s.RuleCount)
+	}
+}
+
 func TestConfigDoctorAdvisories_AggregatesAndTitles(t *testing.T) {
 	// Two exposed + two privileged rules → one check each (aggregated).
 	rules := []rawConfigRule{

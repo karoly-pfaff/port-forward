@@ -114,16 +114,22 @@ type doctorReportJSON struct {
 	Strict       bool                   `json:"strict"`
 	Result       string                 `json:"result"`
 	Explanations map[string]Explanation `json:"explanations,omitempty"`
+	// Config is a compact, deterministic config summary set ONLY by config
+	// doctor (when the file parses); the live doctor leaves it nil so its JSON
+	// is byte-identical to before (omitempty). See config.go configSummary.
+	Config *configSummary `json:"config,omitempty"`
 }
 
 // doctorEmitOptions groups the presentation flags for a doctor report. They
 // affect ONLY how the report is rendered/exported and its exit-code
-// interpretation — never which checks run.
+// interpretation — never which checks run. config is the optional config
+// summary (config doctor only; nil for the live doctor).
 type doctorEmitOptions struct {
 	strict  bool
 	explain bool
 	json    bool
 	outPath string
+	config  *configSummary
 }
 
 // explanationsForReport returns the canonical explanation for each code present
@@ -219,6 +225,7 @@ func emitDoctorReport(title string, r DoctorReport, opts doctorEmitOptions, stdo
 	if opts.explain {
 		payload.Explanations = explanationsForReport(r)
 	}
+	payload.Config = opts.config
 
 	if opts.json {
 		if err := output.PrintJSON(stdout, payload); err != nil {
