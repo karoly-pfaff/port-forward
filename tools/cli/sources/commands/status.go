@@ -51,7 +51,7 @@ func buildRuleInfo(c *client.Client) map[string]ruleInfo {
 }
 
 func printStatusHuman(statuses []client.ForwardStatus, infoMap map[string]ruleInfo, w io.Writer) {
-	headers := []string{"NAME", "PROTO", "STATE", "CONNS", "BYTES IN", "BYTES OUT", "LAST ERROR"}
+	headers := []string{"NAME", "PROTO", "STATE", "HEALTH", "CONNS", "BYTES IN", "BYTES OUT", "LAST ERROR"}
 	rows := make([][]string, len(statuses))
 	for i, s := range statuses {
 		ri := infoMap[s.RuleID]
@@ -67,6 +67,10 @@ func printStatusHuman(statuses []client.ForwardStatus, infoMap map[string]ruleIn
 		if s.Running {
 			state = "running"
 		}
+		health := s.Health
+		if health == "" {
+			health = "-"
+		}
 		conns := "-"
 		if s.ActiveConnections != nil {
 			conns = fmt.Sprintf("%d", *s.ActiveConnections)
@@ -77,6 +81,7 @@ func printStatusHuman(statuses []client.ForwardStatus, infoMap map[string]ruleIn
 			name,
 			proto,
 			state,
+			health,
 			conns,
 			output.FormatBytes(s.BytesIn),
 			output.FormatBytes(s.BytesOut),

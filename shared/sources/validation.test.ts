@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveRuleHealth,
   getCommonPortInfo,
   getPortAdvisories,
   isRecommendedForwardPort,
@@ -378,6 +379,31 @@ describe("rule group metadata", () => {
     expect(validateGroup("x".repeat(65))).toContain("group must be 64 characters or fewer.");
     expect(validateGroup("a\u0007b")).toContain("group must not contain control characters.");
     expect(validateGroup(123)).toContain("group must be a string.");
+  });
+});
+
+describe("deriveRuleHealth", () => {
+  it("returns error when a lastError is present (regardless of running/enabled)", () => {
+    expect(deriveRuleHealth({ enabled: false, running: false, lastError: "boom" })).toBe("error");
+    expect(deriveRuleHealth({ enabled: true, running: true, lastError: "boom" })).toBe("error");
+  });
+
+  it("treats an empty/whitespace lastError as no error", () => {
+    expect(deriveRuleHealth({ enabled: false, running: true, lastError: "" })).toBe("healthy");
+    expect(deriveRuleHealth({ enabled: false, running: true, lastError: "   " })).toBe("healthy");
+  });
+
+  it("returns warning when enabled but not running and no error", () => {
+    expect(deriveRuleHealth({ enabled: true, running: false })).toBe("warning");
+  });
+
+  it("returns healthy when running cleanly", () => {
+    expect(deriveRuleHealth({ enabled: true, running: true })).toBe("healthy");
+    expect(deriveRuleHealth({ enabled: false, running: true })).toBe("healthy");
+  });
+
+  it("returns healthy when intentionally stopped (not enabled, no error)", () => {
+    expect(deriveRuleHealth({ enabled: false, running: false })).toBe("healthy");
   });
 });
 

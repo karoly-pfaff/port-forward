@@ -5,14 +5,14 @@ import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
 
 const stoppedStatus: ForwardStatus = {
   ruleId: "r1",
-  running: false,
+  running: false, health: "healthy",
   bytesIn: 0,
   bytesOut: 0
 };
 
 const runningStatus: ForwardStatus = {
   ruleId: "r1",
-  running: true,
+  running: true, health: "healthy",
   bytesIn: 1024,
   bytesOut: 512
 };

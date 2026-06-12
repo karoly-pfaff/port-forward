@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { ActivityEventType, ActivitySeverity, ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, GroupActionResult, ImportMode, ImportResult, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
-import { listenKey, validateForwardRule, validateForwardRulePatch } from "@portier/shared";
-import type { Forwarder } from "./forwarders/types.js";
+import { deriveRuleHealth, listenKey, validateForwardRule, validateForwardRulePatch } from "@portier/shared";
+import type { Forwarder, ForwarderStatus } from "./forwarders/types.js";
 import { TcpForwarder } from "./forwarders/tcp-forwarder.js";
 import { UdpForwarder } from "./forwarders/udp-forwarder.js";
 import type { ActivityStore } from "./activity/activity-store.js";
@@ -63,21 +63,30 @@ export class ForwardManager {
   }
 
   getStatus(ruleId: string): ForwardStatus {
-    const forwarder = this.forwarders.get(ruleId);
-    if (forwarder) {
-      return forwarder.getStatus();
-    }
     const rule = this.rules.get(ruleId);
+    const forwarder = this.forwarders.get(ruleId);
+    // The forwarders track runtime counters but not `enabled`; the manager is the
+    // single place that derives `health` (it owns the rule definition).
     const isUdp = rule?.protocol === "udp";
+    const base: ForwarderStatus = forwarder
+      ? forwarder.getStatus()
+      : {
+          ruleId,
+          running: false,
+          activeConnections: rule?.protocol === "tcp" ? 0 : undefined,
+          bytesIn: 0,
+          bytesOut: 0,
+          packetsIn: isUdp ? 0 : undefined,
+          packetsOut: isUdp ? 0 : undefined,
+          activeUdpSessions: rule?.udpMode === "bidirectional-multi-client" ? 0 : undefined
+        };
     return {
-      ruleId,
-      running: false,
-      activeConnections: rule?.protocol === "tcp" ? 0 : undefined,
-      bytesIn: 0,
-      bytesOut: 0,
-      packetsIn: isUdp ? 0 : undefined,
-      packetsOut: isUdp ? 0 : undefined,
-      activeUdpSessions: rule?.udpMode === "bidirectional-multi-client" ? 0 : undefined
+      ...base,
+      health: deriveRuleHealth({
+        enabled: rule?.enabled ?? false,
+        running: base.running,
+        lastError: base.lastError
+      })
     };
   }
 
@@ -206,7 +215,7 @@ export class ForwardManager {
     try {
       await forwarder.start();
       this.emitRuleEvent("rule.started", "success", rule, `Rule "${rule.name}" started.`);
-      return forwarder.getStatus();
+      return this.getStatus(ruleId);
     } catch (error) {
       this.forwarders.delete(ruleId);
       const message = error instanceof Error ? error.message : String(error);

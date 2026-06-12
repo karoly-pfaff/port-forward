@@ -31,14 +31,14 @@ const udpRule: ForwardRuleResponse = {
 
 const runningStatus: ForwardStatus = {
   ruleId: "r1",
-  running: true,
+  running: true, health: "healthy",
   bytesIn: 2048,
   bytesOut: 1024
 };
 
 const stoppedStatus: ForwardStatus = {
   ruleId: "r2",
-  running: false,
+  running: false, health: "healthy",
   bytesIn: 0,
   bytesOut: 0
 };

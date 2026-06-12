@@ -146,6 +146,18 @@ Request body: none.
 
 Response: `ForwardStatus[]`.
 
+### Rule health (v1.8)
+
+Each `ForwardStatus` carries a required `health: "healthy" | "warning" | "error"` field — an operator-facing classification **derived deterministically from existing runtime state**. It performs **no target probing and no background check**; it is purely a function of `enabled`, `running`, and `lastError`. Health is distinct from the lifecycle `running` state.
+
+Derivation (identical in the TypeScript server and Go service, parity-tested via `validate:contract`; priority order):
+
+- `error` — the rule has a current non-empty `lastError` (a failed start or a socket error), regardless of `running`/`enabled`.
+- `warning` — the rule is `enabled` (autostart) but is **not** running, and has no error (it is expected to run but isn't).
+- `healthy` — running cleanly, or intentionally stopped (not `enabled`, no error).
+
+Notes: `health` is computed by the manager (which owns the rule's `enabled` flag); forwarders do not classify it. Health does **not** mutate the rule. The exact `lastError` lifecycle is unchanged from prior versions — in particular, whether a `lastError` survives a failed start follows the existing per-runtime behaviour.
+
 ## `GET /api/ports/advisory`
 
 Purpose: get advisory messages for a port, host, and purpose.

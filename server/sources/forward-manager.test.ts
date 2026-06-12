@@ -1126,3 +1126,54 @@ describe("ForwardManager group operations (v1.8 Slice 4)", () => {
     expect(JSON.stringify(manager.listRules())).toBe(before);
   });
 });
+
+describe("ForwardManager rule health (v1.8 Slice 7)", () => {
+  const cleanup: Array<() => Promise<void>> = [];
+
+  afterEach(async () => {
+    await Promise.all(cleanup.splice(0).map((fn) => fn()));
+  });
+
+  async function addRule(
+    manager: ForwardManager,
+    overrides: Partial<ForwardRule> & { id: string }
+  ): Promise<ForwardRule> {
+    const listenPort = await getFreeTcpPort();
+    return manager.addRule({
+      name: overrides.id,
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort,
+      targetHost: "127.0.0.1",
+      targetPort: 49999,
+      enabled: false,
+      ...overrides
+    } as ForwardRule);
+  }
+
+  it("reports healthy for an intentionally stopped (disabled) rule", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    await addRule(manager, { id: "h1", enabled: false });
+    expect(manager.getStatus("h1").health).toBe("healthy");
+  });
+
+  it("reports healthy for a running rule", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    await addRule(manager, { id: "h2", enabled: false });
+    await startRuleStable(manager, "h2", getFreeTcpPort);
+    expect(manager.getStatus("h2").running).toBe(true);
+    expect(manager.getStatus("h2").health).toBe("healthy");
+  });
+
+  it("reports warning for an enabled rule that is not running", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+    // Created enabled → auto-started; stop it so it is enabled but not running.
+    const rule = await addRule(manager, { id: "h3", enabled: true });
+    expect(manager.getStatus(rule.id).running).toBe(true);
+    await manager.stopRule(rule.id);
+    expect(manager.getStatus(rule.id).health).toBe("warning");
+  });
+});

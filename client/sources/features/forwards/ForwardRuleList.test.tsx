@@ -31,14 +31,14 @@ const udpRule: ForwardRuleResponse = {
 
 const stoppedStatus: ForwardStatus = {
   ruleId: "r1",
-  running: false,
+  running: false, health: "healthy",
   bytesIn: 0,
   bytesOut: 0
 };
 
 const runningStatus: ForwardStatus = {
   ruleId: "r1",
-  running: true,
+  running: true, health: "healthy",
   bytesIn: 2048,
   bytesOut: 512,
   activeConnections: 3
@@ -46,7 +46,7 @@ const runningStatus: ForwardStatus = {
 
 const udpStatus: ForwardStatus = {
   ruleId: "r2",
-  running: true,
+  running: true, health: "healthy",
   bytesIn: 0,
   bytesOut: 0,
   packetsIn: 10,
@@ -156,6 +156,19 @@ describe("ForwardRuleList", () => {
       loading: false
     });
     expect(screen.getByText("No")).toBeInTheDocument();
+  });
+
+  it("renders a health badge reflecting the rule's status health", () => {
+    const warningStatus: ForwardStatus = { ...stoppedStatus, health: "warning" };
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(warningStatus),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    expect(
+      screen.getByRole("img", { name: "Health: Warning — enabled but not running" })
+    ).toBeInTheDocument();
   });
 
   it("displays the group label when a rule has a group", () => {
@@ -294,7 +307,7 @@ describe("ForwardRuleList", () => {
 
   it("disables only the busy rule's action buttons, not others", () => {
     const secondRule: ForwardRuleResponse = { ...tcpRule, id: "r3", name: "Other Rule" };
-    const secondStatus: ForwardStatus = { ruleId: "r3", running: false, bytesIn: 0, bytesOut: 0 };
+    const secondStatus: ForwardStatus = { ruleId: "r3", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 };
     renderList({
       rules: [tcpRule, secondRule],
       statusMap: makeMap(stoppedStatus, secondStatus),
@@ -699,7 +712,7 @@ describe("ForwardRuleList diagnostics", () => {
 
   it("does not disable Diagnose for other rules when one is pending", () => {
     const secondRule: ForwardRuleResponse = { ...tcpRule, id: "r3", name: "Other Rule" };
-    const secondStatus: ForwardStatus = { ruleId: "r3", running: false, bytesIn: 0, bytesOut: 0 };
+    const secondStatus: ForwardStatus = { ruleId: "r3", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 };
     renderList({
       rules: [tcpRule, secondRule],
       statusMap: makeMap(stoppedStatus, secondStatus),
@@ -827,7 +840,7 @@ describe("ForwardRuleList activity navigation", () => {
 
   it("shows a View activity button for each rule when multiple rules are present", () => {
     const secondRule: ForwardRuleResponse = { ...tcpRule, id: "r3", name: "Another Rule" };
-    const secondStatus: ForwardStatus = { ruleId: "r3", running: false, bytesIn: 0, bytesOut: 0 };
+    const secondStatus: ForwardStatus = { ruleId: "r3", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 };
     renderList({
       rules: [tcpRule, secondRule],
       statusMap: makeMap(stoppedStatus, secondStatus),

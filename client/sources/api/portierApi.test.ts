@@ -71,7 +71,7 @@ describe("fetchForwardRules", () => {
 
 describe("fetchForwardStatus", () => {
   it("returns statuses from GET /api/status", async () => {
-    const data: ForwardStatus[] = [{ ruleId: "r1", running: false, bytesIn: 0, bytesOut: 0 }];
+    const data: ForwardStatus[] = [{ ruleId: "r1", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 }];
     mockFetchOk(data);
     const result = await fetchForwardStatus();
     expect(result).toEqual(data);
@@ -106,7 +106,7 @@ describe("deleteForwardRule", () => {
 
 describe("setForwardRuleRunning", () => {
   it("POSTs start endpoint when running=true", async () => {
-    const status: ForwardStatus = { ruleId: "r1", running: true, bytesIn: 0, bytesOut: 0 };
+    const status: ForwardStatus = { ruleId: "r1", running: true, health: "healthy", bytesIn: 0, bytesOut: 0 };
     mockFetchOk(status);
     const result = await setForwardRuleRunning(rule, true);
     expect(result.running).toBe(true);
@@ -114,7 +114,7 @@ describe("setForwardRuleRunning", () => {
   });
 
   it("POSTs stop endpoint when running=false", async () => {
-    const status: ForwardStatus = { ruleId: "r1", running: false, bytesIn: 0, bytesOut: 0 };
+    const status: ForwardStatus = { ruleId: "r1", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 };
     mockFetchOk(status);
     await setForwardRuleRunning(rule, false);
     expect(vi.mocked(fetch)).toHaveBeenCalledWith("/api/forwards/r1/stop", expect.objectContaining({ method: "POST" }));

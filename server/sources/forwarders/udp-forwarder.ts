@@ -2,12 +2,11 @@ import dgram from "node:dgram";
 import type { RemoteInfo } from "node:dgram";
 import type {
   ForwardRule,
-  ForwardStatus,
   ActivityEventInput,
   ActivityEventType,
   ActivitySeverity
 } from "@portier/shared";
-import type { Forwarder } from "./types.js";
+import type { Forwarder, ForwarderStatus } from "./types.js";
 import type { UdpSessionRegistry } from "../connections/udp-session-registry.js";
 
 const UDP_LOG_INTERVAL_MS = 1000;
@@ -25,7 +24,7 @@ export class UdpForwarder implements Forwarder {
   private lastClient?: RemoteInfo;
   private lastClientSessionId?: string;
   private sessions = new Map<string, UdpSession>();
-  private status: ForwardStatus;
+  private status: ForwarderStatus;
   private lastForwardLogAt = 0;
   private lastReturnLogAt = 0;
   private readonly sessionTimeoutMs: number;
@@ -207,7 +206,7 @@ export class UdpForwarder implements Forwarder {
     }
   }
 
-  getStatus(): ForwardStatus {
+  getStatus(): ForwarderStatus {
     return { ...this.status };
   }
 

@@ -41,7 +41,7 @@ const testRule: ForwardRuleResponse = {
 
 const testStatus: ForwardStatus = {
   ruleId: "r1",
-  running: true,
+  running: true, health: "healthy",
   bytesIn: 0,
   bytesOut: 0
 };

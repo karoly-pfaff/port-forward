@@ -50,6 +50,7 @@ The two runtimes implement **one** REST contract; the CLI carries a third (DTO-o
 | **enabled** | Persisted *desired* on/off state of a rule (`ForwardRule.enabled`, stored in `rules.json`). Enabled rules are started at launch. | Desired state, not observed state. |
 | **running** | Observed *runtime* state — whether the forwarder is currently bound and serving (`ForwardStatus.running`). | Observed state. A rule can be **enabled but not running** after a failed start (e.g. port already in use). |
 | **status** | The observed runtime view of a rule: `running`, byte/packet counters, `lastError`, active connections/sessions (`ForwardStatus`, `GET /api/status`). | Distinct from the persisted rule. |
+| **health** | An operator-facing *interpretation* of a rule's status — `healthy` / `warning` / `error` (`ForwardStatus.health`). **Derived deterministically** from `enabled`/`running`/`lastError`; performs no target probing. | Added v1.8. **Distinct from `status`/`running`** (lifecycle) — health is the operator reading. `error` = has `lastError`; `warning` = enabled but not running; `healthy` = running clean or intentionally stopped. Does NOT imply active monitoring. |
 | **lastError** | The last forwarding error observed for a rule (bind failure, socket error), surfaced on its status. | Best-effort diagnostic; cleared on a successful (re)start. |
 | **Startup behavior** | On launch, enabled rules are started automatically (TS `loadAndStartEnabled`, Go `StartEnabled`). | There is no separate "autostart" field — "enabled" *is* the start-on-launch flag. |
 

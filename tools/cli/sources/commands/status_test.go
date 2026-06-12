@@ -165,3 +165,52 @@ func TestRunStatus_ConnectionError(t *testing.T) {
 		t.Errorf("stderr missing connection message: %s", errBuf.String())
 	}
 }
+
+func TestRunStatus_ShowsHealthColumn(t *testing.T) {
+	statuses := []client.ForwardStatus{
+		{RuleID: "r1", Running: true, Health: "healthy", BytesIn: 0, BytesOut: 0},
+		{RuleID: "r2", Running: false, Health: "warning", BytesIn: 0, BytesOut: 0},
+	}
+	rules := []client.ForwardRuleResponse{
+		{ID: "r1", Name: "Up", Protocol: "tcp", ListenHost: "127.0.0.1", ListenPort: 48000, TargetHost: "127.0.0.1", TargetPort: 8080, Enabled: true},
+		{ID: "r2", Name: "Down", Protocol: "tcp", ListenHost: "127.0.0.1", ListenPort: 48001, TargetHost: "127.0.0.1", TargetPort: 8081, Enabled: true},
+	}
+	srv := makeStatusServer(t, statuses, rules)
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	if code := commands.RunStatus(c, false, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, errBuf.String())
+	}
+	s := out.String()
+	for _, want := range []string{"HEALTH", "healthy", "warning"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("status output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestRunStatus_JSONIncludesHealth(t *testing.T) {
+	statuses := []client.ForwardStatus{
+		{RuleID: "r1", Running: false, Health: "warning", BytesIn: 0, BytesOut: 0},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(statuses)
+	}))
+	defer srv.Close()
+
+	c := client.New(srv.URL)
+	var out, errBuf strings.Builder
+	if code := commands.RunStatus(c, true, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var decoded []client.ForwardStatus
+	if err := json.Unmarshal([]byte(out.String()), &decoded); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(decoded) != 1 || decoded[0].Health != "warning" {
+		t.Errorf("expected health=warning in JSON, got %+v", decoded)
+	}
+}

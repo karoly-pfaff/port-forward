@@ -3,6 +3,7 @@ import { Activity, Pencil, Stethoscope } from "lucide-react";
 import type { ForwardRule, ForwardRuleResponse, ForwardStatus, GroupActionResponse, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
+import { RuleHealthBadge } from "./RuleHealthBadge.js";
 import { RuleDiagnosticsPanel } from "./RuleDiagnosticsPanel.js";
 import { formatBytes, formatUdpModeLabel } from "../../utils/format.js";
 
@@ -362,10 +363,13 @@ export function ForwardRuleList({
                         </span>
                       </td>
                       <td>
-                        <ForwardStatusBadge
-                          status={status}
-                          onErrorClick={onGoToActivity ? () => onGoToActivity(rule.id) : undefined}
-                        />
+                        <span className="status-cell">
+                          <ForwardStatusBadge
+                            status={status}
+                            onErrorClick={onGoToActivity ? () => onGoToActivity(rule.id) : undefined}
+                          />
+                          {status && <RuleHealthBadge health={status.health} />}
+                        </span>
                       </td>
                       <td className="traffic-cell">
                         {rule.protocol === "tcp" && (

@@ -880,6 +880,34 @@ td strong {
   margin-top: 3px;
 }
 
+/* Status cell holds the lifecycle status badge plus the compact health dot. */
+.status-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Health dot — operator interpretation, distinct from the status badge. */
+.health-badge {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.health-badge--healthy {
+  background: var(--green);
+}
+
+.health-badge--warning {
+  background: var(--amber);
+}
+
+.health-badge--error {
+  background: var(--red);
+}
+
 /* Subtle group label shown beneath a rule's name. Metadata only — kept quiet
    so it does not compete with status/protocol/endpoints. */
 .rule-group-label {

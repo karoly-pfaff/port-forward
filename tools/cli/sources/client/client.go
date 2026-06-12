@@ -150,6 +150,7 @@ type ForwardRuleResponse struct {
 type ForwardStatus struct {
 	RuleID            string `json:"ruleId"`
 	Running           bool   `json:"running"`
+	Health            string `json:"health"`
 	ActiveConnections *int   `json:"activeConnections,omitempty"`
 	BytesIn           int64  `json:"bytesIn"`
 	BytesOut          int64  `json:"bytesOut"`

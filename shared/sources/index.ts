@@ -119,9 +119,20 @@ export interface ForwardRule {
 /** Maximum length (characters) of a normalized rule group label. */
 export const PORTIER_GROUP_MAX_LENGTH = 64;
 
+/**
+ * Operator-facing health classification for a rule (v1.8 Slice 7). Derived
+ * deterministically from existing runtime state — it does NOT probe targets or
+ * run any background check. Distinct from the lifecycle `running` state:
+ * - `error`:   the rule has a current `lastError` (failed start / socket error).
+ * - `warning`: the rule is enabled (autostart) but is not currently running.
+ * - `healthy`: running cleanly, or intentionally stopped (not enabled, no error).
+ */
+export type RuleHealth = "healthy" | "warning" | "error";
+
 export interface ForwardStatus {
   ruleId: string;
   running: boolean;
+  health: RuleHealth;
   activeConnections?: number;
   bytesIn: number;
   bytesOut: number;
@@ -130,6 +141,27 @@ export interface ForwardStatus {
   activeUdpSessions?: number;
   lastError?: string;
   startedAt?: string;
+}
+
+/**
+ * Derive a rule's {@link RuleHealth} from existing runtime state. Pure and
+ * deterministic; performs no I/O. The TypeScript server and Go service share
+ * this exact logic (parity-tested via validate:contract). Priority: a present
+ * `lastError` is always `error`; otherwise an enabled-but-stopped rule is
+ * `warning`; everything else is `healthy`.
+ */
+export function deriveRuleHealth(input: {
+  enabled: boolean;
+  running: boolean;
+  lastError?: string;
+}): RuleHealth {
+  if (input.lastError !== undefined && input.lastError.trim().length > 0) {
+    return "error";
+  }
+  if (input.enabled && !input.running) {
+    return "warning";
+  }
+  return "healthy";
 }
 
 export type ForwardRuleInput = Omit<ForwardRule, "id"> & { id?: string };

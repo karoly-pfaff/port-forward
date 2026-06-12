@@ -500,40 +500,45 @@ func ForwardingFieldsChanged(a domain.ForwardRule, b domain.ForwardRule) bool {
 
 func (m *Manager) statusForRule(rule domain.ForwardRule) domain.ForwardStatus {
 	state := m.runtime[rule.ID]
+
+	var status domain.ForwardStatus
 	if state.forwarder != nil {
-		return state.forwarder.Status()
-	}
+		// The forwarder tracks runtime counters but not the rule's Enabled flag;
+		// the manager is the single place that derives Health.
+		status = state.forwarder.Status()
+	} else {
+		status = domain.ForwardStatus{
+			RuleID:   rule.ID,
+			Running:  state.running,
+			BytesIn:  0,
+			BytesOut: 0,
+		}
+		if state.running {
+			status.StartedAt = state.startedAt
+		}
+		if state.lastError != "" {
+			status.LastError = state.lastError
+		}
 
-	status := domain.ForwardStatus{
-		RuleID:   rule.ID,
-		Running:  state.running,
-		BytesIn:  0,
-		BytesOut: 0,
-	}
-	if state.running {
-		status.StartedAt = state.startedAt
-	}
-	if state.lastError != "" {
-		status.LastError = state.lastError
-	}
-
-	if rule.Protocol == domain.ProtocolTCP {
-		zero := 0
-		status.ActiveConnections = &zero
-	}
-
-	if rule.Protocol == domain.ProtocolUDP {
-		packetsIn := int64(0)
-		packetsOut := int64(0)
-		status.PacketsIn = &packetsIn
-		status.PacketsOut = &packetsOut
-
-		if rule.UdpMode != nil && *rule.UdpMode == domain.UdpModeBidirectionalMulti {
+		if rule.Protocol == domain.ProtocolTCP {
 			zero := 0
-			status.ActiveUdpSessions = &zero
+			status.ActiveConnections = &zero
+		}
+
+		if rule.Protocol == domain.ProtocolUDP {
+			packetsIn := int64(0)
+			packetsOut := int64(0)
+			status.PacketsIn = &packetsIn
+			status.PacketsOut = &packetsOut
+
+			if rule.UdpMode != nil && *rule.UdpMode == domain.UdpModeBidirectionalMulti {
+				zero := 0
+				status.ActiveUdpSessions = &zero
+			}
 		}
 	}
 
+	status.Health = domain.DeriveRuleHealth(rule.Enabled, status.Running, status.LastError)
 	return status
 }
 

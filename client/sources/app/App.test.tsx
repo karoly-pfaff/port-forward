@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ForwardStatus } from "@portier/shared";
 import { App } from "./App.js";
 import * as portierApi from "../api/portierApi.js";
 
@@ -125,7 +126,7 @@ describe("App", () => {
     vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
       {
         ruleId: "r1",
-        running: true,
+        running: true, health: "healthy",
         bytesIn: 0,
         bytesOut: 0
       }
@@ -153,7 +154,7 @@ describe("App", () => {
       }
     ]);
     vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
-      { ruleId: "r1", running: true, bytesIn: 0, bytesOut: 0 }
+      { ruleId: "r1", running: true, health: "healthy", bytesIn: 0, bytesOut: 0 }
     ]);
     vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
 
@@ -211,7 +212,7 @@ describe("App", () => {
     vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
       {
         ruleId: "r1",
-        running: false,
+        running: false, health: "healthy",
         bytesIn: 0,
         bytesOut: 0,
         lastError: "ECONNREFUSED"
@@ -237,7 +238,7 @@ const sampleRule = {
   advisories: []
 };
 
-const stoppedStatus = { ruleId: "r1", running: false, bytesIn: 0, bytesOut: 0 };
+const stoppedStatus: ForwardStatus = { ruleId: "r1", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 };
 
 describe("App drawer", () => {
   beforeEach(() => {
@@ -416,8 +417,8 @@ describe("App group actions", () => {
     const user = userEvent.setup();
     vi.mocked(portierApi.fetchForwardRules).mockResolvedValue(webRules);
     vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
-      { ruleId: "r1", running: false, bytesIn: 0, bytesOut: 0 },
-      { ruleId: "r2", running: false, bytesIn: 0, bytesOut: 0 }
+      { ruleId: "r1", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 },
+      { ruleId: "r2", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 }
     ]);
     vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
     vi.mocked(portierApi.setGroupRunning).mockResolvedValue({
@@ -443,8 +444,8 @@ describe("App group actions", () => {
     const user = userEvent.setup();
     vi.mocked(portierApi.fetchForwardRules).mockResolvedValue(webRules);
     vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
-      { ruleId: "r1", running: true, bytesIn: 0, bytesOut: 0 },
-      { ruleId: "r2", running: true, bytesIn: 0, bytesOut: 0 }
+      { ruleId: "r1", running: true, health: "healthy", bytesIn: 0, bytesOut: 0 },
+      { ruleId: "r2", running: true, health: "healthy", bytesIn: 0, bytesOut: 0 }
     ]);
     vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
     vi.mocked(portierApi.setGroupRunning).mockResolvedValue({

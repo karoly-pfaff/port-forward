@@ -1,12 +1,12 @@
 import net from "node:net";
-import type { ForwardRule, ForwardStatus, ActivityEventInput } from "@portier/shared";
-import type { Forwarder } from "./types.js";
+import type { ForwardRule, ActivityEventInput } from "@portier/shared";
+import type { Forwarder, ForwarderStatus } from "./types.js";
 import type { TcpConnectionRegistry } from "../connections/tcp-connection-registry.js";
 
 export class TcpForwarder implements Forwarder {
   private server?: net.Server;
   private sockets = new Set<net.Socket>();
-  private status: ForwardStatus;
+  private status: ForwarderStatus;
 
   constructor(
     private readonly rule: ForwardRule,
@@ -79,7 +79,7 @@ export class TcpForwarder implements Forwarder {
     this.status.startedAt = undefined;
   }
 
-  getStatus(): ForwardStatus {
+  getStatus(): ForwarderStatus {
     return { ...this.status };
   }
 

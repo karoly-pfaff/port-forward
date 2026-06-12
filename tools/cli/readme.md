@@ -70,9 +70,9 @@ Show runtime status for all forwarding rules.
 portier status [--json]
 ```
 
-Calls `GET /api/status` (and `GET /api/forwards` for rule names in human mode). Displays name, protocol, running/stopped state, active connections, bytes in/out, and last error if present.
+Calls `GET /api/status` (and `GET /api/forwards` for rule names in human mode). Displays name, protocol, running/stopped state, **health** (`healthy`/`warning`/`error` — derived from the runtime status, distinct from the running/stopped state), active connections, bytes in/out, and last error if present.
 
-With `--json`: prints the raw `ForwardStatus[]` array.
+With `--json`: prints the raw `ForwardStatus[]` array (each entry includes the `health` field).
 
 ### `portier activity`
 

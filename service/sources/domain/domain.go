@@ -79,16 +79,17 @@ type ForwardRuleResponse struct {
 }
 
 type ForwardStatus struct {
-	RuleID            string `json:"ruleId"`
-	Running           bool   `json:"running"`
-	ActiveConnections *int   `json:"activeConnections,omitempty"`
-	BytesIn           int64  `json:"bytesIn"`
-	BytesOut          int64  `json:"bytesOut"`
-	PacketsIn         *int64 `json:"packetsIn,omitempty"`
-	PacketsOut        *int64 `json:"packetsOut,omitempty"`
-	ActiveUdpSessions *int   `json:"activeUdpSessions,omitempty"`
-	LastError         string `json:"lastError,omitempty"`
-	StartedAt         string `json:"startedAt,omitempty"`
+	RuleID            string     `json:"ruleId"`
+	Running           bool       `json:"running"`
+	Health            RuleHealth `json:"health"`
+	ActiveConnections *int       `json:"activeConnections,omitempty"`
+	BytesIn           int64      `json:"bytesIn"`
+	BytesOut          int64      `json:"bytesOut"`
+	PacketsIn         *int64     `json:"packetsIn,omitempty"`
+	PacketsOut        *int64     `json:"packetsOut,omitempty"`
+	ActiveUdpSessions *int       `json:"activeUdpSessions,omitempty"`
+	LastError         string     `json:"lastError,omitempty"`
+	StartedAt         string     `json:"startedAt,omitempty"`
 }
 
 type ExportedConfig struct {

@@ -418,7 +418,7 @@ const testRuleForDiag: ForwardRuleResponse = {
 
 const testStatusForDiag: ForwardStatus = {
   ruleId: "r1",
-  running: true,
+  running: true, health: "healthy",
   bytesIn: 0,
   bytesOut: 0
 };
