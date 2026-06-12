@@ -190,6 +190,14 @@ Each finding is a *doctor check* with a stable, machine-readable **code**, a `se
 
 Human output groups the checks under a `Portier Config Doctor` heading with `[INFO]`/`[WARN]`/`[ERROR]` tags, a severity summary, and a `Result: passed`/`Result: failed` line. With `--json`, prints the full report: `{ "checks": [ { "code", "severity", "title", "message", "details"? } ], "summary": { "info": N, "warning": N, "error": N }, "strict": false, "result": "passed" }`.
 
+**Structured details (JSON).** Config doctor findings carry deterministic, JSON-serializable `details` derived **only from the offline config** (rule names/hosts/ports/groups/ids — no environment, process, log, filesystem, runtime, or probe data):
+
+- `config.duplicate_binding` → `{ "bindings": [ { "protocol", "listenHost", "listenPort", "rules": [ { "id"?, "name", "enabled", "group"? } ] } ], "errors": [...] }` (bindings sorted by protocol→host→port; rules in file order).
+- `config.lan_exposure` / `config.privileged_port` → `{ "rules": [ { "id"?, "name", "protocol", "listenHost", "listenPort", "enabled", "group"? } ] }` (all affected rules aggregated into one check, file order).
+- `config.empty` → `{ "ruleCount": 0 }`; `config.validation_failed` → `{ "errors": [...], "ruleCount": N }`; `config.valid` → `{ "ruleCount": N, "tcpCount": N, "udpCount": N }`.
+
+These details flow through `--out` and are surfaced inline by `--explain`; the live `portier doctor` and the support bundle are unaffected.
+
 Exit codes: `0` doctor completed with no error-severity checks (**warnings alone exit `0`** unless `--strict`), `1` one or more error-severity checks **or any warning when `--strict`**, `2` missing file-path argument or usage error.
 
 **`--strict`** treats warnings as failures (a warning-only report exits `1`). It changes only the exit-code interpretation — the same checks run and nothing is modified.

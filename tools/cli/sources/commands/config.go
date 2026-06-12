@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -523,6 +524,7 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 			Severity: DoctorWarning,
 			Title:    "Config contains no rules",
 			Message:  "The config file parsed successfully but defines no forwarding rules.",
+			Details:  map[string]any{"ruleCount": 0},
 		})
 		return newDoctorReport(checks)
 	}
@@ -537,7 +539,7 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 			Severity: DoctorError,
 			Title:    fmt.Sprintf("Config has %d validation %s", len(fieldErrs), pluralWord(len(fieldErrs), "error", "errors")),
 			Message:  "One or more rules have invalid fields. Run 'portier config validate' for the full list.",
-			Details:  map[string]any{"errors": fieldErrs},
+			Details:  map[string]any{"errors": fieldErrs, "ruleCount": len(rules)},
 		})
 	}
 	if len(dupErrs) > 0 {
@@ -546,7 +548,7 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 			Severity: DoctorError,
 			Title:    fmt.Sprintf("Config has %d duplicate listen %s", len(dupErrs), pluralWord(len(dupErrs), "binding", "bindings")),
 			Message:  "Two or more rules share a listen binding (protocol + host + port). Each binding must be unique.",
-			Details:  map[string]any{"errors": dupErrs},
+			Details:  map[string]any{"errors": dupErrs, "bindings": findDuplicateBindings(rules)},
 		})
 	}
 
@@ -557,6 +559,7 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 			Title:    "Config is valid",
 			Message: fmt.Sprintf("The config file can be read, parsed, and validated (%d %s: %d TCP, %d UDP).",
 				vr.RuleCount, pluralRule(vr.RuleCount), vr.TCPCount, vr.UDPCount),
+			Details: map[string]any{"ruleCount": vr.RuleCount, "tcpCount": vr.TCPCount, "udpCount": vr.UDPCount},
 		})
 	}
 
@@ -569,40 +572,175 @@ func runConfigDoctorChecks(filePath string) DoctorReport {
 }
 
 // configDoctorAdvisories returns the LAN-exposure and privileged-port advisory
-// checks for the given rules, in file order, exposure before port per rule.
+// checks for the given rules. Each advisory aggregates ALL affected rules (in
+// file order) into one check carrying a deterministic, structured `rules` list
+// in its details — so the warning count stays one-per-advisory-kind and exit
+// behavior is unchanged. LAN exposure stays the existing `0.0.0.0` check (kept
+// consistent with the shared advisory; `::` is intentionally not added).
 func configDoctorAdvisories(rules []rawConfigRule) []DoctorCheckResult {
 	advisories := []DoctorCheckResult{}
+
+	var exposed, privileged []ruleDetail
 	for _, r := range rules {
-		label := ruleLabel(r)
 		if r.ListenHost == "0.0.0.0" {
-			advisories = append(advisories, DoctorCheckResult{
-				Code:     checkConfigLanExposure,
-				Severity: DoctorWarning,
-				Title:    fmt.Sprintf("%s listens on 0.0.0.0", label),
-				Message:  "Listening on 0.0.0.0 exposes this forwarded port on all interfaces. Other LAN devices may be able to connect if firewall settings allow it.",
-				Details:  map[string]any{"name": r.Name, "listenHost": r.ListenHost, "listenPort": r.ListenPort},
-			})
+			exposed = append(exposed, toRuleDetail(r))
 		}
 		if r.ListenPort >= 1 && r.ListenPort < 1024 {
-			advisories = append(advisories, DoctorCheckResult{
-				Code:     checkConfigPrivilegedPort,
-				Severity: DoctorWarning,
-				Title:    fmt.Sprintf("%s uses privileged port %d", label, r.ListenPort),
-				Message:  fmt.Sprintf("Port %d is privileged and may require elevated permissions to bind.", r.ListenPort),
-				Details:  map[string]any{"name": r.Name, "listenPort": r.ListenPort},
-			})
+			privileged = append(privileged, toRuleDetail(r))
 		}
 	}
+
+	if len(exposed) > 0 {
+		advisories = append(advisories, DoctorCheckResult{
+			Code:     checkConfigLanExposure,
+			Severity: DoctorWarning,
+			Title:    lanExposureTitle(exposed),
+			Message:  "Listening on 0.0.0.0 exposes the forwarded port on all interfaces. Other LAN devices may be able to connect if firewall settings allow it.",
+			Details:  map[string]any{"rules": exposed},
+		})
+	}
+	if len(privileged) > 0 {
+		advisories = append(advisories, DoctorCheckResult{
+			Code:     checkConfigPrivilegedPort,
+			Severity: DoctorWarning,
+			Title:    privilegedPortTitle(privileged),
+			Message:  "One or more rules listen on a privileged port (below 1024), which may require elevated permissions to bind.",
+			Details:  map[string]any{"rules": privileged},
+		})
+	}
 	return advisories
+}
+
+// lanExposureTitle renders the LAN-exposure check title, preserving the
+// single-rule wording and summarizing when multiple rules are affected.
+func lanExposureTitle(rules []ruleDetail) string {
+	if len(rules) == 1 {
+		return fmt.Sprintf("%s listens on 0.0.0.0", ruleLabelName(rules[0].Name))
+	}
+	return fmt.Sprintf("%d rules listen on 0.0.0.0", len(rules))
+}
+
+// privilegedPortTitle renders the privileged-port check title, preserving the
+// single-rule wording and summarizing when multiple rules are affected.
+func privilegedPortTitle(rules []ruleDetail) string {
+	if len(rules) == 1 {
+		return fmt.Sprintf("%s uses privileged port %d", ruleLabelName(rules[0].Name), rules[0].ListenPort)
+	}
+	return fmt.Sprintf("%d rules use privileged ports", len(rules))
 }
 
 // ruleLabel returns a stable human label for a rule in doctor output:
 // the quoted name when present, otherwise a positional-free generic label.
 func ruleLabel(r rawConfigRule) string {
-	if r.Name != "" {
-		return fmt.Sprintf("Rule %q", r.Name)
+	return ruleLabelName(r.Name)
+}
+
+// ruleLabelName is ruleLabel by name (a rule has no positional index in details).
+func ruleLabelName(name string) string {
+	if name != "" {
+		return fmt.Sprintf("Rule %q", name)
 	}
 	return "An unnamed rule"
+}
+
+// ruleDetail is the structured, JSON-serializable description of a rule used in
+// config doctor finding details. Derived ONLY from the offline config — it
+// carries no runtime, host-environment, process, log, or secret data. id/group
+// are omitted when absent.
+type ruleDetail struct {
+	ID         string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	Protocol   string `json:"protocol"`
+	ListenHost string `json:"listenHost"`
+	ListenPort int    `json:"listenPort"`
+	Enabled    bool   `json:"enabled"`
+	Group      string `json:"group,omitempty"`
+}
+
+func toRuleDetail(r rawConfigRule) ruleDetail {
+	return ruleDetail{
+		ID:         r.ID,
+		Name:       r.Name,
+		Protocol:   r.Protocol,
+		ListenHost: r.ListenHost,
+		ListenPort: r.ListenPort,
+		Enabled:    r.Enabled,
+		Group:      strings.TrimSpace(r.Group),
+	}
+}
+
+// bindingConflict describes one duplicated listen binding and the rules on it.
+// The binding identity (protocol/host/port) is shared by all its rules.
+type bindingConflict struct {
+	Protocol   string        `json:"protocol"`
+	ListenHost string        `json:"listenHost"`
+	ListenPort int           `json:"listenPort"`
+	Rules      []bindingRule `json:"rules"`
+}
+
+// bindingRule is the per-rule entry inside a bindingConflict (the binding
+// already carries protocol/host/port, so only rule identity is repeated).
+type bindingRule struct {
+	ID      string `json:"id,omitempty"`
+	Name    string `json:"name"`
+	Enabled bool   `json:"enabled"`
+	Group   string `json:"group,omitempty"`
+}
+
+// findDuplicateBindings groups rules by listen binding (protocol + listenHost +
+// listenPort, considering only rules whose basic fields are valid — mirroring
+// validateLocalConfig's duplicate detection) and returns one bindingConflict per
+// binding shared by two or more rules. Rules within a binding stay in file
+// order; the bindings list is sorted by protocol, host, then port. Fully
+// deterministic and derived only from the offline config.
+func findDuplicateBindings(rules []rawConfigRule) []bindingConflict {
+	type bindKey struct {
+		proto string
+		host  string
+		port  int
+	}
+	validProtocols := map[string]bool{"tcp": true, "udp": true}
+	groups := map[bindKey][]rawConfigRule{}
+	order := []bindKey{}
+	for _, r := range rules {
+		if !validProtocols[r.Protocol] || r.ListenHost == "" || r.ListenPort < 1 || r.ListenPort > 65535 {
+			continue
+		}
+		k := bindKey{r.Protocol, r.ListenHost, r.ListenPort}
+		if _, seen := groups[k]; !seen {
+			order = append(order, k)
+		}
+		groups[k] = append(groups[k], r)
+	}
+
+	conflicts := []bindingConflict{}
+	for _, k := range order {
+		rs := groups[k]
+		if len(rs) < 2 {
+			continue
+		}
+		bc := bindingConflict{Protocol: k.proto, ListenHost: k.host, ListenPort: k.port}
+		for _, r := range rs {
+			bc.Rules = append(bc.Rules, bindingRule{
+				ID:      r.ID,
+				Name:    r.Name,
+				Enabled: r.Enabled,
+				Group:   strings.TrimSpace(r.Group),
+			})
+		}
+		conflicts = append(conflicts, bc)
+	}
+	sort.Slice(conflicts, func(i, j int) bool {
+		a, b := conflicts[i], conflicts[j]
+		if a.Protocol != b.Protocol {
+			return a.Protocol < b.Protocol
+		}
+		if a.ListenHost != b.ListenHost {
+			return a.ListenHost < b.ListenHost
+		}
+		return a.ListenPort < b.ListenPort
+	})
+	return conflicts
 }
 
 // partitionValidationErrors splits validation error messages into duplicate

@@ -94,6 +94,21 @@ All notable changes to Portier are documented here.
 - The doctor emit flags were grouped into a small `doctorEmitOptions` struct to avoid parameter sprawl (internal refactor, no behavior change).
 - CLI coverage **97.4% → 97.5%** statements (functions 99.1% → 99.2%); gate 95% holds, none lowered — recovering part of the Slice 6 dip. Every new explain helper is 100% covered.
 
+### Added — Slice 8: Config doctor advisory details
+
+- **Structured `details` on config doctor findings.** `portier config doctor --json` now attaches deterministic, JSON-serializable `details` to its checks, making JSON reports, exports, and inline explanations more useful — **no new check codes** (existing codes enriched).
+  - `config.duplicate_binding`: a structured `bindings` array (each `{ protocol, listenHost, listenPort, rules: [{ id?, name, enabled, group? }] }`) identifying every conflicting binding and the rules on it, alongside the existing `errors` strings. Bindings sorted by protocol→host→port; rules in file order.
+  - `config.lan_exposure` / `config.privileged_port`: each now **aggregates all affected rules into one check** with a `rules` array (`{ id?, name, protocol, listenHost, listenPort, enabled, group? }`, file order). (Previously one check per affected rule — the warning is now one-per-advisory-kind. Exit behavior is unchanged.)
+  - `config.empty`: `{ ruleCount: 0 }`. `config.validation_failed`: `{ errors, ruleCount }`. `config.valid`: `{ ruleCount, tcpCount, udpCount }`.
+- **Derived only from the offline config** — details contain no environment variables, process info, logs, filesystem data, runtime data, or probe results; only rule names/hosts/ports/groups/ids from the file. IDs are included only when present in the config (`omitempty`); groups are trimmed.
+- **LAN exposure stays the `0.0.0.0` check** (consistent with the shared advisory — `::` is intentionally not added so which rules are flagged is unchanged); the privileged-port check stays the deterministic `< 1024` advisory (no `COMMON_PORTS` duplication).
+
+### Notes (Slice 8)
+
+- CLI-only change. Details flow naturally through `--json` and `--out` (they are part of `DoctorCheckResult`); `--explain` stays presentation-only and compatible; **support-bundle output is unchanged** (it runs the *live* doctor, not config doctor). No shared/server/service/client change, no new endpoints/DTOs/codes. `validate:contract` unchanged at **234/234**.
+- Human output is essentially unchanged (details are a JSON concern); the aggregated advisory titles read `Rule "X" listens on 0.0.0.0` for one rule and `N rules listen on 0.0.0.0` for several.
+- CLI coverage **held at 97.5%** statements (functions 99.2%); gate 95% holds, none lowered. Every new detail builder (`findDuplicateBindings`, `toRuleDetail`, the aggregated advisories, titles) is 100% covered; the ratio is unchanged because the fully-covered additions are proportional to existing coverage.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools
