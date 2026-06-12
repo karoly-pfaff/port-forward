@@ -440,6 +440,37 @@ Calls `GET /api/runtime`. Displays name, version, runtime, platform/arch, uptime
 
 With `--json`: prints the raw `RuntimeInfo` JSON from the API.
 
+### `portier doctor`
+
+Run deterministic diagnostic checks against the **live** Portier runtime. Read-only: never mutates the runtime or its config, and never probes forwarding targets.
+
+```
+portier doctor [--json]
+```
+
+Reuses the same doctor report model as `config doctor` (Slice 1). Each finding is a *doctor check* with a stable `code`, a `severity` (`info`/`warning`/`error`), a `title`, a `message`, and optional `details`. Stable check codes:
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `runtime.reachable` | info | The runtime responded (`GET /api/runtime`). |
+| `runtime.unreachable` | error | The runtime could not be reached. Short-circuits later checks. |
+| `runtime.version` | info / warning | Runtime version; **warning** (never failure) when it differs from the CLI version. |
+| `runtime.status_read` | info | Rule status was read (`GET /api/status`). |
+| `runtime.status_failed` | error | Rule status could not be read. |
+| `rules.none` | warning | No forwarding rules are configured. |
+| `rules.present` | info | N forwarding rules are configured. |
+| `rules.health_ok` | info | No rule reports warning or error health. |
+| `rules.health_warning` | warning | One or more rules report warning health. |
+| `rules.health_error` | error | One or more rules report error health. |
+| `config.export_read` | info | The current config was read (`GET /api/config/export`, read-only). |
+| `config.export_failed` | error | The current config could not be read. |
+
+Rule health comes straight from the API's `health` field (v1.8) — the CLI does **not** re-derive it. Human output groups checks under a `Portier Doctor` heading with `[INFO]`/`[WARN]`/`[ERROR]` tags and a severity summary; `--json` prints the full `DoctorReport` (`{ checks[], summary }`).
+
+Exit codes: `0` doctor completed with no error-severity checks (**warnings alone still exit `0`**), `1` one or more error-severity checks, `2` usage error (unexpected argument).
+
+> **Unreachable-runtime exit code:** unlike the other live commands (which exit `3` on connection failure), `portier doctor` reports an unreachable runtime as a `runtime.unreachable` **check** and exits `1` — the doctor always completes and emits a report, and an unreachable runtime is an error-severity finding. This is an intentional, documented deviation specific to the doctor command.
+
 ### `portier version`
 
 Show the CLI version.
@@ -474,6 +505,7 @@ Policy notes (intentional, not inconsistencies):
 - **`config validate` is a validator.** Its exit code *is* its result: `0` valid, `1` invalid **or** unreadable, `2` missing the file-path argument. So `validate` reports an invalid/unreadable file as `1`, unlike the config-consuming commands above (which use `2`).
 - **Rule selectors.** A rule `<id|name>` that matches nothing exits `1` (the target does not exist, like an API 404); one that matches multiple names exits `2` (the selector is ambiguous and fixable — the matching IDs are listed).
 - **API vs connection.** Any server-side rejection/error is `1`; an unreachable service is `3`.
+- **`doctor` is a reporter.** Like `config doctor`, `portier doctor` always completes and emits a report, so its exit code reflects the *findings*: `0` no error-severity checks (warnings still `0`), `1` one or more error-severity checks. An unreachable runtime is reported as a `runtime.unreachable` error check and exits `1`, **not** `3` — an intentional deviation from the connection-failure policy, scoped to the doctor commands.
 
 ## Runtime Package
 

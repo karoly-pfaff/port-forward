@@ -194,6 +194,15 @@ func TestRun_DiagnoseDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_DoctorDispatch(t *testing.T) {
+	srv := makeDispatchServer(t)
+	defer srv.Close()
+	code := run([]string{"--url", srv.URL, "doctor"})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
 func TestRun_ConfigDispatch_NoSubcommand(t *testing.T) {
 	srv := makeDispatchServer(t)
 	defer srv.Close()
@@ -236,6 +245,7 @@ func TestRun_InvalidURL_AllDispatches(t *testing.T) {
 		{"start", "rule-1"},
 		{"stop", "rule-1"},
 		{"diagnose", "rule-1"},
+		{"doctor"},
 		{"config", "export"},
 		{"group", "list"},
 		{"diagnostics", "export"},

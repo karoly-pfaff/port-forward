@@ -19,6 +19,19 @@ All notable changes to Portier are documented here.
 - Deferred (documented): a full common-port advisory table is **not** reproduced in the CLI (it would duplicate the 25-entry `@portier/shared` `COMMON_PORTS` list); only the deterministic privileged-port (`< 1024`) advisory is implemented in this slice.
 - CLI coverage **97.2% → 97.4%** statements (functions 98.9% → 99.0%); gate 95% holds. No coverage gate lowered.
 
+### Added — Slice 2: Live runtime doctor baseline
+
+- **`portier doctor` command.** Runs deterministic diagnostic checks against the **live** Portier runtime, reusing the Slice 1 doctor model (`DoctorReport`/`DoctorCheckResult`, human + `--json` output, summary/exit-code helpers — no second model). Read-only: it never mutates the runtime or config and never probes forwarding targets.
+- **Stable live check codes.** `runtime.reachable`, `runtime.unreachable`, `runtime.version`, `runtime.status_read`, `runtime.status_failed`, `rules.none`, `rules.present`, `rules.health_ok`, `rules.health_warning`, `rules.health_error`, `config.export_read`, `config.export_failed`. Operator-facing identifiers — not renamed casually.
+- **Checks (deterministic, fixed order).** Runtime reachability (`GET /api/runtime`); runtime version (info, **warning** — never failure — on CLI/runtime mismatch); rule status read (`GET /api/status`); rule presence + an aggregated health summary read straight from the API's `health` field (error before warning before all-clear, so a mixed fleet reports both); and a read-only config-export check (`GET /api/config/export`, nothing written). An unreachable runtime short-circuits the later checks.
+- **Exit codes.** `0` no error-severity checks (warnings alone still `0`), `1` one or more error-severity checks, `2` usage error. **Intentional deviation:** an unreachable runtime is reported as a doctor check and exits `1` (the doctor ran and found a problem), *not* the usual connection exit code `3` — because `portier doctor` always completes and emits a report. Documented in `tools/cli/readme.md`.
+
+### Notes (Slice 2)
+
+- CLI-only change. The CLI stays a pure API client (reuses existing `GET /api/runtime`/`/api/status`/`/api/config/export`); no new endpoints/DTOs, no shared/server/service/client change. `validate:contract` unchanged at **234/234**. Rule health is **read** from the API's `health` field — the CLI never re-derives it.
+- CLI coverage **97.4% → 97.6%** statements (functions 99.0% → 99.1%); gate 95% holds. No coverage gate lowered. Every new doctor function is 100% covered.
+- No target reachability probing, no background monitoring, no auto-fix, no server-side doctor endpoint, no UI doctor panel.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools
