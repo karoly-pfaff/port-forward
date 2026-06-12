@@ -32,6 +32,7 @@ export function App(): ReactElement {
   const [statuses, setStatuses] = useState<ForwardStatus[]>([]);
   const [recentActivity, setRecentActivity] = useState<ActivityEvent[]>([]);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [duplicateSourceId, setDuplicateSourceId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [loadingRules, setLoadingRules] = useState(true);
   const [busyRuleIds, setBusyRuleIds] = useState<Set<string>>(new Set());
@@ -51,6 +52,12 @@ export function App(): ReactElement {
 
   const editingRule = editingRuleId
     ? rules.find((r) => r.id === editingRuleId)
+    : undefined;
+
+  // The rule a duplicate is being created from (create-mode prefill, v1.8
+  // Slice 8). Only meaningful while not editing an existing rule.
+  const duplicateSource = duplicateSourceId
+    ? rules.find((r) => r.id === duplicateSourceId)
     : undefined;
 
   useEffect(() => {
@@ -212,6 +219,7 @@ export function App(): ReactElement {
     }
     setSavingForm(false);
     setEditingRuleId(null);
+    setDuplicateSourceId(null);
     setShowForm(false);
     void refreshAll();
   }
@@ -247,17 +255,29 @@ export function App(): ReactElement {
 
   function handleEditRule(rule: ForwardRule): void {
     setEditingRuleId(rule.id);
+    setDuplicateSourceId(null);
     setShowForm(true);
+  }
+
+  // Open the create form pre-filled from an existing rule (v1.8 Slice 8). The
+  // source rule is not edited; saving creates a new rule.
+  function handleDuplicateRule(rule: ForwardRule): void {
+    setEditingRuleId(null);
+    setDuplicateSourceId(rule.id);
+    setShowForm(true);
+    setView("rules");
   }
 
   function handleAddRule(): void {
     setEditingRuleId(null);
+    setDuplicateSourceId(null);
     setShowForm(true);
     setView("rules");
   }
 
   function handleCancel(): void {
     setEditingRuleId(null);
+    setDuplicateSourceId(null);
     setShowForm(false);
   }
   handleCancelRef.current = handleCancel;
@@ -276,6 +296,7 @@ export function App(): ReactElement {
     if (next === "activity") setActivityRuleFilter(null);
     if (next !== "rules") {
       setEditingRuleId(null);
+      setDuplicateSourceId(null);
       setShowForm(false);
     }
   }
@@ -356,6 +377,7 @@ export function App(): ReactElement {
                 editingRuleId={editingRuleId}
                 diagnosisMap={diagnosisMap}
                 onEdit={handleEditRule}
+                onDuplicate={handleDuplicateRule}
                 onStart={handleStart}
                 onStop={handleStop}
                 onDelete={handleDelete}
@@ -398,10 +420,20 @@ export function App(): ReactElement {
         </main>
 
         {showForm && (
-          <aside className="drawer" aria-label={editingRule ? "Edit Forward Rule" : "Add Forward Rule"}>
+          <aside
+            className="drawer"
+            aria-label={
+              editingRule
+                ? "Edit Forward Rule"
+                : duplicateSource
+                  ? "Duplicate Forward Rule"
+                  : "Add Forward Rule"
+            }
+          >
             <ForwardRuleForm
-              key={editingRuleId ?? "new"}
+              key={editingRuleId ?? (duplicateSourceId ? `dup-${duplicateSourceId}` : "new")}
               editingRule={editingRule}
+              duplicateSource={duplicateSource}
               rules={rules}
               onSave={handleSaveRule}
               onCancel={handleCancel}

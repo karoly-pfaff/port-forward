@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, Fragment, type ReactElement } from "react";
-import { Activity, Pencil, Stethoscope } from "lucide-react";
+import { Activity, Copy, Pencil, Stethoscope } from "lucide-react";
 import type { ForwardRule, ForwardRuleResponse, ForwardStatus, GroupActionResponse, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
@@ -26,6 +26,7 @@ interface ForwardRuleListProps {
   editingRuleId: string | null;
   diagnosisMap: Map<string, DiagnosisEntry>;
   onEdit: (rule: ForwardRule) => void;
+  onDuplicate?: (rule: ForwardRule) => void;
   onStart: (rule: ForwardRule) => void;
   onStop: (rule: ForwardRule) => void;
   onDelete: (rule: ForwardRule) => void;
@@ -50,6 +51,7 @@ export function ForwardRuleList({
   editingRuleId,
   diagnosisMap,
   onEdit,
+  onDuplicate,
   onStart,
   onStop,
   onDelete,
@@ -431,6 +433,18 @@ export function ForwardRuleList({
                             >
                               <Pencil size={14} aria-hidden="true" />
                             </button>
+                            {onDuplicate && (
+                              <button
+                                type="button"
+                                className="btn-icon"
+                                aria-label={`Duplicate rule ${rule.name}`}
+                                title="Duplicate"
+                                onClick={() => onDuplicate(rule)}
+                                disabled={isBusy}
+                              >
+                                <Copy size={14} aria-hidden="true" />
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="btn-icon"

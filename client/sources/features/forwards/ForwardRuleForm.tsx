@@ -8,7 +8,7 @@ import {
   getPortAdvisories,
   validateForwardRule,
 } from "@portier/shared";
-import { emptyForm, formToPayload, ruleToForm, type RuleFormState } from "./RuleForm.js";
+import { emptyForm, formToPayload, ruleToDuplicateForm, ruleToForm, type RuleFormState } from "./RuleForm.js";
 
 const ADVISORY_TITLES: Record<string, string> = {
   COMMON_PORT: "Common Port",
@@ -36,6 +36,10 @@ const HOST_PATTERN =
 
 interface ForwardRuleFormProps {
   editingRule: ForwardRule | undefined;
+  // When set (and not editing), the form opens in *create* mode pre-filled
+  // from this rule — the duplicate-rule flow (v1.8 Slice 8). The source rule
+  // is never mutated; save goes through the create path.
+  duplicateSource?: ForwardRule;
   rules?: ForwardRule[];
   onSave: (id: string | undefined, payload: ForwardRuleInput) => Promise<void>;
   onCancel: () => void;
@@ -46,6 +50,7 @@ interface ForwardRuleFormProps {
 
 export function ForwardRuleForm({
   editingRule,
+  duplicateSource,
   rules = [],
   onSave,
   onCancel,
@@ -53,8 +58,13 @@ export function ForwardRuleForm({
   saving,
   runtimePlatform,
 }: ForwardRuleFormProps): ReactElement {
+  const isDuplicating = !editingRule && !!duplicateSource;
   const [form, setForm] = useState<RuleFormState>(() =>
-    editingRule ? ruleToForm(editingRule) : emptyForm
+    editingRule
+      ? ruleToForm(editingRule)
+      : duplicateSource
+        ? ruleToDuplicateForm(duplicateSource)
+        : emptyForm
   );
   const [formErrors, setFormErrors] = useState<string[]>([]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -137,13 +147,20 @@ export function ForwardRuleForm({
       {/* Drawer header */}
       <div className="drawer-header">
         <div className="drawer-header-content">
-          <h2 className="drawer-title">{isEditing ? "Edit Rule" : "Add Rule"}</h2>
+          <h2 className="drawer-title">
+            {isEditing ? "Edit Rule" : isDuplicating ? "Duplicate Rule" : "Add Rule"}
+          </h2>
           {isEditing && editingRule && (
             <div className="drawer-subtitle">
               <span className={`protocol-badge protocol-badge--${editingRule.protocol}`}>
                 {editingRule.protocol.toUpperCase()}
               </span>
               <span className="drawer-subtitle-name">{editingRule.name}</span>
+            </div>
+          )}
+          {isDuplicating && duplicateSource && (
+            <div className="drawer-subtitle">
+              <span className="drawer-subtitle-name">New rule copied from &ldquo;{duplicateSource.name}&rdquo;</span>
             </div>
           )}
         </div>

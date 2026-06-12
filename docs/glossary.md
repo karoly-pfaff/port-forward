@@ -53,6 +53,7 @@ The two runtimes implement **one** REST contract; the CLI carries a third (DTO-o
 | **health** | An operator-facing *interpretation* of a rule's status — `healthy` / `warning` / `error` (`ForwardStatus.health`). **Derived deterministically** from `enabled`/`running`/`lastError`; performs no target probing. | Added v1.8. **Distinct from `status`/`running`** (lifecycle) — health is the operator reading. `error` = has `lastError`; `warning` = enabled but not running; `healthy` = running clean or intentionally stopped. Does NOT imply active monitoring. |
 | **lastError** | The last forwarding error observed for a rule (bind failure, socket error), surfaced on its status. | Best-effort diagnostic; cleared on a successful (re)start. |
 | **Startup behavior** | On launch, enabled rules are started automatically (TS `loadAndStartEnabled`, Go `StartEnabled`). | There is no separate "autostart" field — "enabled" *is* the start-on-launch flag. |
+| **Duplicate rule** | A UI convenience (web client) that opens the create form pre-filled from an existing rule, so a new rule can be built from it. Added v1.8 Slice 8. | **Client-only, create flow** — no backend "duplicate" endpoint. The source rule is never modified; the duplicate saves through the normal create path (`POST /api/forwards`). The copy gets a `<name> copy` name, **autostart forced off**, no id, and the source's `group`; runtime-only state (status/`lastError`/health) is not copied. |
 
 ---
 

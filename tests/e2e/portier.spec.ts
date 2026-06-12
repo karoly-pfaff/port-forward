@@ -70,7 +70,7 @@ test("edit rule: drawer opens pre-filled, changes saved, list updates", async ({
   await expect(page.locator("tbody").getByText("E2E Edit Original")).toBeVisible();
 
   const ruleRow = page.locator("tr", { hasText: "E2E Edit Original" });
-  await ruleRow.getByRole("button", { name: "Edit" }).click();
+  await ruleRow.getByRole("button", { name: "Edit", exact: true }).click();
 
   const drawer = page.getByRole("complementary", { name: "Edit Forward Rule" });
   await expect(drawer).toBeVisible();
@@ -190,6 +190,54 @@ test("rule group actions: start and stop every rule in a selected group", async 
   await expect(opsTwo.getByText("Stopped")).toBeVisible({ timeout: 10_000 });
 });
 
+test("rule duplicate: copies a rule into a new editable rule, source unchanged", async ({ page, baseURL }) => {
+  const base = { protocol: "tcp" as const, listenHost: "127.0.0.1", targetHost: "127.0.0.1", targetPort: 9999 };
+  const sourceName = "Dup Source";
+  const sourcePort = await getFreePort();
+  const dupPort = await getFreePort();
+  await createRule(baseURL!, { ...base, name: sourceName, listenPort: sourcePort, group: "dupes" });
+
+  await page.goto("/");
+  const sourceRow = page.locator("tr", { hasText: sourceName });
+  await expect(sourceRow).toBeVisible();
+
+  // Duplicate opens the create form pre-filled from the source rule.
+  await sourceRow.getByRole("button", { name: `Duplicate rule ${sourceName}` }).click();
+  const dupDrawer = page.getByRole("complementary", { name: "Duplicate Forward Rule" });
+  await expect(dupDrawer).toBeVisible();
+  await expect(dupDrawer.getByRole("heading", { name: "Duplicate Rule" })).toBeVisible();
+  await expect(dupDrawer.getByLabel("Name")).toHaveValue(`${sourceName} copy`);
+  await expect(dupDrawer.getByLabel("Group")).toHaveValue("dupes");
+
+  // Change name + listen port (avoid duplicate-binding) and save the new rule.
+  const dupName = "Dup Copy";
+  await dupDrawer.getByLabel("Name").fill(dupName);
+  await dupDrawer.getByLabel("Listen Port").fill(String(dupPort));
+  await dupDrawer.getByRole("button", { name: "Add Rule", exact: true }).click();
+  await expect(dupDrawer).not.toBeVisible({ timeout: 5_000 });
+
+  // Both rules now exist; the duplicate preserved the group chip.
+  const dupRow = page.locator("tr", { hasText: dupName });
+  await expect(dupRow).toBeVisible({ timeout: 5_000 });
+  await expect(sourceRow).toBeVisible();
+  await expect(dupRow.locator(".rule-group-label")).toHaveText("dupes");
+
+  // The API has two distinct rules; the source is unchanged.
+  const rules = (await (await fetch(`${baseURL}/api/forwards`)).json()) as Array<{
+    name: string;
+    group?: string;
+    listenPort: number;
+    enabled: boolean;
+  }>;
+  const source = rules.find((r) => r.name === sourceName);
+  const dup = rules.find((r) => r.name === dupName);
+  expect(source?.listenPort).toBe(sourcePort);
+  expect(source?.group).toBe("dupes");
+  expect(dup?.group).toBe("dupes");
+  expect(dup?.listenPort).toBe(dupPort);
+  expect(dup?.enabled).toBe(false); // duplicate never auto-starts
+});
+
 // ── Start/Stop flow ────────────────────────────────────────────────────────
 
 test("start/stop: rule transitions between Running and Stopped", async ({ page, baseURL }) => {
@@ -208,13 +256,13 @@ test("start/stop: rule transitions between Running and Stopped", async ({ page, 
   await expect(ruleRow).toBeVisible();
   await expect(ruleRow.getByText("Stopped")).toBeVisible();
 
-  await ruleRow.getByRole("button", { name: "Start" }).click();
+  await ruleRow.getByRole("button", { name: "Start", exact: true }).click();
   await expect(ruleRow.getByText("Running")).toBeVisible({ timeout: 10_000 });
-  await expect(ruleRow.getByRole("button", { name: "Stop" })).toBeVisible();
+  await expect(ruleRow.getByRole("button", { name: "Stop", exact: true })).toBeVisible();
 
-  await ruleRow.getByRole("button", { name: "Stop" }).click();
+  await ruleRow.getByRole("button", { name: "Stop", exact: true }).click();
   await expect(ruleRow.getByText("Stopped")).toBeVisible({ timeout: 10_000 });
-  await expect(ruleRow.getByRole("button", { name: "Start" })).toBeVisible();
+  await expect(ruleRow.getByRole("button", { name: "Start", exact: true })).toBeVisible();
 });
 
 // ── Delete flow ────────────────────────────────────────────────────────────
@@ -234,7 +282,7 @@ test("delete: confirmation required, rule removed after confirm", async ({ page,
   const ruleRow = page.locator("tr", { hasText: "E2E Delete Me" });
   await expect(ruleRow).toBeVisible();
 
-  await ruleRow.getByRole("button", { name: "Delete" }).click();
+  await ruleRow.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(ruleRow.getByText(/Delete.*E2E Delete Me/)).toBeVisible();
   await expect(ruleRow.getByRole("button", { name: "Confirm" })).toBeVisible();
   await expect(ruleRow.getByRole("button", { name: "Cancel" })).toBeVisible();
@@ -283,7 +331,7 @@ test("diagnose: clicking Diagnose on a rule opens the diagnostics panel with res
   const ruleRow = page.locator("tr", { hasText: "E2E Diagnose Test" });
   await expect(ruleRow).toBeVisible();
 
-  await ruleRow.getByRole("button", { name: "Diagnose" }).click();
+  await ruleRow.getByRole("button", { name: "Diagnose", exact: true }).click();
 
   // The panel is open (its close affordance has an accessible name).
   await expect(page.getByRole("button", { name: "Close diagnostics" })).toBeVisible({ timeout: 5_000 });

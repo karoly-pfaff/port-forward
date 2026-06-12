@@ -851,3 +851,53 @@ describe("ForwardRuleList activity navigation", () => {
     expect(screen.getAllByRole("button", { name: "View activity" })).toHaveLength(2);
   });
 });
+
+describe("ForwardRuleList duplicate action (v1.8 Slice 8)", () => {
+  it("shows a Duplicate action with a rule-scoped accessible name when onDuplicate is provided", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate: noop,
+    });
+    expect(
+      screen.getByRole("button", { name: `Duplicate rule ${tcpRule.name}` })
+    ).toBeInTheDocument();
+  });
+
+  it("does not render a Duplicate action when onDuplicate is omitted", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+    });
+    expect(screen.queryByRole("button", { name: /Duplicate rule/ })).not.toBeInTheDocument();
+  });
+
+  it("calls onDuplicate with the rule when clicked", async () => {
+    const user = userEvent.setup();
+    const onDuplicate = vi.fn();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate,
+    });
+    await user.click(screen.getByRole("button", { name: `Duplicate rule ${tcpRule.name}` }));
+    expect(onDuplicate).toHaveBeenCalledWith(tcpRule);
+  });
+
+  it("disables Duplicate while the rule is busy", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(["r1"]),
+      loading: false,
+      onDuplicate: noop,
+    });
+    expect(screen.getByRole("button", { name: `Duplicate rule ${tcpRule.name}` })).toBeDisabled();
+  });
+});

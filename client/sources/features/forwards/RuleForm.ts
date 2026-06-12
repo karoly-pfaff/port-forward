@@ -41,6 +41,29 @@ export function ruleToForm(rule: ForwardRule): RuleFormState {
   };
 }
 
+// Build the initial form state for a *duplicate* (v1.8 Slice 8): a brand-new
+// rule pre-filled from an existing one. The source rule is never touched. We
+// keep only the editable definition fields (via `ruleToForm`) and then:
+//   - drop the id so the form saves through the create path (POST), not PATCH
+//   - adjust the name so it is clearly a copy
+//   - force `enabled: false` so the duplicate cannot auto-start on save
+//     (a freshly created enabled rule starts immediately — see addRule)
+// Runtime-only fields (status/lastError/health/active connections/sessions)
+// are never part of the form, so they are inherently excluded.
+export function ruleToDuplicateForm(rule: ForwardRule): RuleFormState {
+  return {
+    ...ruleToForm(rule),
+    id: undefined,
+    name: duplicateName(rule.name),
+    enabled: false
+  };
+}
+
+export function duplicateName(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.length > 0 ? `${trimmed} copy` : "copy";
+}
+
 export function formToPayload(form: RuleFormState): ForwardRuleInput {
   return {
     name: form.name,

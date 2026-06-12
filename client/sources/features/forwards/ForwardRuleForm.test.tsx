@@ -583,4 +583,98 @@ describe("ForwardRuleForm", () => {
     await user.click(screen.getByRole("button", { name: "Confirm Delete" }));
     expect(onDelete).toHaveBeenCalledWith(existingRule);
   });
+
+  describe("duplicate mode (v1.8 Slice 8)", () => {
+    const sourceRule: ForwardRule = {
+      id: "src",
+      name: "Source Rule",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48055,
+      targetHost: "10.0.0.5",
+      targetPort: 8080,
+      enabled: true,
+      group: "team-a"
+    };
+
+    it("opens in duplicate (create) mode with a clear title", () => {
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          duplicateSource={sourceRule}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      expect(screen.getByRole("heading", { name: "Duplicate Rule" })).toBeInTheDocument();
+      expect(screen.getByText(/New rule copied from/)).toBeInTheDocument();
+      // It is create mode — the submit button creates, it does not "Save Changes".
+      expect(screen.getByRole("button", { name: "Add Rule" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Save Changes" })).not.toBeInTheDocument();
+      // No delete action for an unsaved new rule.
+      expect(screen.queryByRole("button", { name: "Delete Rule" })).not.toBeInTheDocument();
+    });
+
+    it("pre-fills the editable fields from the source rule, with a copy name", () => {
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          duplicateSource={sourceRule}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Source Rule copy");
+      expect(screen.getByRole("textbox", { name: "Group" })).toHaveValue("team-a");
+      expect(screen.getByDisplayValue("48055")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("10.0.0.5")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("8080")).toBeInTheDocument();
+      // Autostart is forced off so the duplicate cannot auto-start on save.
+      expect(
+        screen.getByRole("checkbox", { name: /Start this rule when Portier starts/ })
+      ).not.toBeChecked();
+    });
+
+    it("saves through the create path (id undefined), not update", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          duplicateSource={sourceRule}
+          onSave={onSave}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: "Add Rule" }));
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(onSave).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({
+          name: "Source Rule copy",
+          group: "team-a",
+          listenPort: 48055,
+          targetHost: "10.0.0.5",
+          enabled: false
+        })
+      );
+    });
+
+    it("ignores duplicateSource when an editingRule is also provided (edit wins)", () => {
+      render(
+        <ForwardRuleForm
+          editingRule={existingRule}
+          duplicateSource={sourceRule}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      expect(screen.getByRole("heading", { name: "Edit Rule" })).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Existing Rule");
+    });
+  });
 });

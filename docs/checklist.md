@@ -104,6 +104,7 @@ Playwright E2E coverage (32 tests across 9 spec files — see `docs/e2e-coverage
 - [x] CLI group commands (v1.8 Slice 5) — `portier group list` (counts + empty state), `portier group start/stop <group>` (summary, skipped vs failed, `--json` GroupActionResponse), exit codes: 0 success/skip, 1 failed/no-match, 2 invalid arg, 3 unreachable
 - [x] UI group actions (v1.8 Slice 6) — filter to a concrete group → Start/Stop group buttons appear (hidden for All Groups / Ungrouped); start/stop refreshes status and shows an inline summary; failed/error shows a warning/error message; buttons disable while in flight
 - [x] Rule health (v1.8 Slice 7) — rule list shows a health dot (green/amber/red) next to status; a stopped autostart rule reads `warning`, a running rule `healthy`, a rule with a lastError `error`; `portier status` shows a HEALTH column and `--json` includes `health`; health is derived only (no probing)
+- [x] Duplicate rule (v1.8 Slice 8) — the Duplicate action on a rule row opens the drawer in "Duplicate Rule" (create) mode pre-filled from the source; name becomes `<name> copy`, group is carried over, autostart is off, no id; saving without changing the listen host/port/protocol shows the duplicate-binding error; changing the listen port and saving creates a second rule while the source is unchanged; Cancel/Close creates nothing
 - [x] Diagnose rule — panel opens, results shown, close button
 - [x] Settings config import (merge — inline 1 TCP rule)
 - [x] Settings config import (replace — v1-mixed fixture, 4 rules; verify Forward Rules view)

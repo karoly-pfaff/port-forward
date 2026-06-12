@@ -297,6 +297,70 @@ describe("App drawer", () => {
     );
     await screen.findByText("Updated Rule");
   });
+
+  it("Duplicate opens the create form pre-filled from the source rule", async () => {
+    const groupedRule = { ...sampleRule, group: "backend" };
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([groupedRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([stoppedStatus]);
+
+    render(<App />);
+    await screen.findByText("Test Rule");
+
+    await userEvent.click(screen.getByRole("button", { name: "Duplicate rule Test Rule" }));
+
+    // Create mode (a "Duplicate Forward Rule" drawer), pre-filled, not editing.
+    expect(
+      screen.getByRole("complementary", { name: "Duplicate Forward Rule" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Duplicate Rule" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Test Rule copy");
+    expect(screen.getByRole("textbox", { name: "Group" })).toHaveValue("backend");
+  });
+
+  it("saving a duplicate calls create (id undefined) and leaves the source rule unchanged", async () => {
+    const groupedRule = { ...sampleRule, group: "backend" };
+    const createdRule = { ...groupedRule, id: "r2", name: "Test Rule copy" };
+    vi.mocked(portierApi.fetchForwardRules)
+      .mockResolvedValueOnce([groupedRule])
+      .mockResolvedValue([groupedRule, createdRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([stoppedStatus]);
+    vi.mocked(portierApi.saveForwardRule).mockResolvedValue({ ...createdRule, advisories: [] });
+
+    render(<App />);
+    await screen.findByText("Test Rule");
+
+    await userEvent.click(screen.getByRole("button", { name: "Duplicate rule Test Rule" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add Rule" }));
+
+    // Create path: id is undefined; group carried over; autostart forced off.
+    expect(portierApi.saveForwardRule).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ name: "Test Rule copy", group: "backend", enabled: false })
+    );
+    // No update call against the source rule.
+    expect(portierApi.saveForwardRule).not.toHaveBeenCalledWith("r1", expect.anything());
+
+    // Both the original and the duplicate are listed after refresh.
+    await screen.findByText("Test Rule copy");
+    expect(screen.getByText("Test Rule")).toBeInTheDocument();
+  });
+
+  it("Cancel after Duplicate makes no save call and keeps the source rule", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([sampleRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([stoppedStatus]);
+
+    render(<App />);
+    await screen.findByText("Test Rule");
+
+    await userEvent.click(screen.getByRole("button", { name: "Duplicate rule Test Rule" }));
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(
+      screen.queryByRole("complementary", { name: "Duplicate Forward Rule" })
+    ).not.toBeInTheDocument();
+    expect(portierApi.saveForwardRule).not.toHaveBeenCalled();
+    expect(screen.getByText("Test Rule")).toBeInTheDocument();
+  });
 });
 
 describe("App diagnostics", () => {
