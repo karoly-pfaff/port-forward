@@ -266,6 +266,20 @@ func TestRun_ConfigDoctorOutDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_SupportBundleDispatch(t *testing.T) {
+	srv := makeDispatchServer(t)
+	defer srv.Close()
+	out := filepath.Join(t.TempDir(), "bundle")
+	// Dispatch server has a version-mismatch warning → exit 0 in normal mode.
+	code := run([]string{"--url", srv.URL, "support-bundle", "--out", out})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if _, err := os.Stat(filepath.Join(out, "manifest.json")); err != nil {
+		t.Errorf("expected manifest.json in bundle: %v", err)
+	}
+}
+
 func TestRun_ExplainDispatch(t *testing.T) {
 	// explain is fully offline — no server needed, and an invalid --url is ignored.
 	code := run([]string{"--url", "ftp://bad-scheme", "explain", "config.valid"})
@@ -324,6 +338,7 @@ func TestRun_InvalidURL_AllDispatches(t *testing.T) {
 		{"stop", "rule-1"},
 		{"diagnose", "rule-1"},
 		{"doctor"},
+		{"support-bundle", "--out", "x"},
 		{"config", "export"},
 		{"group", "list"},
 		{"diagnostics", "export"},

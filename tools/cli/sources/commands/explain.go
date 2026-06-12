@@ -273,11 +273,7 @@ func runExplainList(jsonOutput bool, stdout, stderr io.Writer) int {
 	codes := sortedExplanationCodes()
 
 	if jsonOutput {
-		list := make([]Explanation, len(codes))
-		for i, c := range codes {
-			list[i] = explanations[c]
-		}
-		if err := output.PrintJSON(stdout, list); err != nil {
+		if err := output.PrintJSON(stdout, sortedExplanations()); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
@@ -319,4 +315,15 @@ func sortedExplanationCodes() []string {
 	}
 	sort.Strings(codes)
 	return codes
+}
+
+// sortedExplanations returns every known explanation in deterministic
+// code-sorted order. Shared by `explain --list --json` and the support bundle.
+func sortedExplanations() []Explanation {
+	codes := sortedExplanationCodes()
+	list := make([]Explanation, len(codes))
+	for i, c := range codes {
+		list[i] = explanations[c]
+	}
+	return list
 }

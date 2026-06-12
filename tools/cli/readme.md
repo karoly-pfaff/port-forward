@@ -507,6 +507,33 @@ With `--json`, prints the explanation `{ "code", "title", "meaning", "action", "
 
 Exit codes: `0` explanation (or list) printed; `2` unknown code, missing code argument, or usage error. An unknown code prints a clear error pointing to `--list` and never returns a generic explanation.
 
+### `portier support-bundle --out <directory>`
+
+Collect deterministic doctor artifacts into a local directory for CI artifacts, bug reports, and future tooling. Read-only: contacts the live runtime but never mutates the runtime or its config. (Distinct from `portier diagnostics export`, which writes a single JSON bundle file; `support-bundle` is the doctor-centric **directory** bundle.)
+
+```
+portier support-bundle --out <directory> [--strict] [--json]
+```
+
+The bundle directory contains:
+
+| File | Contents |
+| --- | --- |
+| `manifest.json` | Bundle metadata: `schemaVersion`, `generatedAt`, `cliVersion`, `source`, `generatedBy`, `runtimeUrl`, `strict`, `result`, `artifacts`, `warnings`. |
+| `doctor.json` | The live doctor report — **the same schema as `portier doctor --json`** (`checks`/`summary`/`strict`/`result`). |
+| `doctor.txt` | The human-readable doctor report (same as `portier doctor`). |
+| `explanations.json` | All known doctor/check code explanations (same as `explain --list --json`). |
+| `runtime.json` | Runtime metadata — omitted (with a manifest warning) if the runtime is unreachable. |
+| `config-export.json` | Read-only config export — omitted (with a manifest warning) if unavailable. |
+
+If the runtime is unreachable the bundle is **still created** with `manifest.json`, `doctor.json` (containing `runtime.unreachable`), `doctor.txt`, and `explanations.json`; the command exits `1` because the doctor report has an error.
+
+**Safety:** the bundle deliberately **excludes** OS environment variables, process lists, logs, tokens, and arbitrary filesystem scans. It **may** include rule names, hosts, and ports, because those are part of Portier configuration/diagnostics.
+
+`--strict` applies strict interpretation to the bundled doctor report (warnings fail). `--json` prints a machine-readable bundle summary (`{ out, artifacts, strict, result, warnings }`) to stdout.
+
+Exit codes: `0` bundle written and the doctor report passed; `1` bundle written but the doctor report failed (errors / unreachable / a warning under `--strict`) **or** a filesystem/write failure; `2` missing `--out` or usage error. An existing **non-empty** output directory (or a path that is a file) is **refused** with exit `1` — a bundle is never silently overwritten; an existing empty directory is used. No zip output yet (directory only).
+
 ### `portier version`
 
 Show the CLI version.

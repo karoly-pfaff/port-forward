@@ -67,6 +67,19 @@ All notable changes to Portier are documented here.
 - `--out` (and `--strict`) precede the config file for `config doctor` (flags-before-file), consistent with the other config subcommands.
 - CLI coverage **held at 97.7%** statements (functions 99.1%); gate 95% holds, none lowered. The export additions are small and fully covered (`emitDoctorReport`/`RunDoctor`/`RunConfigDoctor` 100%), so the ratio is unchanged.
 
+### Added — Slice 6: Doctor support bundle baseline
+
+- **`portier support-bundle --out <directory>`** — collects deterministic doctor artifacts into a local directory for CI artifacts, bug reports, and future tooling. Read-only: it contacts the live runtime but never mutates the runtime or its config. Directory output only (no zip yet).
+- **Bundle contents:** `manifest.json` (schemaVersion, generatedAt, cliVersion, source/generatedBy, runtimeUrl, strict, result, artifacts list, collection warnings), `doctor.json` (the **same schema as `portier doctor --json`** — no second doctor schema), `doctor.txt` (the human doctor report), `explanations.json` (all known doctor/check code explanations, same as `explain --list --json`), and — when the runtime provides them — `runtime.json` and `config-export.json` (read-only). If the runtime is unreachable the bundle is still created with the manifest, `doctor.json` (containing `runtime.unreachable`), `doctor.txt`, and `explanations.json`, and the omitted artifacts are recorded as manifest warnings.
+- **Flags:** `--out <dir>` (required), `--strict` (apply strict interpretation to the bundled doctor report), `--json` (print a machine-readable bundle summary to stdout). Reuses the existing doctor report builder/renderer, the explanation registry, and `writePrettyJSON` — no duplicated doctor logic.
+- **Exit codes:** `0` bundle written and the doctor report passed; `1` bundle written but the doctor report failed (errors, unreachable runtime, or a warning under `--strict`), **or** a filesystem/write failure; `2` missing `--out` or usage error. An existing **non-empty** output directory (or a non-directory path) is **refused** (exit 1) — a bundle is never silently overwritten; an existing empty directory is used.
+- **Safety:** the bundle deliberately excludes OS environment variables, process lists, logs, tokens, and arbitrary filesystem scans. It **may** include rule names, hosts, and ports, because those are part of Portier configuration/diagnostics. (Distinct from the existing single-file `portier diagnostics export` bundle; `support-bundle` is the doctor-centric directory bundle.)
+
+### Notes (Slice 6)
+
+- CLI-only change. No second doctor/bundle schema, no probing, no runtime/config mutation. No shared/server/service/client change, no new endpoints/DTOs. `validate:contract` unchanged at **234/234**.
+- CLI coverage **97.7% → 97.4%** statements (functions 99.1%); gate 95% holds, **none lowered**. The small dip is from unavoidable defensive per-file filesystem-write-failure branches that cannot be triggered portably once the output directory is validated as empty and writable — the command-level filesystem-failure → exit 1 behavior **is** covered (mkdir failure, non-empty directory, `--out` is a file). The bundle writes were consolidated into one loop to minimize the unreachable surface.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools

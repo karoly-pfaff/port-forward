@@ -119,6 +119,14 @@ func run(args []string) int {
 		}
 		c := client.New(managementURL)
 		return commands.RunDoctor(c, *flagJSON, remaining[1:], os.Stdout, os.Stderr)
+	case "support-bundle":
+		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 2
+		}
+		c := client.New(managementURL)
+		return commands.RunSupportBundle(c, *flagJSON, remaining[1:], os.Stdout, os.Stderr)
 	case "config":
 		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
 		if err != nil {
