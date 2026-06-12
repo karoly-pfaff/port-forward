@@ -55,6 +55,18 @@ All notable changes to Portier are documented here.
 - `--strict` precedes the file for `config doctor` (`config doctor --strict <file>`), consistent with the other config subcommands' flags-before-file parsing.
 - CLI coverage **held at 97.7%** statements (functions 99.1%); gate 95% holds, none lowered. The change is small and fully covered, so the ratio is unchanged (added covered statements are proportional to existing coverage); every new strict function/branch is 100% covered.
 
+### Added — Slice 5: Doctor report export
+
+- **`--out <file>` for both doctor commands** (`portier doctor --out <file>`, `portier config doctor --out <file> <config>`). Writes the JSON doctor report — the **same** `{ checks, summary, strict, result }` shape as `--json` (Slice 4) — to a file for CI artifacts and support bundles. No second schema.
+- **Output convention:** `--out` always writes the JSON report file regardless of `--json`. stdout stays normal human output unless `--json` is set (in which case the same JSON also prints to stdout). In human mode a `Report written to <file>` line confirms the export; in JSON mode stdout stays pure JSON. Reuses the existing `writePrettyJSON` helper (pretty JSON, create/truncate, no partial write on marshal failure, does not create parent directories).
+- **Exit codes:** export does not change diagnostic semantics — info/warning/error and `--strict` behavior are unchanged. A **file-write failure is an operation failure → exit 1** (and is reported on stderr), taking precedence over the diagnostic exit code; a missing `--out` value is a usage error → exit 2. The report is still written even when the run "fails" on a warning under `--strict` (the file reflects `result: "failed"`).
+
+### Notes (Slice 5)
+
+- CLI-only change. No new schema, no probing, no runtime/config mutation; export is a read-only file write. No shared/server/service/client change, no new endpoints/DTOs. `validate:contract` unchanged at **234/234**.
+- `--out` (and `--strict`) precede the config file for `config doctor` (flags-before-file), consistent with the other config subcommands.
+- CLI coverage **held at 97.7%** statements (functions 99.1%); gate 95% holds, none lowered. The export additions are small and fully covered (`emitDoctorReport`/`RunDoctor`/`RunConfigDoctor` 100%), so the ratio is unchanged.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools

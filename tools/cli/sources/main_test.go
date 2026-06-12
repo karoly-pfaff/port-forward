@@ -234,6 +234,38 @@ func TestRun_ConfigDoctorStrictDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_DoctorOutDispatch(t *testing.T) {
+	srv := makeDispatchServer(t)
+	defer srv.Close()
+	out := filepath.Join(t.TempDir(), "doctor-report.json")
+	// Dispatch server has a version-mismatch warning → exit 0 in normal mode,
+	// and the report file is written.
+	code := run([]string{"--url", srv.URL, "doctor", "--out", out})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Errorf("expected report file at %s: %v", out, err)
+	}
+}
+
+func TestRun_ConfigDoctorOutDispatch(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "rules.json")
+	content := `[{"name":"API","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48000,"targetHost":"10.0.0.1","targetPort":8080,"enabled":true}]`
+	if err := os.WriteFile(cfg, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing temp config: %v", err)
+	}
+	out := filepath.Join(dir, "config-doctor-report.json")
+	code := run([]string{"config", "doctor", "--out", out, cfg})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Errorf("expected report file at %s: %v", out, err)
+	}
+}
+
 func TestRun_ExplainDispatch(t *testing.T) {
 	// explain is fully offline — no server needed, and an invalid --url is ignored.
 	code := run([]string{"--url", "ftp://bad-scheme", "explain", "config.valid"})

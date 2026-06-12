@@ -157,20 +157,36 @@ func printDoctorHuman(title string, r DoctorReport, strict bool, w io.Writer) {
 	fmt.Fprintf(w, "\nResult: %s\n", doctorResultLabel(r, strict))
 }
 
-// emitDoctorReport writes the report as JSON (when jsonOutput is set) or human
-// output and returns the report's exit code under the given strictness. A JSON
-// encoding failure is the one case that overrides the report exit code (exit 1,
-// matching other commands).
-func emitDoctorReport(title string, r DoctorReport, strict, jsonOutput bool, stdout, stderr io.Writer) int {
+// emitDoctorReport prints the report (JSON when jsonOutput is set, otherwise
+// human) and, when outPath is non-empty, also writes the exact same JSON report
+// (checks + summary + strict + result) to that file. It returns the report's
+// exit code under the given strictness — except that a JSON-encode failure or a
+// file-write failure overrides it with exit 1 (an operation failure, not a
+// diagnostic finding). Exporting never mutates the runtime or config.
+func emitDoctorReport(title string, r DoctorReport, strict, jsonOutput bool, outPath string, stdout, stderr io.Writer) int {
+	payload := doctorReportJSON{DoctorReport: r, Strict: strict, Result: doctorResultLabel(r, strict)}
+
 	if jsonOutput {
-		payload := doctorReportJSON{DoctorReport: r, Strict: strict, Result: doctorResultLabel(r, strict)}
 		if err := output.PrintJSON(stdout, payload); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
-		return doctorExitCode(r, strict)
+	} else {
+		printDoctorHuman(title, r, strict, stdout)
 	}
-	printDoctorHuman(title, r, strict, stdout)
+
+	if outPath != "" {
+		if err := writePrettyJSON(outPath, payload); err != nil {
+			fmt.Fprintf(stderr, "Error writing %s: %v\n", outPath, err)
+			return 1
+		}
+		// In human mode, confirm the export on stdout (config export does the
+		// same). In JSON mode stdout must stay valid JSON, so stay silent.
+		if !jsonOutput {
+			fmt.Fprintf(stdout, "\nReport written to %s\n", outPath)
+		}
+	}
+
 	return doctorExitCode(r, strict)
 }
 
@@ -217,11 +233,13 @@ Checks (each produces a stable check code):
   config.export_read / config.export_failed   Can the current config be read (read-only)?
 
 Options:
-  --strict   Treat warnings as failures (a warning-only report exits 1).
+  --strict       Treat warnings as failures (a warning-only report exits 1).
+  --out <file>   Also write the JSON report to <file> (same shape as --json).
 
 Output:
   Human report by default; --json emits the full doctor report
-  (checks + summary + strict + result).
+  (checks + summary + strict + result). --out writes that same JSON to a file
+  regardless of --json; with --json the JSON also prints to stdout.
 
 Exit codes:
   0  Doctor completed; no error-severity checks (warnings alone exit 0 unless --strict)
@@ -235,6 +253,7 @@ doctor ran and found a problem), NOT the usual connection exit code 3.
 Examples:
   portier doctor
   portier doctor --strict
+  portier doctor --out doctor-report.json
   portier --json doctor
   portier --host 127.0.0.1 --port 47831 doctor
 `
@@ -248,6 +267,7 @@ func RunDoctor(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	flagStrict := fs.Bool("strict", false, "treat warnings as failures (exit 1)")
+	flagOut := fs.String("out", "", "also write the JSON report to this file")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -265,7 +285,7 @@ func RunDoctor(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 	}
 
 	report := runLiveDoctorChecks(c)
-	return emitDoctorReport("Portier Doctor", report, *flagStrict, jsonOutput, stdout, stderr)
+	return emitDoctorReport("Portier Doctor", report, *flagStrict, jsonOutput, *flagOut, stdout, stderr)
 }
 
 // runLiveDoctorChecks performs the live runtime analysis and returns a

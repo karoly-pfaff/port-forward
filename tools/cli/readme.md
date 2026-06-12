@@ -170,7 +170,7 @@ Exit codes: `0` valid, `1` invalid or unreadable, `2` missing file path argument
 Run deterministic, **offline** diagnostic checks on a local config file. Does **not** require or contact a running Portier service, and never modifies the file.
 
 ```
-portier config doctor [--strict] <file> [--json]
+portier config doctor [--strict] [--out <file>] <file> [--json]
 ```
 
 Accepted file shapes are the same as `config validate` (raw array, wrapper object, or exported config).
@@ -192,7 +192,9 @@ Human output groups the checks under a `Portier Config Doctor` heading with `[IN
 
 Exit codes: `0` doctor completed with no error-severity checks (**warnings alone exit `0`** unless `--strict`), `1` one or more error-severity checks **or any warning when `--strict`**, `2` missing file-path argument or usage error.
 
-**`--strict`** treats warnings as failures (a warning-only report exits `1`). It changes only the exit-code interpretation — the same checks run and nothing is modified. Place `--strict` **before** the file (`config doctor --strict <file>`), consistent with the other config subcommands.
+**`--strict`** treats warnings as failures (a warning-only report exits `1`). It changes only the exit-code interpretation — the same checks run and nothing is modified.
+
+**`--out <file>`** also writes the JSON report (same `{ checks, summary, strict, result }` shape as `--json`) to a file. A file-write failure is an operation failure → exit `1`. Place `--strict`/`--out` **before** the config file (`config doctor --strict --out report.json <file>`), consistent with the other config subcommands.
 
 > Note: `config doctor` is read-only and offline. Warnings are derived from the file's contents only — they do **not** imply any runtime probing or target reachability check.
 
@@ -447,7 +449,7 @@ With `--json`: prints the raw `RuntimeInfo` JSON from the API.
 Run deterministic diagnostic checks against the **live** Portier runtime. Read-only: never mutates the runtime or its config, and never probes forwarding targets.
 
 ```
-portier doctor [--strict] [--json]
+portier doctor [--strict] [--out <file>] [--json]
 ```
 
 Reuses the same doctor report model as `config doctor` (Slice 1). Each finding is a *doctor check* with a stable `code`, a `severity` (`info`/`warning`/`error`), a `title`, a `message`, and optional `details`. Stable check codes:
@@ -472,6 +474,8 @@ Rule health comes straight from the API's `health` field (v1.8) — the CLI does
 Exit codes: `0` doctor completed with no error-severity checks (**warnings alone exit `0`** unless `--strict`), `1` one or more error-severity checks **or any warning when `--strict`**, `2` usage error (unexpected argument).
 
 **`--strict`** treats warnings as failures: a warning-only report exits `1` instead of `0` (errors still exit `1`, info-only still exits `0`). Strict mode changes only the exit-code interpretation — it does not change which checks run, and never mutates the runtime or config. In human output a `Strict mode: warnings are treated as failures.` note is shown when a warning-only report fails because of strict; in JSON, `"strict"` and `"result"` reflect the mode and outcome.
+
+**`--out <file>`** also writes the JSON report — the same `{ checks, summary, strict, result }` shape as `--json` — to a file (for CI artifacts / support bundles). It writes the file regardless of `--json`; stdout stays human output unless `--json` is set. A file-write failure is an operation failure → exit `1` (reported on stderr), independent of the diagnostic result. Export never mutates the runtime or config.
 
 > **Unreachable-runtime exit code:** unlike the other live commands (which exit `3` on connection failure), `portier doctor` reports an unreachable runtime as a `runtime.unreachable` **check** and exits `1` — the doctor always completes and emits a report, and an unreachable runtime is an error-severity finding. This is an intentional, documented deviation specific to the doctor command.
 
