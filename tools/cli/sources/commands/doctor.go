@@ -78,14 +78,37 @@ func newDoctorReport(checks []DoctorCheckResult) DoctorReport {
 	return DoctorReport{Checks: checks, Summary: summary}
 }
 
-// exitCode maps a report to a CLI exit code following the v1.7 exit-code policy:
-// 0 when the doctor completed with no error-severity checks, 1 when one or more
-// error-severity checks are present. Warnings alone do not fail the run.
-func (r DoctorReport) exitCode() int {
+// doctorExitCode maps a report to a CLI exit code. Normal mode: 1 when one or
+// more error-severity checks are present; warnings alone exit 0. Strict mode
+// additionally treats warnings as failures (a warning-only report exits 1).
+// Info-only is always 0. Strict mode changes only this interpretation — it
+// never changes which checks ran.
+func doctorExitCode(r DoctorReport, strict bool) int {
 	if r.Summary.Error > 0 {
 		return 1
 	}
+	if strict && r.Summary.Warning > 0 {
+		return 1
+	}
 	return 0
+}
+
+// doctorResultLabel returns the stable pass/fail label for a report under the
+// given strictness, mirroring its exit code ("passed" → 0, "failed" → 1).
+func doctorResultLabel(r DoctorReport, strict bool) string {
+	if doctorExitCode(r, strict) != 0 {
+		return "failed"
+	}
+	return "passed"
+}
+
+// doctorReportJSON is the JSON encoding of a doctor report plus the strict-mode
+// outcome. DoctorReport is embedded so its `checks`/`summary` stay at the top
+// level; `strict` and `result` are additive and CLI-local (not an API DTO).
+type doctorReportJSON struct {
+	DoctorReport
+	Strict bool   `json:"strict"`
+	Result string `json:"result"`
 }
 
 // doctorSeverityTag returns the fixed-width ASCII tag for a severity, matching
@@ -104,8 +127,9 @@ func doctorSeverityTag(s DoctorSeverity) string {
 }
 
 // printDoctorHuman renders a report in deterministic human-readable form under
-// the given title heading.
-func printDoctorHuman(title string, r DoctorReport, w io.Writer) {
+// the given title heading. In strict mode, when warnings (and no errors) are
+// the reason for failure, it notes that warnings are treated as failures.
+func printDoctorHuman(title string, r DoctorReport, strict bool, w io.Writer) {
 	fmt.Fprintln(w, title)
 	fmt.Fprintln(w)
 
@@ -125,21 +149,29 @@ func printDoctorHuman(title string, r DoctorReport, w io.Writer) {
 	fmt.Fprintf(w, "  %d info\n", r.Summary.Info)
 	fmt.Fprintf(w, "  %d %s\n", r.Summary.Warning, pluralWord(r.Summary.Warning, "warning", "warnings"))
 	fmt.Fprintf(w, "  %d %s\n", r.Summary.Error, pluralWord(r.Summary.Error, "error", "errors"))
+
+	if strict && r.Summary.Error == 0 && r.Summary.Warning > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Strict mode: warnings are treated as failures.")
+	}
+	fmt.Fprintf(w, "\nResult: %s\n", doctorResultLabel(r, strict))
 }
 
 // emitDoctorReport writes the report as JSON (when jsonOutput is set) or human
-// output and returns the report's exit code. A JSON encoding failure is the one
-// case that overrides the report exit code (exit 1, matching other commands).
-func emitDoctorReport(title string, r DoctorReport, jsonOutput bool, stdout, stderr io.Writer) int {
+// output and returns the report's exit code under the given strictness. A JSON
+// encoding failure is the one case that overrides the report exit code (exit 1,
+// matching other commands).
+func emitDoctorReport(title string, r DoctorReport, strict, jsonOutput bool, stdout, stderr io.Writer) int {
 	if jsonOutput {
-		if err := output.PrintJSON(stdout, r); err != nil {
+		payload := doctorReportJSON{DoctorReport: r, Strict: strict, Result: doctorResultLabel(r, strict)}
+		if err := output.PrintJSON(stdout, payload); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
-		return r.exitCode()
+		return doctorExitCode(r, strict)
 	}
-	printDoctorHuman(title, r, stdout)
-	return r.exitCode()
+	printDoctorHuman(title, r, strict, stdout)
+	return doctorExitCode(r, strict)
 }
 
 // pluralWord returns singular when n == 1, otherwise plural.
@@ -184,12 +216,17 @@ Checks (each produces a stable check code):
                                             Aggregated rule health (from the API's health field).
   config.export_read / config.export_failed   Can the current config be read (read-only)?
 
+Options:
+  --strict   Treat warnings as failures (a warning-only report exits 1).
+
 Output:
-  Human report by default; --json emits the full doctor report (checks + summary).
+  Human report by default; --json emits the full doctor report
+  (checks + summary + strict + result).
 
 Exit codes:
-  0  Doctor completed; no error-severity checks (warnings alone still exit 0)
-  1  Doctor completed; one or more error-severity checks (incl. unreachable runtime)
+  0  Doctor completed; no error-severity checks (warnings alone exit 0 unless --strict)
+  1  Doctor completed; one or more error-severity checks (incl. unreachable runtime),
+     or any warning when --strict is set
   2  Usage error (unexpected argument)
 
 Note: an unreachable runtime is reported as a doctor check and exits 1 (the
@@ -197,6 +234,7 @@ doctor ran and found a problem), NOT the usual connection exit code 3.
 
 Examples:
   portier doctor
+  portier doctor --strict
   portier --json doctor
   portier --host 127.0.0.1 --port 47831 doctor
 `
@@ -209,6 +247,7 @@ Examples:
 func RunDoctor(c *client.Client, jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	flagStrict := fs.Bool("strict", false, "treat warnings as failures (exit 1)")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -226,7 +265,7 @@ func RunDoctor(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 	}
 
 	report := runLiveDoctorChecks(c)
-	return emitDoctorReport("Portier Doctor", report, jsonOutput, stdout, stderr)
+	return emitDoctorReport("Portier Doctor", report, *flagStrict, jsonOutput, stdout, stderr)
 }
 
 // runLiveDoctorChecks performs the live runtime analysis and returns a

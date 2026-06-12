@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -200,6 +202,35 @@ func TestRun_DoctorDispatch(t *testing.T) {
 	code := run([]string{"--url", srv.URL, "doctor"})
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
+func TestRun_DoctorStrictDispatch(t *testing.T) {
+	srv := makeDispatchServer(t)
+	defer srv.Close()
+	// The dispatch server reports a version-mismatch (runtime 1.3.0-dev vs CLI)
+	// → a warning. Without --strict this would exit 0; with --strict the warning
+	// fails the run, which proves --strict is wired through dispatch.
+	code := run([]string{"--url", srv.URL, "doctor", "--strict"})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 (warning under --strict)", code)
+	}
+	if normal := run([]string{"--url", srv.URL, "doctor"}); normal != 0 {
+		t.Errorf("non-strict exit = %d, want 0 (warning alone does not fail)", normal)
+	}
+}
+
+func TestRun_ConfigDoctorStrictDispatch(t *testing.T) {
+	// A valid config with a LAN-exposure warning exits 1 under --strict.
+	dir := t.TempDir()
+	file := filepath.Join(dir, "warn.json")
+	content := `[{"name":"Web","protocol":"tcp","listenHost":"0.0.0.0","listenPort":48000,"targetHost":"10.0.0.1","targetPort":8080,"enabled":true}]`
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing temp config: %v", err)
+	}
+	code := run([]string{"config", "doctor", "--strict", file})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 (warning under --strict)", code)
 	}
 }
 

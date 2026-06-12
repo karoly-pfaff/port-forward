@@ -43,6 +43,18 @@ All notable changes to Portier are documented here.
 - CLI-only change; pure offline reference command (no client, no API call — `explain` ignores `--url`). No shared/server/service/client change, no new endpoints/DTOs. `validate:contract` unchanged at **234/234**.
 - CLI coverage **97.6% → 97.7%** statements (functions 99.1%); gate 95% holds. No coverage gate lowered. Every new explain function is 100% covered.
 
+### Added — Slice 4: Doctor strict mode + report polish
+
+- **`--strict` for both doctor commands** (`portier doctor --strict`, `portier config doctor --strict <file>`). Strict mode treats **warnings as failures**: a warning-only report exits `1` instead of `0`. Normal mode is unchanged (info-only → `0`, warnings-only → `0`, errors → `1`). Strict changes **only the exit-code interpretation** — it does not change which checks run, and never mutates the runtime or config.
+- **Report polish.** Human output now ends with a stable `Result: passed` / `Result: failed` line, and — when strict mode is the reason a warning-only report fails — a `Strict mode: warnings are treated as failures.` note. The JSON report gains two additive top-level fields: `"strict"` (bool) and `"result"` (`"passed"`/`"failed"`). The existing `checks`/`summary` shape is unchanged (the new fields are emitted alongside via an embedded struct, so existing JSON consumers keep working).
+- Shared `doctorExitCode(report, strict)` / `doctorResultLabel(report, strict)` helpers replace the old `DoctorReport.exitCode()` method; both doctor commands route through them.
+
+### Notes (Slice 4)
+
+- CLI-only change. No new checks, no probing, no runtime/config mutation; pure exit-code interpretation + output polish. No shared/server/service/client change, no new endpoints/DTOs. `validate:contract` unchanged at **234/234**.
+- `--strict` precedes the file for `config doctor` (`config doctor --strict <file>`), consistent with the other config subcommands' flags-before-file parsing.
+- CLI coverage **held at 97.7%** statements (functions 99.1%); gate 95% holds, none lowered. The change is small and fully covered, so the ratio is unchanged (added covered statements are proportional to existing coverage); every new strict function/branch is 100% covered.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools

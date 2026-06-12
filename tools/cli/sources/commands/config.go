@@ -39,7 +39,7 @@ Subcommands:
 Run 'portier config <subcommand> --help' for subcommand options.
 `
 
-const doctorHelp = `Usage: portier config doctor <file>
+const doctorHelp = `Usage: portier config doctor [--strict] <file>
 
 Run deterministic, offline diagnostic checks on a local Portier config file.
 Does NOT contact or require a running Portier service, and never modifies the file.
@@ -54,18 +54,23 @@ Checks (each produces a stable check code):
   config.privileged_port    A rule listens on a privileged port (< 1024).
   config.valid              The config is readable, parseable, and valid.
 
+Options:
+  --strict   Treat warnings as failures (a warning-only report exits 1).
+             Place --strict before the file (e.g. config doctor --strict file).
+
 Accepted file shapes:
   Raw JSON array:  [{ "name": "...", ... }, ...]
   Wrapper object:  { "rules": [{ "name": "...", ... }, ...] }
   Exported config: { "version": "1", "exportedAt": "...", "rules": [...] }
 
 Exit codes:
-  0  Doctor completed; no error-severity checks (warnings alone still exit 0)
-  1  Doctor completed; one or more error-severity checks were found
+  0  Doctor completed; no error-severity checks (warnings alone exit 0 unless --strict)
+  1  Doctor completed; one or more error-severity checks, or any warning when --strict
   2  Missing argument or usage error
 
 Examples:
   portier config doctor desired.json
+  portier config doctor --strict desired.json
   portier --json config doctor desired.json
 `
 
@@ -450,6 +455,7 @@ const (
 func RunConfigDoctor(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("config doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	flagStrict := fs.Bool("strict", false, "treat warnings as failures (exit 1)")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -468,7 +474,7 @@ func RunConfigDoctor(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 	}
 
 	report := runConfigDoctorChecks(fs.Arg(0))
-	return emitDoctorReport("Portier Config Doctor", report, jsonOutput, stdout, stderr)
+	return emitDoctorReport("Portier Config Doctor", report, *flagStrict, jsonOutput, stdout, stderr)
 }
 
 // runConfigDoctorChecks performs the offline analysis of a config file and

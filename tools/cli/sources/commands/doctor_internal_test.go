@@ -36,15 +36,49 @@ func TestNewDoctorReport_NilNormalizedToEmpty(t *testing.T) {
 	}
 }
 
-func TestDoctorReport_ExitCode(t *testing.T) {
-	if c := newDoctorReport([]DoctorCheckResult{{Severity: DoctorInfo}}).exitCode(); c != 0 {
-		t.Errorf("info-only exitCode = %d, want 0", c)
+func TestDoctorExitCode_Normal(t *testing.T) {
+	info := newDoctorReport([]DoctorCheckResult{{Severity: DoctorInfo}})
+	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning}})
+	err := newDoctorReport([]DoctorCheckResult{{Severity: DoctorError}})
+
+	if c := doctorExitCode(info, false); c != 0 {
+		t.Errorf("info-only normal exit = %d, want 0", c)
 	}
-	if c := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning}}).exitCode(); c != 0 {
-		t.Errorf("warning-only exitCode = %d, want 0", c)
+	if c := doctorExitCode(warn, false); c != 0 {
+		t.Errorf("warning-only normal exit = %d, want 0", c)
 	}
-	if c := newDoctorReport([]DoctorCheckResult{{Severity: DoctorError}}).exitCode(); c != 1 {
-		t.Errorf("error exitCode = %d, want 1", c)
+	if c := doctorExitCode(err, false); c != 1 {
+		t.Errorf("error normal exit = %d, want 1", c)
+	}
+}
+
+func TestDoctorExitCode_Strict(t *testing.T) {
+	info := newDoctorReport([]DoctorCheckResult{{Severity: DoctorInfo}})
+	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning}})
+	errWarn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorError}, {Severity: DoctorWarning}})
+
+	if c := doctorExitCode(info, true); c != 0 {
+		t.Errorf("info-only strict exit = %d, want 0", c)
+	}
+	if c := doctorExitCode(warn, true); c != 1 {
+		t.Errorf("warning-only strict exit = %d, want 1", c)
+	}
+	if c := doctorExitCode(errWarn, true); c != 1 {
+		t.Errorf("error+warning strict exit = %d, want 1", c)
+	}
+}
+
+func TestDoctorResultLabel(t *testing.T) {
+	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning}})
+	if got := doctorResultLabel(warn, false); got != "passed" {
+		t.Errorf("warning-only normal result = %q, want passed", got)
+	}
+	if got := doctorResultLabel(warn, true); got != "failed" {
+		t.Errorf("warning-only strict result = %q, want failed", got)
+	}
+	errd := newDoctorReport([]DoctorCheckResult{{Severity: DoctorError}})
+	if got := doctorResultLabel(errd, false); got != "failed" {
+		t.Errorf("error result = %q, want failed", got)
 	}
 }
 
@@ -89,9 +123,35 @@ func TestRuleLabel(t *testing.T) {
 
 func TestPrintDoctorHuman_NoChecks(t *testing.T) {
 	var b strings.Builder
-	printDoctorHuman("Title", newDoctorReport(nil), &b)
-	if !strings.Contains(b.String(), "No checks were run.") {
-		t.Errorf("empty report output missing fallback line:\n%s", b.String())
+	printDoctorHuman("Title", newDoctorReport(nil), false, &b)
+	out := b.String()
+	if !strings.Contains(out, "No checks were run.") {
+		t.Errorf("empty report output missing fallback line:\n%s", out)
+	}
+	if !strings.Contains(out, "Result: passed") {
+		t.Errorf("empty report should report Result: passed:\n%s", out)
+	}
+}
+
+func TestPrintDoctorHuman_StrictWarningNote(t *testing.T) {
+	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning, Title: "w"}})
+
+	var normal strings.Builder
+	printDoctorHuman("Title", warn, false, &normal)
+	if strings.Contains(normal.String(), "Strict mode:") {
+		t.Errorf("non-strict output must not show the strict note:\n%s", normal.String())
+	}
+	if !strings.Contains(normal.String(), "Result: passed") {
+		t.Errorf("warning-only normal result should be passed:\n%s", normal.String())
+	}
+
+	var strict strings.Builder
+	printDoctorHuman("Title", warn, true, &strict)
+	if !strings.Contains(strict.String(), "Strict mode: warnings are treated as failures.") {
+		t.Errorf("strict warning-only output missing strict note:\n%s", strict.String())
+	}
+	if !strings.Contains(strict.String(), "Result: failed") {
+		t.Errorf("warning-only strict result should be failed:\n%s", strict.String())
 	}
 }
 

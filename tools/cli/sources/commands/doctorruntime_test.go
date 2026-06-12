@@ -377,6 +377,94 @@ func TestDoctor_BadFlag_Exit2(t *testing.T) {
 	}
 }
 
+// --- strict mode (v1.9 Slice 4) ---
+
+func TestDoctor_WarningOnly_NormalExit0(t *testing.T) {
+	srv := makeDoctorServer(t, doctorServerConfig{
+		statuses: []map[string]any{statusEntry("r1", "healthy"), statusEntry("r2", "warning")},
+	})
+	defer srv.Close()
+	var out, errBuf strings.Builder
+	code := commands.RunDoctor(client.New(srv.URL), false, nil, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("normal exit = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "Result: passed") {
+		t.Errorf("normal warning-only output should report Result: passed\n%s", out.String())
+	}
+}
+
+func TestDoctor_WarningOnly_StrictExit1(t *testing.T) {
+	srv := makeDoctorServer(t, doctorServerConfig{
+		statuses: []map[string]any{statusEntry("r1", "healthy"), statusEntry("r2", "warning")},
+	})
+	defer srv.Close()
+	var out, errBuf strings.Builder
+	code := commands.RunDoctor(client.New(srv.URL), false, []string{"--strict"}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("strict exit = %d, want 1", code)
+	}
+	s := out.String()
+	if !strings.Contains(s, "Strict mode: warnings are treated as failures.") {
+		t.Errorf("strict output missing strict note\n%s", s)
+	}
+	if !strings.Contains(s, "Result: failed") {
+		t.Errorf("strict warning-only output should report Result: failed\n%s", s)
+	}
+}
+
+func TestDoctor_Error_StrictAndNormalExit1(t *testing.T) {
+	cfg := doctorServerConfig{
+		statuses: []map[string]any{statusEntry("r1", "error")},
+	}
+	srv := makeDoctorServer(t, cfg)
+	defer srv.Close()
+	var out, errBuf strings.Builder
+	if code := commands.RunDoctor(client.New(srv.URL), false, nil, &out, &errBuf); code != 1 {
+		t.Errorf("normal exit = %d, want 1", code)
+	}
+	out.Reset()
+	errBuf.Reset()
+	if code := commands.RunDoctor(client.New(srv.URL), false, []string{"--strict"}, &out, &errBuf); code != 1 {
+		t.Errorf("strict exit = %d, want 1", code)
+	}
+}
+
+func TestDoctor_AllInfo_StrictExit0(t *testing.T) {
+	srv := makeDoctorServer(t, doctorServerConfig{
+		statuses:    []map[string]any{statusEntry("r1", "healthy")},
+		exportRules: []map[string]any{{"id": "r1"}},
+	})
+	defer srv.Close()
+	var out, errBuf strings.Builder
+	code := commands.RunDoctor(client.New(srv.URL), false, []string{"--strict"}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("strict exit = %d, want 0 (all info, no warnings)", code)
+	}
+}
+
+func TestDoctor_StrictJSON_Fields(t *testing.T) {
+	srv := makeDoctorServer(t, doctorServerConfig{
+		statuses: []map[string]any{statusEntry("r1", "warning")},
+	})
+	defer srv.Close()
+	var out, errBuf strings.Builder
+	code := commands.RunDoctor(client.New(srv.URL), true, []string{"--strict"}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("strict JSON exit = %d, want 1", code)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(out.String()), &raw); err != nil {
+		t.Fatalf("decoding JSON: %v\n%s", err, out.String())
+	}
+	if raw["strict"] != true {
+		t.Errorf("strict field = %v, want true", raw["strict"])
+	}
+	if raw["result"] != "failed" {
+		t.Errorf("result field = %v, want failed", raw["result"])
+	}
+}
+
 func indexOf(s []string, v string) int {
 	for i, x := range s {
 		if x == v {

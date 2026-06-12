@@ -40,6 +40,97 @@ func hasCode(report commands.DoctorReport, code string) bool {
 	return false
 }
 
+// --- strict mode (v1.9 Slice 4) ---
+
+// warningOnlyConfig is a valid config whose only finding is a LAN-exposure
+// warning (config.valid + config.lan_exposure).
+const warningOnlyConfig = `[
+	{"name": "Web", "protocol": "tcp", "listenHost": "0.0.0.0", "listenPort": 48000, "targetHost": "10.0.0.1", "targetPort": 8080, "enabled": true}
+]`
+
+func TestConfigDoctor_WarningOnly_NormalExit0(t *testing.T) {
+	file := writeTempConfig(t, warningOnlyConfig)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigDoctor(false, []string{file}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("normal exit code = %d, want 0 (warnings do not fail without --strict)", code)
+	}
+	if !strings.Contains(out.String(), "Result: passed") {
+		t.Errorf("normal warning-only output should report Result: passed\n%s", out.String())
+	}
+}
+
+func TestConfigDoctor_WarningOnly_StrictExit1(t *testing.T) {
+	file := writeTempConfig(t, warningOnlyConfig)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigDoctor(false, []string{"--strict", file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("strict exit code = %d, want 1 (warnings fail under --strict)", code)
+	}
+	s := out.String()
+	if !strings.Contains(s, "Strict mode: warnings are treated as failures.") {
+		t.Errorf("strict output missing strict note\n%s", s)
+	}
+	if !strings.Contains(s, "Result: failed") {
+		t.Errorf("strict warning-only output should report Result: failed\n%s", s)
+	}
+}
+
+func TestConfigDoctor_Error_StrictAndNormalExit1(t *testing.T) {
+	// Duplicate binding → config.duplicate_binding (error): exit 1 regardless of strict.
+	dup := `[
+		{"name": "A", "protocol": "tcp", "listenHost": "127.0.0.1", "listenPort": 48000, "targetHost": "10.0.0.1", "targetPort": 8080, "enabled": true},
+		{"name": "B", "protocol": "tcp", "listenHost": "127.0.0.1", "listenPort": 48000, "targetHost": "10.0.0.2", "targetPort": 9090, "enabled": true}
+	]`
+	file := writeTempConfig(t, dup)
+	var out, errBuf strings.Builder
+	if code := commands.RunConfigDoctor(false, []string{file}, &out, &errBuf); code != 1 {
+		t.Errorf("normal exit = %d, want 1", code)
+	}
+	out.Reset()
+	errBuf.Reset()
+	if code := commands.RunConfigDoctor(false, []string{"--strict", file}, &out, &errBuf); code != 1 {
+		t.Errorf("strict exit = %d, want 1", code)
+	}
+}
+
+func TestConfigDoctor_Valid_StrictExit0(t *testing.T) {
+	file := writeTempConfig(t, `[
+		{"name": "API", "protocol": "tcp", "listenHost": "127.0.0.1", "listenPort": 48000, "targetHost": "10.0.0.1", "targetPort": 8080, "enabled": true}
+	]`)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigDoctor(false, []string{"--strict", file}, &out, &errBuf)
+	if code != 0 {
+		t.Errorf("strict exit = %d, want 0 (no warnings or errors)", code)
+	}
+}
+
+func TestConfigDoctor_StrictJSON_Fields(t *testing.T) {
+	file := writeTempConfig(t, warningOnlyConfig)
+	var out, errBuf strings.Builder
+	code := commands.RunConfigDoctor(true, []string{"--strict", file}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("strict JSON exit = %d, want 1", code)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(out.String()), &raw); err != nil {
+		t.Fatalf("decoding JSON: %v\n%s", err, out.String())
+	}
+	if raw["strict"] != true {
+		t.Errorf("strict field = %v, want true", raw["strict"])
+	}
+	if raw["result"] != "failed" {
+		t.Errorf("result field = %v, want failed", raw["result"])
+	}
+	// checks/summary still present (shape preserved).
+	if _, ok := raw["checks"]; !ok {
+		t.Errorf("JSON missing checks: %v", raw)
+	}
+	if _, ok := raw["summary"]; !ok {
+		t.Errorf("JSON missing summary: %v", raw)
+	}
+}
+
 func TestConfigDoctor_ValidConfig(t *testing.T) {
 	file := writeTempConfig(t, `[
 		{"name": "API", "protocol": "tcp", "listenHost": "127.0.0.1", "listenPort": 48000, "targetHost": "10.0.0.1", "targetPort": 8080, "enabled": true}
