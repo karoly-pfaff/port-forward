@@ -18,12 +18,18 @@ import (
 // The CLI does a light local pre-check; the server is authoritative.
 const groupMaxLength = 64
 
+// duplicateBindingErrPrefix is the leading text of the duplicate listen-binding
+// validation error. It is shared between validateLocalConfig (the producer) and
+// the config doctor (which partitions errors by it) so the two cannot drift.
+const duplicateBindingErrPrefix = "duplicate listen binding:"
+
 const configHelp = `Usage: portier config <subcommand> [options]
 
 Manage Portier forwarding rule configuration.
 
 Subcommands:
   validate <file>                     Validate a local config file without importing it
+  doctor <file>                       Run offline diagnostic checks on a local config file (read-only)
   export --out <file>                 Export current rules to a file (omit --out to print to stdout)
   import <file> --mode merge|replace  Import rules from a file (--yes required for replace mode)
   plan <file>                         Compare a desired config file against the running config (read-only)
@@ -31,6 +37,36 @@ Subcommands:
   apply <file> --yes                  Apply a desired config file to the running service
 
 Run 'portier config <subcommand> --help' for subcommand options.
+`
+
+const doctorHelp = `Usage: portier config doctor <file>
+
+Run deterministic, offline diagnostic checks on a local Portier config file.
+Does NOT contact or require a running Portier service, and never modifies the file.
+
+Checks (each produces a stable check code):
+  config.read_failed        The file could not be read.
+  config.parse_failed       The file is not valid Portier config JSON.
+  config.empty              The config contains no rules.
+  config.validation_failed  One or more rules have invalid fields.
+  config.duplicate_binding  Two rules share a listen binding (protocol+host+port).
+  config.lan_exposure       A rule listens on 0.0.0.0 (exposed on the LAN).
+  config.privileged_port    A rule listens on a privileged port (< 1024).
+  config.valid              The config is readable, parseable, and valid.
+
+Accepted file shapes:
+  Raw JSON array:  [{ "name": "...", ... }, ...]
+  Wrapper object:  { "rules": [{ "name": "...", ... }, ...] }
+  Exported config: { "version": "1", "exportedAt": "...", "rules": [...] }
+
+Exit codes:
+  0  Doctor completed; no error-severity checks (warnings alone still exit 0)
+  1  Doctor completed; one or more error-severity checks were found
+  2  Missing argument or usage error
+
+Examples:
+  portier config doctor desired.json
+  portier --json config doctor desired.json
 `
 
 const applyHelp = `Usage: portier config apply <file> --yes [options]
@@ -177,6 +213,8 @@ func RunConfig(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 		return RunConfigImport(c, jsonOutput, args[1:], stdout, stderr)
 	case "validate":
 		return RunConfigValidate(jsonOutput, args[1:], stdout, stderr)
+	case "doctor":
+		return RunConfigDoctor(jsonOutput, args[1:], stdout, stderr)
 	case "plan":
 		return RunConfigPlan(c, jsonOutput, args[1:], stdout, stderr)
 	case "diff":
@@ -391,6 +429,180 @@ func RunConfigValidate(jsonOutput bool, args []string, stdout, stderr io.Writer)
 	return 1
 }
 
+// Config doctor check codes. These are stable, operator-facing identifiers —
+// do not rename them casually (they are a CLI/tool contract).
+const (
+	checkConfigReadFailed       = "config.read_failed"
+	checkConfigParseFailed      = "config.parse_failed"
+	checkConfigEmpty            = "config.empty"
+	checkConfigValidationFailed = "config.validation_failed"
+	checkConfigDuplicateBinding = "config.duplicate_binding"
+	checkConfigLanExposure      = "config.lan_exposure"
+	checkConfigPrivilegedPort   = "config.privileged_port"
+	checkConfigValid            = "config.valid"
+)
+
+// RunConfigDoctor runs deterministic, offline diagnostic checks on a local
+// config file and prints a doctor report. It never contacts the running
+// service and never modifies the file. Exit codes follow the doctor policy:
+// 0 = no error-severity checks, 1 = one or more error-severity checks,
+// 2 = missing argument / usage error.
+func RunConfigDoctor(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("config doctor", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, doctorHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, doctorHelp)
+		return 2
+	}
+
+	if fs.NArg() == 0 {
+		fmt.Fprintln(stderr, "Error: doctor requires a config file path")
+		fmt.Fprint(stderr, doctorHelp)
+		return 2
+	}
+
+	report := runConfigDoctorChecks(fs.Arg(0))
+	return emitDoctorReport("Portier Config Doctor", report, jsonOutput, stdout, stderr)
+}
+
+// runConfigDoctorChecks performs the offline analysis of a config file and
+// returns a deterministic doctor report. Read and parse failures short-circuit
+// (no later checks are meaningful); otherwise validation, duplicate-binding,
+// emptiness, validity, and the LAN-exposure / privileged-port advisories run.
+func runConfigDoctorChecks(filePath string) DoctorReport {
+	checks := []DoctorCheckResult{}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		checks = append(checks, DoctorCheckResult{
+			Code:     checkConfigReadFailed,
+			Severity: DoctorError,
+			Title:    "Config file could not be read",
+			Message:  fmt.Sprintf("Reading %s failed: %v", filePath, err),
+			Details:  map[string]any{"path": filePath},
+		})
+		return newDoctorReport(checks)
+	}
+
+	rules, parseErr := parseLocalConfig(data)
+	if parseErr != nil {
+		checks = append(checks, DoctorCheckResult{
+			Code:     checkConfigParseFailed,
+			Severity: DoctorError,
+			Title:    "Config file could not be parsed",
+			Message:  parseErr.Error(),
+			Details:  map[string]any{"path": filePath},
+		})
+		return newDoctorReport(checks)
+	}
+
+	if len(rules) == 0 {
+		checks = append(checks, DoctorCheckResult{
+			Code:     checkConfigEmpty,
+			Severity: DoctorWarning,
+			Title:    "Config contains no rules",
+			Message:  "The config file parsed successfully but defines no forwarding rules.",
+		})
+		return newDoctorReport(checks)
+	}
+
+	// Field validation and duplicate bindings are reported separately so an
+	// operator can distinguish a binding conflict from a malformed rule.
+	vr := validateLocalConfig(rules)
+	dupErrs, fieldErrs := partitionValidationErrors(vr.Errors)
+	if len(fieldErrs) > 0 {
+		checks = append(checks, DoctorCheckResult{
+			Code:     checkConfigValidationFailed,
+			Severity: DoctorError,
+			Title:    fmt.Sprintf("Config has %d validation %s", len(fieldErrs), pluralWord(len(fieldErrs), "error", "errors")),
+			Message:  "One or more rules have invalid fields. Run 'portier config validate' for the full list.",
+			Details:  map[string]any{"errors": fieldErrs},
+		})
+	}
+	if len(dupErrs) > 0 {
+		checks = append(checks, DoctorCheckResult{
+			Code:     checkConfigDuplicateBinding,
+			Severity: DoctorError,
+			Title:    fmt.Sprintf("Config has %d duplicate listen %s", len(dupErrs), pluralWord(len(dupErrs), "binding", "bindings")),
+			Message:  "Two or more rules share a listen binding (protocol + host + port). Each binding must be unique.",
+			Details:  map[string]any{"errors": dupErrs},
+		})
+	}
+
+	if vr.Valid {
+		checks = append(checks, DoctorCheckResult{
+			Code:     checkConfigValid,
+			Severity: DoctorInfo,
+			Title:    "Config is valid",
+			Message: fmt.Sprintf("The config file can be read, parsed, and validated (%d %s: %d TCP, %d UDP).",
+				vr.RuleCount, pluralRule(vr.RuleCount), vr.TCPCount, vr.UDPCount),
+		})
+	}
+
+	// Deterministic advisories run on every parsed rule (in file order),
+	// independent of field validity, since exposure and port concerns are
+	// meaningful even when other fields are wrong.
+	checks = append(checks, configDoctorAdvisories(rules)...)
+
+	return newDoctorReport(checks)
+}
+
+// configDoctorAdvisories returns the LAN-exposure and privileged-port advisory
+// checks for the given rules, in file order, exposure before port per rule.
+func configDoctorAdvisories(rules []rawConfigRule) []DoctorCheckResult {
+	advisories := []DoctorCheckResult{}
+	for _, r := range rules {
+		label := ruleLabel(r)
+		if r.ListenHost == "0.0.0.0" {
+			advisories = append(advisories, DoctorCheckResult{
+				Code:     checkConfigLanExposure,
+				Severity: DoctorWarning,
+				Title:    fmt.Sprintf("%s listens on 0.0.0.0", label),
+				Message:  "Listening on 0.0.0.0 exposes this forwarded port on all interfaces. Other LAN devices may be able to connect if firewall settings allow it.",
+				Details:  map[string]any{"name": r.Name, "listenHost": r.ListenHost, "listenPort": r.ListenPort},
+			})
+		}
+		if r.ListenPort >= 1 && r.ListenPort < 1024 {
+			advisories = append(advisories, DoctorCheckResult{
+				Code:     checkConfigPrivilegedPort,
+				Severity: DoctorWarning,
+				Title:    fmt.Sprintf("%s uses privileged port %d", label, r.ListenPort),
+				Message:  fmt.Sprintf("Port %d is privileged and may require elevated permissions to bind.", r.ListenPort),
+				Details:  map[string]any{"name": r.Name, "listenPort": r.ListenPort},
+			})
+		}
+	}
+	return advisories
+}
+
+// ruleLabel returns a stable human label for a rule in doctor output:
+// the quoted name when present, otherwise a positional-free generic label.
+func ruleLabel(r rawConfigRule) string {
+	if r.Name != "" {
+		return fmt.Sprintf("Rule %q", r.Name)
+	}
+	return "An unnamed rule"
+}
+
+// partitionValidationErrors splits validation error messages into duplicate
+// listen-binding errors and all other (field-level) errors, preserving order.
+func partitionValidationErrors(errs []string) (dup, field []string) {
+	for _, e := range errs {
+		if strings.HasPrefix(e, duplicateBindingErrPrefix) {
+			dup = append(dup, e)
+		} else {
+			field = append(field, e)
+		}
+	}
+	return dup, field
+}
+
 // --- local config parsing and validation ---
 
 // configValidationResult holds the outcome of local config validation.
@@ -526,8 +738,8 @@ func validateLocalConfig(rules []rawConfigRule) configValidationResult {
 		if validProtocols[r.Protocol] && r.ListenHost != "" && r.ListenPort >= 1 && r.ListenPort <= 65535 {
 			key := bindingKey{r.Protocol, r.ListenHost, r.ListenPort}
 			if prev, ok := seen[key]; ok {
-				errs = append(errs, fmt.Sprintf("duplicate listen binding: %s %s:%d (rules %d and %d)",
-					r.Protocol, r.ListenHost, r.ListenPort, prev, ruleNum))
+				errs = append(errs, fmt.Sprintf("%s %s %s:%d (rules %d and %d)",
+					duplicateBindingErrPrefix, r.Protocol, r.ListenHost, r.ListenPort, prev, ruleNum))
 			} else {
 				seen[key] = ruleNum
 			}

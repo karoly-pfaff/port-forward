@@ -4,6 +4,23 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — Doctor & Config Toolkit (v1.9, in progress)
+
+### Added — Slice 1: Doctor result model + offline config doctor
+
+- **Doctor result model (CLI).** A small, deterministic doctor result model in the Go CLI: `DoctorCheckResult` (`code`, `severity`, `title`, `message`, optional `details`) with severities `info`/`warning`/`error`, plus a `DoctorReport` (`checks[]` + `summary` counts). This is the data foundation for the v1.9 Doctor & Config Toolkit; a live runtime doctor comes later.
+- **`portier config doctor <file>` command.** Runs deterministic, **offline** diagnostic checks on a local config file — it does **not** require or contact a running Portier service, and never modifies the file. Human output by default; `--json` emits the full `DoctorReport`. Exit codes follow the v1.7 CLI policy: `0` when no error-severity checks (warnings alone still exit `0`), `1` when one or more error-severity checks are found, `2` for a missing/invalid argument.
+- **Stable check codes.** `config.read_failed`, `config.parse_failed`, `config.empty`, `config.validation_failed`, `config.duplicate_binding`, `config.lan_exposure`, `config.privileged_port`, `config.valid`. These are operator-facing identifiers and will not be renamed casually.
+- **Offline checks.** File readability, JSON parse, local config validation (field validity), duplicate listen-binding detection (reported separately from field errors), empty-config detection, and the LAN-exposure (`0.0.0.0`) and privileged-port (`< 1024`) advisories — all computed locally from the parsed file, in file order.
+
+### Notes
+
+- CLI-only change. The CLI stays a pure API client; no shared/server/service/client code, no API/DTO/config shape, and no plan/apply or forwarding behavior changed. `validate:contract` unchanged at **234/234**.
+- Deferred (documented): a full common-port advisory table is **not** reproduced in the CLI (it would duplicate the 25-entry `@portier/shared` `COMMON_PORTS` list); only the deterministic privileged-port (`< 1024`) advisory is implemented in this slice.
+- CLI coverage **97.2% → 97.4%** statements (functions 98.9% → 99.0%); gate 95% holds. No coverage gate lowered.
+
+---
+
 ## [1.8.0] — 2026-06-11 — Operator Power Tools
 
 ### Goal

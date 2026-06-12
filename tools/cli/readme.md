@@ -165,6 +165,35 @@ With `--json`: prints `{ "valid": true|false, "ruleCount": N, "tcpCount": N, "ud
 
 Exit codes: `0` valid, `1` invalid or unreadable, `2` missing file path argument.
 
+### `portier config doctor <file>`
+
+Run deterministic, **offline** diagnostic checks on a local config file. Does **not** require or contact a running Portier service, and never modifies the file.
+
+```
+portier config doctor <file> [--json]
+```
+
+Accepted file shapes are the same as `config validate` (raw array, wrapper object, or exported config).
+
+Each finding is a *doctor check* with a stable, machine-readable **code**, a `severity` (`info`/`warning`/`error`), a short `title`, an actionable `message`, and optional deterministic `details`. Stable check codes:
+
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `config.read_failed` | error | The file could not be read. |
+| `config.parse_failed` | error | The file is not valid Portier config JSON. |
+| `config.empty` | warning | The config parsed but defines no rules. |
+| `config.validation_failed` | error | One or more rules have invalid fields. |
+| `config.duplicate_binding` | error | Two rules share a listen binding (`protocol`+`listenHost`+`listenPort`). |
+| `config.lan_exposure` | warning | A rule listens on `0.0.0.0` (exposed on the LAN). |
+| `config.privileged_port` | warning | A rule listens on a privileged port (`< 1024`). |
+| `config.valid` | info | The config is readable, parseable, and valid. |
+
+Human output groups the checks under a `Portier Config Doctor` heading with `[INFO]`/`[WARN]`/`[ERROR]` tags and a severity summary. With `--json`, prints the full report: `{ "checks": [ { "code", "severity", "title", "message", "details"? } ], "summary": { "info": N, "warning": N, "error": N } }`.
+
+Exit codes: `0` doctor completed with no error-severity checks (**warnings alone still exit `0`**), `1` one or more error-severity checks were found, `2` missing file-path argument or usage error.
+
+> Note: `config doctor` is read-only and offline. Warnings are derived from the file's contents only — they do **not** imply any runtime probing or target reachability check.
+
 ### `portier config export --out <file>`
 
 Export the current rules from the running service to a file.

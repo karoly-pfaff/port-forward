@@ -69,6 +69,8 @@ The two runtimes implement **one** REST contract; the CLI carries a third (DTO-o
 | **Diagnose** | A per-rule diagnostic action: run a set of checks against one rule (`POST /api/forwards/:id/diagnose`, CLI `diagnose`, `RuleDiagnosticsResult`). | Verb/action on a single rule. |
 | **Diagnostic check** | One check within a diagnose result (`DiagnosticCheck`: id/label/status/message). | The unit inside a diagnose. |
 | **Diagnostics export** | A support **bundle** across the whole runtime (CLI `diagnostics export`). A distinct feature from per-rule diagnose. | Don't conflate with "diagnose". |
+| **Doctor** | A deterministic operator diagnostic that runs a set of **checks** and reports a graded summary (v1.9 Doctor & Config Toolkit). First form: **config doctor** (CLI `config doctor <file>`) — an **offline** analysis of a local config file. | A graded multi-check report, not a single per-rule action (that is "diagnose"). Offline config doctor must not require a live runtime or probe targets. |
+| **Doctor check** | One finding within a doctor report (`DoctorCheckResult`: `code`/`severity`/`title`/`message`/optional `details`). Each has a stable, operator-facing **check code** (e.g. `config.valid`, `config.lan_exposure`). | The unit inside a doctor report. Check codes are a CLI/tool contract — do not rename casually. |
 | **Live connection** | A tracked **TCP** connection (`TcpConnectionInfo`, "Live Connections" view, `GET /api/connections`). | TCP = connection. |
 | **UDP session** | A tracked **UDP** flow (`UdpSessionInfo`). UDP has no connection, so Portier tracks sessions. | UDP = session. Keep the TCP/UDP split deliberate. |
 
@@ -85,5 +87,6 @@ The two runtimes implement **one** REST contract; the CLI carries a third (DTO-o
 - Use **"advisory"** for the object and **"warning"** for a severity/category — keep them distinct.
 - Use **"live connection"** for TCP and **"UDP session"** for UDP.
 - Use **"diagnose"** for the per-rule action and **"diagnostics export"** for the support bundle.
+- Use **"doctor"** for a graded, multi-check diagnostic report (e.g. **config doctor**); keep it distinct from per-rule "diagnose". **Doctor check codes** (e.g. `config.valid`) are stable operator-facing identifiers.
 
 New docs, API responses, CLI output, or UI labels should use these terms, or update this glossary if a genuinely new concept is introduced. Renames of frozen public terms are out of scope; CLI command-file naming cleanup and UI wording alignment are deferred follow-ups (see the readability/naming audit).
