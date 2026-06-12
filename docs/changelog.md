@@ -4,7 +4,11 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — v1.8 Operator Power Tools (in progress)
+## [1.8.0] — 2026-06-11 — Operator Power Tools
+
+### Goal
+
+Operator power tools built around **rule groups** and day-to-day conveniences — all backward-compatible (existing configs and API clients keep working unchanged). Ten slices: optional, behavior-neutral `group` metadata end to end (Slice 1) with UI set/edit/clear/display (Slice 2), rule-list group filtering (Slice 3), a group start/stop API in both runtimes (Slice 4), CLI `group list/start/stop` commands (Slice 5), and UI group action buttons (Slice 6); plus derived rule **health** (`healthy`/`warning`/`error`) on the status API, web UI, and CLI (Slice 7); a client-side **duplicate rule** action over the existing create flow (Slice 8); **config preview** clarity in Settings — friendly field labels, group/metadata-vs-forwarding change tags, and a clear metadata-only signal for group-only changes (Slice 9); and a per-row **action menu (kebab)** plus a dedicated **Health column** that declutter the Forward Rules table (Slice 10). The only public-contract additions are the optional `group` field, the `POST /api/forwards/groups/:group/{start,stop}` endpoints + `GroupActionResponse`, and the required `ForwardStatus.health` field — all additive. `group` is optional and non-forwarding (a group-only change is a non-destructive plan update, never a socket restart); health is derived deterministically with no probing or background monitor. `validate:contract` ends at **234/234** (185 → 204 → 225 → 234 across Slices 1/4/7); all five coverage gates hold (none lowered).
 
 ### Changed
 
