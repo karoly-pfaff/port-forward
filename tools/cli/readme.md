@@ -170,7 +170,7 @@ Exit codes: `0` valid, `1` invalid or unreadable, `2` missing file path argument
 Run deterministic, **offline** diagnostic checks on a local config file. Does **not** require or contact a running Portier service, and never modifies the file.
 
 ```
-portier config doctor [--strict] [--out <file>] <file> [--json]
+portier config doctor [--strict] [--explain] [--out <file>] <file> [--json]
 ```
 
 Accepted file shapes are the same as `config validate` (raw array, wrapper object, or exported config).
@@ -194,7 +194,9 @@ Exit codes: `0` doctor completed with no error-severity checks (**warnings alone
 
 **`--strict`** treats warnings as failures (a warning-only report exits `1`). It changes only the exit-code interpretation — the same checks run and nothing is modified.
 
-**`--out <file>`** also writes the JSON report (same `{ checks, summary, strict, result }` shape as `--json`) to a file. A file-write failure is an operation failure → exit `1`. Place `--strict`/`--out` **before** the config file (`config doctor --strict --out report.json <file>`), consistent with the other config subcommands.
+**`--out <file>`** also writes the JSON report (same `{ checks, summary, strict, result }` shape as `--json`) to a file. A file-write failure is an operation failure → exit `1`.
+
+**`--explain`** adds an inline explanation (code, meaning, next action) for each emitted check (human blocks; an additive `explanations` map in JSON), reusing the `portier explain` registry. It changes nothing about which checks run, the result, or the exit code. Place `--strict`/`--explain`/`--out` **before** the config file (`config doctor --explain <file>`), consistent with the other config subcommands.
 
 > Note: `config doctor` is read-only and offline. Warnings are derived from the file's contents only — they do **not** imply any runtime probing or target reachability check.
 
@@ -449,7 +451,7 @@ With `--json`: prints the raw `RuntimeInfo` JSON from the API.
 Run deterministic diagnostic checks against the **live** Portier runtime. Read-only: never mutates the runtime or its config, and never probes forwarding targets.
 
 ```
-portier doctor [--strict] [--out <file>] [--json]
+portier doctor [--strict] [--explain] [--out <file>] [--json]
 ```
 
 Reuses the same doctor report model as `config doctor` (Slice 1). Each finding is a *doctor check* with a stable `code`, a `severity` (`info`/`warning`/`error`), a `title`, a `message`, and optional `details`. Stable check codes:
@@ -476,6 +478,8 @@ Exit codes: `0` doctor completed with no error-severity checks (**warnings alone
 **`--strict`** treats warnings as failures: a warning-only report exits `1` instead of `0` (errors still exit `1`, info-only still exits `0`). Strict mode changes only the exit-code interpretation — it does not change which checks run, and never mutates the runtime or config. In human output a `Strict mode: warnings are treated as failures.` note is shown when a warning-only report fails because of strict; in JSON, `"strict"` and `"result"` reflect the mode and outcome.
 
 **`--out <file>`** also writes the JSON report — the same `{ checks, summary, strict, result }` shape as `--json` — to a file (for CI artifacts / support bundles). It writes the file regardless of `--json`; stdout stays human output unless `--json` is set. A file-write failure is an operation failure → exit `1` (reported on stderr), independent of the diagnostic result. Export never mutates the runtime or config.
+
+**`--explain`** adds an inline explanation (code, meaning, next action, related codes) for each check **that appears in the report**, reusing the same registry as `portier explain`. In human output each check is followed by an indented `Code:`/`Meaning:`/`What to do:` block; in JSON an additive top-level `explanations` map (`code → { title, meaning, action, ... }`) is added for the emitted codes only. `--explain` does **not** change which checks run, the summary, the result, or the exit code; combine it freely with `--strict`, `--json`, and `--out` (with `--out --explain` the exported JSON includes the explanations).
 
 > **Unreachable-runtime exit code:** unlike the other live commands (which exit `3` on connection failure), `portier doctor` reports an unreachable runtime as a `runtime.unreachable` **check** and exits `1` — the doctor always completes and emits a report, and an unreachable runtime is an error-severity finding. This is an intentional, documented deviation specific to the doctor command.
 

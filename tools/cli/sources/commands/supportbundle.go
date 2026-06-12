@@ -131,8 +131,10 @@ func RunSupportBundle(c *client.Client, jsonOutput bool, args []string, stdout, 
 	// explanations.json are always present; runtime.json and config-export.json
 	// are added only when the runtime provides them (otherwise a manifest
 	// warning records the omission). manifest.json is written separately, last.
+	// doctor.txt mirrors `portier doctor` (no inline explanations — the bundle
+	// ships explanations.json separately).
 	var human bytes.Buffer
-	printDoctorHuman("Portier Doctor", report, strict, &human)
+	printDoctorHuman("Portier Doctor", report, strict, false, &human)
 
 	items := []bundleArtifact{
 		{"doctor.json", func(p string) error {

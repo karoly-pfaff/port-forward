@@ -121,9 +121,76 @@ func TestRuleLabel(t *testing.T) {
 	}
 }
 
+func TestExplanationsForReport_OnlyEmittedCodesDeduped(t *testing.T) {
+	r := newDoctorReport([]DoctorCheckResult{
+		{Code: checkRuntimeReachable, Severity: DoctorInfo},
+		{Code: checkRuntimeReachable, Severity: DoctorInfo}, // duplicate code
+		{Code: checkRulesHealthError, Severity: DoctorError},
+	})
+	m := explanationsForReport(r)
+
+	if len(m) != 2 {
+		t.Errorf("len = %d, want 2 (duplicate code collapsed)", len(m))
+	}
+	if _, ok := m[checkRuntimeReachable]; !ok {
+		t.Errorf("missing %s", checkRuntimeReachable)
+	}
+	if _, ok := m[checkRulesHealthError]; !ok {
+		t.Errorf("missing %s", checkRulesHealthError)
+	}
+	// A code NOT present in the report must not appear.
+	if _, ok := m[checkConfigValid]; ok {
+		t.Errorf("%s should not appear (not in report)", checkConfigValid)
+	}
+	// Each entry is the canonical registry explanation.
+	if m[checkRuntimeReachable].Code != checkRuntimeReachable {
+		t.Errorf("explanation Code mismatch: %q", m[checkRuntimeReachable].Code)
+	}
+}
+
+func TestExplanationsForReport_UnknownCodeSafelyOmitted(t *testing.T) {
+	r := newDoctorReport([]DoctorCheckResult{{Code: "not.a.real.code", Severity: DoctorInfo}})
+	if m := explanationsForReport(r); len(m) != 0 {
+		t.Errorf("unknown code should be omitted, got %v", m)
+	}
+}
+
+func TestExplanationsForReport_AllDoctorCodesExplainable(t *testing.T) {
+	// Every code a doctor can emit must resolve to a registry explanation, so
+	// inline --explain never hits the "(no explanation available)" fallback.
+	checks := make([]DoctorCheckResult, len(allDoctorCodes))
+	for i, code := range allDoctorCodes {
+		checks[i] = DoctorCheckResult{Code: code, Severity: DoctorInfo}
+	}
+	m := explanationsForReport(newDoctorReport(checks))
+	if len(m) != len(allDoctorCodes) {
+		t.Errorf("explained %d of %d doctor codes", len(m), len(allDoctorCodes))
+	}
+}
+
+func TestPrintCheckExplanation(t *testing.T) {
+	// Known code: prints Code/Meaning/What to do (+ Related when present).
+	var known strings.Builder
+	printCheckExplanation(DoctorCheckResult{Code: checkConfigLanExposure}, &known)
+	ks := known.String()
+	for _, want := range []string{"Code: config.lan_exposure", "Meaning:", "What to do:", "Related:"} {
+		if !strings.Contains(ks, want) {
+			t.Errorf("known-code explanation missing %q:\n%s", want, ks)
+		}
+	}
+
+	// Unknown code: safe-degrade to a clear fallback (no crash).
+	var unknown strings.Builder
+	printCheckExplanation(DoctorCheckResult{Code: "not.a.real.code"}, &unknown)
+	us := unknown.String()
+	if !strings.Contains(us, "Code: not.a.real.code") || !strings.Contains(us, "(no explanation available)") {
+		t.Errorf("unknown-code fallback wrong:\n%s", us)
+	}
+}
+
 func TestPrintDoctorHuman_NoChecks(t *testing.T) {
 	var b strings.Builder
-	printDoctorHuman("Title", newDoctorReport(nil), false, &b)
+	printDoctorHuman("Title", newDoctorReport(nil), false, false, &b)
 	out := b.String()
 	if !strings.Contains(out, "No checks were run.") {
 		t.Errorf("empty report output missing fallback line:\n%s", out)
@@ -137,7 +204,7 @@ func TestPrintDoctorHuman_StrictWarningNote(t *testing.T) {
 	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning, Title: "w"}})
 
 	var normal strings.Builder
-	printDoctorHuman("Title", warn, false, &normal)
+	printDoctorHuman("Title", warn, false, false, &normal)
 	if strings.Contains(normal.String(), "Strict mode:") {
 		t.Errorf("non-strict output must not show the strict note:\n%s", normal.String())
 	}
@@ -146,7 +213,7 @@ func TestPrintDoctorHuman_StrictWarningNote(t *testing.T) {
 	}
 
 	var strict strings.Builder
-	printDoctorHuman("Title", warn, true, &strict)
+	printDoctorHuman("Title", warn, true, false, &strict)
 	if !strings.Contains(strict.String(), "Strict mode: warnings are treated as failures.") {
 		t.Errorf("strict warning-only output missing strict note:\n%s", strict.String())
 	}

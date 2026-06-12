@@ -80,6 +80,20 @@ All notable changes to Portier are documented here.
 - CLI-only change. No second doctor/bundle schema, no probing, no runtime/config mutation. No shared/server/service/client change, no new endpoints/DTOs. `validate:contract` unchanged at **234/234**.
 - CLI coverage **97.7% → 97.4%** statements (functions 99.1%); gate 95% holds, **none lowered**. The small dip is from unavoidable defensive per-file filesystem-write-failure branches that cannot be triggered portably once the output directory is validated as empty and writable — the command-level filesystem-failure → exit 1 behavior **is** covered (mkdir failure, non-empty directory, `--out` is a file). The bundle writes were consolidated into one loop to minimize the unreachable surface.
 
+### Added — Slice 7: Doctor inline explanations
+
+- **`--explain` for both doctor commands** (`portier doctor --explain`, `portier config doctor --explain <file>`). Adds an inline explanation — code, meaning, and next action (plus related codes) — for the checks that **actually appear** in the report, reusing the Slice 3 explanation registry (no duplicated strings).
+- **Human output:** each check is followed by an indented `Code: / Meaning: / What to do: / Related:` block. Only emitted codes are explained.
+- **JSON output:** an **additive** top-level `explanations` map (`code → { code, title, meaning, action, severity, related }`) is included only with `--explain`, and only for codes present in `checks` (deduplicated). The existing `checks`/`summary`/`strict`/`result` shape is unchanged; without `--explain` the JSON is byte-identical to before (the field is `omitempty`).
+- **Combines with `--strict`, `--json`, and `--out`:** `--out --explain` writes JSON with explanations; `--json --out --explain` keeps stdout and file byte-identical. Works for `config doctor` with flags before the file.
+- **`--explain` changes nothing else:** it does not change which checks run, the summary, the result, or exit codes (info/warnings → 0, errors → 1; strict warnings → 1). Codes with no registry entry degrade safely (`(no explanation available)`), and an internal test guarantees every emittable doctor code is explainable so that fallback never triggers in practice.
+
+### Notes (Slice 7)
+
+- CLI-only change. Reuses the doctor report model + explanation registry; support-bundle output is unchanged (`doctor.json`/`doctor.txt` carry no inline explanations — the bundle already ships `explanations.json`). No second schema, no probing, no runtime/config mutation. No shared/server/service/client change, no new endpoints/DTOs. `validate:contract` unchanged at **234/234**.
+- The doctor emit flags were grouped into a small `doctorEmitOptions` struct to avoid parameter sprawl (internal refactor, no behavior change).
+- CLI coverage **97.4% → 97.5%** statements (functions 99.1% → 99.2%); gate 95% holds, none lowered — recovering part of the Slice 6 dip. Every new explain helper is 100% covered.
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools

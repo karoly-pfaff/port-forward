@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"portier/cli/sources/client"
 	"portier/cli/sources/output"
@@ -104,11 +105,39 @@ func doctorResultLabel(r DoctorReport, strict bool) string {
 
 // doctorReportJSON is the JSON encoding of a doctor report plus the strict-mode
 // outcome. DoctorReport is embedded so its `checks`/`summary` stay at the top
-// level; `strict` and `result` are additive and CLI-local (not an API DTO).
+// level; `strict`/`result`/`explanations` are additive and CLI-local (not an
+// API DTO). Explanations is populated only with `--explain` and only for the
+// codes present in checks; otherwise it is omitted (nil → omitempty), so output
+// without `--explain` is byte-identical to before.
 type doctorReportJSON struct {
 	DoctorReport
-	Strict bool   `json:"strict"`
-	Result string `json:"result"`
+	Strict       bool                   `json:"strict"`
+	Result       string                 `json:"result"`
+	Explanations map[string]Explanation `json:"explanations,omitempty"`
+}
+
+// doctorEmitOptions groups the presentation flags for a doctor report. They
+// affect ONLY how the report is rendered/exported and its exit-code
+// interpretation — never which checks run.
+type doctorEmitOptions struct {
+	strict  bool
+	explain bool
+	json    bool
+	outPath string
+}
+
+// explanationsForReport returns the canonical explanation for each code present
+// in the report's checks (deduplicated via the map; codes with no registry
+// entry are safely omitted). Reuses the Slice 3 explanation registry — it does
+// not duplicate explanation strings.
+func explanationsForReport(r DoctorReport) map[string]Explanation {
+	m := make(map[string]Explanation)
+	for _, c := range r.Checks {
+		if exp, ok := explanations[c.Code]; ok {
+			m[c.Code] = exp
+		}
+	}
+	return m
 }
 
 // doctorSeverityTag returns the fixed-width ASCII tag for a severity, matching
@@ -128,8 +157,9 @@ func doctorSeverityTag(s DoctorSeverity) string {
 
 // printDoctorHuman renders a report in deterministic human-readable form under
 // the given title heading. In strict mode, when warnings (and no errors) are
-// the reason for failure, it notes that warnings are treated as failures.
-func printDoctorHuman(title string, r DoctorReport, strict bool, w io.Writer) {
+// the reason for failure, it notes that warnings are treated as failures. When
+// explain is set, each check is followed by its code, meaning, and next action.
+func printDoctorHuman(title string, r DoctorReport, strict, explain bool, w io.Writer) {
 	fmt.Fprintln(w, title)
 	fmt.Fprintln(w)
 
@@ -141,6 +171,9 @@ func printDoctorHuman(title string, r DoctorReport, strict bool, w io.Writer) {
 		fmt.Fprintf(w, "%-7s %s\n", doctorSeverityTag(c.Severity), c.Title)
 		if c.Message != "" {
 			fmt.Fprintf(w, "        %s\n", c.Message)
+		}
+		if explain {
+			printCheckExplanation(c, w)
 		}
 	}
 
@@ -157,37 +190,58 @@ func printDoctorHuman(title string, r DoctorReport, strict bool, w io.Writer) {
 	fmt.Fprintf(w, "\nResult: %s\n", doctorResultLabel(r, strict))
 }
 
-// emitDoctorReport prints the report (JSON when jsonOutput is set, otherwise
-// human) and, when outPath is non-empty, also writes the exact same JSON report
-// (checks + summary + strict + result) to that file. It returns the report's
-// exit code under the given strictness — except that a JSON-encode failure or a
-// file-write failure overrides it with exit 1 (an operation failure, not a
-// diagnostic finding). Exporting never mutates the runtime or config.
-func emitDoctorReport(title string, r DoctorReport, strict, jsonOutput bool, outPath string, stdout, stderr io.Writer) int {
-	payload := doctorReportJSON{DoctorReport: r, Strict: strict, Result: doctorResultLabel(r, strict)}
+// printCheckExplanation renders the inline explanation block for one check
+// (`--explain`), indented to align with the check message. Codes with no
+// registry entry degrade safely to a clear "(no explanation available)" note.
+func printCheckExplanation(c DoctorCheckResult, w io.Writer) {
+	fmt.Fprintf(w, "        Code: %s\n", c.Code)
+	exp, ok := explanations[c.Code]
+	if !ok {
+		fmt.Fprintln(w, "        (no explanation available)")
+		return
+	}
+	fmt.Fprintf(w, "        Meaning: %s\n", exp.Meaning)
+	fmt.Fprintf(w, "        What to do: %s\n", exp.Action)
+	if len(exp.Related) > 0 {
+		fmt.Fprintf(w, "        Related: %s\n", strings.Join(exp.Related, ", "))
+	}
+}
 
-	if jsonOutput {
+// emitDoctorReport prints the report (JSON when opts.json is set, otherwise
+// human) and, when opts.outPath is non-empty, also writes the exact same JSON
+// report to that file. With opts.explain it adds inline explanations (human
+// blocks; an additive `explanations` map in JSON) for the codes present in the
+// report — without changing checks/summary/result. It returns the report's exit
+// code under opts.strict — except that a JSON-encode or file-write failure
+// overrides it with exit 1 (an operation failure). Never mutates runtime/config.
+func emitDoctorReport(title string, r DoctorReport, opts doctorEmitOptions, stdout, stderr io.Writer) int {
+	payload := doctorReportJSON{DoctorReport: r, Strict: opts.strict, Result: doctorResultLabel(r, opts.strict)}
+	if opts.explain {
+		payload.Explanations = explanationsForReport(r)
+	}
+
+	if opts.json {
 		if err := output.PrintJSON(stdout, payload); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
 	} else {
-		printDoctorHuman(title, r, strict, stdout)
+		printDoctorHuman(title, r, opts.strict, opts.explain, stdout)
 	}
 
-	if outPath != "" {
-		if err := writePrettyJSON(outPath, payload); err != nil {
-			fmt.Fprintf(stderr, "Error writing %s: %v\n", outPath, err)
+	if opts.outPath != "" {
+		if err := writePrettyJSON(opts.outPath, payload); err != nil {
+			fmt.Fprintf(stderr, "Error writing %s: %v\n", opts.outPath, err)
 			return 1
 		}
 		// In human mode, confirm the export on stdout (config export does the
 		// same). In JSON mode stdout must stay valid JSON, so stay silent.
-		if !jsonOutput {
-			fmt.Fprintf(stdout, "\nReport written to %s\n", outPath)
+		if !opts.json {
+			fmt.Fprintf(stdout, "\nReport written to %s\n", opts.outPath)
 		}
 	}
 
-	return doctorExitCode(r, strict)
+	return doctorExitCode(r, opts.strict)
 }
 
 // pluralWord returns singular when n == 1, otherwise plural.
@@ -234,12 +288,14 @@ Checks (each produces a stable check code):
 
 Options:
   --strict       Treat warnings as failures (a warning-only report exits 1).
+  --explain      Show an explanation (meaning + next action) for each emitted check.
   --out <file>   Also write the JSON report to <file> (same shape as --json).
 
 Output:
   Human report by default; --json emits the full doctor report
-  (checks + summary + strict + result). --out writes that same JSON to a file
-  regardless of --json; with --json the JSON also prints to stdout.
+  (checks + summary + strict + result, plus an additive explanations map with
+  --explain). --out writes that same JSON to a file regardless of --json; with
+  --json the JSON also prints to stdout.
 
 Exit codes:
   0  Doctor completed; no error-severity checks (warnings alone exit 0 unless --strict)
@@ -253,6 +309,7 @@ doctor ran and found a problem), NOT the usual connection exit code 3.
 Examples:
   portier doctor
   portier doctor --strict
+  portier doctor --explain
   portier doctor --out doctor-report.json
   portier --json doctor
   portier --host 127.0.0.1 --port 47831 doctor
@@ -267,6 +324,7 @@ func RunDoctor(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	flagStrict := fs.Bool("strict", false, "treat warnings as failures (exit 1)")
+	flagExplain := fs.Bool("explain", false, "show an explanation for each emitted check")
 	flagOut := fs.String("out", "", "also write the JSON report to this file")
 
 	if err := fs.Parse(args); err != nil {
@@ -285,7 +343,9 @@ func RunDoctor(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 	}
 
 	report := runLiveDoctorChecks(c)
-	return emitDoctorReport("Portier Doctor", report, *flagStrict, jsonOutput, *flagOut, stdout, stderr)
+	return emitDoctorReport("Portier Doctor", report, doctorEmitOptions{
+		strict: *flagStrict, explain: *flagExplain, json: jsonOutput, outPath: *flagOut,
+	}, stdout, stderr)
 }
 
 // runLiveDoctorChecks performs the live runtime analysis and returns a

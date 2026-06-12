@@ -39,7 +39,7 @@ Subcommands:
 Run 'portier config <subcommand> --help' for subcommand options.
 `
 
-const doctorHelp = `Usage: portier config doctor [--strict] [--out <file>] <file>
+const doctorHelp = `Usage: portier config doctor [--strict] [--explain] [--out <file>] <file>
 
 Run deterministic, offline diagnostic checks on a local Portier config file.
 Does NOT contact or require a running Portier service, and never modifies the file.
@@ -56,6 +56,7 @@ Checks (each produces a stable check code):
 
 Options:
   --strict       Treat warnings as failures (a warning-only report exits 1).
+  --explain      Show an explanation (meaning + next action) for each emitted check.
   --out <file>   Also write the JSON report to <file> (same shape as --json).
                  Place flags before the config file (e.g. config doctor --strict file).
 
@@ -73,6 +74,7 @@ Exit codes:
 Examples:
   portier config doctor desired.json
   portier config doctor --strict desired.json
+  portier config doctor --explain desired.json
   portier config doctor --out config-doctor-report.json desired.json
   portier --json config doctor desired.json
 `
@@ -459,6 +461,7 @@ func RunConfigDoctor(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 	fs := flag.NewFlagSet("config doctor", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	flagStrict := fs.Bool("strict", false, "treat warnings as failures (exit 1)")
+	flagExplain := fs.Bool("explain", false, "show an explanation for each emitted check")
 	flagOut := fs.String("out", "", "also write the JSON report to this file")
 
 	if err := fs.Parse(args); err != nil {
@@ -478,7 +481,9 @@ func RunConfigDoctor(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 	}
 
 	report := runConfigDoctorChecks(fs.Arg(0))
-	return emitDoctorReport("Portier Config Doctor", report, *flagStrict, jsonOutput, *flagOut, stdout, stderr)
+	return emitDoctorReport("Portier Config Doctor", report, doctorEmitOptions{
+		strict: *flagStrict, explain: *flagExplain, json: jsonOutput, outPath: *flagOut,
+	}, stdout, stderr)
 }
 
 // runConfigDoctorChecks performs the offline analysis of a config file and
