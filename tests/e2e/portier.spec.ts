@@ -70,7 +70,8 @@ test("edit rule: drawer opens pre-filled, changes saved, list updates", async ({
   await expect(page.locator("tbody").getByText("E2E Edit Original")).toBeVisible();
 
   const ruleRow = page.locator("tr", { hasText: "E2E Edit Original" });
-  await ruleRow.getByRole("button", { name: "Edit", exact: true }).click();
+  await ruleRow.getByRole("button", { name: "More actions for E2E Edit Original" }).click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
 
   const drawer = page.getByRole("complementary", { name: "Edit Forward Rule" });
   await expect(drawer).toBeVisible();
@@ -115,7 +116,8 @@ test("rule group: set on create, shown in list, cleared on edit", async ({ page,
   expect(created.find((r) => r.name === ruleName)?.group).toBe("web-team");
 
   // Edit the rule and clear the group.
-  await ruleRow.getByRole("button", { name: "Edit" }).click();
+  await ruleRow.getByRole("button", { name: `More actions for ${ruleName}` }).click();
+  await page.getByRole("menuitem", { name: "Edit" }).click();
   const editDrawer = page.getByRole("complementary", { name: "Edit Forward Rule" });
   await expect(editDrawer).toBeVisible();
   await expect(editDrawer.getByLabel("Group")).toHaveValue("web-team");
@@ -201,8 +203,9 @@ test("rule duplicate: copies a rule into a new editable rule, source unchanged",
   const sourceRow = page.locator("tr", { hasText: sourceName });
   await expect(sourceRow).toBeVisible();
 
-  // Duplicate opens the create form pre-filled from the source rule.
-  await sourceRow.getByRole("button", { name: `Duplicate rule ${sourceName}` }).click();
+  // Duplicate (in the row action menu) opens the create form pre-filled.
+  await sourceRow.getByRole("button", { name: `More actions for ${sourceName}` }).click();
+  await page.getByRole("menuitem", { name: "Duplicate" }).click();
   const dupDrawer = page.getByRole("complementary", { name: "Duplicate Forward Rule" });
   await expect(dupDrawer).toBeVisible();
   await expect(dupDrawer.getByRole("heading", { name: "Duplicate Rule" })).toBeVisible();
@@ -282,7 +285,8 @@ test("delete: confirmation required, rule removed after confirm", async ({ page,
   const ruleRow = page.locator("tr", { hasText: "E2E Delete Me" });
   await expect(ruleRow).toBeVisible();
 
-  await ruleRow.getByRole("button", { name: "Delete", exact: true }).click();
+  await ruleRow.getByRole("button", { name: "More actions for E2E Delete Me" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
   await expect(ruleRow.getByText(/Delete.*E2E Delete Me/)).toBeVisible();
   await expect(ruleRow.getByRole("button", { name: "Confirm" })).toBeVisible();
   await expect(ruleRow.getByRole("button", { name: "Cancel" })).toBeVisible();
@@ -331,7 +335,8 @@ test("diagnose: clicking Diagnose on a rule opens the diagnostics panel with res
   const ruleRow = page.locator("tr", { hasText: "E2E Diagnose Test" });
   await expect(ruleRow).toBeVisible();
 
-  await ruleRow.getByRole("button", { name: "Diagnose", exact: true }).click();
+  await ruleRow.getByRole("button", { name: "More actions for E2E Diagnose Test" }).click();
+  await page.getByRole("menuitem", { name: "Diagnose" }).click();
 
   // The panel is open (its close affordance has an accessible name).
   await expect(page.getByRole("button", { name: "Close diagnostics" })).toBeVisible({ timeout: 5_000 });

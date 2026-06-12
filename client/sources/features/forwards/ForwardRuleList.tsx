@@ -1,5 +1,5 @@
-import { useMemo, useState, useRef, Fragment, type ReactElement } from "react";
-import { Activity, Copy, Pencil, Stethoscope } from "lucide-react";
+import { useEffect, useMemo, useState, useRef, Fragment, type ReactElement } from "react";
+import { Activity, Copy, MoreVertical, Pencil, Stethoscope, Trash2 } from "lucide-react";
 import type { ForwardRule, ForwardRuleResponse, ForwardStatus, GroupActionResponse, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
@@ -68,6 +68,7 @@ export function ForwardRuleList({
   onChangeAutoRefreshInterval,
 }: ForwardRuleListProps): ReactElement {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "running" | "stopped" | "error">("all");
   const [groupFilter, setGroupFilter] = useState<string>(ALL_GROUPS);
@@ -76,6 +77,23 @@ export function ForwardRuleList({
     useState<{ tone: "info" | "warn" | "error"; text: string } | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const dragIdRef = useRef<string | null>(null);
+
+  // Close the open row action menu on an outside click or Escape.
+  useEffect(() => {
+    if (!openMenuId) return;
+    function onDocMouseDown(e: MouseEvent): void {
+      if (!(e.target as HTMLElement).closest(".row-menu")) setOpenMenuId(null);
+    }
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Escape") setOpenMenuId(null);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [openMenuId]);
 
   // Distinct, normalized group names present in the current rules, sorted
   // locale-insensitive alphabetical. Derived from rules only — never persisted.
@@ -288,8 +306,8 @@ export function ForwardRuleList({
                 <th scope="col">Status</th>
                 <th scope="col">Health</th>
                 <th scope="col">Traffic</th>
-                <th scope="col">Actions</th>
-                <th scope="col" className="delete-cell" />
+                <th scope="col" className="actions-col" />
+                <th scope="col" className="row-menu-cell" />
               </tr>
             </thead>
             <tbody>
@@ -400,7 +418,7 @@ export function ForwardRuleList({
                           {formatBytes(status?.bytesIn ?? 0)} / {formatBytes(status?.bytesOut ?? 0)}
                         </span>
                       </td>
-                      <td>
+                      <td className="actions-col">
                         {isConfirming ? (
                           <div className="confirm-delete">
                             <span className="confirm-label">
@@ -435,63 +453,84 @@ export function ForwardRuleList({
                             >
                               {isBusy ? "…" : status?.running ? "⏹" : "▶"}
                             </button>
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              aria-label="Edit"
-                              title="Edit"
-                              onClick={() => onEdit(rule)}
-                              disabled={isBusy}
-                            >
-                              <Pencil size={14} aria-hidden="true" />
-                            </button>
-                            {onDuplicate && (
-                              <button
-                                type="button"
-                                className="btn-icon"
-                                aria-label={`Duplicate rule ${rule.name}`}
-                                title="Duplicate"
-                                onClick={() => onDuplicate(rule)}
-                                disabled={isBusy}
-                              >
-                                <Copy size={14} aria-hidden="true" />
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="btn-icon"
-                              aria-label="Diagnose"
-                              title="Diagnose"
-                              onClick={() => onDiagnose(rule.id)}
-                              disabled={isBusy || isDiagPending}
-                            >
-                              {isDiagPending ? "…" : <Stethoscope size={14} aria-hidden="true" />}
-                            </button>
-                            {onGoToActivity && (
-                              <button
-                                type="button"
-                                className="btn-icon"
-                                aria-label="View activity"
-                                title="View activity"
-                                onClick={() => onGoToActivity(rule.id)}
-                              >
-                                <Activity size={14} aria-hidden="true" />
-                              </button>
-                            )}
                           </div>
                         )}
                       </td>
-                      <td className="delete-cell">
-                        <button
-                          type="button"
-                          className="delete-cell-btn"
-                          aria-label="Delete"
-                          title="Delete"
-                          onClick={() => setConfirmingDeleteId(rule.id)}
-                          disabled={isBusy || isConfirming}
-                        >
-                          🗑
-                        </button>
+                      <td className="row-menu-cell">
+                        <div className="row-menu">
+                          <button
+                            type="button"
+                            className="row-menu-trigger"
+                            aria-label={`More actions for ${rule.name}`}
+                            title="More actions"
+                            aria-haspopup="menu"
+                            aria-expanded={openMenuId === rule.id}
+                            onClick={() =>
+                              setOpenMenuId(openMenuId === rule.id ? null : rule.id)
+                            }
+                            disabled={isBusy || isConfirming}
+                          >
+                            <MoreVertical size={16} aria-hidden="true" />
+                          </button>
+                          {openMenuId === rule.id && (
+                            <div
+                              className="row-menu-dropdown"
+                              role="menu"
+                              aria-label={`Actions for ${rule.name}`}
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="row-menu-item"
+                                onClick={() => { setOpenMenuId(null); onEdit(rule); }}
+                              >
+                                <Pencil size={14} aria-hidden="true" />
+                                Edit
+                              </button>
+                              {onDuplicate && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="row-menu-item"
+                                  onClick={() => { setOpenMenuId(null); onDuplicate(rule); }}
+                                >
+                                  <Copy size={14} aria-hidden="true" />
+                                  Duplicate
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="row-menu-item"
+                                onClick={() => { setOpenMenuId(null); onDiagnose(rule.id); }}
+                                disabled={isDiagPending}
+                              >
+                                <Stethoscope size={14} aria-hidden="true" />
+                                Diagnose
+                              </button>
+                              {onGoToActivity && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  className="row-menu-item"
+                                  onClick={() => { setOpenMenuId(null); onGoToActivity(rule.id); }}
+                                >
+                                  <Activity size={14} aria-hidden="true" />
+                                  Activity
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="row-menu-item row-menu-item--danger"
+                                onClick={() => { setOpenMenuId(null); setConfirmingDeleteId(rule.id); }}
+                              >
+                                <Trash2 size={14} aria-hidden="true" />
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {diagEntry && (

@@ -267,7 +267,8 @@ describe("App drawer", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
     expect(screen.getByRole("complementary", { name: "Edit Forward Rule" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Test Rule")).toBeInTheDocument();
   });
@@ -283,7 +284,8 @@ describe("App drawer", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Edit" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
 
     const nameInput = screen.getByDisplayValue("Test Rule");
     await userEvent.clear(nameInput);
@@ -306,7 +308,8 @@ describe("App drawer", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Duplicate rule Test Rule" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
 
     // Create mode (a "Duplicate Forward Rule" drawer), pre-filled, not editing.
     expect(
@@ -329,7 +332,8 @@ describe("App drawer", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Duplicate rule Test Rule" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
     await userEvent.click(screen.getByRole("button", { name: "Add Rule" }));
 
     // Create path: id is undefined; group carried over; autostart forced off.
@@ -352,7 +356,8 @@ describe("App drawer", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Duplicate rule Test Rule" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Duplicate" }));
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
 
     expect(
@@ -388,7 +393,8 @@ describe("App diagnostics", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Diagnose" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Diagnose" }));
 
     expect(portierApi.diagnoseForwardRule).toHaveBeenCalledWith("r1");
     await screen.findByText("All checks passed.");
@@ -403,7 +409,8 @@ describe("App diagnostics", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Diagnose" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Diagnose" }));
 
     await screen.findByText("Service unavailable");
     expect(screen.getByRole("alert")).toBeInTheDocument();
@@ -459,7 +466,8 @@ describe("App error banners", () => {
     render(<App />);
     await screen.findByText("Test Rule");
 
-    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await screen.findByText("Delete failed");

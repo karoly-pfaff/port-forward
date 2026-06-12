@@ -59,6 +59,15 @@ function makeMap<T extends { ruleId: string }>(...statuses: T[]): Map<string, T>
 
 const noop = vi.fn();
 
+// Duplicate / Diagnose / Activity / Delete now live behind a per-row kebab
+// ("More actions") menu. Open it before clicking one of those items.
+async function openRowMenu(
+  user: ReturnType<typeof userEvent.setup>,
+  ruleName = "Test Rule"
+): Promise<void> {
+  await user.click(screen.getByRole("button", { name: `More actions for ${ruleName}` }));
+}
+
 function renderList(
   props: Partial<Parameters<typeof ForwardRuleList>[0]> & {
     rules: ForwardRuleResponse[];
@@ -275,7 +284,8 @@ describe("ForwardRuleList", () => {
       onDelete
     });
 
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await openRowMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(onDelete).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Confirm" }));
@@ -293,11 +303,13 @@ describe("ForwardRuleList", () => {
       onDelete
     });
 
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await openRowMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(onDelete).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    // After cancelling, the kebab trigger is available again.
+    expect(screen.getByRole("button", { name: "More actions for Test Rule" })).toBeInTheDocument();
   });
 
   it("calls onStart when Start is clicked for a stopped rule", async () => {
@@ -681,14 +693,16 @@ describe("ForwardRuleList diagnostics", () => {
     vi.clearAllMocks();
   });
 
-  it("shows a Diagnose button for each rule", () => {
+  it("shows a Diagnose menu item for each rule", async () => {
+    const user = userEvent.setup();
     renderList({
       rules: [tcpRule],
       statusMap: makeMap(stoppedStatus),
       busyRuleIds: new Set(),
       loading: false,
     });
-    expect(screen.getByRole("button", { name: "Diagnose" })).toBeInTheDocument();
+    await openRowMenu(user);
+    expect(screen.getByRole("menuitem", { name: "Diagnose" })).toBeInTheDocument();
   });
 
   it("calls onDiagnose with the rule id when Diagnose is clicked", async () => {
@@ -701,7 +715,8 @@ describe("ForwardRuleList diagnostics", () => {
       loading: false,
       onDiagnose,
     });
-    await user.click(screen.getByRole("button", { name: "Diagnose" }));
+    await openRowMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Diagnose" }));
     expect(onDiagnose).toHaveBeenCalledWith("r1");
   });
 
@@ -716,7 +731,8 @@ describe("ForwardRuleList diagnostics", () => {
     expect(screen.getByText("Running diagnostics…")).toBeInTheDocument();
   });
 
-  it("disables the Diagnose button while diagnosis is pending for that rule", () => {
+  it("disables the Diagnose menu item while diagnosis is pending for that rule", async () => {
+    const user = userEvent.setup();
     renderList({
       rules: [tcpRule],
       statusMap: makeMap(stoppedStatus),
@@ -724,16 +740,12 @@ describe("ForwardRuleList diagnostics", () => {
       loading: false,
       diagnosisMap: makeDiagMap("r1", { state: "pending" }),
     });
-    const diagBtn = screen.getAllByRole("button").find((btn) => btn.hasAttribute("disabled") && btn.getAttribute("aria-label") === "Diagnose");
-    // Diagnose button has no aria-label when pending (shows "…"); check it's disabled
-    const buttons = screen.getAllByRole("button");
-    // The diagnose button shows "…" and is disabled when pending
-    const disabledButtons = buttons.filter((b) => b.hasAttribute("disabled"));
-    expect(disabledButtons.length).toBeGreaterThan(0);
-    void diagBtn; // suppress unused var warning
+    await openRowMenu(user);
+    expect(screen.getByRole("menuitem", { name: "Diagnose" })).toBeDisabled();
   });
 
-  it("does not disable Diagnose for other rules when one is pending", () => {
+  it("does not disable Diagnose for other rules when one is pending", async () => {
+    const user = userEvent.setup();
     const secondRule: ForwardRuleResponse = { ...tcpRule, id: "r3", name: "Other Rule" };
     const secondStatus: ForwardStatus = { ruleId: "r3", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 };
     renderList({
@@ -743,11 +755,12 @@ describe("ForwardRuleList diagnostics", () => {
       loading: false,
       diagnosisMap: makeDiagMap("r1", { state: "pending" }),
     });
-    const diagButtons = screen.getAllByRole("button", { name: "Diagnose" });
-    // r1's button is disabled (pending), r3's is enabled
-    const enabledDiagButtons = diagButtons.filter((b) => !b.hasAttribute("disabled"));
-    expect(enabledDiagButtons.length).toBe(1);
-    expect(enabledDiagButtons[0]).not.toBeDisabled();
+    // r1's Diagnose is disabled (pending)…
+    await openRowMenu(user);
+    expect(screen.getByRole("menuitem", { name: "Diagnose" })).toBeDisabled();
+    // …while r3's (opening its own menu) is enabled.
+    await openRowMenu(user, "Other Rule");
+    expect(screen.getByRole("menuitem", { name: "Diagnose" })).not.toBeDisabled();
   });
 
   it("shows summary result when diagnosisMap has done entry", () => {
@@ -802,7 +815,8 @@ describe("ForwardRuleList diagnostics", () => {
       onDelete,
       onClearDiagnosis,
     });
-    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await openRowMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     expect(onClearDiagnosis).toHaveBeenCalledWith("r1");
     expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: "r1" }));
@@ -826,7 +840,8 @@ describe("ForwardRuleList activity navigation", () => {
     vi.clearAllMocks();
   });
 
-  it("shows View activity button for each rule when onGoToActivity is provided", () => {
+  it("shows an Activity menu item for each rule when onGoToActivity is provided", async () => {
+    const user = userEvent.setup();
     renderList({
       rules: [tcpRule],
       statusMap: makeMap(stoppedStatus),
@@ -834,20 +849,23 @@ describe("ForwardRuleList activity navigation", () => {
       loading: false,
       onGoToActivity: noop,
     });
-    expect(screen.getByRole("button", { name: "View activity" })).toBeInTheDocument();
+    await openRowMenu(user);
+    expect(screen.getByRole("menuitem", { name: "Activity" })).toBeInTheDocument();
   });
 
-  it("does not show View activity button when onGoToActivity is not provided", () => {
+  it("does not show an Activity menu item when onGoToActivity is not provided", async () => {
+    const user = userEvent.setup();
     renderList({
       rules: [tcpRule],
       statusMap: makeMap(stoppedStatus),
       busyRuleIds: new Set(),
       loading: false,
     });
-    expect(screen.queryByRole("button", { name: "View activity" })).not.toBeInTheDocument();
+    await openRowMenu(user);
+    expect(screen.queryByRole("menuitem", { name: "Activity" })).not.toBeInTheDocument();
   });
 
-  it("calls onGoToActivity with the rule id when View activity is clicked", async () => {
+  it("calls onGoToActivity with the rule id when Activity is clicked", async () => {
     const user = userEvent.setup();
     const onGoToActivity = vi.fn();
     renderList({
@@ -857,11 +875,13 @@ describe("ForwardRuleList activity navigation", () => {
       loading: false,
       onGoToActivity,
     });
-    await user.click(screen.getByRole("button", { name: "View activity" }));
+    await openRowMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Activity" }));
     expect(onGoToActivity).toHaveBeenCalledWith("r1");
   });
 
-  it("shows a View activity button for each rule when multiple rules are present", () => {
+  it("shows an Activity menu item per rule when multiple rules are present", async () => {
+    const user = userEvent.setup();
     const secondRule: ForwardRuleResponse = { ...tcpRule, id: "r3", name: "Another Rule" };
     const secondStatus: ForwardStatus = { ruleId: "r3", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 };
     renderList({
@@ -871,12 +891,16 @@ describe("ForwardRuleList activity navigation", () => {
       loading: false,
       onGoToActivity: noop,
     });
-    expect(screen.getAllByRole("button", { name: "View activity" })).toHaveLength(2);
+    await openRowMenu(user);
+    expect(screen.getByRole("menuitem", { name: "Activity" })).toBeInTheDocument();
+    await openRowMenu(user, "Another Rule");
+    expect(screen.getByRole("menuitem", { name: "Activity" })).toBeInTheDocument();
   });
 });
 
 describe("ForwardRuleList duplicate action (v1.8 Slice 8)", () => {
-  it("shows a Duplicate action with a rule-scoped accessible name when onDuplicate is provided", () => {
+  it("shows a Duplicate menu item when onDuplicate is provided", async () => {
+    const user = userEvent.setup();
     renderList({
       rules: [tcpRule],
       statusMap: makeMap(stoppedStatus),
@@ -884,19 +908,20 @@ describe("ForwardRuleList duplicate action (v1.8 Slice 8)", () => {
       loading: false,
       onDuplicate: noop,
     });
-    expect(
-      screen.getByRole("button", { name: `Duplicate rule ${tcpRule.name}` })
-    ).toBeInTheDocument();
+    await openRowMenu(user);
+    expect(screen.getByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument();
   });
 
-  it("does not render a Duplicate action when onDuplicate is omitted", () => {
+  it("does not render a Duplicate menu item when onDuplicate is omitted", async () => {
+    const user = userEvent.setup();
     renderList({
       rules: [tcpRule],
       statusMap: makeMap(stoppedStatus),
       busyRuleIds: new Set(),
       loading: false,
     });
-    expect(screen.queryByRole("button", { name: /Duplicate rule/ })).not.toBeInTheDocument();
+    await openRowMenu(user);
+    expect(screen.queryByRole("menuitem", { name: "Duplicate" })).not.toBeInTheDocument();
   });
 
   it("calls onDuplicate with the rule when clicked", async () => {
@@ -909,11 +934,12 @@ describe("ForwardRuleList duplicate action (v1.8 Slice 8)", () => {
       loading: false,
       onDuplicate,
     });
-    await user.click(screen.getByRole("button", { name: `Duplicate rule ${tcpRule.name}` }));
+    await openRowMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Duplicate" }));
     expect(onDuplicate).toHaveBeenCalledWith(tcpRule);
   });
 
-  it("disables Duplicate while the rule is busy", () => {
+  it("disables the actions menu while the rule is busy", () => {
     renderList({
       rules: [tcpRule],
       statusMap: makeMap(stoppedStatus),
@@ -921,6 +947,90 @@ describe("ForwardRuleList duplicate action (v1.8 Slice 8)", () => {
       loading: false,
       onDuplicate: noop,
     });
-    expect(screen.getByRole("button", { name: `Duplicate rule ${tcpRule.name}` })).toBeDisabled();
+    // The kebab trigger is disabled, so the moved actions are unreachable.
+    expect(
+      screen.getByRole("button", { name: "More actions for Test Rule" })
+    ).toBeDisabled();
+  });
+});
+
+describe("ForwardRuleList row action menu", () => {
+  it("keeps Start/Stop as a button outside the menu", () => {
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate: noop,
+      onGoToActivity: noop,
+    });
+    // Start stays a direct button (no menu needed)…
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    // …while Edit and the other actions are not shown until the menu is opened.
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Duplicate" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  it("opens a menu with Edit, Duplicate, Diagnose, Activity and Delete; Delete is the danger item", async () => {
+    const user = userEvent.setup();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate: noop,
+      onGoToActivity: noop,
+    });
+    await openRowMenu(user);
+    const menu = screen.getByRole("menu", { name: "Actions for Test Rule" });
+    const items = within(menu).getAllByRole("menuitem").map((el) => el.textContent);
+    expect(items).toEqual(["Edit", "Duplicate", "Diagnose", "Activity", "Delete"]);
+    expect(within(menu).getByRole("menuitem", { name: "Delete" })).toHaveClass("row-menu-item--danger");
+  });
+
+  it("calls onEdit with the rule when Edit is chosen from the menu", async () => {
+    const user = userEvent.setup();
+    const onEdit = vi.fn();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onEdit,
+    });
+    await openRowMenu(user);
+    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(onEdit).toHaveBeenCalledWith(tcpRule);
+  });
+
+  it("closes the menu when Escape is pressed", async () => {
+    const user = userEvent.setup();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate: noop,
+    });
+    await openRowMenu(user);
+    expect(screen.getByRole("menu", { name: "Actions for Test Rule" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu", { name: "Actions for Test Rule" })).not.toBeInTheDocument();
+  });
+
+  it("closes the menu when clicking outside it", async () => {
+    const user = userEvent.setup();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate: noop,
+    });
+    await openRowMenu(user);
+    expect(screen.getByRole("menu", { name: "Actions for Test Rule" })).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Search rules"));
+    expect(screen.queryByRole("menu", { name: "Actions for Test Rule" })).not.toBeInTheDocument();
   });
 });
