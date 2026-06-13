@@ -630,6 +630,47 @@ Stable finding codes: `policy.valid` (info, emitted when the config complies), `
 
 Exit codes: `0` no violations; `1` one or more violations, or an `--out` write failure; `2` missing/invalid arguments (including a missing `--out` value), or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
 
+### `portier policy template <name> [--out <file>]` / `--list`
+
+Print a built-in **policy template** (or list the available ones) so you don't have to write the policy JSON schema by hand. Fully **offline** — it never contacts the runtime and never modifies any file except the requested `--out` file. A rendered template is a complete policy file (`schemaVersion: 1`) that can be passed straight to `portier policy check --policy <file>`.
+
+```
+portier policy template --list
+portier policy template <name> [--out <file>]
+```
+
+Built-in templates (sorted by name):
+
+| Template | Purpose |
+| --- | --- |
+| `local-safe` | Local workstation use: forbids LAN exposure and privileged ports, keeps autostart allowed, no group requirement. |
+| `managed` | Stricter managed baseline: requires groups; forbids LAN exposure, privileged ports, and autostart. |
+| `permissive` | Mirrors Portier's default permissive policy — only duplicate bindings are forbidden. |
+
+Every template uses `schemaVersion: 1` with only the five standard boolean guardrails. There is intentionally **no protocol allowlist/denylist and no `allowUdp`** — UDP is first-class.
+
+Output:
+
+| Command | stdout | `--out` file |
+| --- | --- | --- |
+| `policy template <name>` | bare policy JSON | — |
+| `policy template <name> --json` | metadata wrapper `{ name, title, description, policy }` | — |
+| `policy template <name> --out f` | `Policy written to f` | bare policy JSON |
+| `policy template <name> --json --out f` | metadata wrapper (pure JSON) | bare policy JSON |
+| `policy template --list` | compact human list | — |
+| `policy template --list --json` | `{ "templates": [{ name, title, description }] }` | — |
+
+The `--out` file always contains the **bare policy JSON** (no metadata wrapper), so it is directly usable by `policy check`. Flags may appear before or after the template name (`policy template managed --out f`).
+
+Exit codes: `0` success; `1` an `--out` write failure (operation failure); `2` a usage error — an unknown template, a missing template name, too many names, a missing `--out` value, or `--list` combined with a name or `--out`.
+
+Example — generate a policy and immediately check a config against it:
+
+```
+portier policy template managed --out policy.json
+portier policy check --config portier.json --policy policy.json
+```
+
 ### Using policy output with an AI assistant
 
 To ask an AI assistant to help interpret a policy report, Portier ships a reusable, copy-paste prompt in [`docs/prompts/policy.md`](../../docs/prompts/policy.md). As with the doctor prompt, **Portier never sends anything anywhere** (no AI integration, upload, or telemetry) — it is plain text *you* paste into an assistant of your choice along with output you generated locally (e.g. `portier policy check --json --explain`). The policy prompt frames each finding as a **policy choice**, not necessarily a product defect, and separates safe next actions from changes that need admin/security review.

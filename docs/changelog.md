@@ -8,6 +8,18 @@ All notable changes to Portier are documented here.
 
 v1.10 helps operators define and evaluate **safe operating rules** before any automation or enforcement exists. It starts with **dry-run policy evaluation only** — built entirely in the Go CLI as a pure API client, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**). UDP stays first-class: there is **no `allowUdp`/protocol-restriction policy**.
 
+### Added — Slice 4: Policy templates
+
+- **`portier policy template <name>` / `--list`.** Built-in, deterministic policy templates so operators don't have to invent the JSON schema by hand. Three templates (sorted by name): **`local-safe`** (forbids LAN exposure + privileged ports, keeps autostart, no group requirement), **`managed`** (requires groups; forbids LAN exposure, privileged ports, and autostart), and **`permissive`** (mirrors Portier's default — only duplicate bindings forbidden). Every template is `schemaVersion: 1` with only the five standard boolean guardrails — **no protocol allowlist/denylist and no `allowUdp`** (UDP stays first-class).
+- **Output shapes.** `policy template <name>` prints the **bare policy JSON** (directly usable by `policy check`); `--json` prints a metadata wrapper `{name, title, description, policy}`; `--list` prints a compact human list (name column + title + indented description); `--list --json` prints `{"templates":[{name, title, description}]}` (no embedded policy). `--out <file>` writes the **bare policy JSON** regardless of `--json`, so the file can be passed straight to `policy check --policy <file>` (human mode confirms with `Policy written to <file>`; `--json` mode keeps stdout the pure wrapper).
+- **Offline + safe.** Fully offline — never contacts the runtime, never probes targets, and modifies nothing except the requested `--out` file. Exit codes: `0` success; `1` `--out` write failure (operation failure, `Error writing` on stderr); `2` usage error — unknown template, missing template name, too many names, a missing `--out` value, or `--list` combined with a name/`--out`. Flags may appear before or after the template name (`template managed --out f`).
+
+### Notes (Slice 4)
+
+- CLI-only. Template registry, metadata, and rendering live in the `policy` package (`Templates`/`FindTemplate`/`Template.PolicyValue`/`DetailValue`/`PrintTemplateList`/`TemplateNames`, in `policy/template.go`); file writing reuses `output.WritePrettyJSON`; `commands` stays handlers-only. `validate:contract` stays **234/234**; the CLI stays a pure API client.
+- Templates are guarded by a white-box registry test (each renders to a schema-1 policy that `Parse` accepts and `Evaluate` runs; sorted/unique; no `udp`/`protocol` token; guardrail booleans locked to each template's documented purpose) plus black-box command tests (list/render/`--out`-usable-by-`check`/error paths).
+- CLI coverage **97.8% → 97.6%** (gate 97 PASS, not lowered). `policy/template.go` is 100% covered; the ~0.4% dip is the three structurally-unreachable `json.Marshal`-on-concrete-DTO encode-failure branches in `RunPolicyTemplate` (the same documented CLI pattern). Gate not raised — the buffer is intentionally tight and the remaining gap is defensive/unreachable.
+
 ### Added — Slice 3: Policy report export
 
 - **`portier policy check --out <file>`.** Writes the policy report to a file as deterministic pretty JSON, for CI artifacts, reviews, and support handoff. The exported file uses the **same shape as `--json`** (`findings` + `summary` + `result`, plus the additive `explanations` map under `--explain`) — there is no second report schema.

@@ -5,20 +5,59 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"portier/cli/sources/config"
+	"portier/cli/sources/output"
 	"portier/cli/sources/policy"
 )
 
 const policyHelp = `Usage: portier policy <subcommand> [options]
 
-Evaluate Portier config files against a small, offline policy file.
+Evaluate Portier config files against a small, offline policy file, and inspect
+built-in policy templates.
 
 Subcommands:
   check --config <file> --policy <file>   Evaluate a config against a policy (read-only, offline)
+  template <name> | --list                Print a built-in policy template, or list them
   help                                    Show this help message
 
-Run 'portier policy check --help' for check options.
+Run 'portier policy check --help' or 'portier policy template --help' for options.
+`
+
+const policyTemplateHelp = `Usage: portier policy template <name> [--out <file>]
+       portier policy template --list
+
+Print a built-in policy template, or list the available templates. Fully offline:
+never contacts the runtime and never modifies any file except the requested --out
+file. A rendered template is a complete policy file (schemaVersion 1) that can be
+passed straight to 'portier policy check --policy <file>'.
+
+Options:
+  --list            List the available templates (name, title, description).
+  --out <file>      Write the template's policy JSON to <file> (bare policy only,
+                    directly usable by 'policy check'). Without --out, the policy
+                    JSON is printed to stdout.
+
+Output:
+  policy template <name>           Prints the template's policy JSON to stdout.
+  policy template <name> --json    Prints a metadata wrapper {name,title,description,policy}.
+  policy template <name> --out f   Writes the policy JSON to f (human mode confirms on stdout).
+  policy template --list           Prints a compact human list of the templates.
+  policy template --list --json    Prints {"templates":[{name,title,description}]}.
+
+Built-in templates: local-safe, managed, permissive.
+
+Exit codes:
+  0  Success
+  1  Output file write failure (an operation failure)
+  2  Missing/invalid arguments (including a missing --out value) or an unknown template
+
+Examples:
+  portier policy template --list
+  portier policy template local-safe
+  portier policy template managed --out policy.json
+  portier policy check --config portier.json --policy policy.json
 `
 
 const policyCheckHelp = `Usage: portier policy check --config <config-file> --policy <policy-file>
@@ -81,6 +120,8 @@ func RunPolicy(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "check":
 		return RunPolicyCheck(jsonOutput, args[1:], stdout, stderr)
+	case "template":
+		return RunPolicyTemplate(jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, policyHelp)
 		return 0
@@ -151,4 +192,104 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 
 	report := policy.Evaluate(rules, pol)
 	return policy.Emit(report, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
+}
+
+// RunPolicyTemplate prints a built-in policy template (or lists them). It is
+// fully offline: it never contacts the runtime and never modifies any file
+// except the requested --out file. A rendered template is a complete policy file
+// in the schema `policy check` accepts. Exit codes: 0 = success, 1 = output-file
+// write failure, 2 = usage error (including a missing --out value) or an unknown
+// template.
+func RunPolicyTemplate(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("policy template", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagList := fs.Bool("list", false, "list the available templates")
+	flagOut := fs.String("out", "", "write the template policy JSON to this file")
+
+	// Parse flags that may appear before AND after the positional template name
+	// (e.g. `template managed --out f`); Go's flag package otherwise stops at the
+	// first non-flag argument.
+	var positional []string
+	rest := args
+	for {
+		if err := fs.Parse(rest); err != nil {
+			if err == flag.ErrHelp {
+				fmt.Fprint(stdout, policyTemplateHelp)
+				return 0
+			}
+			fmt.Fprintf(stderr, "Error: %v\n\n", err)
+			fmt.Fprint(stderr, policyTemplateHelp)
+			return 2
+		}
+		rest = fs.Args()
+		if len(rest) == 0 {
+			break
+		}
+		positional = append(positional, rest[0])
+		rest = rest[1:]
+	}
+
+	if *flagList {
+		if len(positional) > 0 {
+			fmt.Fprintf(stderr, "Error: --list takes no template name (got %q)\n\n", positional[0])
+			fmt.Fprint(stderr, policyTemplateHelp)
+			return 2
+		}
+		if *flagOut != "" {
+			fmt.Fprintln(stderr, "Error: --out cannot be combined with --list")
+			fmt.Fprint(stderr, policyTemplateHelp)
+			return 2
+		}
+		if err := policy.PrintTemplateList(jsonOutput, stdout); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	if len(positional) == 0 {
+		fmt.Fprintln(stderr, "Error: a template name is required (or use --list)")
+		fmt.Fprint(stderr, policyTemplateHelp)
+		return 2
+	}
+	if len(positional) > 1 {
+		fmt.Fprintf(stderr, "Error: too many arguments (expected one template name, got %d)\n\n", len(positional))
+		fmt.Fprint(stderr, policyTemplateHelp)
+		return 2
+	}
+
+	name := positional[0]
+	tmpl, ok := policy.FindTemplate(name)
+	if !ok {
+		fmt.Fprintf(stderr, "Error: unknown template %q. Available: %s\n", name, strings.Join(policy.TemplateNames(), ", "))
+		return 2
+	}
+
+	// stdout carries the metadata+policy wrapper under --json, the bare policy
+	// JSON in human mode, or (human mode + --out) just the write confirmation —
+	// the --out file always gets the bare policy JSON so it is directly usable by
+	// `policy check`.
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, tmpl.DetailValue()); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+	} else if *flagOut == "" {
+		if err := output.PrintJSON(stdout, tmpl.PolicyValue()); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+	}
+
+	if *flagOut != "" {
+		if err := output.WritePrettyJSON(*flagOut, tmpl.PolicyValue()); err != nil {
+			fmt.Fprintf(stderr, "Error writing %s: %v\n", *flagOut, err)
+			return 1
+		}
+		if !jsonOutput {
+			fmt.Fprintf(stdout, "Policy written to %s\n", *flagOut)
+		}
+	}
+
+	return 0
 }
