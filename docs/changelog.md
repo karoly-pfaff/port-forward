@@ -4,7 +4,11 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — Doctor & Config Toolkit (v1.9, in progress)
+## [1.9.0] — 2026-06-13 — Doctor & Config Toolkit
+
+### Goal
+
+Operator-facing diagnostic tooling, built entirely in the Go CLI as a pure API client — **no runtime/API/server/service/client contract changes** (`validate:contract` stays **234/234** throughout). v1.9 adds: an **offline `portier config doctor <file>`** and a **live `portier doctor`** sharing one deterministic doctor result model (`DoctorReport`/`DoctorCheckResult`) and **20 stable check codes**; **`portier explain <code>`** backed by a test-guarded explanation registry covering every code; **`--strict`** (treat warnings as failures — exit-code interpretation only, never changing which checks run), **`--out <file>`** (export the JSON report, same schema as `--json`), and **`--explain`** (inline per-check explanations) across both doctor commands; **`portier support-bundle --out <dir>`** collecting deterministic doctor artifacts (manifest + `doctor.json`/`doctor.txt` + explanations) **safely** — no environment/process/log/token/filesystem collection, and a runtime-unreachable bundle is still produced; **structured config-doctor `details`** (duplicate-binding / LAN-exposure / privileged-port / validation findings, derived only from the offline config) plus a compact, machine-readable **`config` summary**; and an offline, safety-first **AI handoff prompt** ([`docs/prompts/doctor.md`](prompts/doctor.md)) with no AI integration/upload/telemetry. Rounded out by a **docs cleanup** (removed unmaintained docs, renamed/tidied references) and a **release-readiness audit** (Slices 1–9 PASS). All five coverage gates hold (none lowered); CLI coverage ≈ 97.6% (gate 95%).
 
 ### Added — Slice 1: Doctor result model + offline config doctor
 
