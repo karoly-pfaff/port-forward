@@ -630,6 +630,42 @@ Stable finding codes: `policy.valid` (info, emitted when the config complies), `
 
 Exit codes: `0` no violations; `1` one or more violations, or an `--out` write failure; `2` missing/invalid arguments (including a missing `--out` value), or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
 
+### `portier policy review --current <file> --candidate <file> --policy <file>`
+
+A **policy-aware config review**: compare a current config with a candidate config and evaluate **only the candidate** against a policy — answering "if I moved from current to candidate, would the candidate pass this policy, and what changed?". Fully **offline and dry-run** — it reads the three files, never contacts the runtime, never probes targets, and never modifies any file except the requested `--out` file. It does **not** apply or import anything.
+
+```
+portier policy review --current <current-config> --candidate <candidate-config> --policy <policy-file> [--json] [--explain] [--out <file>]
+```
+
+The review reports a **compact change summary** (current vs candidate rule/group counts and their delta) plus the candidate's policy findings — reusing the exact `policy check` finding/report semantics (no second schema). Human output:
+
+```
+Portier Policy Review
+
+Config changes:
+- Rules: 2 → 3 (+1)
+- Enabled rules: 1 → 3 (+2)
+- Disabled rules: 1 → 0 (-1)
+- Groups: 1 → 2 (+1)
+- Ungrouped rules: 1 → 0 (-1)
+
+Policy findings:
+[INFO]  Config complies with the policy
+        The config satisfies all enabled policy rules.
+
+Summary:
+  0 info
+  0 warnings
+  0 errors
+
+Result: passed
+```
+
+`--json` emits `{ "review": { "current", "candidate", "delta" }, "findings": [...], "summary": {...}, "result": "passed" }` — `current`/`candidate` are the same shape as the `config doctor` config summary; `delta` is the scalar `candidate − current` difference. `--explain` adds the same additive `explanations` map as `policy check --json --explain` (and inline explanation blocks in human output) without changing the review, findings, summary, result, or exit code. `--out <file>` also writes the JSON review (byte-identical to `--json` stdout; human mode confirms with `Review written to <file>`). The change summary is intentionally compact — this is **not** a full config diff engine.
+
+Exit codes: `0` the candidate passes the policy; `1` the candidate violates the policy, or an `--out` write failure; `2` missing/invalid arguments, or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
+
 ### `portier policy template <name> [--out <file>]` / `--list`
 
 Print a built-in **policy template** (or list the available ones) so you don't have to write the policy JSON schema by hand. Fully **offline** — it never contacts the runtime and never modifies any file except the requested `--out` file. A rendered template is a complete policy file (`schemaVersion: 1`) that can be passed straight to `portier policy check --policy <file>`.

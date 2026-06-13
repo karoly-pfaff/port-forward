@@ -314,7 +314,14 @@ func severityTag(s Severity) string {
 func PrintHuman(r Report, withExplain bool, w io.Writer) {
 	fmt.Fprintln(w, "Portier Policy Check")
 	fmt.Fprintln(w)
+	printFindings(r, withExplain, w)
+	printSummaryAndResult(r, w)
+}
 
+// printFindings writes each finding's tag/title/message (and, with withExplain,
+// its inline explanation block). Shared by PrintHuman and PrintReviewHuman so the
+// finding rendering cannot drift between them.
+func printFindings(r Report, withExplain bool, w io.Writer) {
 	for _, f := range r.Findings {
 		fmt.Fprintf(w, "%-7s %s\n", severityTag(f.Severity), f.Title)
 		if f.Message != "" {
@@ -324,7 +331,11 @@ func PrintHuman(r Report, withExplain bool, w io.Writer) {
 			explain.PrintInline(explanations, f.Code, w)
 		}
 	}
+}
 
+// printSummaryAndResult writes the severity summary and the Result line. Shared
+// by PrintHuman and PrintReviewHuman.
+func printSummaryAndResult(r Report, w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Summary:")
 	fmt.Fprintf(w, "  %d info\n", r.Summary.Info)

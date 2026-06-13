@@ -19,10 +19,48 @@ built-in policy templates.
 
 Subcommands:
   check --config <file> --policy <file>   Evaluate a config against a policy (read-only, offline)
+  review --current <file> --candidate <file> --policy <file>
+                                          Compare current vs candidate config and evaluate the
+                                          candidate against a policy (read-only, offline)
   template <name> | --list                Print a built-in policy template, or list them
   help                                    Show this help message
 
-Run 'portier policy check --help' or 'portier policy template --help' for options.
+Run 'portier policy check --help', 'portier policy review --help', or
+'portier policy template --help' for options.
+`
+
+const policyReviewHelp = `Usage: portier policy review --current <file> --candidate <file> --policy <file>
+
+Compare a current config with a candidate config and evaluate ONLY the candidate
+against a policy: "if I moved from current to candidate, would the candidate pass
+this policy, and what changed?". Fully offline and dry-run — it reads the three
+files, never contacts the runtime, never probes targets, and never modifies any
+file except the requested --out file. It does NOT apply or import anything.
+
+Options:
+  --current <file>    Path to the current Portier config file (required).
+  --candidate <file>  Path to the candidate Portier config file (required).
+  --policy <file>     Path to the JSON policy file (required).
+  --explain           Show an explanation for each emitted policy finding (inline
+                      in human output; an additive explanations map in --json).
+  --out <file>        Also write the JSON review report to <file> (same shape as
+                      --json). With --json the JSON also prints to stdout and is
+                      byte-identical to the file.
+
+The review reports a compact change summary (current vs candidate rule/group
+counts and their delta) plus the candidate's policy findings, summary, and result
+(reusing 'policy check' semantics). --explain does not change the findings,
+summary, result, review, or exit code.
+
+Exit codes:
+  0  Candidate passes the policy
+  1  Candidate violates the policy, or an --out write failure
+  2  Missing/invalid arguments, or an unreadable/malformed config or policy file
+     (including an unsupported schemaVersion)
+
+Examples:
+  portier policy review --current current.json --candidate candidate.json --policy policy.json
+  portier --json policy review --current current.json --candidate candidate.json --policy policy.json --explain
 `
 
 const policyTemplateHelp = `Usage: portier policy template <name> [--out <file>]
@@ -120,6 +158,8 @@ func RunPolicy(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "check":
 		return RunPolicyCheck(jsonOutput, args[1:], stdout, stderr)
+	case "review":
+		return RunPolicyReview(jsonOutput, args[1:], stdout, stderr)
 	case "template":
 		return RunPolicyTemplate(jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -192,6 +232,90 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 
 	report := policy.Evaluate(rules, pol)
 	return policy.Emit(report, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
+}
+
+// loadReviewConfig reads and parses a local config file for `policy review`,
+// labelling errors with the role (current/candidate). On failure it writes a
+// clear message to stderr and returns exit code 2; on success it returns the
+// parsed rules and 0.
+func loadReviewConfig(path, label string, stderr io.Writer) ([]config.Rule, int) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading %s config %s: %v\n", label, path, err)
+		return nil, 2
+	}
+	rules, parseErr := config.ParseLocal(data)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid %s config %s: %v\n", label, path, parseErr)
+		return nil, 2
+	}
+	return rules, 0
+}
+
+// RunPolicyReview compares a current config with a candidate config and evaluates
+// ONLY the candidate against a policy, printing a deterministic review (change
+// summary + candidate policy findings). It is fully offline and dry-run: it never
+// contacts the runtime, never probes targets, and never modifies any file except
+// the requested --out file. Exit codes: 0 = candidate passes, 1 = candidate
+// violates the policy (or a JSON-encode / --out write failure), 2 = usage error
+// or an unreadable/malformed config or policy file.
+func RunPolicyReview(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("policy review", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagCurrent := fs.String("current", "", "path to the current config file")
+	flagCandidate := fs.String("candidate", "", "path to the candidate config file")
+	flagPolicy := fs.String("policy", "", "path to the policy file")
+	flagExplain := fs.Bool("explain", false, "show an explanation for each emitted finding")
+	flagOut := fs.String("out", "", "also write the JSON review report to this file")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, policyReviewHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, policyReviewHelp)
+		return 2
+	}
+
+	if *flagCurrent == "" {
+		fmt.Fprintln(stderr, "Error: --current is required")
+		fmt.Fprint(stderr, policyReviewHelp)
+		return 2
+	}
+	if *flagCandidate == "" {
+		fmt.Fprintln(stderr, "Error: --candidate is required")
+		fmt.Fprint(stderr, policyReviewHelp)
+		return 2
+	}
+	if *flagPolicy == "" {
+		fmt.Fprintln(stderr, "Error: --policy is required")
+		fmt.Fprint(stderr, policyReviewHelp)
+		return 2
+	}
+
+	current, code := loadReviewConfig(*flagCurrent, "current", stderr)
+	if code != 0 {
+		return code
+	}
+	candidate, code := loadReviewConfig(*flagCandidate, "candidate", stderr)
+	if code != 0 {
+		return code
+	}
+
+	policyData, err := os.ReadFile(*flagPolicy)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading policy %s: %v\n", *flagPolicy, err)
+		return 2
+	}
+	pol, polErr := policy.Parse(policyData)
+	if polErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid policy %s: %v\n", *flagPolicy, polErr)
+		return 2
+	}
+
+	review := policy.BuildReview(current, candidate, pol)
+	return policy.EmitReview(review, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
 }
 
 // RunPolicyTemplate prints a built-in policy template (or lists them). It is
