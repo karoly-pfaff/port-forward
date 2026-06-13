@@ -464,7 +464,7 @@ Dev build output (repo-internal, not distributed): `service/build/portier-servic
 Packaging scripts:
 - `build:runtime` → `build/portier/` (cross-platform, primary generic output; builds CLI + service)
 - `build:runtime:windows` → `build/windows/`, `build:runtime:macos` → `build/macos/`, `build:runtime:linux` → `build/linux/`
-- `build:clean` removes `build/portier/`, all platform package output dirs, `build/releases/`, and `tools/cli/build/`
+- `build:clean` removes the top-level outputs (`build/portier/`, all platform package output dirs, `build/releases/`, `build/tests/`) **and** the per-workspace dev build dirs (`client/build/`, `server/build/`, `shared/build/`, `service/build/`, `tools/cli/build/`)
 
 Validation scripts:
 - `validate:runtime` → validates `build/portier/` layout

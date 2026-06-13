@@ -366,7 +366,7 @@ npm run build:runtime             # cross-platform: builds build/portier/ on the
 npm run build:runtime:windows     # Windows package (build/windows/)
 npm run build:runtime:macos       # macOS package (build/macos/)
 npm run build:runtime:linux       # Linux package (build/linux/)
-npm run build:clean               # clean build/portier/ and all platform package dirs
+npm run build:clean               # clean all build outputs: build/* (portier/platform/releases/tests) + per-workspace build/ (client/server/shared/service) + tools/cli/build
 ```
 
 ## macOS LaunchAgent Commands

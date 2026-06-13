@@ -7,12 +7,18 @@ import { fileURLToPath } from "node:url";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const targets = [
+  // Top-level packaged-runtime / release / test-binary outputs.
   "build/portier",
   "build/windows",
   "build/macos",
   "build/linux",
   "build/releases",
   "build/tests",
+  // Per-workspace dev build outputs (repo-internal, not distributed).
+  "client/build",
+  "server/build",
+  "shared/build",
+  "service/build",
   "tools/cli/build",
 ];
 
