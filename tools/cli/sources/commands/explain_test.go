@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"portier/cli/sources/commands"
-	"portier/cli/sources/doctor"
+	"portier/cli/sources/explain"
 )
 
 func TestExplain_ConfigCode(t *testing.T) {
@@ -40,7 +40,7 @@ func TestExplain_JSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	var exp doctor.Explanation
+	var exp explain.Explanation
 	if err := json.Unmarshal([]byte(out.String()), &exp); err != nil {
 		t.Fatalf("decoding JSON: %v\noutput:\n%s", err, out.String())
 	}
@@ -114,14 +114,46 @@ func TestExplain_List(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	s := out.String()
-	for _, want := range []string{"config.valid", "runtime.reachable", "rules.health_error", "config.export_read"} {
+	for _, want := range []string{"config.valid", "runtime.reachable", "rules.health_error", "config.export_read", "policy.lan_exposure_forbidden", "policy.group_required"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("--list output missing %q", want)
 		}
 	}
-	// Sorted: config.* codes come before runtime.* codes.
+	// Sorted alphabetically by code: config.* < policy.* < runtime.*.
 	if strings.Index(s, "runtime.reachable") < strings.Index(s, "config.valid") {
 		t.Errorf("--list should be sorted (config.* before runtime.*)\noutput:\n%s", s)
+	}
+	if strings.Index(s, "policy.group_required") > strings.Index(s, "runtime.reachable") {
+		t.Errorf("--list should be sorted (policy.* before runtime.*)\noutput:\n%s", s)
+	}
+}
+
+func TestExplain_PolicyCode(t *testing.T) {
+	var out, errBuf strings.Builder
+	code := commands.RunExplain(false, []string{"policy.lan_exposure_forbidden"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	s := out.String()
+	for _, want := range []string{"policy.lan_exposure_forbidden", "Meaning:", "What to do:"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("policy explain output missing %q\noutput:\n%s", want, s)
+		}
+	}
+}
+
+func TestExplain_PolicyCodeJSON(t *testing.T) {
+	var out, errBuf strings.Builder
+	code := commands.RunExplain(true, []string{"policy.group_required"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var exp explain.Explanation
+	if err := json.Unmarshal([]byte(out.String()), &exp); err != nil {
+		t.Fatalf("decoding JSON: %v\n%s", err, out.String())
+	}
+	if exp.Code != "policy.group_required" || exp.Severity != "error" {
+		t.Errorf("policy explanation = %+v", exp)
 	}
 }
 
@@ -131,12 +163,12 @@ func TestExplain_ListJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	var list []doctor.Explanation
+	var list []explain.Explanation
 	if err := json.Unmarshal([]byte(out.String()), &list); err != nil {
 		t.Fatalf("decoding JSON list: %v\noutput:\n%s", err, out.String())
 	}
-	if len(list) != 20 {
-		t.Errorf("list length = %d, want 20 (8 config doctor + 12 live doctor)", len(list))
+	if len(list) != 26 {
+		t.Errorf("list length = %d, want 26 (8 config doctor + 12 live doctor + 6 policy)", len(list))
 	}
 	// Sorted by code.
 	for i := 1; i < len(list); i++ {

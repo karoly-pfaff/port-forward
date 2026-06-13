@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"portier/cli/sources/config"
+	"portier/cli/sources/explain"
 	"portier/cli/sources/output"
 )
 
@@ -307,8 +308,10 @@ func severityTag(s Severity) string {
 	}
 }
 
-// PrintHuman renders a policy report in deterministic human-readable form.
-func PrintHuman(r Report, w io.Writer) {
+// PrintHuman renders a policy report in deterministic human-readable form. When
+// withExplain is set, each finding is followed by an inline explanation block
+// (code, meaning, next action, related codes) for its finding code.
+func PrintHuman(r Report, withExplain bool, w io.Writer) {
 	fmt.Fprintln(w, "Portier Policy Check")
 	fmt.Fprintln(w)
 
@@ -316,6 +319,9 @@ func PrintHuman(r Report, w io.Writer) {
 		fmt.Fprintf(w, "%-7s %s\n", severityTag(f.Severity), f.Title)
 		if f.Message != "" {
 			fmt.Fprintf(w, "        %s\n", f.Message)
+		}
+		if withExplain {
+			explain.PrintInline(explanations, f.Code, w)
 		}
 	}
 
@@ -325,4 +331,53 @@ func PrintHuman(r Report, w io.Writer) {
 	fmt.Fprintf(w, "  %d %s\n", r.Summary.Warning, output.PluralWord(r.Summary.Warning, "warning", "warnings"))
 	fmt.Fprintf(w, "  %d %s\n", r.Summary.Error, output.PluralWord(r.Summary.Error, "error", "errors"))
 	fmt.Fprintf(w, "\nResult: %s\n", r.Result)
+}
+
+// reportJSON is the JSON encoding of a policy report plus an optional additive
+// explanations map. Report is embedded so findings/summary/result stay at the
+// top level; Explanations is populated ONLY with --explain (and only for the
+// codes present in the report), so output without --explain is byte-identical to
+// the bare Report.
+type reportJSON struct {
+	Report
+	Explanations map[string]explain.Explanation `json:"explanations,omitempty"`
+}
+
+// EmitOptions groups the presentation flags for a policy report. They affect
+// ONLY how the report is rendered — never the findings, summary, result, or exit
+// code.
+type EmitOptions struct {
+	Explain bool
+	JSON    bool
+}
+
+// codesOf returns the finding codes of a report, in order.
+func codesOf(r Report) []string {
+	codes := make([]string, len(r.Findings))
+	for i, f := range r.Findings {
+		codes[i] = f.Code
+	}
+	return codes
+}
+
+// Emit prints a policy report (JSON when opts.JSON is set, otherwise human) and
+// returns its exit code. With opts.Explain it adds inline explanations (human
+// blocks; an additive `explanations` map in JSON, deduplicated by code) for the
+// finding codes present in the report — without changing findings, summary,
+// result, or the exit code. A JSON-encode failure overrides the exit code with 1.
+func Emit(r Report, opts EmitOptions, stdout, stderr io.Writer) int {
+	if opts.JSON {
+		payload := reportJSON{Report: r}
+		if opts.Explain {
+			payload.Explanations = explain.ForReport(explanations, codesOf(r))
+		}
+		if err := output.PrintJSON(stdout, payload); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return ExitCode(r)
+	}
+
+	PrintHuman(r, opts.Explain, stdout)
+	return ExitCode(r)
 }

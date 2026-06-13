@@ -50,6 +50,7 @@ const coverpkg = [
   "portier/cli/sources/commands",
   "portier/cli/sources/config",
   "portier/cli/sources/doctor",
+  "portier/cli/sources/explain",
   "portier/cli/sources/output",
   "portier/cli/sources/planview",
   "portier/cli/sources/policy",

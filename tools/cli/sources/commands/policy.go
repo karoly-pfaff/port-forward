@@ -7,7 +7,6 @@ import (
 	"os"
 
 	"portier/cli/sources/config"
-	"portier/cli/sources/output"
 	"portier/cli/sources/policy"
 )
 
@@ -30,6 +29,9 @@ never contacts the runtime, never probes targets, and never modifies any file.
 Options:
   --config <file>   Path to the Portier config file to evaluate (required).
   --policy <file>   Path to the JSON policy file (required).
+  --explain         Show an explanation (meaning + next action) for each emitted
+                    finding (inline in human output; an additive explanations map
+                    in --json). Does not change findings, result, or exit code.
 
 Policy file format (schemaVersion 1):
   {
@@ -93,6 +95,7 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 	fs.SetOutput(io.Discard)
 	flagConfig := fs.String("config", "", "path to the Portier config file")
 	flagPolicy := fs.String("policy", "", "path to the policy file")
+	flagExplain := fs.Bool("explain", false, "show an explanation for each emitted finding")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -138,15 +141,5 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 	}
 
 	report := policy.Evaluate(rules, pol)
-
-	if jsonOutput {
-		if err := output.PrintJSON(stdout, report); err != nil {
-			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
-			return 1
-		}
-		return policy.ExitCode(report)
-	}
-
-	policy.PrintHuman(report, stdout)
-	return policy.ExitCode(report)
+	return policy.Emit(report, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput}, stdout, stderr)
 }

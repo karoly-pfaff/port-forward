@@ -512,14 +512,14 @@ Exit codes: `0` doctor completed with no error-severity checks (**warnings alone
 
 ### `portier explain <code>`
 
-Explain a stable doctor/check code: what it means and what to do next. Fully **offline** — static reference data, no runtime contact, no external lookup, no AI, and nothing is changed or fixed.
+Explain a stable doctor/check or policy code: what it means and what to do next. Fully **offline** — static reference data, no runtime contact, no external lookup, no AI, and nothing is changed or fixed.
 
 ```
 portier explain <code> [--json]
 portier explain --list [--json]
 ```
 
-Covers all stable codes emitted by `portier doctor` and `portier config doctor` (the 8 config-doctor codes from Slice 1 and the 12 live-doctor codes from Slice 2). Human output:
+Covers all 26 stable codes: the 8 config-doctor codes and 12 live-doctor codes emitted by `portier config doctor` / `portier doctor`, plus the 6 policy finding codes emitted by `portier policy check` (`policy.valid`, `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`). Human output:
 
 ```
 config.duplicate_binding
@@ -576,7 +576,7 @@ If you want to ask an AI assistant to help interpret a doctor report, Portier sh
 Evaluate a local Portier config file against a small JSON **policy** file. Fully **offline** — it never contacts the runtime, never probes targets, and never modifies the config or policy file. This is **dry-run evaluation only**: there is no enforcement, no automation, and no config/runtime mutation.
 
 ```
-portier policy check --config <config-file> --policy <policy-file> [--json]
+portier policy check --config <config-file> --policy <policy-file> [--json] [--explain]
 ```
 
 The policy file is a small JSON document (`schemaVersion: 1`) with a `rules` object of boolean guardrails:
@@ -624,7 +624,13 @@ Human output lists each finding with an `[INFO]`/`[ERROR]` tag, a severity summa
 
 Stable finding codes: `policy.valid` (info, emitted when the config complies), `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`. Evaluation is deterministic: per-rule findings appear in config file order (within a rule: group → LAN exposure → privileged port → autostart); duplicate-binding findings come last, one per conflicting binding, sorted by protocol → listen host → port.
 
+**`--explain`** adds an inline explanation (code, meaning, next action, related codes) for each emitted finding, reusing the same registry as `portier explain`. In human output each finding is followed by an indented `Code:`/`Meaning:`/`What to do:` block; in `--json` an additive top-level `explanations` map (`code → { title, meaning, action, ... }`, deduplicated by code) is added for the emitted finding codes only. `--explain` does **not** change the findings, summary, result, or exit code — without it the JSON is byte-identical to before (the `explanations` map is omitted). Explanations describe what a guardrail means and what an operator can do; they never claim Portier enforces a policy or fixes a violation automatically.
+
 Exit codes: `0` no violations; `1` one or more violations; `2` missing/invalid arguments, or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
+
+### Using policy output with an AI assistant
+
+To ask an AI assistant to help interpret a policy report, Portier ships a reusable, copy-paste prompt in [`docs/prompts/policy.md`](../../docs/prompts/policy.md). As with the doctor prompt, **Portier never sends anything anywhere** (no AI integration, upload, or telemetry) — it is plain text *you* paste into an assistant of your choice along with output you generated locally (e.g. `portier policy check --json --explain`). The policy prompt frames each finding as a **policy choice**, not necessarily a product defect, and separates safe next actions from changes that need admin/security review.
 
 ### `portier version`
 

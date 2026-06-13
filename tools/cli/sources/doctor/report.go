@@ -9,9 +9,9 @@ package doctor
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"portier/cli/sources/config"
+	"portier/cli/sources/explain"
 	"portier/cli/sources/output"
 )
 
@@ -115,9 +115,9 @@ func ResultLabel(r Report, strict bool) string {
 // is byte-identical to before.
 type reportJSON struct {
 	Report
-	Strict       bool                   `json:"strict"`
-	Result       string                 `json:"result"`
-	Explanations map[string]Explanation `json:"explanations,omitempty"`
+	Strict       bool                           `json:"strict"`
+	Result       string                         `json:"result"`
+	Explanations map[string]explain.Explanation `json:"explanations,omitempty"`
 	// Config is a compact, deterministic config summary set ONLY by config doctor
 	// (when the file parses); the live doctor leaves it nil so its JSON is
 	// byte-identical to before (omitempty).
@@ -145,18 +145,13 @@ func ReportPayload(r Report, strict bool) any {
 	return reportJSON{Report: r, Strict: strict, Result: ResultLabel(r, strict)}
 }
 
-// explanationsForReport returns the canonical explanation for each code present
-// in the report's checks (deduplicated via the map; codes with no registry entry
-// are safely omitted). Reuses the explanation registry — it does not duplicate
-// explanation strings.
-func explanationsForReport(r Report) map[string]Explanation {
-	m := make(map[string]Explanation)
-	for _, c := range r.Checks {
-		if exp, ok := explanations[c.Code]; ok {
-			m[c.Code] = exp
-		}
+// checkCodes returns the codes of every check in the report, in order.
+func checkCodes(r Report) []string {
+	codes := make([]string, len(r.Checks))
+	for i, c := range r.Checks {
+		codes[i] = c.Code
 	}
-	return m
+	return codes
 }
 
 // severityTag returns the fixed-width ASCII tag for a severity, matching the
@@ -178,7 +173,7 @@ func severityTag(s Severity) string {
 // given title heading. In strict mode, when warnings (and no errors) are the
 // reason for failure, it notes that warnings are treated as failures. When
 // explain is set, each check is followed by its code, meaning, and next action.
-func PrintHuman(title string, r Report, strict, explain bool, w io.Writer) {
+func PrintHuman(title string, r Report, strict, withExplain bool, w io.Writer) {
 	fmt.Fprintln(w, title)
 	fmt.Fprintln(w)
 
@@ -191,8 +186,8 @@ func PrintHuman(title string, r Report, strict, explain bool, w io.Writer) {
 		if c.Message != "" {
 			fmt.Fprintf(w, "        %s\n", c.Message)
 		}
-		if explain {
-			printCheckExplanation(c, w)
+		if withExplain {
+			explain.PrintInline(explanations, c.Code, w)
 		}
 	}
 
@@ -209,23 +204,6 @@ func PrintHuman(title string, r Report, strict, explain bool, w io.Writer) {
 	fmt.Fprintf(w, "\nResult: %s\n", ResultLabel(r, strict))
 }
 
-// printCheckExplanation renders the inline explanation block for one check
-// (--explain), indented to align with the check message. Codes with no registry
-// entry degrade safely to a clear "(no explanation available)" note.
-func printCheckExplanation(c CheckResult, w io.Writer) {
-	fmt.Fprintf(w, "        Code: %s\n", c.Code)
-	exp, ok := explanations[c.Code]
-	if !ok {
-		fmt.Fprintln(w, "        (no explanation available)")
-		return
-	}
-	fmt.Fprintf(w, "        Meaning: %s\n", exp.Meaning)
-	fmt.Fprintf(w, "        What to do: %s\n", exp.Action)
-	if len(exp.Related) > 0 {
-		fmt.Fprintf(w, "        Related: %s\n", strings.Join(exp.Related, ", "))
-	}
-}
-
 // Emit prints the report (JSON when opts.JSON is set, otherwise human) and, when
 // opts.OutPath is non-empty, also writes the exact same JSON report to that file.
 // With opts.Explain it adds inline explanations (human blocks; an additive
@@ -236,7 +214,7 @@ func printCheckExplanation(c CheckResult, w io.Writer) {
 func Emit(title string, r Report, opts EmitOptions, stdout, stderr io.Writer) int {
 	payload := reportJSON{Report: r, Strict: opts.Strict, Result: ResultLabel(r, opts.Strict)}
 	if opts.Explain {
-		payload.Explanations = explanationsForReport(r)
+		payload.Explanations = explain.ForReport(explanations, checkCodes(r))
 	}
 	payload.Config = opts.Config
 

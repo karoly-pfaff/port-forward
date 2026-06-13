@@ -8,6 +8,20 @@ All notable changes to Portier are documented here.
 
 v1.10 helps operators define and evaluate **safe operating rules** before any automation or enforcement exists. It starts with **dry-run policy evaluation only** — built entirely in the Go CLI as a pure API client, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**). UDP stays first-class: there is **no `allowUdp`/protocol-restriction policy**.
 
+### Added — Slice 2: Policy finding explanations
+
+- **`portier explain` now covers policy finding codes.** `portier explain policy.lan_exposure_forbidden` (and every policy code) prints a deterministic explanation (meaning + what to do + related codes); `portier explain --list` now lists all **26** codes (8 config-doctor + 12 live-doctor + 6 policy), sorted. Doctor code explanations are unchanged.
+- **`portier policy check --explain`.** Adds an inline explanation block (`Code:`/`Meaning:`/`What to do:`/`Related:`) after each emitted finding in human output, and an additive top-level `explanations` map (deduplicated by code) under `--json`. `--explain` does **not** change the findings, summary, result, or exit code — without it the JSON is byte-identical to before (the `explanations` map is omitted via `omitempty`).
+- **Neutral `explain` package (architecture).** The shared `Explanation` type and its rendering helpers (`For`/`Sorted`/`SortedCodes`/`ForReport`/`PrintInline`/`Merge`) moved out of `doctor` into a new leaf package `tools/cli/sources/explain` (imports nothing internal). Each domain (`doctor`, `policy`) owns its own explanation **data** keyed by its own code constants; the `explain` command merges them. This keeps `doctor` from owning policy codes, avoids import cycles, and keeps `commands` handlers-only.
+- **Explanations are policy-framed and safe.** Each policy explanation frames the finding as a **policy choice** (the operator's `allow*`/`require*` guardrail), offers both resolutions (change the rule **or** adjust the policy), and never claims Portier enforces a policy or fixes a violation automatically.
+- **AI handoff prompt.** Added [`docs/prompts/policy.md`](prompts/policy.md) — a focused, offline, copy-paste prompt for interpreting policy reports (distinct from the doctor prompt because policy findings need the "change the rule vs. adjust the policy" framing). Docs-only; no CLI prompt helper, no AI integration/upload/telemetry.
+
+### Notes (Slice 2)
+
+- CLI-only, behavior-preserving for doctor: `validate:contract` stays **234/234**, doctor `--explain` output is byte-identical (same `Explanation` JSON shape, same inline rendering), and the support bundle's `explanations.json` stays doctor-scoped (20 codes). The CLI stays a pure API client.
+- Every policy finding code is explainable, guarded by a registry parity test in the `policy` package (mirroring the doctor guard). Inline explanations reuse the canonical registry — no second explanation schema.
+- CLI coverage held at **97.8%** (gate 97, not lowered); the new `explain` package and policy explanation code are fully covered.
+
 ### Added — Slice 1: Policy model + dry-run evaluator
 
 - **`portier policy check --config <file> --policy <file>` command.** Evaluates a local Portier config file against a small JSON policy file and prints a deterministic report. **Fully offline** — it never contacts the runtime, never probes targets, and never modifies the config or policy file. Human output by default; `--json` emits the full `PolicyReport`.

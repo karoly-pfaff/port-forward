@@ -1,24 +1,13 @@
 package doctor
 
-import "sort"
-
-// Explanation is a static, deterministic description of one stable doctor/check
-// code: what it means and what an operator should do. It is offline reference
-// data — there is no probing, remediation, or external lookup behind it.
-type Explanation struct {
-	Code     string   `json:"code"`
-	Title    string   `json:"title"`
-	Meaning  string   `json:"meaning"`
-	Action   string   `json:"action"`
-	Severity string   `json:"severity,omitempty"`
-	Related  []string `json:"related,omitempty"`
-}
+import "portier/cli/sources/explain"
 
 // explanations is the static registry mapping every stable doctor/check code to
-// its explanation. Keys reuse the doctor code constants so the strings cannot
+// its explanation, keyed by the doctor code constants so the strings cannot
 // drift. Every code the doctors can emit MUST have an entry here (guarded by
-// explain_internal_test.go).
-var explanations = map[string]Explanation{
+// explain_internal_test.go). The Explanation type and rendering helpers live in
+// the shared explain package; this package owns only the doctor explanation data.
+var explanations = map[string]explain.Explanation{
 	// --- config doctor ---
 	checkConfigReadFailed: {
 		Code:     checkConfigReadFailed,
@@ -184,30 +173,15 @@ var explanations = map[string]Explanation{
 	},
 }
 
-// ExplanationFor returns the explanation for a stable doctor/check code and
-// whether one exists. Used by the `explain` command and inline explanations.
-func ExplanationFor(code string) (Explanation, bool) {
-	e, ok := explanations[code]
-	return e, ok
+// Explanations returns the doctor explanation registry (config-doctor + live
+// doctor codes). The `explain` command merges this with other domains'
+// registries (e.g. policy) for unified lookup and listing.
+func Explanations() map[string]explain.Explanation {
+	return explanations
 }
 
-// SortedExplanationCodes returns all known codes in deterministic sorted order.
-func SortedExplanationCodes() []string {
-	codes := make([]string, 0, len(explanations))
-	for c := range explanations {
-		codes = append(codes, c)
-	}
-	sort.Strings(codes)
-	return codes
-}
-
-// SortedExplanations returns every known explanation in deterministic
-// code-sorted order. Shared by `explain --list --json` and the support bundle.
-func SortedExplanations() []Explanation {
-	codes := SortedExplanationCodes()
-	list := make([]Explanation, len(codes))
-	for i, c := range codes {
-		list[i] = explanations[c]
-	}
-	return list
+// SortedExplanations returns the doctor explanations in deterministic
+// code-sorted order. Used by the support bundle's doctor-scoped explanations.json.
+func SortedExplanations() []explain.Explanation {
+	return explain.Sorted(explanations)
 }

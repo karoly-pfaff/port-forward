@@ -6,17 +6,19 @@ import (
 	"io"
 
 	"portier/cli/sources/doctor"
+	"portier/cli/sources/explain"
 	"portier/cli/sources/output"
+	"portier/cli/sources/policy"
 )
 
 const explainHelp = `Usage: portier explain <code>
        portier explain --list
 
-Explain a stable Portier doctor/check code: what it means and what to do next.
-Fully offline — does not contact the runtime and changes nothing.
+Explain a stable Portier doctor or policy code: what it means and what to do
+next. Fully offline — does not contact the runtime and changes nothing.
 
 Options:
-  --list   List all known doctor/check codes (with their titles).
+  --list   List all known codes (doctor/check and policy) with their titles.
 
 Output:
   Human explanation by default; --json emits the explanation, or with --list the
@@ -29,17 +31,25 @@ Exit codes:
 Examples:
   portier explain config.duplicate_binding
   portier explain rules.health_error
+  portier explain policy.lan_exposure_forbidden
   portier --json explain runtime.unreachable
   portier explain --list
 `
 
+// allExplanations returns the merged explanation registry across all domains
+// (doctor/check codes + policy finding codes). Each domain owns its own
+// registry; the explain command composes them for unified lookup and listing.
+func allExplanations() map[string]explain.Explanation {
+	return explain.Merge(doctor.Explanations(), policy.Explanations())
+}
+
 // RunExplain runs the `portier explain` command. It is fully offline: it looks
-// up a static explanation for a stable doctor/check code (or lists all known
-// codes with --list). Exit codes: 0 success, 2 unknown/missing code or usage.
+// up a static explanation for a stable doctor/check or policy code (or lists all
+// known codes with --list). Exit codes: 0 success, 2 unknown/missing code or usage.
 func RunExplain(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	flagList := fs.Bool("list", false, "list all known doctor/check codes")
+	flagList := fs.Bool("list", false, "list all known codes")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -67,7 +77,7 @@ func RunExplain(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	}
 
 	code := fs.Arg(0)
-	exp, ok := doctor.ExplanationFor(code)
+	exp, ok := explain.For(allExplanations(), code)
 	if !ok {
 		fmt.Fprintf(stderr, "Error: unknown code %q\n", code)
 		fmt.Fprintln(stderr, "Run 'portier explain --list' to see all known codes.")
@@ -88,20 +98,19 @@ func RunExplain(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 
 // runExplainList prints every known code, sorted, in human or JSON form.
 func runExplainList(jsonOutput bool, stdout, stderr io.Writer) int {
-	codes := doctor.SortedExplanationCodes()
+	reg := allExplanations()
 
 	if jsonOutput {
-		if err := output.PrintJSON(stdout, doctor.SortedExplanations()); err != nil {
+		if err := output.PrintJSON(stdout, explain.Sorted(reg)); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
 		return 0
 	}
 
-	fmt.Fprintln(stdout, "Known doctor/check codes:")
-	for _, c := range codes {
-		exp, _ := doctor.ExplanationFor(c)
-		fmt.Fprintf(stdout, "  %-26s %s\n", c, exp.Title)
+	fmt.Fprintln(stdout, "Known codes:")
+	for _, c := range explain.SortedCodes(reg) {
+		fmt.Fprintf(stdout, "  %-34s %s\n", c, reg[c].Title)
 	}
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Run 'portier explain <code>' for details on one code.")
@@ -109,7 +118,7 @@ func runExplainList(jsonOutput bool, stdout, stderr io.Writer) int {
 }
 
 // printExplanationHuman renders one explanation in the CLI's plain style.
-func printExplanationHuman(exp doctor.Explanation, w io.Writer) {
+func printExplanationHuman(exp explain.Explanation, w io.Writer) {
 	fmt.Fprintln(w, exp.Code)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Meaning:")
