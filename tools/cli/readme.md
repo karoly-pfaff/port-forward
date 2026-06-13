@@ -565,6 +565,12 @@ If the runtime is unreachable the bundle is **still created** with `manifest.jso
 
 Exit codes: `0` bundle written and the doctor report passed; `1` bundle written but the doctor report failed (errors / unreachable / a warning under `--strict`) **or** a filesystem/write failure; `2` missing `--out` or usage error. An existing **non-empty** output directory (or a path that is a file) is **refused** with exit `1` — a bundle is never silently overwritten; an existing empty directory is used. No zip output yet (directory only).
 
+### Using doctor output with an AI assistant
+
+If you want to ask an AI assistant to help interpret a doctor report, Portier ships a reusable, copy-paste **AI handoff prompt** in [`docs/prompts/doctor.md`](../../docs/prompts/doctor.md) (a full version and a short version).
+
+**Portier never sends anything anywhere** — there is no AI integration, upload, or telemetry. The prompt is plain text *you* paste into an assistant of your choice, together with output you generated locally (e.g. `portier doctor --json --explain`). The prompt tells the assistant to treat the pasted report as the only source of truth, to distinguish info / warning / error / strict failures, to ground its analysis in the data, and — importantly — **never to ask you for secrets, tokens, keys, environment dumps, process lists, or logs** (the doctor tools never collect those). It asks for a verdict, prioritized findings, a risk level, and separated "safe now" vs "needs admin/network/security review" next steps.
+
 ### `portier version`
 
 Show the CLI version.

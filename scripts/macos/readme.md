@@ -195,7 +195,7 @@ tar -xzf portier-portable-macos-<version>.tar.gz -C ~/Applications/Portier/
 bash scripts/macos/service/install-launch-agent.sh --source-dir ~/Applications/Portier
 ```
 
-> **Note:** `.pkg` installer support (via `pkgbuild`/`productbuild`) is not yet implemented. The portable tar.gz is the v1.1 macOS release artifact. `.pkg` is planned as a follow-up. See `docs/installer-strategy.md`.
+> **Note:** `.pkg` installer support (via `pkgbuild`/`productbuild`) is not yet implemented. The portable tar.gz is the v1.1 macOS release artifact. `.pkg` is planned as a follow-up. See `docs/installer.md`.
 
 ---
 

@@ -1,6 +1,6 @@
-# Claude Code Usage
+# Agentic Coding Setup
 
-Portier includes Claude Code project support files so coding agents have repo-specific guardrails before editing.
+Portier includes agent support files (currently Claude Code) so coding agents have repo-specific guardrails before editing.
 
 ## Root Guidance
 

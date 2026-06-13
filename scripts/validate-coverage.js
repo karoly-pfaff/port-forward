@@ -69,13 +69,13 @@ const coverDir = join(repoRoot, "coverage");
 //   client 95.6/89.6/78.6, service 87.7, cli 93.2
 // Actuals after Slice B: service 88.6% (gate raised 87→88).
 // Actuals after Coverage Slice C: cli 97.7% (gate raised 93→95; deterministic
-//   cross-package Go number, repeated runs stable). See docs/coverage-baseline.md.
+//   cross-package Go number, repeated runs stable).
 // Actuals after Coverage Slice D: service 90.3% (gate raised 88→90; two
 //   consecutive coverage:service runs both 90.3%, modified packages stable at
-//   -count=3). See docs/coverage-baseline.md.
+//   -count=3).
 // Actuals after Coverage Slice E: server 98.9/93.57/100 (gates raised
 //   89/91/99 → 95/92/99; three consecutive coverage:server runs stable, the
-//   ghost-entry dedup keeps the number deterministic). See docs/coverage-baseline.md.
+//   ghost-entry dedup keeps the number deterministic).
 const GATES = {
   shared:  { statements: 100, branches: 100, functions: 100 },
   server:  { statements: 95, branches: 92, functions: 99 },

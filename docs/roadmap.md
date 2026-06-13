@@ -2285,11 +2285,11 @@ server/
 
 ### Coverage Strategy
 
-Do not lower gates; do not chase NestJS framework internals. Focus on controller behavior, error mapping, contract parity, and service orchestration. If coverage fluctuates due to framework wrapper lines, document structural exclusions in `docs/coverage-baseline.md` rather than lowering meaningful coverage.
+Do not lower gates; do not chase NestJS framework internals. Focus on controller behavior, error mapping, contract parity, and service orchestration. If coverage fluctuates due to framework wrapper lines, document structural exclusions rather than lowering meaningful coverage.
 
 ### Documentation Updates
 
-`docs/changelog.md`, `docs/checklist.md`, `docs/api-contract.md` (if server implementation notes change), `docs/coverage-baseline.md` (if NestJS structural exclusions are added), `docs/glossary.md` (if terminology changes), `CLAUDE.md`, `AGENTS.md`, and `README.md` (if server startup/build commands change).
+`docs/changelog.md`, `docs/checklist.md`, `docs/api-contract.md` (if server implementation notes change), `docs/glossary.md` (if terminology changes), `CLAUDE.md`, `AGENTS.md`, and `README.md` (if server startup/build commands change).
 
 ### Risks
 
@@ -2463,11 +2463,11 @@ If staying with `net/http`: use an explicit `http.ServeMux` and still split rout
 
 ### Coverage Strategy
 
-Do not lower gates; do not chase router-framework internals. Focus on route behavior, error mapping, contract parity, and service orchestration. If chi or another router introduces uninteresting wrapper lines, document structural exclusions in `docs/coverage-baseline.md` rather than weakening meaningful coverage.
+Do not lower gates; do not chase router-framework internals. Focus on route behavior, error mapping, contract parity, and service orchestration. If chi or another router introduces uninteresting wrapper lines, document structural exclusions rather than weakening meaningful coverage.
 
 ### Documentation Updates
 
-`docs/changelog.md`, `docs/checklist.md`, `docs/api-contract.md` (if implementation notes change), `docs/coverage-baseline.md` (if structural exclusions are added), `docs/glossary.md` (if terminology changes), `CLAUDE.md`, `AGENTS.md`, and `README.md` (if service startup/build commands change).
+`docs/changelog.md`, `docs/checklist.md`, `docs/api-contract.md` (if implementation notes change), `docs/glossary.md` (if terminology changes), `CLAUDE.md`, `AGENTS.md`, and `README.md` (if service startup/build commands change).
 
 ### Risks
 
@@ -2543,7 +2543,7 @@ Each audit is read-only analysis producing the listed output.
 6. **Automation, Policy, and Workflow Audit** — groups/profiles, policy metadata, preflight, temporary starts, recipes, snapshots/restore, saved views/filters, local analyzer. Are policy violations warn/block consistent, preflight explicitly best-effort/race-aware, temporary starts reliable, recipes previewable/rollback-aware, snapshots using plan/apply, automation events visible, group/profile ops parity-tested? *Output:* workflow safety matrix, policy/preflight invariants, rollback gaps.
 7. **Testing and Coverage Audit** — unit/integration/E2E balance, contract/CLI/replay/history coverage, framework-migration coverage, EADDRINUSE/determinism, gate strategy. Are gates still meaningful, did NestJS/chi add wrapper noise, are new tools in validation, important error paths covered or documented, E2E still user-meaningful, impossible branches documented not chased? *Output:* coverage posture, gate recommendations, flake risks, meaningful coverage gaps.
 8. **Complexity, Duplication, and Maintainability Audit** — NestJS modules, Go route modules, config/policy/history/replay logic, repeated DTO mapping/validation, duplicate TS/Go contract semantics, CLI vs replay duplication, large UI components. Are abstractions paying for themselves, modules right-sized, did v1.14/v1.15 reduce complexity, any accidental CLI/replay duplication, any `runScenarios`-like high-complexity functions? *Output:* top complexity hotspots, duplication map, refactor candidates.
-9. **Documentation, Glossary, and Operator UX Audit** — `README.md`, `docs/api-contract.md`, `docs/glossary.md`, `docs/checklist.md`, `docs/coverage-baseline.md`, `tools/cli/readme.md`, `tools/replay/readme.md`, terminology, CLI/UI wording. Does the glossary still match the product, are new terms documented, CLI/replay responsibilities clear, operator warnings actionable, docs current (not old v1.6 assumptions), deferred/accepted gaps documented? *Output:* doc drift list, terminology update list, UX wording risks.
+9. **Documentation, Glossary, and Operator UX Audit** — `README.md`, `docs/api-contract.md`, `docs/glossary.md`, `docs/checklist.md`, `tools/cli/readme.md`, `tools/replay/readme.md`, terminology, CLI/UI wording. Does the glossary still match the product, are new terms documented, CLI/replay responsibilities clear, operator warnings actionable, docs current (not old v1.6 assumptions), deferred/accepted gaps documented? *Output:* doc drift list, terminology update list, UX wording risks.
 10. **Release Readiness and Packaging Audit** — build/release scripts, runtime smoke, release artifacts, version injection, CLI and replay packaging, web UI static serving, platform scripts. Do all scripts still work, does packaging include needed tools, is `tools/replay` packaged or intentionally separate, are versions injected consistently, does smoke cover static UI + API, are install docs accurate? *Output:* release readiness matrix, packaging gaps, final v1.16 decision.
 
 ### Output Artifacts

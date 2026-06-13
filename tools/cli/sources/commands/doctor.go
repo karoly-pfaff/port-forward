@@ -307,7 +307,7 @@ Output:
 Exit codes:
   0  Doctor completed; no error-severity checks (warnings alone exit 0 unless --strict)
   1  Doctor completed; one or more error-severity checks (incl. unreachable runtime),
-     or any warning when --strict is set
+     any warning when --strict is set, or the --out file could not be written
   2  Usage error (unexpected argument)
 
 Note: an unreachable runtime is reported as a doctor check and exits 1 (the

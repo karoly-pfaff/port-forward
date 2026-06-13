@@ -19,15 +19,10 @@ Raw release readiness audit reports live in `audits/` (gitignored, local only).
 - [scripts/macos/readme.md](../scripts/macos/readme.md) — macOS LaunchAgent install, Go service and Node fallback modes.
 - [scripts/linux/readme.md](../scripts/linux/readme.md) — Linux systemd unit, both runtimes, firewall notes.
 
-## UI and Client
-
-- [client.md](client.md) — UI component inventory, view descriptions, and cleanup guidance.
-
 ## QA
 
 - [checklist.md](checklist.md) — automated and manual platform QA checklist.
 
 ## Agent and Tooling
 
-- [agent-workflow.md](agent-workflow.md) — how Codex and Claude Code are used together; coordination rules.
-- [claude-code.md](claude-code.md) — Claude Code settings, hooks, audit skill, and local helper commands.
+- [agentic.md](agentic.md) — agent support files: CLAUDE.md/AGENTS.md guidance, `.claude/` settings, hooks, audit skill, and local helper commands.

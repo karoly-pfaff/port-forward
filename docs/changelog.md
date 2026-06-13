@@ -121,6 +121,25 @@ All notable changes to Portier are documented here.
 - CLI-only change. No shared/server/service/client change, no new endpoints/DTOs/codes, no support-bundle change (it runs the live doctor). `validate:contract` unchanged at **234/234**. Human output is unchanged (the summary is a JSON concern); `listenHostCount`/`listenPortCount` were intentionally omitted to keep the summary compact.
 - CLI coverage **97.5% → 97.6%** statements (functions 99.2%); gate 95% holds, none lowered. The new `buildConfigSummary` builder is 100% covered.
 
+### Slice 10: Doctor toolkit release-readiness audit — PASS
+
+Focused release-readiness audit of the v1.9 Doctor & Config Toolkit (Slices 1–9). Audit/cleanup only; **no new features**. Result: **ready for finalization** with one tiny consistency fix.
+
+- **Command surface** (audited against the binary): all `doctor` / `config doctor` / `explain` / `support-bundle` flag combinations (`--json`/`--strict`/`--out`/`--explain` and their combinations) dispatch, help, and exit correctly; `explain` stays fully offline (no URL resolution); `doctor`/`support-bundle` correctly resolve the runtime URL.
+- **JSON schema** (verified): doctor JSON is `{ checks, summary, strict, result }` + `explanations` only with `--explain` + `config` only for config doctor after a successful parse; the live `doctor` JSON never carries `config`; non-`--explain` output carries no `explanations`; `--json --out` stays byte-identical (both config and live doctor).
+- **Check codes & explanations** (verified): all 20 codes are explainable, the registry has no extra/duplicate/dangling entries (guarded by tests), `explain --list` is sorted, inline explanations include only emitted codes, and **no check-code string literals exist outside the constants** (only a doc-comment example and the `runtime.json` bundle filename matched).
+- **Exit codes** (verified end-to-end): normal info/warn → 0, error → 1; strict warn/error → 1, info → 0; usage → 2; unreachable `doctor`/`support-bundle` → 1 with a useful report/bundle still produced; filesystem/write failure → 1; unknown `explain` code → 2.
+- **Safety** (verified): no doctor command mutates runtime/config (only read-only `GET /api/runtime`/`/api/status`/`/api/config/export`; config doctor is offline file-read only); no env/process/log/exec collection anywhere; the support bundle excludes env vars/process lists/logs/tokens/filesystem scans and refuses a non-empty output directory (no silent overwrite); the live doctor does not probe targets; `--strict`/`--explain`/`--out` never change which checks run.
+- **Fix made:** aligned the `portier doctor` help exit-code text to mention the `--out` write-failure → exit 1 case (parity with `config doctor` help). Help-text only — no behavior/coverage/contract change.
+- **Deferred non-blockers:** (1) `config doctor` (and `config validate`) still flow through the URL-resolving `config` dispatch, so a malformed `--url` passed to these offline subcommands fails at URL validation (exit 2) before the offline work — pre-existing, consistent with `config validate`, and only reachable by passing connection flags to an offline command; a clean fix needs a dispatch refactor (out of audit scope). (2) Two platform-dependent defensive filesystem-error branches in `prepareBundleDir`/`RunSupportBundle` remain uncovered (can't be triggered portably once the output dir is validated empty+writable); the command-level filesystem-failure → exit 1 paths are fully tested.
+- **Validation:** `go test ./...` green; `validate:cli` green; `validate:coverage:cli` **97.6%** (gate 95% PASS, none lowered); `validate:contract` **234/234**; `lint` + `typecheck` clean. **v1.9 is ready for version bump/finalization.**
+
+### Added — Slice 10: Doctor AI handoff prompt (docs-only)
+
+- **Reusable AI handoff prompt** in [`docs/prompts/doctor.md`](prompts/doctor.md) — a polished, copy-paste prompt (a **full** version and a **short** version) for asking an AI assistant to help interpret `portier doctor` / `portier config doctor` output or a support-bundle summary. Referenced from `tools/cli/readme.md` ("Using doctor output with an AI assistant") and the glossary.
+- **Safety-first and fully offline.** Portier adds **no** AI integration, upload, or telemetry — the prompt is plain text the user pastes into an assistant of their choice, together with output they generated locally. The prompt instructs the assistant to: treat the pasted report as the **only source of truth** and not invent runtime state; prefer JSON over human output and flag conflicts; distinguish `info` / `warning` / `error`, strict-mode failures, and operation failures; explain stable check `code`s via the `explanations` map; respect Portier semantics (runtime-reported health, `0.0.0.0` LAN exposure, `< 1024` privileged ports, protocol+host+port duplicate bindings); and **never ask for secrets, tokens, keys, environment dumps, process lists, or logs**. It asks for a verdict, prioritized findings (errors first), likely cause, a low/medium/high risk level, and **separated** "safe to try now" vs "requires admin/network/security review" next steps.
+- **Docs-only.** No CLI/Go/TS code changed (a `--prompt`/`prompt` CLI helper was considered and intentionally deferred to avoid a second copy of the prompt that could drift from the doc). No shared/server/service/client change, no new endpoints/DTOs/codes, no doctor checks. `validate:contract` unchanged at **234/234**; CLI coverage unchanged at 97.6% (no code added).
+
 ---
 
 ## [1.8.0] — 2026-06-11 — Operator Power Tools
@@ -498,7 +517,7 @@ Portier v1.2 improves operational confidence with diagnostics, visibility, and s
 
 Portier v1.1 makes Portier easy and safe to install as a native background service on Windows, macOS, and Linux, with automated package/service validation and clean release artifacts.
 
-See `docs/installer-strategy.md` for scope, platform decisions, and implementation slices.
+See `docs/installer.md` for scope, platform decisions, and implementation slices.
 
 ### Added
 

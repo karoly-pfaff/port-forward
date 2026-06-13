@@ -270,7 +270,7 @@ Each portable archive contains the clean runtime layout (`service`/`service.exe`
 
 Service binaries are platform-native. For a multi-platform release, run `release:current` on each target OS. The Windows installer is skipped (non-fatal) when Inno Setup is unavailable — the portable zip is still produced.
 
-macOS `.pkg` and Linux `.deb`/`.rpm` are out of v1.1 scope. See `docs/installer-strategy.md`.
+macOS `.pkg` and Linux `.deb`/`.rpm` are out of v1.1 scope. See `docs/installer.md`.
 
 ## Package Layout
 
@@ -609,14 +609,14 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 Current version: **1.4.0**
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
-- [docs/installer-strategy.md](docs/installer-strategy.md) — v1.1 installer and distribution strategy.
+- [docs/installer.md](docs/installer.md) — v1.1 installer and distribution strategy.
 - [docs/roadmap.md](docs/roadmap.md) — v1.4 delivered the Live Connection Inspector (`GET /api/connections`, TCP + UDP tracking in both runtimes, Live Connections UI, 116/116 contract checks); v1.5 plans Declarative Config & Drift Control (plan/diff/apply workflows); v1.6 plans a dedicated Architecture, Quality & Maintainability Audit after v1.4/v1.5 coverage work creates the safety net.
 
 ## Agent Workflow
 
 `AGENTS.md` contains lightweight project guidance for Codex and other coding agents. `CLAUDE.md` contains Claude Code guidance for architecture review, UI cleanup, and risk checks. Use `npm run check` to run lint, typecheck, and tests for an agent task.
 
-See `docs/agent-workflow.md` for guidance on using Codex and Claude together. See `docs/claude-code.md` for Claude Code settings, manual helper hooks, and audit skill usage. Claude UI cleanup should start with `docs/client.md` and `docs/api-contract.md`.
+See `docs/agentic.md` for agent setup: Claude Code settings, manual helper hooks, and audit skill usage.
 
 ## Activity Log
 
