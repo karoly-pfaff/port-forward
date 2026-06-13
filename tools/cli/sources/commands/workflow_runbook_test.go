@@ -355,7 +355,7 @@ func TestWorkflowRunbook_FromTemplates(t *testing.T) {
 func TestRunWorkflow_RunbookDispatch(t *testing.T) {
 	wf := writeTempFile(t, "w.json", `{"schemaVersion":1,"steps":[{"id":"c","type":"policy.check","runtime":true,"policy":"p.json"}]}`)
 	var out, errBuf strings.Builder
-	code := commands.RunWorkflow(false, []string{"runbook", "--file", wf}, &out, &errBuf)
+	code := commands.RunWorkflow(false, commands.ConnFlags{}, []string{"runbook", "--file", wf}, &out, &errBuf)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\n%s", code, errBuf.String())
 	}

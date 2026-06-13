@@ -1,33 +1,87 @@
 package commands
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	"portier/cli/sources/client"
+	"portier/cli/sources/config"
 	"portier/cli/sources/output"
 	"portier/cli/sources/workflow"
 )
 
 const workflowHelp = `Usage: portier workflow <subcommand> [options]
 
-Plan and validate a local workflow — an ordered sequence of existing safe Portier
-operations described in a small JSON file — or generate a starter workflow from a
-built-in template. Fully offline and dry-run: it reads/writes local files only,
-validates schema and step references, and never executes a step, contacts the
-runtime, applies or imports configs, enforces a policy, or mutates any file
-(except the requested --out file).
+Plan, validate, run, preview, or template a local workflow — an ordered sequence
+of existing safe Portier operations described in a small JSON file. Read-only and
+dry-run: it never applies/imports configs, enforces a policy, runs a shell
+command, schedules anything, or mutates any file (except the requested --out
+file). Only 'workflow run' executes the (read-only) steps; it is the only
+subcommand that may contact the runtime, and only for a policy.check runtime step.
 
 Subcommands:
   plan --file <workflow.json>     Validate a workflow file and print its plan
+  run --file <workflow.json>      Execute a valid workflow's read-only steps
   runbook --file <workflow.json>  Preview the CLI commands a valid workflow maps to
   template <name> | --list        Print a built-in workflow template, or list them
   help                            Show this help message
 
-Run 'portier workflow plan --help', 'portier workflow runbook --help', or
-'portier workflow template --help' for options.
+Run 'portier workflow plan --help', 'portier workflow run --help',
+'portier workflow runbook --help', or 'portier workflow template --help' for options.
+`
+
+const workflowRunHelp = `Usage: portier workflow run --file <workflow.json> [--out <file>]
+
+Execute a VALID workflow's steps in order and print a deterministic run report.
+Execution is strictly READ-ONLY: it runs only the existing safe step types by
+calling the policy evaluator/review/baseline-compare directly. It NEVER runs a
+shell command (or the runbook display text), never applies/imports configs, never
+enforces a policy, never schedules anything, and never mutates the
+runtime/config/policy/baseline/report files. The only runtime contact is a
+read-only runtime-config read for a policy.check runtime step.
+
+If the workflow is invalid, the plan (with the validation errors) is printed and
+the command exits 1 — no step runs and no --out file is produced. Referenced
+files (config/policy/baseline/report) are read HERE (during the run), unlike
+'workflow plan' / 'workflow runbook' which never open them.
+
+Options:
+  --file <file>   Path to the workflow JSON file (required).
+  --out <file>    Also write the JSON run report to <file> (same shape as --json).
+                  With --json the JSON also prints to stdout and is byte-identical
+                  to the file.
+
+Step execution (read-only):
+  policy.check              Evaluate a local config (offline) or the live runtime
+                            config (read-only) against a policy.
+  policy.review             Compare current vs candidate and evaluate the candidate
+                            against a policy (offline).
+  policy.baseline.compare   Compare a baseline against a policy report — a report
+                            file, or the IN-MEMORY report produced by an earlier
+                            step (reportFrom). A reportFrom step whose dependency
+                            produced no report is SKIPPED (which fails the run).
+
+Step status: a policy/review pass → passed; a violation → failed; a baseline
+compare with new findings → failed. A failed or skipped step fails the run.
+
+Exit codes:
+  0  All executed steps passed (none skipped)
+  1  One or more steps failed or were skipped; the workflow plan was invalid; or
+     an --out write failure
+  2  Missing/invalid arguments (including a missing --file/--out value), or an
+     unreadable/malformed workflow file (including a missing/unsupported
+     schemaVersion, or no steps)
+  3  A policy.check runtime step could not reach the runtime (matching
+     'policy check --runtime')
+
+Examples:
+  portier workflow run --file workflow.json
+  portier --json workflow run --file workflow.json
+  portier workflow run --file workflow.json --out report.json
 `
 
 const workflowRunbookHelp = `Usage: portier workflow runbook --file <workflow.json> [--out <file>]
@@ -170,10 +224,11 @@ Examples:
   portier workflow plan --file workflow.json --out plan.json
 `
 
-// RunWorkflow dispatches the `portier workflow <subcommand>` commands. Every
-// subcommand is fully offline (workflow planning never contacts the runtime), so
-// no connection flags are threaded in.
-func RunWorkflow(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+// RunWorkflow dispatches the `portier workflow <subcommand>` commands. All
+// subcommands are offline except `workflow run`, which (only for a policy.check
+// runtime step) lazily resolves the runtime URL from conn inside the handler; the
+// offline subcommands never touch conn.
+func RunWorkflow(jsonOutput bool, conn ConnFlags, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, workflowHelp)
 		return 2
@@ -181,6 +236,8 @@ func RunWorkflow(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "plan":
 		return RunWorkflowPlan(jsonOutput, args[1:], stdout, stderr)
+	case "run":
+		return RunWorkflowRun(jsonOutput, conn, args[1:], stdout, stderr)
 	case "template":
 		return RunWorkflowTemplate(jsonOutput, args[1:], stdout, stderr)
 	case "runbook":
@@ -394,4 +451,98 @@ func RunWorkflowPlan(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 
 	plan := workflow.BuildPlan(file)
 	return workflow.Emit(plan, workflow.EmitOptions{JSON: jsonOutput, OutPath: *flagOut, Explain: *flagExplain}, stdout, stderr)
+}
+
+// makeRuntimeRules returns the injected runtime-config fetcher for workflow
+// execution. It is the ONLY runtime contact a workflow run makes, and only for a
+// policy.check runtime step. The runtime config is read read-only via the
+// existing config-export path; the result is memoized so multiple runtime steps
+// fetch at most once. A connection failure is wrapped with
+// workflow.ErrRuntimeUnreachable so execution can map it to exit 3 (matching
+// `policy check --runtime`) without importing the client package.
+func makeRuntimeRules(conn ConnFlags) func() ([]config.Rule, error) {
+	var (
+		cachedRules []config.Rule
+		cachedErr   error
+		done        bool
+	)
+	return func() ([]config.Rule, error) {
+		if done {
+			return cachedRules, cachedErr
+		}
+		done = true
+		managementURL, err := ResolveURL(conn.URL, conn.Host, conn.Port)
+		if err != nil {
+			cachedErr = err
+			return nil, cachedErr
+		}
+		cfg, expErr := client.New(managementURL).ExportConfig()
+		if expErr != nil {
+			var connErr *client.ConnectionError
+			if errors.As(expErr, &connErr) {
+				cachedErr = fmt.Errorf("%w: %v", workflow.ErrRuntimeUnreachable, connErr)
+			} else {
+				cachedErr = expErr
+			}
+			return nil, cachedErr
+		}
+		cachedRules = exportedRules(cfg)
+		return cachedRules, nil
+	}
+}
+
+// RunWorkflowRun reads a local workflow file, validates it, and executes its
+// read-only steps in order, printing a deterministic run report. Execution never
+// runs a shell command, never mutates any file, never applies/imports configs or
+// enforces a policy, and contacts the runtime only (read-only) for a policy.check
+// runtime step. If the workflow is invalid it prints the plan and exits 1 with no
+// step run and no --out file (like `workflow plan`/`runbook`). Exit codes: 0 all
+// steps passed; 1 a step failed/was skipped, the plan was invalid, or an --out
+// write failure; 2 usage error (including a missing --file/--out value) or an
+// unreadable/malformed workflow file; 3 a runtime step could not reach the runtime.
+func RunWorkflowRun(jsonOutput bool, conn ConnFlags, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("workflow run", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagFile := fs.String("file", "", "path to the workflow JSON file")
+	flagOut := fs.String("out", "", "also write the JSON run report to this file")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, workflowRunHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, workflowRunHelp)
+		return 2
+	}
+	if *flagFile == "" {
+		fmt.Fprintln(stderr, "Error: --file is required")
+		fmt.Fprint(stderr, workflowRunHelp)
+		return 2
+	}
+
+	data, err := os.ReadFile(*flagFile)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading workflow %s: %v\n", *flagFile, err)
+		return 2
+	}
+	file, parseErr := workflow.Parse(data)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid workflow %s: %v\n", *flagFile, parseErr)
+		return 2
+	}
+
+	// A workflow runs only from a VALID plan. If invalid, print the plan (the
+	// validation errors) and exit 1 — no step runs, no --out file is written.
+	plan := workflow.BuildPlan(file)
+	if workflow.PlanExitCode(plan) != 0 {
+		return workflow.Emit(plan, workflow.EmitOptions{JSON: jsonOutput}, stdout, stderr)
+	}
+
+	deps := workflow.RunDeps{
+		ReadFile:     os.ReadFile,
+		RuntimeRules: makeRuntimeRules(conn),
+	}
+	run := workflow.Run(file, deps)
+	return workflow.EmitRun(run, jsonOutput, *flagOut, stdout, stderr)
 }

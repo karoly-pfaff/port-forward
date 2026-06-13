@@ -306,7 +306,7 @@ func TestWorkflowTemplate_DoesNotMutateUnrelatedFiles(t *testing.T) {
 
 func TestRunWorkflow_TemplateDispatch(t *testing.T) {
 	var out, errBuf strings.Builder
-	code := commands.RunWorkflow(false, []string{"template", "--list"}, &out, &errBuf)
+	code := commands.RunWorkflow(false, commands.ConnFlags{}, []string{"template", "--list"}, &out, &errBuf)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\n%s", code, errBuf.String())
 	}

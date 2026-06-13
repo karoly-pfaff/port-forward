@@ -794,7 +794,33 @@ The plan lists each step as `[VALID]`/`[INVALID]` with the inputs it would use (
 
 Exit codes: `0` the workflow plan is valid; `1` the workflow parsed but the plan is invalid (one or more invalid steps) **or** an `--out` write failure; `2` missing/invalid arguments (including a missing `--file` or `--out` value), or an unreadable/malformed workflow file (including a missing or unsupported `schemaVersion`, or no steps). Workflow planning never contacts the runtime, so there is no connection-failure (`3`) exit code.
 
-> This slice validates, plans, and explains workflows only — it does not run them. Step execution and reporting are deferred to a later v1.11 slice.
+### `portier workflow run --file <workflow.json>`
+
+Execute a **valid** workflow's steps in order and print a deterministic run report. Execution is strictly **read-only**: it runs only the existing safe step types by calling the policy evaluator/review/baseline-compare directly. It **never** runs a shell command (or the runbook display text), applies/imports configs, enforces a policy, schedules anything, or mutates the runtime/config/policy/baseline/report files. The only runtime contact is a read-only runtime-config read for a `policy.check` runtime step.
+
+```
+portier workflow run --file <workflow.json> [--json] [--out <file>]
+```
+
+Step execution and status:
+
+| Step | Behaviour | Step status |
+| --- | --- | --- |
+| `policy.check` (config) | Evaluate a local config (offline) against the policy. | `passed` if the policy result passes, else `failed`. |
+| `policy.check` (runtime) | Evaluate the live runtime config (read-only). | as above; runtime unreachable → run exits `3`. |
+| `policy.review` | Evaluate the candidate against the policy. | `passed`/`failed` by the candidate's policy result. |
+| `policy.baseline.compare` (report file) | Compare the baseline against the report file. | `passed` with no new findings, else `failed`. |
+| `policy.baseline.compare` (`reportFrom`) | Compare against the **in-memory** report produced by the referenced earlier step. | as above; **skipped** if the dependency produced no report. |
+
+A `reportFrom` step consumes the report the referenced step produced **in memory** — no intermediate file is read or written, and the in-memory report is normalised so its findings match a file-derived baseline. If the referenced step failed, was skipped, or did not produce a report, the dependent step is **skipped**, which fails the run. Unlike `workflow plan`/`workflow runbook`, the referenced files (config/policy/baseline/report) are read **here**, during the run.
+
+Human output tags each step `[PASSED]`/`[FAILED]`/`[SKIPPED]` and ends in `Result: passed`/`Result: failed`. `--json` emits `{ workflow, steps: [{ id, type, status, exitCode, message, report? }], summary: { total, passed, failed, skipped }, result }` (the per-step `report` is the policy/review/compare result it produced). `--out <file>` also writes that JSON (with `--json`, stdout and the file are byte-identical).
+
+If the workflow is **invalid**, `workflow run` prints the plan (the validation errors) and exits `1` — exactly like `workflow plan`/`runbook` — and runs **no step** and writes **no `--out` file**.
+
+Exit codes: `0` all executed steps passed (none skipped); `1` one or more steps failed or were skipped, the workflow plan was invalid, or an `--out` write failure; `2` missing/invalid arguments (including a missing `--file`/`--out` value), or an unreadable/malformed workflow file; `3` a `policy.check` runtime step could not reach the runtime (matching `policy check --runtime`). A referenced file that is unreadable/malformed during the run is a **step failure** (exit 1), not a usage error.
+
+> `workflow run` is **read-only execution** — it evaluates policies and compares baselines but never changes anything (no apply/import, no enforcement, no shell commands, no scheduling). `--explain` is not supported for `workflow run` yet.
 
 ### `portier workflow runbook --file <workflow.json>`
 

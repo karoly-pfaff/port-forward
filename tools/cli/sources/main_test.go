@@ -10,6 +10,11 @@ import (
 	"testing"
 )
 
+// jsonPath makes a filesystem path safe to embed in a JSON string literal by
+// using forward slashes (accepted by os.ReadFile on Windows too), avoiding
+// backslash-escaping issues on Windows.
+func jsonPath(p string) string { return strings.ReplaceAll(p, "\\", "/") }
+
 // makeDispatchServer creates a test server that handles all command API endpoints.
 func makeDispatchServer(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -305,6 +310,29 @@ func TestRun_WorkflowPlanDispatch(t *testing.T) {
 		t.Fatalf("writing temp workflow: %v", err)
 	}
 	code := run([]string{"--url", "ftp://bad-scheme", "workflow", "plan", "--file", wf})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
+func TestRun_WorkflowRunDispatch(t *testing.T) {
+	// A config-only workflow run executes offline (no runtime step), so an invalid
+	// --url is never resolved. A passing run exits 0.
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "cfg.json")
+	pol := filepath.Join(dir, "pol.json")
+	wf := filepath.Join(dir, "workflow.json")
+	if err := os.WriteFile(cfg, []byte(`[{"name":"A","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48080,"targetHost":"h","targetPort":1,"enabled":false,"group":"g"}]`), 0o644); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
+	if err := os.WriteFile(pol, []byte(`{"schemaVersion":1,"rules":{}}`), 0o644); err != nil {
+		t.Fatalf("writing policy: %v", err)
+	}
+	wfContent := `{"schemaVersion":1,"steps":[{"id":"c","type":"policy.check","config":"` + jsonPath(cfg) + `","policy":"` + jsonPath(pol) + `"}]}`
+	if err := os.WriteFile(wf, []byte(wfContent), 0o644); err != nil {
+		t.Fatalf("writing workflow: %v", err)
+	}
+	code := run([]string{"--url", "ftp://bad-scheme", "workflow", "run", "--file", wf})
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}

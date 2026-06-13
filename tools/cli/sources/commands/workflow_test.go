@@ -372,7 +372,7 @@ func TestWorkflowPlan_DoesNotReadReferencedFiles(t *testing.T) {
 
 func TestRunWorkflow_NoSubcommandExit2(t *testing.T) {
 	var out, errBuf strings.Builder
-	code := commands.RunWorkflow(false, nil, &out, &errBuf)
+	code := commands.RunWorkflow(false, commands.ConnFlags{}, nil, &out, &errBuf)
 	if code != 2 {
 		t.Fatalf("exit code = %d, want 2", code)
 	}
@@ -380,7 +380,7 @@ func TestRunWorkflow_NoSubcommandExit2(t *testing.T) {
 
 func TestRunWorkflow_HelpExit0(t *testing.T) {
 	var out, errBuf strings.Builder
-	code := commands.RunWorkflow(false, []string{"help"}, &out, &errBuf)
+	code := commands.RunWorkflow(false, commands.ConnFlags{}, []string{"help"}, &out, &errBuf)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
@@ -391,7 +391,7 @@ func TestRunWorkflow_HelpExit0(t *testing.T) {
 
 func TestRunWorkflow_UnknownSubcommandExit2(t *testing.T) {
 	var out, errBuf strings.Builder
-	code := commands.RunWorkflow(false, []string{"run"}, &out, &errBuf)
+	code := commands.RunWorkflow(false, commands.ConnFlags{}, []string{"bogus"}, &out, &errBuf)
 	if code != 2 {
 		t.Fatalf("exit code = %d, want 2", code)
 	}
@@ -403,7 +403,7 @@ func TestRunWorkflow_UnknownSubcommandExit2(t *testing.T) {
 func TestRunWorkflow_PlanDispatch(t *testing.T) {
 	wf := writeTempFile(t, "workflow.json", validWorkflow)
 	var out, errBuf strings.Builder
-	code := commands.RunWorkflow(false, []string{"plan", "--file", wf}, &out, &errBuf)
+	code := commands.RunWorkflow(false, commands.ConnFlags{}, []string{"plan", "--file", wf}, &out, &errBuf)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0\n%s", code, out.String())
 	}
