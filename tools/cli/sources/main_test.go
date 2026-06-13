@@ -310,6 +310,15 @@ func TestRun_WorkflowPlanDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_WorkflowTemplateDispatch(t *testing.T) {
+	// workflow template is fully offline — no server needed, an invalid --url is
+	// ignored. Rendering a built-in template exits 0.
+	code := run([]string{"--url", "ftp://bad-scheme", "workflow", "template", "policy-check-local"})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
 func TestRun_WorkflowDispatch_NoSubcommand(t *testing.T) {
 	if code := run([]string{"workflow"}); code != 2 {
 		t.Errorf("exit code = %d, want 2", code)

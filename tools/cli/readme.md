@@ -796,6 +796,48 @@ Exit codes: `0` the workflow plan is valid; `1` the workflow parsed but the plan
 
 > This slice validates, plans, and explains workflows only — it does not run them. Step execution and reporting are deferred to a later v1.11 slice.
 
+### `portier workflow template <name>` / `--list`
+
+Print a built-in **workflow template** (or list the available ones) so you don't have to write the workflow JSON schema by hand. Fully **offline** — never contacts the runtime, never executes a step, never reads referenced workflow input files, and never modifies any file except the requested `--out` file. A rendered template is a complete workflow file (`schemaVersion: 1`) that can be passed straight to `portier workflow plan --file <file>`.
+
+```
+portier workflow template --list
+portier workflow template <name> [--out <file>]
+```
+
+Built-in templates (sorted by name):
+
+| Template | Purpose |
+| --- | --- |
+| `policy-baseline-check` | Checks a config against a policy, then compares the resulting report against a policy baseline (two steps; the compare uses `reportFrom`). |
+| `policy-check-local` | Checks a local config file against a local policy file. |
+| `policy-check-runtime` | Checks the live runtime config against a local policy file. |
+| `policy-review` | Compares a current config with a candidate config and evaluates the candidate against a policy. |
+
+Every template uses `schemaVersion: 1` and only the existing validated step types (`policy.check`, `policy.review`, `policy.baseline.compare`). They are dry-run starter files — there are intentionally **no execution, scheduler, or mutation/apply/import fields**.
+
+Output:
+
+| Command | stdout | `--out` file |
+| --- | --- | --- |
+| `workflow template <name>` | bare workflow JSON | — |
+| `workflow template <name> --json` | metadata wrapper `{ name, title, description, workflow }` | — |
+| `workflow template <name> --out f` | `Workflow written to f` | bare workflow JSON |
+| `workflow template <name> --json --out f` | metadata wrapper (pure JSON) | bare workflow JSON |
+| `workflow template --list` | compact human list | — |
+| `workflow template --list --json` | `{ "templates": [{ name, title, description }] }` | — |
+
+The `--out` file always contains the **bare workflow JSON** (no metadata wrapper), so it is directly usable by `workflow plan --file`. Flags may appear before or after the template name (`workflow template policy-review --out f`).
+
+Exit codes: `0` success; `1` an `--out` write failure (operation failure); `2` a usage error — an unknown template, a missing template name, too many names, a missing `--out` value, or `--list` combined with a name or `--out`.
+
+Example — generate a workflow and immediately plan it:
+
+```
+portier workflow template policy-baseline-check --out workflow.json
+portier workflow plan --file workflow.json
+```
+
 ### `portier version`
 
 Show the CLI version.

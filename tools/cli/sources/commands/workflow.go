@@ -5,24 +5,64 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
+	"portier/cli/sources/output"
 	"portier/cli/sources/workflow"
 )
 
 const workflowHelp = `Usage: portier workflow <subcommand> [options]
 
 Plan and validate a local workflow — an ordered sequence of existing safe Portier
-operations described in a small JSON file. Fully offline and dry-run: it reads the
-workflow file, validates its schema and step references, and prints a deterministic
-plan. It does NOT execute any step, never contacts the runtime, never applies or
-imports configs, never enforces a policy, and never mutates any file (except the
-requested --out file).
+operations described in a small JSON file — or generate a starter workflow from a
+built-in template. Fully offline and dry-run: it reads/writes local files only,
+validates schema and step references, and never executes a step, contacts the
+runtime, applies or imports configs, enforces a policy, or mutates any file
+(except the requested --out file).
 
 Subcommands:
   plan --file <workflow.json>   Validate a workflow file and print its plan
+  template <name> | --list      Print a built-in workflow template, or list them
   help                          Show this help message
 
-Run 'portier workflow plan --help' for options.
+Run 'portier workflow plan --help' or 'portier workflow template --help' for options.
+`
+
+const workflowTemplateHelp = `Usage: portier workflow template <name> [--out <file>]
+       portier workflow template --list
+
+Print a built-in workflow template, or list the available templates. Fully
+offline: never contacts the runtime, never executes a step, and never modifies
+any file except the requested --out file. A rendered template is a complete
+workflow file (schemaVersion 1) that can be passed straight to
+'portier workflow plan --file <file>'.
+
+Options:
+  --list            List the available templates (name, title, description).
+  --out <file>      Write the template's workflow JSON to <file> (bare workflow
+                    only, directly usable by 'workflow plan'). Without --out, the
+                    workflow JSON is printed to stdout.
+
+Output:
+  workflow template <name>           Prints the template's workflow JSON to stdout.
+  workflow template <name> --json    Prints a metadata wrapper {name,title,description,workflow}.
+  workflow template <name> --out f   Writes the workflow JSON to f (human mode confirms on stdout).
+  workflow template --list           Prints a compact human list of the templates.
+  workflow template --list --json    Prints {"templates":[{name,title,description}]}.
+
+Built-in templates: policy-baseline-check, policy-check-local,
+policy-check-runtime, policy-review.
+
+Exit codes:
+  0  Success
+  1  Output file write failure (an operation failure)
+  2  Missing/invalid arguments (including a missing --out value) or an unknown template
+
+Examples:
+  portier workflow template --list
+  portier workflow template policy-check-local
+  portier workflow template policy-check-local --out workflow.json
+  portier workflow plan --file workflow.json
 `
 
 const workflowPlanHelp = `Usage: portier workflow plan --file <workflow.json> [--out <file>]
@@ -92,6 +132,8 @@ func RunWorkflow(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	switch args[0] {
 	case "plan":
 		return RunWorkflowPlan(jsonOutput, args[1:], stdout, stderr)
+	case "template":
+		return RunWorkflowTemplate(jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, workflowHelp)
 		return 0
@@ -100,6 +142,106 @@ func RunWorkflow(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, workflowHelp)
 		return 2
 	}
+}
+
+// RunWorkflowTemplate prints a built-in workflow template (or lists them). It is
+// fully offline: it never contacts the runtime, never executes a step, and never
+// modifies any file except the requested --out file. A rendered template is a
+// complete workflow file in the schema `workflow plan` accepts. Exit codes: 0 =
+// success, 1 = output-file write failure, 2 = usage error (including a missing
+// --out value) or an unknown template.
+func RunWorkflowTemplate(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("workflow template", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagList := fs.Bool("list", false, "list the available templates")
+	flagOut := fs.String("out", "", "write the template workflow JSON to this file")
+
+	// Parse flags that may appear before AND after the positional template name
+	// (e.g. `template policy-check-local --out f`); Go's flag package otherwise
+	// stops at the first non-flag argument.
+	var positional []string
+	rest := args
+	for {
+		if err := fs.Parse(rest); err != nil {
+			if err == flag.ErrHelp {
+				fmt.Fprint(stdout, workflowTemplateHelp)
+				return 0
+			}
+			fmt.Fprintf(stderr, "Error: %v\n\n", err)
+			fmt.Fprint(stderr, workflowTemplateHelp)
+			return 2
+		}
+		rest = fs.Args()
+		if len(rest) == 0 {
+			break
+		}
+		positional = append(positional, rest[0])
+		rest = rest[1:]
+	}
+
+	if *flagList {
+		if len(positional) > 0 {
+			fmt.Fprintf(stderr, "Error: --list takes no template name (got %q)\n\n", positional[0])
+			fmt.Fprint(stderr, workflowTemplateHelp)
+			return 2
+		}
+		if *flagOut != "" {
+			fmt.Fprintln(stderr, "Error: --out cannot be combined with --list")
+			fmt.Fprint(stderr, workflowTemplateHelp)
+			return 2
+		}
+		if err := workflow.PrintTemplateList(jsonOutput, stdout); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	if len(positional) == 0 {
+		fmt.Fprintln(stderr, "Error: a template name is required (or use --list)")
+		fmt.Fprint(stderr, workflowTemplateHelp)
+		return 2
+	}
+	if len(positional) > 1 {
+		fmt.Fprintf(stderr, "Error: too many arguments (expected one template name, got %d)\n\n", len(positional))
+		fmt.Fprint(stderr, workflowTemplateHelp)
+		return 2
+	}
+
+	name := positional[0]
+	tmpl, ok := workflow.FindTemplate(name)
+	if !ok {
+		fmt.Fprintf(stderr, "Error: unknown template %q. Available: %s\n", name, strings.Join(workflow.TemplateNames(), ", "))
+		return 2
+	}
+
+	// stdout carries the metadata+workflow wrapper under --json, the bare workflow
+	// JSON in human mode, or (human mode + --out) just the write confirmation —
+	// the --out file always gets the bare workflow JSON so it is directly usable
+	// by `workflow plan --file`.
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, tmpl.DetailValue()); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+	} else if *flagOut == "" {
+		if err := output.PrintJSON(stdout, tmpl.WorkflowValue()); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+	}
+
+	if *flagOut != "" {
+		if err := output.WritePrettyJSON(*flagOut, tmpl.WorkflowValue()); err != nil {
+			fmt.Fprintf(stderr, "Error writing %s: %v\n", *flagOut, err)
+			return 1
+		}
+		if !jsonOutput {
+			fmt.Fprintf(stdout, "Workflow written to %s\n", *flagOut)
+		}
+	}
+
+	return 0
 }
 
 // RunWorkflowPlan reads a local workflow file, validates its schema and step
