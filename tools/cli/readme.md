@@ -512,14 +512,14 @@ Exit codes: `0` doctor completed with no error-severity checks (**warnings alone
 
 ### `portier explain <code>`
 
-Explain a stable doctor/check or policy code: what it means and what to do next. Fully **offline** — static reference data, no runtime contact, no external lookup, no AI, and nothing is changed or fixed.
+Explain a stable doctor/check, policy, or workflow code: what it means and what to do next. Fully **offline** — static reference data, no runtime contact, no external lookup, no AI, and nothing is changed or fixed.
 
 ```
 portier explain <code> [--json]
 portier explain --list [--json]
 ```
 
-Covers all 26 stable codes: the 8 config-doctor codes and 12 live-doctor codes emitted by `portier config doctor` / `portier doctor`, plus the 6 policy finding codes emitted by `portier policy check` (`policy.valid`, `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`). Human output:
+Covers all 41 stable codes: the 8 config-doctor codes and 12 live-doctor codes emitted by `portier config doctor` / `portier doctor`, the 6 policy finding codes emitted by `portier policy check` (`policy.valid`, `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`), and the 15 workflow step-validation codes emitted by `portier workflow plan` (`workflow.step.valid` plus the 14 invalid-step codes such as `workflow.step.unknown_report_from` and `workflow.step.conflicting_config_sources`). Human output:
 
 ```
 config.duplicate_binding
@@ -760,7 +760,7 @@ To ask an AI assistant to help interpret a policy report, Portier ships a reusab
 Plan and validate a local **workflow** — an ordered sequence of existing safe Portier operations described in a small JSON file. Fully **offline** and **dry-run**: it reads the workflow file, validates its schema and step references, and prints a deterministic plan. It does **not execute** any step, never contacts the runtime, never reads the files a step refers to, never applies or imports configs, never enforces a policy, and never mutates any file except the requested `--out` file.
 
 ```
-portier workflow plan --file <workflow.json> [--json] [--out <file>]
+portier workflow plan --file <workflow.json> [--json] [--explain] [--out <file>]
 ```
 
 Workflow file format (`schemaVersion: 1`):
@@ -788,11 +788,13 @@ Supported step types and their required fields:
 
 Validation rules: `schemaVersion` must be `1`; at least one step is required; every step needs a unique, non-empty `id`; the step `type` must be supported with its required fields present; a `reportFrom` must reference a step that appears **earlier** in the file. Unknown fields anywhere in the file are **rejected** (to catch typos). Planning is structural only — it validates references; it does **not** open or parse the files a step refers to (so a missing referenced file does not fail the plan). `name` is optional (it renders as `(unnamed)` when absent).
 
-The plan lists each step as `[VALID]`/`[INVALID]` with the inputs it would use (valid) or the reason it is invalid, then a summary and a `Result: valid`/`Result: invalid` line. `--json` emits the full plan (`{ schemaVersion, name, steps, summary, result }`); `--out <file>` also writes that JSON to a file (with `--json`, stdout and the file are byte-identical).
+The plan lists each step as `[VALID]`/`[INVALID]` with the inputs it would use (valid) or the reason it is invalid, then a summary and a `Result: valid`/`Result: invalid` line. Every step also carries a stable validation **code** (e.g. `workflow.step.unknown_report_from`; valid steps use `workflow.step.valid`). `--json` emits the full plan (`{ schemaVersion, name, steps, summary, result }`); `--out <file>` also writes that JSON to a file (with `--json`, stdout and the file are byte-identical).
+
+**`--explain`** adds an inline explanation (code, meaning, next action, related codes) for each **invalid** step, reusing the same registry as `portier explain`. In human output each invalid step is followed by an indented `Code:`/`Meaning:`/`What to do:` block; in `--json` an additive top-level `explanations` map (`code → { title, meaning, action, ... }`, deduplicated, **invalid-step codes only**) is added. A valid step needs no explanation, so it is not explained. `--explain` does **not** change the steps, summary, result, or exit code — without it the JSON is byte-identical to before (the `explanations` map is omitted), and `--json --out --explain` keeps stdout/file byte-identical. Use `portier explain <code>` to look up any workflow code directly.
 
 Exit codes: `0` the workflow plan is valid; `1` the workflow parsed but the plan is invalid (one or more invalid steps) **or** an `--out` write failure; `2` missing/invalid arguments (including a missing `--file` or `--out` value), or an unreadable/malformed workflow file (including a missing or unsupported `schemaVersion`, or no steps). Workflow planning never contacts the runtime, so there is no connection-failure (`3`) exit code.
 
-> This first slice validates and plans workflows only — it does not run them. Step execution and reporting are deferred to a later v1.11 slice.
+> This slice validates, plans, and explains workflows only — it does not run them. Step execution and reporting are deferred to a later v1.11 slice.
 
 ### `portier version`
 

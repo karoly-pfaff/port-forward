@@ -15,6 +15,7 @@ import (
 	"io"
 	"strings"
 
+	"portier/cli/sources/explain"
 	"portier/cli/sources/output"
 )
 
@@ -39,6 +40,30 @@ var supportedStepTypes = []string{stepPolicyCheck, stepPolicyReview, stepPolicyB
 const (
 	statusValid   = "valid"
 	statusInvalid = "invalid"
+)
+
+// Stable workflow step-validation codes. These are operator-facing identifiers
+// (a CLI/tool contract) — do not rename them casually. Every code MUST have an
+// explanation in the registry (guarded by explain_internal_test.go) and must be
+// covered by the locked code-set test. There is exactly one code per distinct
+// Slice 1 validation outcome; codeStepMissingPolicy is shared by policy.check and
+// policy.review (the same "missing policy file" outcome).
+const (
+	codeStepValid                    = "workflow.step.valid"
+	codeStepDuplicateID              = "workflow.step.duplicate_id"
+	codeStepUnknownType              = "workflow.step.unknown_type"
+	codeStepMissingID                = "workflow.step.missing_id"
+	codeStepMissingType              = "workflow.step.missing_type"
+	codeStepMissingConfigSource      = "workflow.step.missing_config_source"
+	codeStepConflictingConfigSources = "workflow.step.conflicting_config_sources"
+	codeStepMissingPolicy            = "workflow.step.missing_policy"
+	codeStepMissingCurrent           = "workflow.step.missing_current"
+	codeStepMissingCandidate         = "workflow.step.missing_candidate"
+	codeStepMissingBaseline          = "workflow.step.missing_baseline"
+	codeStepMissingReportSource      = "workflow.step.missing_report_source"
+	codeStepConflictingReportSources = "workflow.step.conflicting_report_sources"
+	codeStepUnknownReportFrom        = "workflow.step.unknown_report_from"
+	codeStepFutureReportFrom         = "workflow.step.future_report_from"
 )
 
 // File is a parsed workflow file after schema validation. It carries the raw
@@ -147,13 +172,16 @@ func Parse(data []byte) (File, error) {
 	}, nil
 }
 
-// StepPlan is the validated plan for one workflow step: its id/type, a
-// valid/invalid status with an explanatory message, the resolved inputs the step
-// would use (deterministic, map keys sorted in JSON), and the IDs of steps it
-// depends on (only `reportFrom` creates a dependency in this slice).
+// StepPlan is the validated plan for one workflow step: its id/type, a stable
+// validation code, a valid/invalid status with an explanatory message, the
+// resolved inputs the step would use (deterministic, map keys sorted in JSON),
+// and the IDs of steps it depends on (only `reportFrom` creates a dependency in
+// this slice). Every step carries a Code (valid steps use codeStepValid); the
+// code is the stable, operator-facing identifier behind `explain <code>`.
 type StepPlan struct {
 	ID        string            `json:"id"`
 	Type      string            `json:"type"`
+	Code      string            `json:"code"`
 	Status    string            `json:"status"`
 	Message   string            `json:"message"`
 	Inputs    map[string]string `json:"inputs"`
@@ -242,23 +270,25 @@ func validateStep(s Step, index int, seenID, earlierIDs map[string]bool, allIDs 
 	sp := StepPlan{
 		ID:        s.ID,
 		Type:      s.Type,
+		Code:      codeStepValid,
 		Status:    statusValid,
 		Message:   "Step is valid.",
 		Inputs:    map[string]string{},
 		DependsOn: []string{},
 	}
 
-	invalid := func(msg string) StepPlan {
+	invalid := func(code, msg string) StepPlan {
+		sp.Code = code
 		sp.Status = statusInvalid
 		sp.Message = msg
 		return sp
 	}
 
 	if s.ID == "" {
-		return invalid("Step is missing a required id.")
+		return invalid(codeStepMissingID, "Step is missing a required id.")
 	}
 	if seenID[s.ID] {
-		return invalid(fmt.Sprintf("Duplicate step id %q; step ids must be unique.", s.ID))
+		return invalid(codeStepDuplicateID, fmt.Sprintf("Duplicate step id %q; step ids must be unique.", s.ID))
 	}
 
 	switch s.Type {
@@ -269,24 +299,24 @@ func validateStep(s Step, index int, seenID, earlierIDs map[string]bool, allIDs 
 	case stepPolicyBaselineCompare:
 		return validateBaselineCompare(s, sp, invalid, earlierIDs, allIDs)
 	case "":
-		return invalid("Step is missing a required type.")
+		return invalid(codeStepMissingType, "Step is missing a required type.")
 	default:
-		return invalid(fmt.Sprintf("Unsupported step type %q; supported types: %s.", s.Type, strings.Join(supportedStepTypes, ", ")))
+		return invalid(codeStepUnknownType, fmt.Sprintf("Unsupported step type %q; supported types: %s.", s.Type, strings.Join(supportedStepTypes, ", ")))
 	}
 }
 
 // validatePolicyCheck enforces the policy.check rules: exactly one config source
 // (--config file OR --runtime marker) and a required policy file.
-func validatePolicyCheck(s Step, sp StepPlan, invalid func(string) StepPlan) StepPlan {
+func validatePolicyCheck(s Step, sp StepPlan, invalid func(code, msg string) StepPlan) StepPlan {
 	hasConfig := s.Config != ""
 	if hasConfig && s.Runtime {
-		return invalid("A policy.check step cannot set both \"config\" and \"runtime\".")
+		return invalid(codeStepConflictingConfigSources, "A policy.check step cannot set both \"config\" and \"runtime\".")
 	}
 	if !hasConfig && !s.Runtime {
-		return invalid("A policy.check step requires one of \"config\" or \"runtime\".")
+		return invalid(codeStepMissingConfigSource, "A policy.check step requires one of \"config\" or \"runtime\".")
 	}
 	if s.Policy == "" {
-		return invalid("A policy.check step requires a \"policy\" file.")
+		return invalid(codeStepMissingPolicy, "A policy.check step requires a \"policy\" file.")
 	}
 	if hasConfig {
 		sp.Inputs["config"] = s.Config
@@ -299,15 +329,15 @@ func validatePolicyCheck(s Step, sp StepPlan, invalid func(string) StepPlan) Ste
 
 // validatePolicyReview enforces the policy.review rules: current, candidate, and
 // policy are all required.
-func validatePolicyReview(s Step, sp StepPlan, invalid func(string) StepPlan) StepPlan {
+func validatePolicyReview(s Step, sp StepPlan, invalid func(code, msg string) StepPlan) StepPlan {
 	if s.Current == "" {
-		return invalid("A policy.review step requires a \"current\" config file.")
+		return invalid(codeStepMissingCurrent, "A policy.review step requires a \"current\" config file.")
 	}
 	if s.Candidate == "" {
-		return invalid("A policy.review step requires a \"candidate\" config file.")
+		return invalid(codeStepMissingCandidate, "A policy.review step requires a \"candidate\" config file.")
 	}
 	if s.Policy == "" {
-		return invalid("A policy.review step requires a \"policy\" file.")
+		return invalid(codeStepMissingPolicy, "A policy.review step requires a \"policy\" file.")
 	}
 	sp.Inputs["current"] = s.Current
 	sp.Inputs["candidate"] = s.Candidate
@@ -318,17 +348,17 @@ func validatePolicyReview(s Step, sp StepPlan, invalid func(string) StepPlan) St
 // validateBaselineCompare enforces the policy.baseline.compare rules: a required
 // baseline, and exactly one report source (a "report" file OR a "reportFrom"
 // reference to an EARLIER step). A reportFrom dependency is recorded in DependsOn.
-func validateBaselineCompare(s Step, sp StepPlan, invalid func(string) StepPlan, earlierIDs map[string]bool, allIDs map[string]int) StepPlan {
+func validateBaselineCompare(s Step, sp StepPlan, invalid func(code, msg string) StepPlan, earlierIDs map[string]bool, allIDs map[string]int) StepPlan {
 	if s.Baseline == "" {
-		return invalid("A policy.baseline.compare step requires a \"baseline\" file.")
+		return invalid(codeStepMissingBaseline, "A policy.baseline.compare step requires a \"baseline\" file.")
 	}
 	hasReport := s.Report != ""
 	hasReportFrom := s.ReportFrom != ""
 	if hasReport && hasReportFrom {
-		return invalid("A policy.baseline.compare step cannot set both \"report\" and \"reportFrom\".")
+		return invalid(codeStepConflictingReportSources, "A policy.baseline.compare step cannot set both \"report\" and \"reportFrom\".")
 	}
 	if !hasReport && !hasReportFrom {
-		return invalid("A policy.baseline.compare step requires one of \"report\" or \"reportFrom\".")
+		return invalid(codeStepMissingReportSource, "A policy.baseline.compare step requires one of \"report\" or \"reportFrom\".")
 	}
 
 	sp.Inputs["baseline"] = s.Baseline
@@ -340,9 +370,9 @@ func validateBaselineCompare(s Step, sp StepPlan, invalid func(string) StepPlan,
 	// reportFrom must reference an earlier step.
 	if !earlierIDs[s.ReportFrom] {
 		if allIDs[s.ReportFrom] > 0 {
-			return invalid(fmt.Sprintf("\"reportFrom\" references step %q, which does not appear before this step.", s.ReportFrom))
+			return invalid(codeStepFutureReportFrom, fmt.Sprintf("\"reportFrom\" references step %q, which does not appear before this step.", s.ReportFrom))
 		}
-		return invalid(fmt.Sprintf("\"reportFrom\" references unknown step id %q.", s.ReportFrom))
+		return invalid(codeStepUnknownReportFrom, fmt.Sprintf("\"reportFrom\" references unknown step id %q.", s.ReportFrom))
 	}
 	sp.Inputs["reportFrom"] = s.ReportFrom
 	sp.DependsOn = []string{s.ReportFrom}
@@ -385,9 +415,12 @@ func statusTag(status string) string {
 }
 
 // PrintHuman renders a workflow plan in deterministic human-readable form. Valid
-// steps list the inputs they would use; invalid steps show the reason. The output
-// ends with a summary and a Result: valid/invalid line.
-func PrintHuman(p Plan, w io.Writer) {
+// steps list the inputs they would use; invalid steps show the reason. When
+// withExplain is set, each INVALID step is followed by an inline explanation
+// block (code, meaning, next action) for its validation code — valid steps are
+// not explained (a valid step needs no explanation). The output ends with a
+// summary and a Result: valid/invalid line.
+func PrintHuman(p Plan, withExplain bool, w io.Writer) {
 	fmt.Fprintln(w, "Portier Workflow Plan")
 	fmt.Fprintln(w)
 	name := p.Name
@@ -421,6 +454,9 @@ func PrintHuman(p Plan, w io.Writer) {
 			}
 		} else {
 			fmt.Fprintf(w, "          %s\n", sp.Message)
+			if withExplain {
+				explain.PrintInline(explanations, sp.Code, w)
+			}
 		}
 		fmt.Fprintln(w)
 	}
@@ -432,32 +468,67 @@ func PrintHuman(p Plan, w io.Writer) {
 	fmt.Fprintf(w, "\nResult: %s\n", p.Result)
 }
 
+// planJSON is the JSON encoding of a workflow plan plus an optional additive
+// explanations map. Plan is embedded so schemaVersion/name/steps/summary/result
+// stay at the top level; Explanations is populated ONLY with --explain (and only
+// for the INVALID step codes present in the plan). It is omitempty, so without
+// --explain the output is byte-identical to encoding the Plan directly.
+type planJSON struct {
+	Plan
+	Explanations map[string]explain.Explanation `json:"explanations,omitempty"`
+}
+
+// invalidCodesOf returns the validation codes of the INVALID steps in a plan, in
+// step order (with duplicates — ForReport deduplicates them via its map). Valid
+// steps are excluded: a valid step needs no explanation, so --explain explains
+// only invalid steps in both human and JSON output.
+func invalidCodesOf(p Plan) []string {
+	codes := make([]string, 0, len(p.Steps))
+	for _, sp := range p.Steps {
+		if sp.Status == statusInvalid {
+			codes = append(codes, sp.Code)
+		}
+	}
+	return codes
+}
+
 // EmitOptions groups the presentation flags for a workflow plan. They affect ONLY
 // how the plan is rendered/exported — never the steps, summary, result, or exit
-// code. OutPath, when non-empty, also writes the JSON plan to that file.
+// code. OutPath, when non-empty, also writes the JSON plan to that file. Explain
+// adds inline explanations (human) / an additive explanations map (JSON) for the
+// plan's invalid step codes.
 type EmitOptions struct {
 	JSON    bool
 	OutPath string
+	Explain bool
 }
 
 // Emit prints a workflow plan (JSON when opts.JSON is set, otherwise human) and,
 // when opts.OutPath is non-empty, also writes the exact same JSON plan to that
-// file (byte-identical to the --json stdout output). It returns the plan's exit
+// file (byte-identical to the --json stdout output). With opts.Explain it adds
+// inline explanations (human blocks; an additive `explanations` map in JSON,
+// deduplicated by code) for the INVALID step codes present in the plan — without
+// changing the steps, summary, result, or exit code. It returns the plan's exit
 // code, except that a JSON-encode or file-write failure overrides it with 1 (an
 // operation failure, not a plan finding). It never mutates the workflow file and
 // never contacts the runtime.
 func Emit(p Plan, opts EmitOptions, stdout, stderr io.Writer) int {
+	payload := planJSON{Plan: p}
+	if opts.Explain {
+		payload.Explanations = explain.ForReport(explanations, invalidCodesOf(p))
+	}
+
 	if opts.JSON {
-		if err := output.PrintJSON(stdout, p); err != nil {
+		if err := output.PrintJSON(stdout, payload); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
 	} else {
-		PrintHuman(p, stdout)
+		PrintHuman(p, opts.Explain, stdout)
 	}
 
 	if opts.OutPath != "" {
-		if err := output.WritePrettyJSON(opts.OutPath, p); err != nil {
+		if err := output.WritePrettyJSON(opts.OutPath, payload); err != nil {
 			fmt.Fprintf(stderr, "Error writing %s: %v\n", opts.OutPath, err)
 			return 1
 		}

@@ -307,7 +307,7 @@ func TestPrintHuman_ValidShape(t *testing.T) {
 		{"id":"compare-baseline","type":"policy.baseline.compare","baseline":"policy-baseline.json","reportFrom":"check-current"}
 	]}`))
 	var sb strings.Builder
-	PrintHuman(p, &sb)
+	PrintHuman(p, false, &sb)
 	out := sb.String()
 	for _, want := range []string{
 		"Portier Workflow Plan",
@@ -334,7 +334,7 @@ func TestPrintHuman_ValidShape(t *testing.T) {
 func TestPrintHuman_InvalidShowsReason(t *testing.T) {
 	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.review","current":"x"}]}`))
 	var sb strings.Builder
-	PrintHuman(p, &sb)
+	PrintHuman(p, false, &sb)
 	out := sb.String()
 	if !strings.Contains(out, "[INVALID]") || !strings.Contains(out, "candidate") {
 		t.Errorf("invalid human output should show reason:\n%s", out)
@@ -347,7 +347,7 @@ func TestPrintHuman_InvalidShowsReason(t *testing.T) {
 func TestPrintHuman_RuntimeMarkerNoValue(t *testing.T) {
 	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","runtime":true,"policy":"p.json"}]}`))
 	var sb strings.Builder
-	PrintHuman(p, &sb)
+	PrintHuman(p, false, &sb)
 	out := sb.String()
 	if !strings.Contains(out, "Uses runtime config") {
 		t.Errorf("runtime marker line missing:\n%s", out)
@@ -360,7 +360,7 @@ func TestPrintHuman_RuntimeMarkerNoValue(t *testing.T) {
 func TestPrintHuman_UnnamedWorkflow(t *testing.T) {
 	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","runtime":true,"policy":"p.json"}]}`))
 	var sb strings.Builder
-	PrintHuman(p, &sb)
+	PrintHuman(p, false, &sb)
 	if !strings.Contains(sb.String(), "Workflow: (unnamed)") {
 		t.Errorf("unnamed workflow placeholder missing:\n%s", sb.String())
 	}
@@ -371,7 +371,7 @@ func TestPrintHuman_EmptyIDAndTypePlaceholders(t *testing.T) {
 	// placeholders rather than blanks.
 	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[{}]}`))
 	var sb strings.Builder
-	PrintHuman(p, &sb)
+	PrintHuman(p, false, &sb)
 	out := sb.String()
 	if !strings.Contains(out, "(step 1)") {
 		t.Errorf("missing (step N) placeholder:\n%s", out)
@@ -387,6 +387,107 @@ func TestStatusTag(t *testing.T) {
 	}
 	if statusTag(statusInvalid) != "[INVALID]" {
 		t.Errorf("statusTag(invalid) = %q", statusTag(statusInvalid))
+	}
+}
+
+// --- v1.11 Slice 2: step validation codes ---
+
+// TestBuildPlan_StepCodes maps each Slice 1 validation outcome to its stable
+// code, so a code regression is caught. A single-step workflow per case.
+func TestBuildPlan_StepCodes(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		want string
+	}{
+		{"valid", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","runtime":true,"policy":"p"}]}`, codeStepValid},
+		{"missing id", `{"schemaVersion":1,"steps":[{"type":"policy.check","runtime":true,"policy":"p"}]}`, codeStepMissingID},
+		{"missing type", `{"schemaVersion":1,"steps":[{"id":"a"}]}`, codeStepMissingType},
+		{"unknown type", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.apply"}]}`, codeStepUnknownType},
+		{"check missing source", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","policy":"p"}]}`, codeStepMissingConfigSource},
+		{"check conflicting source", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","config":"c","runtime":true,"policy":"p"}]}`, codeStepConflictingConfigSources},
+		{"check missing policy", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","config":"c"}]}`, codeStepMissingPolicy},
+		{"review missing current", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.review","candidate":"x","policy":"p"}]}`, codeStepMissingCurrent},
+		{"review missing candidate", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.review","current":"x","policy":"p"}]}`, codeStepMissingCandidate},
+		{"review missing policy", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.review","current":"x","candidate":"y"}]}`, codeStepMissingPolicy},
+		{"compare missing baseline", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.baseline.compare","report":"r"}]}`, codeStepMissingBaseline},
+		{"compare missing report source", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.baseline.compare","baseline":"b"}]}`, codeStepMissingReportSource},
+		{"compare conflicting report source", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.baseline.compare","baseline":"b","report":"r","reportFrom":"x"}]}`, codeStepConflictingReportSources},
+		{"compare unknown reportFrom", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.baseline.compare","baseline":"b","reportFrom":"nope"}]}`, codeStepUnknownReportFrom},
+		{"compare future reportFrom", `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.baseline.compare","baseline":"b","reportFrom":"later"},{"id":"later","type":"policy.check","runtime":true,"policy":"p"}]}`, codeStepFutureReportFrom},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := BuildPlan(mustParse(t, tc.src))
+			if p.Steps[0].Code != tc.want {
+				t.Errorf("step code = %q, want %q (message: %q)", p.Steps[0].Code, tc.want, p.Steps[0].Message)
+			}
+		})
+	}
+}
+
+func TestBuildPlan_DuplicateIDCode(t *testing.T) {
+	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[
+		{"id":"a","type":"policy.check","runtime":true,"policy":"p"},
+		{"id":"a","type":"policy.check","runtime":true,"policy":"p"}
+	]}`))
+	if p.Steps[0].Code != codeStepValid {
+		t.Errorf("first step code = %q, want valid", p.Steps[0].Code)
+	}
+	if p.Steps[1].Code != codeStepDuplicateID {
+		t.Errorf("second step code = %q, want %q", p.Steps[1].Code, codeStepDuplicateID)
+	}
+}
+
+func TestInvalidCodesOf(t *testing.T) {
+	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[
+		{"id":"ok","type":"policy.check","runtime":true,"policy":"p"},
+		{"id":"bad","type":"policy.review","current":"x"},
+		{"id":"bad2","type":"policy.apply"}
+	]}`))
+	codes := invalidCodesOf(p)
+	if len(codes) != 2 {
+		t.Fatalf("invalidCodesOf = %v, want 2 codes (valid step excluded)", codes)
+	}
+	if codes[0] != codeStepMissingCandidate || codes[1] != codeStepUnknownType {
+		t.Errorf("invalidCodesOf = %v, want [missing_candidate unknown_type] in order", codes)
+	}
+}
+
+func TestInvalidCodesOf_AllValid(t *testing.T) {
+	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","runtime":true,"policy":"p"}]}`))
+	if len(invalidCodesOf(p)) != 0 {
+		t.Errorf("all-valid plan should have no invalid codes")
+	}
+}
+
+func TestPrintHuman_ExplainInvalidStepOnly(t *testing.T) {
+	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[
+		{"id":"ok","type":"policy.check","runtime":true,"policy":"p"},
+		{"id":"bad","type":"policy.baseline.compare","baseline":"b","reportFrom":"nope"}
+	]}`))
+	var sb strings.Builder
+	PrintHuman(p, true, &sb)
+	out := sb.String()
+	// Invalid step gets an inline explanation block for its code.
+	if !strings.Contains(out, "Code: "+codeStepUnknownReportFrom) {
+		t.Errorf("missing inline explanation for invalid step:\n%s", out)
+	}
+	if !strings.Contains(out, "Meaning:") || !strings.Contains(out, "What to do:") {
+		t.Errorf("inline block incomplete:\n%s", out)
+	}
+	// Valid step must NOT get an explanation block.
+	if strings.Contains(out, "Code: "+codeStepValid) {
+		t.Errorf("valid step should not be explained:\n%s", out)
+	}
+}
+
+func TestPrintHuman_NoExplainOmitsBlocks(t *testing.T) {
+	p := BuildPlan(mustParse(t, `{"schemaVersion":1,"steps":[{"id":"bad","type":"policy.apply"}]}`))
+	var sb strings.Builder
+	PrintHuman(p, false, &sb)
+	if strings.Contains(sb.String(), "Code:") || strings.Contains(sb.String(), "Meaning:") {
+		t.Errorf("non-explain human output should have no explanation block:\n%s", sb.String())
 	}
 }
 

@@ -35,7 +35,12 @@ to, never enforces a policy, and never mutates any file except the requested
 
 Options:
   --file <file>   Path to the workflow JSON file (required).
-  --out <file>    Also write the JSON plan to <file> (same shape as --json). With
+  --explain       Show an explanation (meaning + next action) for each INVALID
+                  step's validation code (inline in human output; an additive
+                  explanations map in --json). Does not change the steps, summary,
+                  result, or exit code. Use 'portier explain <code>' for any code.
+  --out <file>    Also write the JSON plan to <file> (same shape as --json,
+                  including the additive explanations map under --explain). With
                   --json the JSON also prints to stdout and is byte-identical to
                   the file.
 
@@ -72,6 +77,7 @@ Exit codes:
 Examples:
   portier workflow plan --file workflow.json
   portier --json workflow plan --file workflow.json
+  portier workflow plan --file workflow.json --explain
   portier workflow plan --file workflow.json --out plan.json
 `
 
@@ -100,14 +106,17 @@ func RunWorkflow(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 // references, and prints a deterministic plan. It is fully offline and dry-run:
 // it does not execute any step, never contacts the runtime, never reads the files
 // a step refers to, and never mutates any file except the requested --out file.
-// Exit codes: 0 = plan valid, 1 = plan invalid (or a JSON-encode / --out write
-// failure), 2 = usage error (including a missing --out value) or an
-// unreadable/malformed workflow file (including a missing/unsupported
-// schemaVersion or no steps).
+// With --explain it adds inline explanations (human) / an additive explanations
+// map (JSON) for the plan's invalid step codes, without changing the steps,
+// summary, result, or exit code. Exit codes: 0 = plan valid, 1 = plan invalid (or
+// a JSON-encode / --out write failure), 2 = usage error (including a missing
+// --out value) or an unreadable/malformed workflow file (including a
+// missing/unsupported schemaVersion or no steps).
 func RunWorkflowPlan(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("workflow plan", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	flagFile := fs.String("file", "", "path to the workflow JSON file")
+	flagExplain := fs.Bool("explain", false, "explain each invalid step's validation code")
 	flagOut := fs.String("out", "", "also write the JSON plan to this file")
 
 	if err := fs.Parse(args); err != nil {
@@ -137,5 +146,5 @@ func RunWorkflowPlan(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 	}
 
 	plan := workflow.BuildPlan(file)
-	return workflow.Emit(plan, workflow.EmitOptions{JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
+	return workflow.Emit(plan, workflow.EmitOptions{JSON: jsonOutput, OutPath: *flagOut, Explain: *flagExplain}, stdout, stderr)
 }

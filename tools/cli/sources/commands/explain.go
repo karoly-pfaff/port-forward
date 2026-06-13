@@ -9,16 +9,17 @@ import (
 	"portier/cli/sources/explain"
 	"portier/cli/sources/output"
 	"portier/cli/sources/policy"
+	"portier/cli/sources/workflow"
 )
 
 const explainHelp = `Usage: portier explain <code>
        portier explain --list
 
-Explain a stable Portier doctor or policy code: what it means and what to do
-next. Fully offline — does not contact the runtime and changes nothing.
+Explain a stable Portier doctor, policy, or workflow code: what it means and what
+to do next. Fully offline — does not contact the runtime and changes nothing.
 
 Options:
-  --list   List all known codes (doctor/check and policy) with their titles.
+  --list   List all known codes (doctor/check, policy, and workflow) with titles.
 
 Output:
   Human explanation by default; --json emits the explanation, or with --list the
@@ -32,20 +33,23 @@ Examples:
   portier explain config.duplicate_binding
   portier explain rules.health_error
   portier explain policy.lan_exposure_forbidden
+  portier explain workflow.step.unknown_report_from
   portier --json explain runtime.unreachable
   portier explain --list
 `
 
 // allExplanations returns the merged explanation registry across all domains
-// (doctor/check codes + policy finding codes). Each domain owns its own
-// registry; the explain command composes them for unified lookup and listing.
+// (doctor/check codes + policy finding codes + workflow validation codes). Each
+// domain owns its own registry; the explain command composes them for unified
+// lookup and listing.
 func allExplanations() map[string]explain.Explanation {
-	return explain.Merge(doctor.Explanations(), policy.Explanations())
+	return explain.Merge(doctor.Explanations(), policy.Explanations(), workflow.Explanations())
 }
 
 // RunExplain runs the `portier explain` command. It is fully offline: it looks
-// up a static explanation for a stable doctor/check or policy code (or lists all
-// known codes with --list). Exit codes: 0 success, 2 unknown/missing code or usage.
+// up a static explanation for a stable doctor/check, policy, or workflow code (or
+// lists all known codes with --list). Exit codes: 0 success, 2 unknown/missing
+// code or usage.
 func RunExplain(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("explain", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
