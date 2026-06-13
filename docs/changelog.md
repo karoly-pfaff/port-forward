@@ -4,6 +4,28 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — Automation, Policies & Safe Operations
+
+v1.10 helps operators define and evaluate **safe operating rules** before any automation or enforcement exists. It starts with **dry-run policy evaluation only** — built entirely in the Go CLI as a pure API client, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**). UDP stays first-class: there is **no `allowUdp`/protocol-restriction policy**.
+
+### Added — Slice 1: Policy model + dry-run evaluator
+
+- **`portier policy check --config <file> --policy <file>` command.** Evaluates a local Portier config file against a small JSON policy file and prints a deterministic report. **Fully offline** — it never contacts the runtime, never probes targets, and never modifies the config or policy file. Human output by default; `--json` emits the full `PolicyReport`.
+- **Small JSON policy format (`schemaVersion: 1`).** A `rules` object with five boolean guardrails: `requireGroup`, `allowLanExposure`, `allowPrivilegedPorts`, `allowAutostart`, `forbidDuplicateBindings`. Omitted fields fall back to a **permissive baseline** (an empty policy permits everything — operators opt into each restriction). **Unknown fields are rejected** so a typo cannot silently relax a guardrail.
+- **Policy result model.** `PolicyFinding` (`code`, `severity` `info`/`warning`/`error`, `title`, `message`, optional `details`) aggregated into a `PolicyReport` (`findings[]` + `summary` counts + `result` `passed`/`failed`). Kept separate from the doctor `DoctorReport`.
+- **Stable policy finding codes.** `policy.valid`, `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`. Operator-facing identifiers — not renamed casually. In this slice every violation is an `error`; a compliant config emits one `policy.valid` info finding.
+- **Deterministic evaluation.** Per-rule checks run in config file order (within a rule: group → LAN exposure → privileged port → autostart); duplicate-binding findings are emitted last, one per conflicting binding, sorted by protocol → listen host → port. LAN exposure (`0.0.0.0`), privileged port (`< 1024`), and duplicate-binding detection reuse the v1.9 config-doctor interpretations so the two cannot drift.
+- **Exit codes.** `0` no violations, `1` one or more violations (or a JSON-encode failure), `2` missing/invalid arguments or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
+
+### Notes (Slice 1)
+
+- CLI-only change. The CLI stays a pure API client; no shared/server/service/client code, no API/DTO/config shape, and no plan/apply or forwarding behavior changed. `validate:contract` unchanged at **234/234**.
+- **No enforcement, no mutation, no automation.** This slice is dry-run evaluation only — there is no live policy enforcement, no automatic remediation, no scheduler, no UI panel, and no remote/team/auth behavior.
+- **UDP is first-class.** There is intentionally **no `allowUdp`/`udpForbidden` policy** and no protocol allowlist/denylist; a UDP rule is evaluated by the same general guardrails as a TCP rule.
+- CLI coverage **97.6% → 97.8%** statements; every new policy function is 100% covered. Applying the new **opportunistic coverage-gate ratchet**, the **CLI gate was raised 95% → 97%** (`scripts/validate-coverage.js`) — actual 97.8%, a deliberately tighter ~0.8% buffer (deterministic cross-package Go measurement). The remaining uncovered lines are documented structurally-unreachable CLI branches (os.Exit wrapper, `json.Marshal` on concrete DTOs, platform filesystem-failure paths). No gate lowered.
+
+---
+
 ## [1.9.0] — 2026-06-13 — Doctor & Config Toolkit
 
 ### Goal

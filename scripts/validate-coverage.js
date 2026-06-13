@@ -76,12 +76,21 @@ const coverDir = join(repoRoot, "coverage");
 // Actuals after Coverage Slice E: server 98.9/93.57/100 (gates raised
 //   89/91/99 → 95/92/99; three consecutive coverage:server runs stable, the
 //   ghost-entry dedup keeps the number deterministic).
+// Actuals after v1.10 Slice 1: cli 97.8% (gate raised 95→97; opportunistic
+//   tightening — deterministic cross-package Go number, the policy + doctor
+//   commands keep cli ≥ 97.2% across recent slices, so 97 stays above with a
+//   ~0.8% buffer). NOTE: 97 is a tighter floor than the historical ~2% buffer —
+//   the remaining uncovered lines are documented structurally-unreachable
+//   branches (os.Exit wrapper, json.Marshal on concrete DTOs, platform
+//   filesystem-failure paths), so a future defensive-code-heavy slice could
+//   land close to this floor; that is an accepted, deliberate tightening. See
+//   the "Coverage-gate tightening" durable rule in CLAUDE.md / AGENTS.md.
 const GATES = {
   shared:  { statements: 100, branches: 100, functions: 100 },
   server:  { statements: 95, branches: 92, functions: 99 },
   client:  { statements: 94, branches: 89, functions: 78 },
   service: { statements: 90 },
-  cli:     { statements: 95 },
+  cli:     { statements: 97 },
 };
 
 const ALL_COMPONENTS = Object.keys(GATES);

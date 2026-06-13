@@ -571,6 +571,61 @@ If you want to ask an AI assistant to help interpret a doctor report, Portier sh
 
 **Portier never sends anything anywhere** — there is no AI integration, upload, or telemetry. The prompt is plain text *you* paste into an assistant of your choice, together with output you generated locally (e.g. `portier doctor --json --explain`). The prompt tells the assistant to treat the pasted report as the only source of truth, to distinguish info / warning / error / strict failures, to ground its analysis in the data, and — importantly — **never to ask you for secrets, tokens, keys, environment dumps, process lists, or logs** (the doctor tools never collect those). It asks for a verdict, prioritized findings, a risk level, and separated "safe now" vs "needs admin/network/security review" next steps.
 
+### `portier policy check --config <file> --policy <file>`
+
+Evaluate a local Portier config file against a small JSON **policy** file. Fully **offline** — it never contacts the runtime, never probes targets, and never modifies the config or policy file. This is **dry-run evaluation only**: there is no enforcement, no automation, and no config/runtime mutation.
+
+```
+portier policy check --config <config-file> --policy <policy-file> [--json]
+```
+
+The policy file is a small JSON document (`schemaVersion: 1`) with a `rules` object of boolean guardrails:
+
+```json
+{
+  "schemaVersion": 1,
+  "rules": {
+    "requireGroup": false,
+    "allowLanExposure": true,
+    "allowPrivilegedPorts": true,
+    "allowAutostart": true,
+    "forbidDuplicateBindings": true
+  }
+}
+```
+
+| Policy rule | Effect |
+| --- | --- |
+| `requireGroup` | When `true`, every rule must have a non-empty (trimmed) group. |
+| `allowLanExposure` | When `false`, listening on `0.0.0.0` is a violation. |
+| `allowPrivilegedPorts` | When `false`, listen ports below `1024` are violations. |
+| `allowAutostart` | When `false`, autostart-enabled rules (`enabled: true`) are violations. |
+| `forbidDuplicateBindings` | When `true`, duplicate `protocol` + `listenHost` + `listenPort` bindings are violations. |
+
+Each **omitted** field falls back to the **permissive default** shown above (`requireGroup`/`forbidDuplicateBindings` default off, `allow*` default on), so an empty `rules` object permits everything — operators opt **into** each restriction. **Unknown fields are rejected** (exit `2`) so a typo cannot silently relax a guardrail. There is intentionally **no `allowUdp`/protocol-restriction policy** — UDP is first-class and is evaluated by the same general guardrails as TCP.
+
+Human output lists each finding with an `[INFO]`/`[ERROR]` tag, a severity summary, and a `Result: passed`/`Result: failed` line. `--json` emits the full report:
+
+```json
+{
+  "findings": [
+    {
+      "code": "policy.lan_exposure_forbidden",
+      "severity": "error",
+      "title": "Rule \"Admin UI\" listens on 0.0.0.0",
+      "message": "This rule listens on 0.0.0.0, but the policy forbids LAN exposure.",
+      "details": { "rule": { "name": "Admin UI", "protocol": "tcp", "listenHost": "0.0.0.0", "listenPort": 48080, "enabled": true, "group": "admin" } }
+    }
+  ],
+  "summary": { "info": 0, "warning": 0, "error": 1 },
+  "result": "failed"
+}
+```
+
+Stable finding codes: `policy.valid` (info, emitted when the config complies), `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`. Evaluation is deterministic: per-rule findings appear in config file order (within a rule: group → LAN exposure → privileged port → autostart); duplicate-binding findings come last, one per conflicting binding, sorted by protocol → listen host → port.
+
+Exit codes: `0` no violations; `1` one or more violations; `2` missing/invalid arguments, or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
+
 ### `portier version`
 
 Show the CLI version.
@@ -606,6 +661,7 @@ Policy notes (intentional, not inconsistencies):
 - **Rule selectors.** A rule `<id|name>` that matches nothing exits `1` (the target does not exist, like an API 404); one that matches multiple names exits `2` (the selector is ambiguous and fixable — the matching IDs are listed).
 - **API vs connection.** Any server-side rejection/error is `1`; an unreachable service is `3`.
 - **`doctor` is a reporter.** Like `config doctor`, `portier doctor` always completes and emits a report, so its exit code reflects the *findings*: `0` no error-severity checks (warnings still `0`), `1` one or more error-severity checks. An unreachable runtime is reported as a `runtime.unreachable` error check and exits `1`, **not** `3` — an intentional deviation from the connection-failure policy, scoped to the doctor commands.
+- **`policy check` is a reporter.** Fully offline, it always completes and emits a report, so its exit code reflects the *findings*: `0` no violations, `1` one or more violations. An unreadable/malformed config or policy file (or an unsupported `schemaVersion`) is a local **input** error → `2`, consistent with the other config-consuming commands.
 
 ## Runtime Package
 

@@ -295,6 +295,51 @@ func TestRun_ExplainListDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_PolicyCheckDispatch(t *testing.T) {
+	// policy check is fully offline — no server needed, and an invalid --url is
+	// ignored. A compliant config against a strict policy exits 0.
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.json")
+	cfgContent := `[{"name":"Admin","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48080,"targetHost":"10.0.0.1","targetPort":8080,"enabled":false,"group":"admin"}]`
+	if err := os.WriteFile(cfg, []byte(cfgContent), 0o644); err != nil {
+		t.Fatalf("writing temp config: %v", err)
+	}
+	pol := filepath.Join(dir, "policy.json")
+	polContent := `{"schemaVersion":1,"rules":{"requireGroup":true,"allowLanExposure":false,"allowPrivilegedPorts":false,"allowAutostart":false,"forbidDuplicateBindings":true}}`
+	if err := os.WriteFile(pol, []byte(polContent), 0o644); err != nil {
+		t.Fatalf("writing temp policy: %v", err)
+	}
+	code := run([]string{"--url", "ftp://bad-scheme", "policy", "check", "--config", cfg, "--policy", pol})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
+func TestRun_PolicyDispatch_NoSubcommand(t *testing.T) {
+	// policy with no subcommand → 2
+	code := run([]string{"policy"})
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
+func TestRun_PolicyCheckViolationDispatch(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.json")
+	cfgContent := `[{"name":"Exposed","protocol":"tcp","listenHost":"0.0.0.0","listenPort":48080,"targetHost":"10.0.0.1","targetPort":8080,"enabled":false,"group":"g"}]`
+	if err := os.WriteFile(cfg, []byte(cfgContent), 0o644); err != nil {
+		t.Fatalf("writing temp config: %v", err)
+	}
+	pol := filepath.Join(dir, "policy.json")
+	if err := os.WriteFile(pol, []byte(`{"schemaVersion":1,"rules":{"allowLanExposure":false}}`), 0o644); err != nil {
+		t.Fatalf("writing temp policy: %v", err)
+	}
+	code := run([]string{"policy", "check", "--config", cfg, "--policy", pol})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1 (violation)", code)
+	}
+}
+
 func TestRun_ConfigDispatch_NoSubcommand(t *testing.T) {
 	srv := makeDispatchServer(t)
 	defer srv.Close()
