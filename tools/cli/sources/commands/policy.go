@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"portier/cli/sources/client"
 	"portier/cli/sources/config"
@@ -33,11 +34,67 @@ Subcommands:
   review --current <file> --candidate <file> --policy <file>
                                           Compare current vs candidate config and evaluate the
                                           candidate against a policy (read-only, offline)
+  baseline create|compare ...             Save an accepted policy report as a baseline, or compare
+                                          a fresh report against it (offline)
   template <name> | --list                Print a built-in policy template, or list them
   help                                    Show this help message
 
-Run 'portier policy check --help', 'portier policy review --help', or
-'portier policy template --help' for options.
+Run 'portier policy check --help', 'portier policy review --help',
+'portier policy baseline --help', or 'portier policy template --help' for options.
+`
+
+const policyBaselineHelp = `Usage: portier policy baseline <subcommand> [options]
+
+Save an accepted set of policy findings as a baseline, then compare later policy
+reports against it — a dry-run acceptance workflow. Fully offline: works on the
+policy report JSON files produced by 'policy check' / 'policy review' (--json or
+--out); never contacts the runtime and never mutates inputs.
+
+Subcommands:
+  create --from-report <report.json> --out <baseline.json>
+        Save a policy report's findings as an accepted baseline.
+  compare --baseline <baseline.json> --report <report.json>
+        Compare a fresh policy report against a baseline (new/resolved/unchanged).
+  help  Show this help message.
+`
+
+const policyBaselineCreateHelp = `Usage: portier policy baseline create --from-report <report.json> --out <baseline.json>
+
+Save an accepted policy report's findings as a baseline file. Fully offline: it
+reads the report, writes a compact baseline JSON (schemaVersion 1: createdAt,
+source, result, and fingerprinted findings — no raw config, no secrets, no
+runtime host data), and never contacts the runtime or mutates the report.
+
+The input report may come from 'policy check' or 'policy review' (--json/--out).
+
+Options:
+  --from-report <file>  Path to the policy report JSON to baseline (required).
+  --out <file>          Path to write the baseline JSON (required).
+
+Exit codes:
+  0  Baseline written
+  1  Output file write failure
+  2  Missing/invalid arguments, or an unreadable/malformed report
+`
+
+const policyBaselineCompareHelp = `Usage: portier policy baseline compare --baseline <baseline.json> --report <report.json>
+
+Compare a fresh policy report against an accepted baseline and report which
+findings are new, resolved, or unchanged. Fully offline; never contacts the
+runtime and never mutates inputs. New findings fail the comparison; resolved-only
+changes do not.
+
+Options:
+  --baseline <file>  Path to the baseline JSON (required).
+  --report <file>    Path to the fresh policy report JSON to compare (required).
+
+Output: a human report (or the full comparison under --json) listing new,
+resolved, and unchanged findings, and a Result: passed/failed line.
+
+Exit codes:
+  0  No new findings (passed)
+  1  One or more new findings (failed)
+  2  Missing/invalid arguments, or an unreadable/malformed baseline or report
 `
 
 const policyReviewHelp = `Usage: portier policy review --current <file> --candidate <file> --policy <file>
@@ -185,6 +242,8 @@ func RunPolicy(jsonOutput bool, conn ConnFlags, args []string, stdout, stderr io
 		return RunPolicyCheck(jsonOutput, conn, args[1:], stdout, stderr)
 	case "review":
 		return RunPolicyReview(jsonOutput, args[1:], stdout, stderr)
+	case "baseline":
+		return RunPolicyBaseline(jsonOutput, args[1:], stdout, stderr)
 	case "template":
 		return RunPolicyTemplate(jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -401,6 +460,154 @@ func RunPolicyReview(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 
 	review := policy.BuildReview(current, candidate, pol)
 	return policy.EmitReview(review, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
+}
+
+// RunPolicyBaseline dispatches the `policy baseline <subcommand>` commands. All
+// are fully offline (they operate on local report/baseline JSON files).
+func RunPolicyBaseline(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprint(stderr, policyBaselineHelp)
+		return 2
+	}
+	switch args[0] {
+	case "create":
+		return RunPolicyBaselineCreate(jsonOutput, args[1:], stdout, stderr)
+	case "compare":
+		return RunPolicyBaselineCompare(jsonOutput, args[1:], stdout, stderr)
+	case "help", "--help", "-h":
+		fmt.Fprint(stdout, policyBaselineHelp)
+		return 0
+	default:
+		fmt.Fprintf(stderr, "Unknown baseline subcommand %q\n\n", args[0])
+		fmt.Fprint(stderr, policyBaselineHelp)
+		return 2
+	}
+}
+
+// RunPolicyBaselineCreate reads a policy report JSON file and writes a compact
+// accepted baseline. Fully offline: it never contacts the runtime and never
+// mutates the report. Exit codes: 0 = baseline written, 1 = output-file write
+// failure (or a JSON-encode failure of the summary), 2 = usage error or an
+// unreadable/malformed report.
+func RunPolicyBaselineCreate(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("policy baseline create", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagFrom := fs.String("from-report", "", "path to the policy report JSON")
+	flagOut := fs.String("out", "", "path to write the baseline JSON")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, policyBaselineCreateHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, policyBaselineCreateHelp)
+		return 2
+	}
+	if *flagFrom == "" {
+		fmt.Fprintln(stderr, "Error: --from-report is required")
+		fmt.Fprint(stderr, policyBaselineCreateHelp)
+		return 2
+	}
+	if *flagOut == "" {
+		fmt.Fprintln(stderr, "Error: --out is required")
+		fmt.Fprint(stderr, policyBaselineCreateHelp)
+		return 2
+	}
+
+	reportData, err := os.ReadFile(*flagFrom)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading report %s: %v\n", *flagFrom, err)
+		return 2
+	}
+	snap, snapErr := policy.ParseReportSnapshot(reportData)
+	if snapErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid report %s: %v\n", *flagFrom, snapErr)
+		return 2
+	}
+
+	baseline := policy.BuildBaseline(snap, time.Now())
+	if err := output.WritePrettyJSON(*flagOut, baseline); err != nil {
+		fmt.Fprintf(stderr, "Error writing %s: %v\n", *flagOut, err)
+		return 1
+	}
+
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, map[string]any{
+			"ok": true, "path": *flagOut, "findingCount": len(baseline.Findings),
+		}); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+	} else {
+		fmt.Fprintf(stdout, "Baseline written to %s (%d %s)\n", *flagOut, len(baseline.Findings), output.PluralWord(len(baseline.Findings), "finding", "findings"))
+	}
+	return 0
+}
+
+// RunPolicyBaselineCompare compares a fresh policy report against a baseline and
+// prints which findings are new, resolved, or unchanged. Fully offline: it never
+// contacts the runtime and never mutates the inputs. Exit codes: 0 = no new
+// findings, 1 = one or more new findings (or a JSON-encode failure), 2 = usage
+// error or an unreadable/malformed baseline or report.
+func RunPolicyBaselineCompare(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("policy baseline compare", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagBaseline := fs.String("baseline", "", "path to the baseline JSON")
+	flagReport := fs.String("report", "", "path to the fresh policy report JSON")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, policyBaselineCompareHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, policyBaselineCompareHelp)
+		return 2
+	}
+	if *flagBaseline == "" {
+		fmt.Fprintln(stderr, "Error: --baseline is required")
+		fmt.Fprint(stderr, policyBaselineCompareHelp)
+		return 2
+	}
+	if *flagReport == "" {
+		fmt.Fprintln(stderr, "Error: --report is required")
+		fmt.Fprint(stderr, policyBaselineCompareHelp)
+		return 2
+	}
+
+	baselineData, err := os.ReadFile(*flagBaseline)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading baseline %s: %v\n", *flagBaseline, err)
+		return 2
+	}
+	baseline, baseErr := policy.ParseBaseline(baselineData)
+	if baseErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid baseline %s: %v\n", *flagBaseline, baseErr)
+		return 2
+	}
+
+	reportData, err := os.ReadFile(*flagReport)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading report %s: %v\n", *flagReport, err)
+		return 2
+	}
+	snap, snapErr := policy.ParseReportSnapshot(reportData)
+	if snapErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid report %s: %v\n", *flagReport, snapErr)
+		return 2
+	}
+
+	report := policy.Compare(baseline, snap)
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, report); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+	} else {
+		policy.PrintCompareHuman(report, stdout)
+	}
+	return policy.CompareExitCode(report)
 }
 
 // RunPolicyTemplate prints a built-in policy template (or lists them). It is

@@ -678,6 +678,38 @@ Result: passed
 
 Exit codes: `0` the candidate passes the policy; `1` the candidate violates the policy, or an `--out` write failure; `2` missing/invalid arguments, or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
 
+### `portier policy baseline create|compare`
+
+A dry-run **acceptance workflow**: save an accepted set of policy findings as a **baseline**, then compare later policy reports against it. Fully **offline** — both commands operate on the policy report JSON files produced by `policy check` / `policy review` (`--json` or `--out`); they never contact the runtime and never mutate inputs. A baseline is an accepted **snapshot of findings, not a config copy** (no raw config, no secrets, no runtime host data).
+
+```
+portier policy baseline create --from-report <report.json> --out <baseline.json>
+portier policy baseline compare --baseline <baseline.json> --report <report.json> [--json]
+```
+
+**create** reads a policy report and writes a compact baseline (`schemaVersion: 1`, `createdAt` (RFC3339 UTC), `source`, `result`, and a fingerprinted `findings` array). The `policy.valid` "no violations" marker is excluded. Exit codes: `0` written; `1` output-file write failure; `2` usage error or an unreadable/malformed report.
+
+**compare** classifies each finding in a fresh report against the baseline as **new** (in the report, not the baseline), **resolved** (in the baseline, not the report), or **unchanged** (in both), matched by a deterministic fingerprint:
+
+```
+Portier Policy Baseline Compare
+
+New findings:
+- policy.privileged_port_forbidden: This rule listens on a privileged port (below 1024), but the policy forbids privileged ports.
+
+Resolved findings:
+- none
+
+Unchanged findings:
+- policy.lan_exposure_forbidden: This rule listens on 0.0.0.0, but the policy forbids LAN exposure.
+
+Result: failed
+```
+
+`--json` emits `{ "summary": { "new", "resolved", "unchanged" }, "result", "new": [...], "resolved": [...], "unchanged": [...] }`. The result is `failed` only when there are **new** findings — **resolved-only changes do not fail**. Exit codes: `0` no new findings; `1` one or more new findings; `2` usage error or an unreadable/malformed baseline or report (including an unsupported baseline `schemaVersion`).
+
+Finding **fingerprints** are deterministic and source-independent: rule-scoped findings use `code|name|protocol|listenHost|listenPort`; duplicate bindings use `code|protocol|listenHost|listenPort|<sorted rule names>`; anything else falls back to `code|message`. A finding fingerprints identically whether its report came from offline `--config` or `--runtime`, and never depends on volatile rule IDs.
+
 ### `portier policy template <name> [--out <file>]` / `--list`
 
 Print a built-in **policy template** (or list the available ones) so you don't have to write the policy JSON schema by hand. Fully **offline** — it never contacts the runtime and never modifies any file except the requested `--out` file. A rendered template is a complete policy file (`schemaVersion: 1`) that can be passed straight to `portier policy check --policy <file>`.
