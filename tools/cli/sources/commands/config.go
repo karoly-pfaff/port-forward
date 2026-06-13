@@ -1,28 +1,17 @@
 package commands
 
 import (
-	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
-	"sort"
-	"strings"
-	"unicode/utf8"
 
 	"portier/cli/sources/client"
+	"portier/cli/sources/config"
+	"portier/cli/sources/doctor"
 	"portier/cli/sources/output"
+	"portier/cli/sources/planview"
 )
-
-// groupMaxLength mirrors the server-side rule group label limit (characters).
-// The CLI does a light local pre-check; the server is authoritative.
-const groupMaxLength = 64
-
-// duplicateBindingErrPrefix is the leading text of the duplicate listen-binding
-// validation error. It is shared between validateLocalConfig (the producer) and
-// the config doctor (which partitions errors by it) so the two cannot drift.
-const duplicateBindingErrPrefix = "duplicate listen binding:"
 
 const configHelp = `Usage: portier config <subcommand> [options]
 
@@ -278,7 +267,7 @@ func RunConfigExport(c *client.Client, jsonOutput bool, args []string, stdout, s
 		return 2
 	}
 
-	if err := writePrettyJSON(*flagOut, cfg); err != nil {
+	if err := output.WritePrettyJSON(*flagOut, cfg); err != nil {
 		fmt.Fprintf(stderr, "Error writing %s: %v\n", *flagOut, err)
 		return 1
 	}
@@ -297,7 +286,7 @@ func RunConfigExport(c *client.Client, jsonOutput bool, args []string, stdout, s
 	}
 
 	fmt.Fprintf(stdout, "Exported %d %s to %s\n",
-		ruleCount, pluralRule(ruleCount), *flagOut)
+		ruleCount, output.PluralRule(ruleCount), *flagOut)
 	return 0
 }
 
@@ -364,7 +353,7 @@ func RunConfigImport(c *client.Client, jsonOutput bool, args []string, stdout, s
 	fmt.Fprintf(stdout, "Imported config using %s mode.\n", *flagMode)
 	if resp.Result.Imported > 0 {
 		fmt.Fprintf(stdout, "  %d %s imported.\n",
-			resp.Result.Imported, pluralRule(resp.Result.Imported))
+			resp.Result.Imported, output.PluralRule(resp.Result.Imported))
 	}
 	return 0
 }
@@ -397,10 +386,10 @@ func RunConfigValidate(jsonOutput bool, args []string, stdout, stderr io.Writer)
 		return 1
 	}
 
-	rules, parseErr := parseLocalConfig(data)
+	rules, parseErr := config.ParseLocal(data)
 	if parseErr != nil {
 		if jsonOutput {
-			if err := output.PrintJSON(stdout, configValidationResult{
+			if err := output.PrintJSON(stdout, config.ValidationResult{
 				Valid:  false,
 				Errors: []string{parseErr.Error()},
 			}); err != nil {
@@ -413,7 +402,7 @@ func RunConfigValidate(jsonOutput bool, args []string, stdout, stderr io.Writer)
 		return 1
 	}
 
-	vr := validateLocalConfig(rules)
+	vr := config.Validate(rules)
 
 	if jsonOutput {
 		if err := output.PrintJSON(stdout, vr); err != nil {
@@ -429,7 +418,7 @@ func RunConfigValidate(jsonOutput bool, args []string, stdout, stderr io.Writer)
 	if vr.Valid {
 		fmt.Fprintln(stdout, "Config is valid.")
 		fmt.Fprintf(stdout, "  %d %s: %d TCP, %d UDP\n",
-			vr.RuleCount, pluralRule(vr.RuleCount), vr.TCPCount, vr.UDPCount)
+			vr.RuleCount, output.PluralRule(vr.RuleCount), vr.TCPCount, vr.UDPCount)
 		return 0
 	}
 
@@ -439,19 +428,6 @@ func RunConfigValidate(jsonOutput bool, args []string, stdout, stderr io.Writer)
 	}
 	return 1
 }
-
-// Config doctor check codes. These are stable, operator-facing identifiers —
-// do not rename them casually (they are a CLI/tool contract).
-const (
-	checkConfigReadFailed       = "config.read_failed"
-	checkConfigParseFailed      = "config.parse_failed"
-	checkConfigEmpty            = "config.empty"
-	checkConfigValidationFailed = "config.validation_failed"
-	checkConfigDuplicateBinding = "config.duplicate_binding"
-	checkConfigLanExposure      = "config.lan_exposure"
-	checkConfigPrivilegedPort   = "config.privileged_port"
-	checkConfigValid            = "config.valid"
-)
 
 // RunConfigDoctor runs deterministic, offline diagnostic checks on a local
 // config file and prints a doctor report. It never contacts the running
@@ -481,524 +457,13 @@ func RunConfigDoctor(jsonOutput bool, args []string, stdout, stderr io.Writer) i
 		return 2
 	}
 
-	report, summary := runConfigDoctorChecks(fs.Arg(0))
-	return emitDoctorReport("Portier Config Doctor", report, doctorEmitOptions{
-		strict: *flagStrict, explain: *flagExplain, json: jsonOutput, outPath: *flagOut, config: summary,
+	report, summary := doctor.RunConfigChecks(fs.Arg(0))
+	return doctor.Emit("Portier Config Doctor", report, doctor.EmitOptions{
+		Strict: *flagStrict, Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut, Config: summary,
 	}, stdout, stderr)
 }
 
-// runConfigDoctorChecks performs the offline analysis of a config file and
-// returns a deterministic doctor report plus a compact config summary. Read and
-// parse failures short-circuit (no later checks are meaningful, and the summary
-// is nil because no rules could be parsed); otherwise the summary is derived
-// from the parsed rules and validation, duplicate-binding, emptiness, validity,
-// and the LAN-exposure / privileged-port advisories run.
-func runConfigDoctorChecks(filePath string) (DoctorReport, *configSummary) {
-	checks := []DoctorCheckResult{}
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		checks = append(checks, DoctorCheckResult{
-			Code:     checkConfigReadFailed,
-			Severity: DoctorError,
-			Title:    "Config file could not be read",
-			Message:  fmt.Sprintf("Reading %s failed: %v", filePath, err),
-			Details:  map[string]any{"path": filePath},
-		})
-		return newDoctorReport(checks), nil
-	}
-
-	rules, parseErr := parseLocalConfig(data)
-	if parseErr != nil {
-		checks = append(checks, DoctorCheckResult{
-			Code:     checkConfigParseFailed,
-			Severity: DoctorError,
-			Title:    "Config file could not be parsed",
-			Message:  parseErr.Error(),
-			Details:  map[string]any{"path": filePath},
-		})
-		return newDoctorReport(checks), nil
-	}
-
-	// The summary is available whenever parsing succeeded (including an empty
-	// config or a config with validation errors).
-	summary := buildConfigSummary(rules)
-
-	if len(rules) == 0 {
-		checks = append(checks, DoctorCheckResult{
-			Code:     checkConfigEmpty,
-			Severity: DoctorWarning,
-			Title:    "Config contains no rules",
-			Message:  "The config file parsed successfully but defines no forwarding rules.",
-			Details:  map[string]any{"ruleCount": 0},
-		})
-		return newDoctorReport(checks), &summary
-	}
-
-	// Field validation and duplicate bindings are reported separately so an
-	// operator can distinguish a binding conflict from a malformed rule.
-	vr := validateLocalConfig(rules)
-	dupErrs, fieldErrs := partitionValidationErrors(vr.Errors)
-	if len(fieldErrs) > 0 {
-		checks = append(checks, DoctorCheckResult{
-			Code:     checkConfigValidationFailed,
-			Severity: DoctorError,
-			Title:    fmt.Sprintf("Config has %d validation %s", len(fieldErrs), pluralWord(len(fieldErrs), "error", "errors")),
-			Message:  "One or more rules have invalid fields. Run 'portier config validate' for the full list.",
-			Details:  map[string]any{"errors": fieldErrs, "ruleCount": len(rules)},
-		})
-	}
-	if len(dupErrs) > 0 {
-		checks = append(checks, DoctorCheckResult{
-			Code:     checkConfigDuplicateBinding,
-			Severity: DoctorError,
-			Title:    fmt.Sprintf("Config has %d duplicate listen %s", len(dupErrs), pluralWord(len(dupErrs), "binding", "bindings")),
-			Message:  "Two or more rules share a listen binding (protocol + host + port). Each binding must be unique.",
-			Details:  map[string]any{"errors": dupErrs, "bindings": findDuplicateBindings(rules)},
-		})
-	}
-
-	if vr.Valid {
-		checks = append(checks, DoctorCheckResult{
-			Code:     checkConfigValid,
-			Severity: DoctorInfo,
-			Title:    "Config is valid",
-			Message: fmt.Sprintf("The config file can be read, parsed, and validated (%d %s: %d TCP, %d UDP).",
-				vr.RuleCount, pluralRule(vr.RuleCount), vr.TCPCount, vr.UDPCount),
-			Details: map[string]any{"ruleCount": vr.RuleCount, "tcpCount": vr.TCPCount, "udpCount": vr.UDPCount},
-		})
-	}
-
-	// Deterministic advisories run on every parsed rule (in file order),
-	// independent of field validity, since exposure and port concerns are
-	// meaningful even when other fields are wrong.
-	checks = append(checks, configDoctorAdvisories(rules)...)
-
-	return newDoctorReport(checks), &summary
-}
-
-// configSummary is a compact, deterministic, machine-readable description of a
-// parsed config. It is derived ONLY from the offline config contents (no
-// environment, runtime, or filesystem data) and intentionally does not repeat
-// full rule data (Slice 8 finding details already identify affected rules).
-type configSummary struct {
-	RuleCount          int            `json:"ruleCount"`
-	EnabledRuleCount   int            `json:"enabledRuleCount"`
-	DisabledRuleCount  int            `json:"disabledRuleCount"`
-	Protocols          protocolCounts `json:"protocols"`
-	GroupCount         int            `json:"groupCount"`
-	Groups             []groupSummary `json:"groups"`
-	UngroupedRuleCount int            `json:"ungroupedRuleCount"`
-}
-
-// protocolCounts counts rules per protocol in a stable field order.
-type protocolCounts struct {
-	TCP int `json:"tcp"`
-	UDP int `json:"udp"`
-}
-
-// groupSummary is the per-group rollup inside a configSummary.
-type groupSummary struct {
-	Name              string `json:"name"`
-	RuleCount         int    `json:"ruleCount"`
-	EnabledRuleCount  int    `json:"enabledRuleCount"`
-	DisabledRuleCount int    `json:"disabledRuleCount"`
-}
-
-// buildConfigSummary computes the deterministic config summary from parsed
-// rules. Group names are trimmed; empty/whitespace groups count as ungrouped;
-// the groups list is sorted by name. Unknown protocols are simply not counted
-// under tcp/udp (so ruleCount may exceed tcp+udp for an invalid config).
-func buildConfigSummary(rules []rawConfigRule) configSummary {
-	s := configSummary{RuleCount: len(rules)}
-	groups := map[string]*groupSummary{}
-	for _, r := range rules {
-		if r.Enabled {
-			s.EnabledRuleCount++
-		} else {
-			s.DisabledRuleCount++
-		}
-		switch r.Protocol {
-		case "tcp":
-			s.Protocols.TCP++
-		case "udp":
-			s.Protocols.UDP++
-		}
-
-		g := strings.TrimSpace(r.Group)
-		if g == "" {
-			s.UngroupedRuleCount++
-			continue
-		}
-		gs, ok := groups[g]
-		if !ok {
-			gs = &groupSummary{Name: g}
-			groups[g] = gs
-		}
-		gs.RuleCount++
-		if r.Enabled {
-			gs.EnabledRuleCount++
-		} else {
-			gs.DisabledRuleCount++
-		}
-	}
-
-	s.GroupCount = len(groups)
-	s.Groups = make([]groupSummary, 0, len(groups))
-	for _, gs := range groups {
-		s.Groups = append(s.Groups, *gs)
-	}
-	sort.Slice(s.Groups, func(i, j int) bool { return s.Groups[i].Name < s.Groups[j].Name })
-	return s
-}
-
-// configDoctorAdvisories returns the LAN-exposure and privileged-port advisory
-// checks for the given rules. Each advisory aggregates ALL affected rules (in
-// file order) into one check carrying a deterministic, structured `rules` list
-// in its details — so the warning count stays one-per-advisory-kind and exit
-// behavior is unchanged. LAN exposure stays the existing `0.0.0.0` check (kept
-// consistent with the shared advisory; `::` is intentionally not added).
-func configDoctorAdvisories(rules []rawConfigRule) []DoctorCheckResult {
-	advisories := []DoctorCheckResult{}
-
-	var exposed, privileged []ruleDetail
-	for _, r := range rules {
-		if r.ListenHost == "0.0.0.0" {
-			exposed = append(exposed, toRuleDetail(r))
-		}
-		if r.ListenPort >= 1 && r.ListenPort < 1024 {
-			privileged = append(privileged, toRuleDetail(r))
-		}
-	}
-
-	if len(exposed) > 0 {
-		advisories = append(advisories, DoctorCheckResult{
-			Code:     checkConfigLanExposure,
-			Severity: DoctorWarning,
-			Title:    lanExposureTitle(exposed),
-			Message:  "Listening on 0.0.0.0 exposes the forwarded port on all interfaces. Other LAN devices may be able to connect if firewall settings allow it.",
-			Details:  map[string]any{"rules": exposed},
-		})
-	}
-	if len(privileged) > 0 {
-		advisories = append(advisories, DoctorCheckResult{
-			Code:     checkConfigPrivilegedPort,
-			Severity: DoctorWarning,
-			Title:    privilegedPortTitle(privileged),
-			Message:  "One or more rules listen on a privileged port (below 1024), which may require elevated permissions to bind.",
-			Details:  map[string]any{"rules": privileged},
-		})
-	}
-	return advisories
-}
-
-// lanExposureTitle renders the LAN-exposure check title, preserving the
-// single-rule wording and summarizing when multiple rules are affected.
-func lanExposureTitle(rules []ruleDetail) string {
-	if len(rules) == 1 {
-		return fmt.Sprintf("%s listens on 0.0.0.0", ruleLabelName(rules[0].Name))
-	}
-	return fmt.Sprintf("%d rules listen on 0.0.0.0", len(rules))
-}
-
-// privilegedPortTitle renders the privileged-port check title, preserving the
-// single-rule wording and summarizing when multiple rules are affected.
-func privilegedPortTitle(rules []ruleDetail) string {
-	if len(rules) == 1 {
-		return fmt.Sprintf("%s uses privileged port %d", ruleLabelName(rules[0].Name), rules[0].ListenPort)
-	}
-	return fmt.Sprintf("%d rules use privileged ports", len(rules))
-}
-
-// ruleLabel returns a stable human label for a rule in doctor output:
-// the quoted name when present, otherwise a positional-free generic label.
-func ruleLabel(r rawConfigRule) string {
-	return ruleLabelName(r.Name)
-}
-
-// ruleLabelName is ruleLabel by name (a rule has no positional index in details).
-func ruleLabelName(name string) string {
-	if name != "" {
-		return fmt.Sprintf("Rule %q", name)
-	}
-	return "An unnamed rule"
-}
-
-// ruleDetail is the structured, JSON-serializable description of a rule used in
-// config doctor finding details. Derived ONLY from the offline config — it
-// carries no runtime, host-environment, process, log, or secret data. id/group
-// are omitted when absent.
-type ruleDetail struct {
-	ID         string `json:"id,omitempty"`
-	Name       string `json:"name"`
-	Protocol   string `json:"protocol"`
-	ListenHost string `json:"listenHost"`
-	ListenPort int    `json:"listenPort"`
-	Enabled    bool   `json:"enabled"`
-	Group      string `json:"group,omitempty"`
-}
-
-func toRuleDetail(r rawConfigRule) ruleDetail {
-	return ruleDetail{
-		ID:         r.ID,
-		Name:       r.Name,
-		Protocol:   r.Protocol,
-		ListenHost: r.ListenHost,
-		ListenPort: r.ListenPort,
-		Enabled:    r.Enabled,
-		Group:      strings.TrimSpace(r.Group),
-	}
-}
-
-// bindingConflict describes one duplicated listen binding and the rules on it.
-// The binding identity (protocol/host/port) is shared by all its rules.
-type bindingConflict struct {
-	Protocol   string        `json:"protocol"`
-	ListenHost string        `json:"listenHost"`
-	ListenPort int           `json:"listenPort"`
-	Rules      []bindingRule `json:"rules"`
-}
-
-// bindingRule is the per-rule entry inside a bindingConflict (the binding
-// already carries protocol/host/port, so only rule identity is repeated).
-type bindingRule struct {
-	ID      string `json:"id,omitempty"`
-	Name    string `json:"name"`
-	Enabled bool   `json:"enabled"`
-	Group   string `json:"group,omitempty"`
-}
-
-// findDuplicateBindings groups rules by listen binding (protocol + listenHost +
-// listenPort, considering only rules whose basic fields are valid — mirroring
-// validateLocalConfig's duplicate detection) and returns one bindingConflict per
-// binding shared by two or more rules. Rules within a binding stay in file
-// order; the bindings list is sorted by protocol, host, then port. Fully
-// deterministic and derived only from the offline config.
-func findDuplicateBindings(rules []rawConfigRule) []bindingConflict {
-	type bindKey struct {
-		proto string
-		host  string
-		port  int
-	}
-	validProtocols := map[string]bool{"tcp": true, "udp": true}
-	groups := map[bindKey][]rawConfigRule{}
-	order := []bindKey{}
-	for _, r := range rules {
-		if !validProtocols[r.Protocol] || r.ListenHost == "" || r.ListenPort < 1 || r.ListenPort > 65535 {
-			continue
-		}
-		k := bindKey{r.Protocol, r.ListenHost, r.ListenPort}
-		if _, seen := groups[k]; !seen {
-			order = append(order, k)
-		}
-		groups[k] = append(groups[k], r)
-	}
-
-	conflicts := []bindingConflict{}
-	for _, k := range order {
-		rs := groups[k]
-		if len(rs) < 2 {
-			continue
-		}
-		bc := bindingConflict{Protocol: k.proto, ListenHost: k.host, ListenPort: k.port}
-		for _, r := range rs {
-			bc.Rules = append(bc.Rules, bindingRule{
-				ID:      r.ID,
-				Name:    r.Name,
-				Enabled: r.Enabled,
-				Group:   strings.TrimSpace(r.Group),
-			})
-		}
-		conflicts = append(conflicts, bc)
-	}
-	sort.Slice(conflicts, func(i, j int) bool {
-		a, b := conflicts[i], conflicts[j]
-		if a.Protocol != b.Protocol {
-			return a.Protocol < b.Protocol
-		}
-		if a.ListenHost != b.ListenHost {
-			return a.ListenHost < b.ListenHost
-		}
-		return a.ListenPort < b.ListenPort
-	})
-	return conflicts
-}
-
-// partitionValidationErrors splits validation error messages into duplicate
-// listen-binding errors and all other (field-level) errors, preserving order.
-func partitionValidationErrors(errs []string) (dup, field []string) {
-	for _, e := range errs {
-		if strings.HasPrefix(e, duplicateBindingErrPrefix) {
-			dup = append(dup, e)
-		} else {
-			field = append(field, e)
-		}
-	}
-	return dup, field
-}
-
 // --- local config parsing and validation ---
-
-// configValidationResult holds the outcome of local config validation.
-type configValidationResult struct {
-	Valid     bool     `json:"valid"`
-	RuleCount int      `json:"ruleCount"`
-	TCPCount  int      `json:"tcpCount"`
-	UDPCount  int      `json:"udpCount"`
-	Errors    []string `json:"errors"`
-}
-
-// rawConfigRule is a forwarding rule parsed from a local config file.
-type rawConfigRule struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Protocol   string `json:"protocol"`
-	ListenHost string `json:"listenHost"`
-	ListenPort int    `json:"listenPort"`
-	TargetHost string `json:"targetHost"`
-	TargetPort int    `json:"targetPort"`
-	Enabled    bool   `json:"enabled"`
-	UDPMode    string `json:"udpMode"`
-	Group      string `json:"group"`
-}
-
-// parseLocalConfig extracts forwarding rules from a config file in any supported shape:
-//   - raw JSON array: [...]
-//   - wrapper object: { "rules": [...] }
-//   - exported config: { "version": "1", "exportedAt": "...", "rules": [...] }
-func parseLocalConfig(data []byte) ([]rawConfigRule, error) {
-	trimmed := bytes.TrimSpace(data)
-	if len(trimmed) == 0 {
-		return nil, fmt.Errorf("config file is empty")
-	}
-
-	if trimmed[0] == '[' {
-		var rules []rawConfigRule
-		if err := json.Unmarshal(trimmed, &rules); err != nil {
-			return nil, fmt.Errorf("not a valid JSON array: %w", err)
-		}
-		if rules == nil {
-			rules = []rawConfigRule{}
-		}
-		return rules, nil
-	}
-
-	if trimmed[0] == '{' {
-		var obj struct {
-			Rules json.RawMessage `json:"rules"`
-		}
-		if err := json.Unmarshal(trimmed, &obj); err != nil {
-			return nil, fmt.Errorf("not a valid JSON object: %w", err)
-		}
-		if obj.Rules == nil {
-			return nil, fmt.Errorf("config object is missing the required \"rules\" field")
-		}
-		var rules []rawConfigRule
-		if err := json.Unmarshal(obj.Rules, &rules); err != nil {
-			return nil, fmt.Errorf("\"rules\" field is not a valid JSON array: %w", err)
-		}
-		if rules == nil {
-			rules = []rawConfigRule{}
-		}
-		return rules, nil
-	}
-
-	return nil, fmt.Errorf("not a valid Portier config: expected a JSON array or an object with a \"rules\" field")
-}
-
-// validateLocalConfig checks rules for field validity and duplicate listen bindings.
-func validateLocalConfig(rules []rawConfigRule) configValidationResult {
-	errs := make([]string, 0)
-	tcpCount := 0
-	udpCount := 0
-
-	validProtocols := map[string]bool{"tcp": true, "udp": true}
-	validUDPModes := map[string]bool{
-		"one-way":                    true,
-		"bidirectional-last-client":  true,
-		"bidirectional-multi-client": true,
-	}
-
-	type bindingKey struct {
-		proto string
-		host  string
-		port  int
-	}
-	seen := map[bindingKey]int{} // key → 1-based rule index
-
-	for i, r := range rules {
-		ruleNum := i + 1
-		prefix := fmt.Sprintf("rule %d", ruleNum)
-		if r.Name != "" {
-			prefix = fmt.Sprintf("rule %d %q", ruleNum, r.Name)
-		}
-
-		if r.Name == "" {
-			errs = append(errs, fmt.Sprintf("%s: name is required", prefix))
-		}
-		if !validProtocols[r.Protocol] {
-			errs = append(errs, fmt.Sprintf("%s: invalid protocol %q (must be \"tcp\" or \"udp\")", prefix, r.Protocol))
-		}
-		if r.ListenHost == "" {
-			errs = append(errs, fmt.Sprintf("%s: listenHost is required", prefix))
-		}
-		if r.ListenPort < 1 || r.ListenPort > 65535 {
-			errs = append(errs, fmt.Sprintf("%s: listenPort %d is out of range (must be 1–65535)", prefix, r.ListenPort))
-		}
-		if r.TargetHost == "" {
-			errs = append(errs, fmt.Sprintf("%s: targetHost is required", prefix))
-		}
-		if r.TargetPort < 1 || r.TargetPort > 65535 {
-			errs = append(errs, fmt.Sprintf("%s: targetPort %d is out of range (must be 1–65535)", prefix, r.TargetPort))
-		}
-		if r.Protocol == "udp" && r.UDPMode != "" && !validUDPModes[r.UDPMode] {
-			errs = append(errs, fmt.Sprintf("%s: invalid udpMode %q", prefix, r.UDPMode))
-		}
-		if g := strings.TrimSpace(r.Group); g != "" {
-			if utf8.RuneCountInString(g) > groupMaxLength {
-				errs = append(errs, fmt.Sprintf("%s: group must be %d characters or fewer", prefix, groupMaxLength))
-			} else if hasControlChar(g) {
-				errs = append(errs, fmt.Sprintf("%s: group must not contain control characters", prefix))
-			}
-		}
-
-		if r.Protocol == "tcp" {
-			tcpCount++
-		} else if r.Protocol == "udp" {
-			udpCount++
-		}
-
-		// Duplicate binding check (only when basic fields are valid)
-		if validProtocols[r.Protocol] && r.ListenHost != "" && r.ListenPort >= 1 && r.ListenPort <= 65535 {
-			key := bindingKey{r.Protocol, r.ListenHost, r.ListenPort}
-			if prev, ok := seen[key]; ok {
-				errs = append(errs, fmt.Sprintf("%s %s %s:%d (rules %d and %d)",
-					duplicateBindingErrPrefix, r.Protocol, r.ListenHost, r.ListenPort, prev, ruleNum))
-			} else {
-				seen[key] = ruleNum
-			}
-		}
-	}
-
-	return configValidationResult{
-		Valid:     len(errs) == 0,
-		RuleCount: len(rules),
-		TCPCount:  tcpCount,
-		UDPCount:  udpCount,
-		Errors:    errs,
-	}
-}
-
-// hasControlChar reports whether s contains a C0 control character (U+0000-
-// U+001F) or DEL (U+007F). Used for the local group-label pre-check.
-func hasControlChar(s string) bool {
-	for _, r := range s {
-		if r < 0x20 || r == 0x7f {
-			return true
-		}
-	}
-	return false
-}
 
 // loadConfigForCommand reads, parses, and validates a local config file for the
 // import/plan/diff/apply commands, writing the standard error output to stderr.
@@ -1006,20 +471,20 @@ func hasControlChar(s string) bool {
 // ok=false and the exit code the caller should return (errExit); verb names the
 // command for the "Config is invalid — <verb> aborted." message. RunConfigValidate
 // keeps its own JSON-aware flow and does not use this helper.
-func loadConfigForCommand(filePath, verb string, errExit int, stderr io.Writer) ([]rawConfigRule, int, bool) {
+func loadConfigForCommand(filePath, verb string, errExit int, stderr io.Writer) ([]config.Rule, int, bool) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error reading %s: %v\n", filePath, err)
 		return nil, errExit, false
 	}
 
-	rules, parseErr := parseLocalConfig(data)
+	rules, parseErr := config.ParseLocal(data)
 	if parseErr != nil {
 		fmt.Fprintf(stderr, "Error: %v\n", parseErr)
 		return nil, errExit, false
 	}
 
-	vr := validateLocalConfig(rules)
+	vr := config.Validate(rules)
 	if !vr.Valid {
 		fmt.Fprintf(stderr, "Config is invalid — %s aborted.\n", verb)
 		for _, e := range vr.Errors {
@@ -1029,23 +494,6 @@ func loadConfigForCommand(filePath, verb string, errExit int, stderr io.Writer) 
 	}
 
 	return rules, 0, true
-}
-
-// writePrettyJSON marshals v as indented JSON and writes it to path.
-// The file is only written after a successful marshal, so no partial writes occur.
-func writePrettyJSON(path string, v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encoding JSON: %w", err)
-	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
-}
-
-func pluralRule(n int) string {
-	if n == 1 {
-		return "rule"
-	}
-	return "rules"
 }
 
 // RunConfigPlan compares a desired config file against the running config.
@@ -1084,11 +532,11 @@ func RunConfigPlan(c *client.Client, jsonOutput bool, args []string, stdout, std
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
-		return planExitCode(plan, *flagFailOnDrift)
+		return planview.PlanExitCode(plan, *flagFailOnDrift)
 	}
 
-	printPlanHuman(plan, stdout)
-	return planExitCode(plan, *flagFailOnDrift)
+	planview.PrintPlan(plan, stdout)
+	return planview.PlanExitCode(plan, *flagFailOnDrift)
 }
 
 // RunConfigDiff shows a human-friendly diff between a desired config and the running config.
@@ -1128,22 +576,22 @@ func RunConfigDiff(c *client.Client, jsonOutput bool, args []string, stdout, std
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
-		return planExitCode(plan, *flagFailOnDrift)
+		return planview.PlanExitCode(plan, *flagFailOnDrift)
 	}
 
-	printDiffHuman(plan, *flagShowUnchanged, stdout)
-	return planExitCode(plan, *flagFailOnDrift)
+	planview.PrintDiff(plan, *flagShowUnchanged, stdout)
+	return planview.PlanExitCode(plan, *flagFailOnDrift)
 }
 
 // buildPlanRequest converts local config rules into a ConfigPlanRequest.
-func buildPlanRequest(rules []rawConfigRule) client.ConfigPlanRequest {
+func buildPlanRequest(rules []config.Rule) client.ConfigPlanRequest {
 	return client.ConfigPlanRequest{
 		Desired: client.ConfigPlanDesired{Rules: toConfigRules(rules)},
 	}
 }
 
 // buildApplyRequest converts local config rules and apply flags into a ConfigApplyRequest.
-func buildApplyRequest(rules []rawConfigRule, yes, dryRun bool) client.ConfigApplyRequest {
+func buildApplyRequest(rules []config.Rule, yes, dryRun bool) client.ConfigApplyRequest {
 	return client.ConfigApplyRequest{
 		Desired: client.ConfigPlanDesired{Rules: toConfigRules(rules)},
 		Yes:     yes,
@@ -1152,7 +600,7 @@ func buildApplyRequest(rules []rawConfigRule, yes, dryRun bool) client.ConfigApp
 }
 
 // buildImportRequest converts local config rules and a mode into a ConfigImportRequest.
-func buildImportRequest(rules []rawConfigRule, mode string) client.ConfigImportRequest {
+func buildImportRequest(rules []config.Rule, mode string) client.ConfigImportRequest {
 	return client.ConfigImportRequest{
 		Mode: mode,
 		Config: client.ConfigExportResponse{
@@ -1165,7 +613,7 @@ func buildImportRequest(rules []rawConfigRule, mode string) client.ConfigImportR
 // toConfigRules maps locally-parsed config rules to the API ConfigRule DTO.
 // Shared by the import, apply, and plan/diff request builders so the field
 // mapping cannot drift between them.
-func toConfigRules(rules []rawConfigRule) []client.ConfigRule {
+func toConfigRules(rules []config.Rule) []client.ConfigRule {
 	configRules := make([]client.ConfigRule, len(rules))
 	for i, r := range rules {
 		configRules[i] = client.ConfigRule{
@@ -1182,172 +630,6 @@ func toConfigRules(rules []rawConfigRule) []client.ConfigRule {
 		}
 	}
 	return configRules
-}
-
-// planExitCode determines the exit code for plan/diff commands.
-// Priority: plan errors (1) > drift with --fail-on-drift (4) > success (0).
-func planExitCode(plan *client.ConfigPlanResponse, failOnDrift bool) int {
-	if plan.Summary.HasErrors {
-		return 1
-	}
-	if failOnDrift && plan.Summary.HasDrift {
-		return 4
-	}
-	return 0
-}
-
-// printPlanHuman renders the plan response in structured human-readable format.
-func printPlanHuman(plan *client.ConfigPlanResponse, w io.Writer) {
-	s := plan.Summary
-
-	if !s.HasDrift && !s.HasErrors {
-		fmt.Fprintln(w, "No drift detected.")
-		if s.Unchanged > 0 {
-			fmt.Fprintf(w, "  %d %s unchanged.\n", s.Unchanged, pluralRule(s.Unchanged))
-		}
-		if len(plan.Warnings) > 0 {
-			fmt.Fprintln(w)
-			printPlanWarnings(plan.Warnings, w)
-		}
-		return
-	}
-
-	fmt.Fprintln(w, "Config Plan")
-	parts := []string{
-		fmt.Sprintf("Add: %d", s.Add),
-		fmt.Sprintf("Update: %d", s.Update),
-		fmt.Sprintf("Remove: %d", s.Remove),
-		fmt.Sprintf("Unchanged: %d", s.Unchanged),
-	}
-	if s.Destructive > 0 {
-		parts = append(parts, fmt.Sprintf("Destructive: %d", s.Destructive))
-	}
-	fmt.Fprintf(w, "  %s\n", strings.Join(parts, "  "))
-
-	if len(plan.Operations) > 0 {
-		fmt.Fprintln(w)
-		for _, op := range plan.Operations {
-			dest := ""
-			if op.Destructive {
-				dest = "  [destructive]"
-			}
-			fmt.Fprintf(w, "  %-10s %-24s %-5s %s%s\n",
-				op.Type, op.RuleName, op.Protocol, opEndpoint(op), dest)
-			for _, ch := range op.Changes {
-				fmt.Fprintf(w, "    %s: %s → %s\n",
-					ch.Field, formatChangeValue(ch.Before), formatChangeValue(ch.After))
-			}
-		}
-	}
-
-	if len(plan.Warnings) > 0 {
-		fmt.Fprintln(w)
-		printPlanWarnings(plan.Warnings, w)
-	}
-	if len(plan.Errors) > 0 {
-		fmt.Fprintln(w)
-		printPlanErrors(plan.Errors, w)
-	}
-}
-
-// printDiffHuman renders the plan response as a visual diff.
-func printDiffHuman(plan *client.ConfigPlanResponse, showUnchanged bool, w io.Writer) {
-	s := plan.Summary
-
-	if !s.HasDrift && !s.HasErrors {
-		fmt.Fprintln(w, "No drift detected.")
-		return
-	}
-
-	for _, op := range plan.Operations {
-		if op.Type == "unchanged" && !showUnchanged {
-			continue
-		}
-		dest := ""
-		if op.Destructive {
-			dest = "  [destructive]"
-		}
-		fmt.Fprintf(w, "%s %-9s %-24s %-5s %s%s\n",
-			opDiffPrefix(op.Type), opDiffLabel(op.Type),
-			op.RuleName, op.Protocol, opEndpoint(op), dest)
-		for _, ch := range op.Changes {
-			fmt.Fprintf(w, "  %s: %s → %s\n",
-				ch.Field, formatChangeValue(ch.Before), formatChangeValue(ch.After))
-		}
-	}
-
-	if len(plan.Warnings) > 0 {
-		fmt.Fprintln(w)
-		printPlanWarnings(plan.Warnings, w)
-	}
-	if len(plan.Errors) > 0 {
-		fmt.Fprintln(w)
-		printPlanErrors(plan.Errors, w)
-	}
-}
-
-func opEndpoint(op client.ConfigPlanOperation) string {
-	snap := op.Current
-	if snap == nil {
-		snap = op.Desired
-	}
-	if snap == nil {
-		return "—"
-	}
-	return fmt.Sprintf("%s:%d → %s:%d", snap.ListenHost, snap.ListenPort, snap.TargetHost, snap.TargetPort)
-}
-
-func opDiffPrefix(opType string) string {
-	switch opType {
-	case "add":
-		return "+"
-	case "update":
-		return "~"
-	case "remove":
-		return "-"
-	default:
-		return "="
-	}
-}
-
-func opDiffLabel(opType string) string {
-	switch opType {
-	case "add":
-		return "Add:"
-	case "update":
-		return "Update:"
-	case "remove":
-		return "Remove:"
-	default:
-		return "Unchanged:"
-	}
-}
-
-func formatChangeValue(v any) string {
-	if v == nil {
-		return "(none)"
-	}
-	if f, ok := v.(float64); ok {
-		if f == float64(int64(f)) {
-			return fmt.Sprintf("%d", int64(f))
-		}
-		return fmt.Sprintf("%g", f)
-	}
-	return fmt.Sprintf("%v", v)
-}
-
-func printPlanWarnings(warnings []client.ConfigPlanWarning, w io.Writer) {
-	fmt.Fprintln(w, "Warnings:")
-	for _, warn := range warnings {
-		fmt.Fprintf(w, "  [%s] %s\n", warn.Code, warn.Message)
-	}
-}
-
-func printPlanErrors(errs []client.ConfigPlanError, w io.Writer) {
-	fmt.Fprintln(w, "Errors:")
-	for _, e := range errs {
-		fmt.Fprintf(w, "  [%s] %s\n", e.Code, e.Message)
-	}
 }
 
 // RunConfigApply applies a desired config file to the running Portier service.
@@ -1386,7 +668,7 @@ func RunConfigApply(c *client.Client, jsonOutput bool, args []string, stdout, st
 			fmt.Fprintln(stderr, "Apply aborted — backup failed.")
 			return 1
 		}
-		if writeErr := writePrettyJSON(*flagBackupOut, cfg); writeErr != nil {
+		if writeErr := output.WritePrettyJSON(*flagBackupOut, cfg); writeErr != nil {
 			fmt.Fprintf(stderr, "Error writing backup to %s: %v\n", *flagBackupOut, writeErr)
 			fmt.Fprintln(stderr, "Apply aborted — backup failed.")
 			return 1
@@ -1406,53 +688,9 @@ func RunConfigApply(c *client.Client, jsonOutput bool, args []string, stdout, st
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
-		return applyExitCode(resp)
+		return planview.ApplyExitCode(resp)
 	}
 
-	printApplyHuman(resp, stdout, stderr)
-	return applyExitCode(resp)
-}
-
-// applyExitCode maps an apply response to an exit code.
-func applyExitCode(resp *client.ConfigApplyResponse) int {
-	if !resp.Ok {
-		return 1
-	}
-	return 0
-}
-
-// printApplyHuman renders the apply response in human-readable format.
-func printApplyHuman(resp *client.ConfigApplyResponse, stdout, stderr io.Writer) {
-	plan := resp.Plan
-
-	if !resp.Ok {
-		fmt.Fprintln(stderr, "Apply failed — plan has errors.")
-		printPlanErrors(plan.Errors, stderr)
-		return
-	}
-
-	if resp.DryRun {
-		fmt.Fprintln(stdout, "Dry run complete — no changes applied.")
-		if !plan.Summary.HasDrift {
-			fmt.Fprintln(stdout, "  No drift detected.")
-			return
-		}
-		fmt.Fprintf(stdout, "  Would apply: +%d update:%d -%d (unchanged:%d)\n",
-			resp.Applied.Add, resp.Applied.Update, resp.Applied.Remove, resp.Applied.Unchanged)
-		return
-	}
-
-	if !plan.Summary.HasDrift {
-		fmt.Fprintln(stdout, "No drift detected — nothing to apply.")
-		return
-	}
-
-	fmt.Fprintln(stdout, "Config applied.")
-	fmt.Fprintf(stdout, "  +%d added  ~%d updated  -%d removed  =%d unchanged\n",
-		resp.Applied.Add, resp.Applied.Update, resp.Applied.Remove, resp.Applied.Unchanged)
-
-	if len(plan.Warnings) > 0 {
-		fmt.Fprintln(stdout)
-		printPlanWarnings(plan.Warnings, stdout)
-	}
+	planview.PrintApply(resp, stdout, stderr)
+	return planview.ApplyExitCode(resp)
 }

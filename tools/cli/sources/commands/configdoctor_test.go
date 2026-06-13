@@ -6,15 +6,16 @@ import (
 	"testing"
 
 	"portier/cli/sources/commands"
+	"portier/cli/sources/doctor"
 )
 
 // runConfigDoctorJSON runs `config doctor` with --json on the given file and
 // decodes the resulting report. It fails the test on a non-decodable report.
-func runConfigDoctorJSON(t *testing.T, filePath string) (commands.DoctorReport, int) {
+func runConfigDoctorJSON(t *testing.T, filePath string) (doctor.Report, int) {
 	t.Helper()
 	var out, errBuf strings.Builder
 	code := commands.RunConfigDoctor(true, []string{filePath}, &out, &errBuf)
-	var report commands.DoctorReport
+	var report doctor.Report
 	if err := json.Unmarshal([]byte(out.String()), &report); err != nil {
 		t.Fatalf("decoding doctor JSON: %v\noutput:\n%s", err, out.String())
 	}
@@ -22,7 +23,7 @@ func runConfigDoctorJSON(t *testing.T, filePath string) (commands.DoctorReport, 
 }
 
 // checkCodes returns the ordered list of check codes in a report.
-func checkCodes(report commands.DoctorReport) []string {
+func checkCodes(report doctor.Report) []string {
 	codes := make([]string, len(report.Checks))
 	for i, c := range report.Checks {
 		codes[i] = c.Code
@@ -31,7 +32,7 @@ func checkCodes(report commands.DoctorReport) []string {
 }
 
 // hasCode reports whether the report contains a check with the given code.
-func hasCode(report commands.DoctorReport, code string) bool {
+func hasCode(report doctor.Report, code string) bool {
 	for _, c := range report.Checks {
 		if c.Code == code {
 			return true
@@ -146,7 +147,7 @@ func TestConfigDoctor_ValidConfig(t *testing.T) {
 	if report.Checks[0].Severity != "info" {
 		t.Errorf("severity = %q, want info", report.Checks[0].Severity)
 	}
-	if report.Summary != (commands.DoctorSummary{Info: 1}) {
+	if report.Summary != (doctor.Summary{Info: 1}) {
 		t.Errorf("summary = %+v, want {Info:1}", report.Summary)
 	}
 }

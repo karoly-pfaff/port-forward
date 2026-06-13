@@ -730,9 +730,18 @@ tools/cli/
     main.go            entry point and command dispatch
     version/           CLI version constant
     client/            HTTP API client for the management API
-    commands/          command handlers and connection config
-    output/            human-readable and JSON output helpers
+    commands/          command handlers (the Run* functions) and connection config
+    config/            local config-file domain: Rule, ParseLocal, Validate, Summary, FindDuplicateBindings, RuleDetail
+    doctor/            doctor model + checks: Report/CheckResult/Severity, live + config-doctor check builders, explanation registry, Emit
+    policy/            offline policy model + evaluator: Report/Finding/Severity, Parse, Evaluate, PrintHuman
+    planview/          renders config plan/diff/apply API responses: PrintPlan, PrintDiff, PrintApply, PlanExitCode, ApplyExitCode
+    output/            human-readable and JSON output helpers (PrintJSON, WritePrettyJSON, PrintTable, PluralWord/PluralRule)
 ```
+
+The general model/result types and their pure, offline logic live in the focused
+`config`, `doctor`, and `policy` packages. The `commands` package holds only the
+`Run*` command handlers, which compose those packages with the API client. This
+keeps `commands` about dispatch, not data types.
 
 ## Notes
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"time"
 )
 
@@ -12,6 +13,29 @@ func PrintJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// WritePrettyJSON marshals v as indented JSON and writes it to path. The file is
+// only written after a successful marshal, so no partial writes occur.
+func WritePrettyJSON(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encoding JSON: %w", err)
+	}
+	return os.WriteFile(path, append(data, '\n'), 0644)
+}
+
+// PluralWord returns singular when n == 1, otherwise plural.
+func PluralWord(n int, singular, plural string) string {
+	if n == 1 {
+		return singular
+	}
+	return plural
+}
+
+// PluralRule returns "rule" when n == 1, otherwise "rules".
+func PluralRule(n int) string {
+	return PluralWord(n, "rule", "rules")
 }
 
 // PrintField writes a label/value pair in aligned human-readable format.

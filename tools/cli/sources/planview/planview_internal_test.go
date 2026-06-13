@@ -1,4 +1,4 @@
-package commands
+package planview
 
 // Internal (white-box) tests for unexported diff/plan formatting helpers.
 // These cover the value-formatting and endpoint branches that are awkward to

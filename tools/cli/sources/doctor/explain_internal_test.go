@@ -1,4 +1,4 @@
-package commands
+package doctor
 
 // Internal (white-box) tests guarding the explanation registry against the
 // actual doctor code constants — every stable code the doctors emit must be

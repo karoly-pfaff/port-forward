@@ -1,131 +1,104 @@
-package commands
+package doctor
 
-// Internal (white-box) tests for the doctor result model helpers — the summary
-// derivation, exit-code mapping, severity tag, error partitioning, and the
-// default/empty branches that are awkward to reach through a command path.
+// White-box tests for the doctor report model: summary derivation, exit codes,
+// result labels, severity tags, inline explanations, and human output.
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 )
 
 func TestNewDoctorReport_Summary(t *testing.T) {
-	report := newDoctorReport([]DoctorCheckResult{
-		{Code: "a", Severity: DoctorInfo},
-		{Code: "b", Severity: DoctorWarning},
-		{Code: "c", Severity: DoctorWarning},
-		{Code: "d", Severity: DoctorError},
+	report := NewReport([]CheckResult{
+		{Code: "a", Severity: Info},
+		{Code: "b", Severity: Warning},
+		{Code: "c", Severity: Warning},
+		{Code: "d", Severity: Error},
 	})
-	want := DoctorSummary{Info: 1, Warning: 2, Error: 1}
+	want := Summary{Info: 1, Warning: 2, Error: 1}
 	if report.Summary != want {
 		t.Errorf("summary = %+v, want %+v", report.Summary, want)
 	}
 }
 
 func TestNewDoctorReport_NilNormalizedToEmpty(t *testing.T) {
-	report := newDoctorReport(nil)
+	report := NewReport(nil)
 	if report.Checks == nil {
 		t.Error("Checks should be a non-nil empty slice, got nil")
 	}
 	if len(report.Checks) != 0 {
 		t.Errorf("len(Checks) = %d, want 0", len(report.Checks))
 	}
-	if report.Summary != (DoctorSummary{}) {
+	if report.Summary != (Summary{}) {
 		t.Errorf("summary = %+v, want zero", report.Summary)
 	}
 }
 
 func TestDoctorExitCode_Normal(t *testing.T) {
-	info := newDoctorReport([]DoctorCheckResult{{Severity: DoctorInfo}})
-	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning}})
-	err := newDoctorReport([]DoctorCheckResult{{Severity: DoctorError}})
+	info := NewReport([]CheckResult{{Severity: Info}})
+	warn := NewReport([]CheckResult{{Severity: Warning}})
+	err := NewReport([]CheckResult{{Severity: Error}})
 
-	if c := doctorExitCode(info, false); c != 0 {
+	if c := ExitCode(info, false); c != 0 {
 		t.Errorf("info-only normal exit = %d, want 0", c)
 	}
-	if c := doctorExitCode(warn, false); c != 0 {
+	if c := ExitCode(warn, false); c != 0 {
 		t.Errorf("warning-only normal exit = %d, want 0", c)
 	}
-	if c := doctorExitCode(err, false); c != 1 {
+	if c := ExitCode(err, false); c != 1 {
 		t.Errorf("error normal exit = %d, want 1", c)
 	}
 }
 
 func TestDoctorExitCode_Strict(t *testing.T) {
-	info := newDoctorReport([]DoctorCheckResult{{Severity: DoctorInfo}})
-	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning}})
-	errWarn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorError}, {Severity: DoctorWarning}})
+	info := NewReport([]CheckResult{{Severity: Info}})
+	warn := NewReport([]CheckResult{{Severity: Warning}})
+	errWarn := NewReport([]CheckResult{{Severity: Error}, {Severity: Warning}})
 
-	if c := doctorExitCode(info, true); c != 0 {
+	if c := ExitCode(info, true); c != 0 {
 		t.Errorf("info-only strict exit = %d, want 0", c)
 	}
-	if c := doctorExitCode(warn, true); c != 1 {
+	if c := ExitCode(warn, true); c != 1 {
 		t.Errorf("warning-only strict exit = %d, want 1", c)
 	}
-	if c := doctorExitCode(errWarn, true); c != 1 {
+	if c := ExitCode(errWarn, true); c != 1 {
 		t.Errorf("error+warning strict exit = %d, want 1", c)
 	}
 }
 
 func TestDoctorResultLabel(t *testing.T) {
-	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning}})
-	if got := doctorResultLabel(warn, false); got != "passed" {
+	warn := NewReport([]CheckResult{{Severity: Warning}})
+	if got := ResultLabel(warn, false); got != "passed" {
 		t.Errorf("warning-only normal result = %q, want passed", got)
 	}
-	if got := doctorResultLabel(warn, true); got != "failed" {
+	if got := ResultLabel(warn, true); got != "failed" {
 		t.Errorf("warning-only strict result = %q, want failed", got)
 	}
-	errd := newDoctorReport([]DoctorCheckResult{{Severity: DoctorError}})
-	if got := doctorResultLabel(errd, false); got != "failed" {
+	errd := NewReport([]CheckResult{{Severity: Error}})
+	if got := ResultLabel(errd, false); got != "failed" {
 		t.Errorf("error result = %q, want failed", got)
 	}
 }
 
 func TestDoctorSeverityTag(t *testing.T) {
-	cases := map[DoctorSeverity]string{
-		DoctorInfo:          "[INFO]",
-		DoctorWarning:       "[WARN]",
-		DoctorError:         "[ERROR]",
-		DoctorSeverity("?"): "[?]",
+	cases := map[Severity]string{
+		Info:          "[INFO]",
+		Warning:       "[WARN]",
+		Error:         "[ERROR]",
+		Severity("?"): "[?]",
 	}
 	for sev, want := range cases {
-		if got := doctorSeverityTag(sev); got != want {
-			t.Errorf("doctorSeverityTag(%q) = %q, want %q", sev, got, want)
+		if got := severityTag(sev); got != want {
+			t.Errorf("severityTag(%q) = %q, want %q", sev, got, want)
 		}
 	}
 }
 
-func TestPartitionValidationErrors(t *testing.T) {
-	dup, field := partitionValidationErrors([]string{
-		"rule 1 \"A\": name is required",
-		duplicateBindingErrPrefix + " tcp 127.0.0.1:48000 (rules 1 and 2)",
-		"rule 2 \"B\": targetHost is required",
-	})
-	wantDup := []string{duplicateBindingErrPrefix + " tcp 127.0.0.1:48000 (rules 1 and 2)"}
-	wantField := []string{"rule 1 \"A\": name is required", "rule 2 \"B\": targetHost is required"}
-	if !reflect.DeepEqual(dup, wantDup) {
-		t.Errorf("dup = %v, want %v", dup, wantDup)
-	}
-	if !reflect.DeepEqual(field, wantField) {
-		t.Errorf("field = %v, want %v", field, wantField)
-	}
-}
-
-func TestRuleLabel(t *testing.T) {
-	if got := ruleLabel(rawConfigRule{Name: "Web"}); got != `Rule "Web"` {
-		t.Errorf("named ruleLabel = %q, want `Rule \"Web\"`", got)
-	}
-	if got := ruleLabel(rawConfigRule{}); got != "An unnamed rule" {
-		t.Errorf("unnamed ruleLabel = %q, want \"An unnamed rule\"", got)
-	}
-}
-
 func TestExplanationsForReport_OnlyEmittedCodesDeduped(t *testing.T) {
-	r := newDoctorReport([]DoctorCheckResult{
-		{Code: checkRuntimeReachable, Severity: DoctorInfo},
-		{Code: checkRuntimeReachable, Severity: DoctorInfo}, // duplicate code
-		{Code: checkRulesHealthError, Severity: DoctorError},
+	r := NewReport([]CheckResult{
+		{Code: checkRuntimeReachable, Severity: Info},
+		{Code: checkRuntimeReachable, Severity: Info}, // duplicate code
+		{Code: checkRulesHealthError, Severity: Error},
 	})
 	m := explanationsForReport(r)
 
@@ -149,7 +122,7 @@ func TestExplanationsForReport_OnlyEmittedCodesDeduped(t *testing.T) {
 }
 
 func TestExplanationsForReport_UnknownCodeSafelyOmitted(t *testing.T) {
-	r := newDoctorReport([]DoctorCheckResult{{Code: "not.a.real.code", Severity: DoctorInfo}})
+	r := NewReport([]CheckResult{{Code: "not.a.real.code", Severity: Info}})
 	if m := explanationsForReport(r); len(m) != 0 {
 		t.Errorf("unknown code should be omitted, got %v", m)
 	}
@@ -158,11 +131,11 @@ func TestExplanationsForReport_UnknownCodeSafelyOmitted(t *testing.T) {
 func TestExplanationsForReport_AllDoctorCodesExplainable(t *testing.T) {
 	// Every code a doctor can emit must resolve to a registry explanation, so
 	// inline --explain never hits the "(no explanation available)" fallback.
-	checks := make([]DoctorCheckResult, len(allDoctorCodes))
+	checks := make([]CheckResult, len(allDoctorCodes))
 	for i, code := range allDoctorCodes {
-		checks[i] = DoctorCheckResult{Code: code, Severity: DoctorInfo}
+		checks[i] = CheckResult{Code: code, Severity: Info}
 	}
-	m := explanationsForReport(newDoctorReport(checks))
+	m := explanationsForReport(NewReport(checks))
 	if len(m) != len(allDoctorCodes) {
 		t.Errorf("explained %d of %d doctor codes", len(m), len(allDoctorCodes))
 	}
@@ -171,7 +144,7 @@ func TestExplanationsForReport_AllDoctorCodesExplainable(t *testing.T) {
 func TestPrintCheckExplanation(t *testing.T) {
 	// Known code: prints Code/Meaning/What to do (+ Related when present).
 	var known strings.Builder
-	printCheckExplanation(DoctorCheckResult{Code: checkConfigLanExposure}, &known)
+	printCheckExplanation(CheckResult{Code: checkConfigLanExposure}, &known)
 	ks := known.String()
 	for _, want := range []string{"Code: config.lan_exposure", "Meaning:", "What to do:", "Related:"} {
 		if !strings.Contains(ks, want) {
@@ -181,7 +154,7 @@ func TestPrintCheckExplanation(t *testing.T) {
 
 	// Unknown code: safe-degrade to a clear fallback (no crash).
 	var unknown strings.Builder
-	printCheckExplanation(DoctorCheckResult{Code: "not.a.real.code"}, &unknown)
+	printCheckExplanation(CheckResult{Code: "not.a.real.code"}, &unknown)
 	us := unknown.String()
 	if !strings.Contains(us, "Code: not.a.real.code") || !strings.Contains(us, "(no explanation available)") {
 		t.Errorf("unknown-code fallback wrong:\n%s", us)
@@ -190,7 +163,7 @@ func TestPrintCheckExplanation(t *testing.T) {
 
 func TestPrintDoctorHuman_NoChecks(t *testing.T) {
 	var b strings.Builder
-	printDoctorHuman("Title", newDoctorReport(nil), false, false, &b)
+	PrintHuman("Title", NewReport(nil), false, false, &b)
 	out := b.String()
 	if !strings.Contains(out, "No checks were run.") {
 		t.Errorf("empty report output missing fallback line:\n%s", out)
@@ -201,10 +174,10 @@ func TestPrintDoctorHuman_NoChecks(t *testing.T) {
 }
 
 func TestPrintDoctorHuman_StrictWarningNote(t *testing.T) {
-	warn := newDoctorReport([]DoctorCheckResult{{Severity: DoctorWarning, Title: "w"}})
+	warn := NewReport([]CheckResult{{Severity: Warning, Title: "w"}})
 
 	var normal strings.Builder
-	printDoctorHuman("Title", warn, false, false, &normal)
+	PrintHuman("Title", warn, false, false, &normal)
 	if strings.Contains(normal.String(), "Strict mode:") {
 		t.Errorf("non-strict output must not show the strict note:\n%s", normal.String())
 	}
@@ -213,23 +186,11 @@ func TestPrintDoctorHuman_StrictWarningNote(t *testing.T) {
 	}
 
 	var strict strings.Builder
-	printDoctorHuman("Title", warn, true, false, &strict)
+	PrintHuman("Title", warn, true, false, &strict)
 	if !strings.Contains(strict.String(), "Strict mode: warnings are treated as failures.") {
 		t.Errorf("strict warning-only output missing strict note:\n%s", strict.String())
 	}
 	if !strings.Contains(strict.String(), "Result: failed") {
 		t.Errorf("warning-only strict result should be failed:\n%s", strict.String())
-	}
-}
-
-func TestPluralWord(t *testing.T) {
-	if got := pluralWord(1, "warning", "warnings"); got != "warning" {
-		t.Errorf("pluralWord(1) = %q, want warning", got)
-	}
-	if got := pluralWord(0, "warning", "warnings"); got != "warnings" {
-		t.Errorf("pluralWord(0) = %q, want warnings", got)
-	}
-	if got := pluralWord(2, "warning", "warnings"); got != "warnings" {
-		t.Errorf("pluralWord(2) = %q, want warnings", got)
 	}
 }

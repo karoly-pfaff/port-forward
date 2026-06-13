@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"portier/cli/sources/client"
+	"portier/cli/sources/doctor"
 	"portier/cli/sources/output"
 	"portier/cli/sources/version"
 )
@@ -122,8 +123,8 @@ func RunSupportBundle(c *client.Client, jsonOutput bool, args []string, stdout, 
 	}
 
 	strict := *flagStrict
-	report := runLiveDoctorChecks(c)
-	result := doctorResultLabel(report, strict)
+	report := doctor.RunLiveChecks(c)
+	result := doctor.ResultLabel(report, strict)
 
 	var warnings []string
 
@@ -134,24 +135,24 @@ func RunSupportBundle(c *client.Client, jsonOutput bool, args []string, stdout, 
 	// doctor.txt mirrors `portier doctor` (no inline explanations — the bundle
 	// ships explanations.json separately).
 	var human bytes.Buffer
-	printDoctorHuman("Portier Doctor", report, strict, false, &human)
+	doctor.PrintHuman("Portier Doctor", report, strict, false, &human)
 
 	items := []bundleArtifact{
 		{"doctor.json", func(p string) error {
-			return writePrettyJSON(p, doctorReportJSON{DoctorReport: report, Strict: strict, Result: result})
+			return output.WritePrettyJSON(p, doctor.ReportPayload(report, strict))
 		}},
 		{"doctor.txt", func(p string) error { return os.WriteFile(p, human.Bytes(), 0o644) }},
-		{"explanations.json", func(p string) error { return writePrettyJSON(p, sortedExplanations()) }},
+		{"explanations.json", func(p string) error { return output.WritePrettyJSON(p, doctor.SortedExplanations()) }},
 	}
 	if info, err := c.GetRuntime(); err != nil {
 		warnings = append(warnings, fmt.Sprintf("runtime.json omitted: %v", err))
 	} else {
-		items = append(items, bundleArtifact{"runtime.json", func(p string) error { return writePrettyJSON(p, info) }})
+		items = append(items, bundleArtifact{"runtime.json", func(p string) error { return output.WritePrettyJSON(p, info) }})
 	}
 	if cfg, err := c.ExportConfig(); err != nil {
 		warnings = append(warnings, fmt.Sprintf("config-export.json omitted: %v", err))
 	} else {
-		items = append(items, bundleArtifact{"config-export.json", func(p string) error { return writePrettyJSON(p, cfg) }})
+		items = append(items, bundleArtifact{"config-export.json", func(p string) error { return output.WritePrettyJSON(p, cfg) }})
 	}
 
 	artifacts := make([]string, 0, len(items))
@@ -177,7 +178,7 @@ func RunSupportBundle(c *client.Client, jsonOutput bool, args []string, stdout, 
 		Artifacts:     artifacts,
 		Warnings:      warnings,
 	}
-	if err := writePrettyJSON(filepath.Join(outDir, "manifest.json"), manifest); err != nil {
+	if err := output.WritePrettyJSON(filepath.Join(outDir, "manifest.json"), manifest); err != nil {
 		fmt.Fprintf(stderr, "Error writing %s: %v\n", filepath.Join(outDir, "manifest.json"), err)
 		return 1
 	}
@@ -196,14 +197,14 @@ func RunSupportBundle(c *client.Client, jsonOutput bool, args []string, stdout, 
 		}
 	} else {
 		fmt.Fprintf(stdout, "Support bundle written to %s\n", outDir)
-		fmt.Fprintf(stdout, "  %d %s\n", len(allFiles), pluralWord(len(allFiles), "artifact", "artifacts"))
+		fmt.Fprintf(stdout, "  %d %s\n", len(allFiles), output.PluralWord(len(allFiles), "artifact", "artifacts"))
 		for _, w := range warnings {
 			fmt.Fprintf(stdout, "  warning: %s\n", w)
 		}
 		fmt.Fprintf(stdout, "  Result: %s\n", result)
 	}
 
-	return doctorExitCode(report, strict)
+	return doctor.ExitCode(report, strict)
 }
 
 // prepareBundleDir ensures outDir is a usable, empty bundle directory: it

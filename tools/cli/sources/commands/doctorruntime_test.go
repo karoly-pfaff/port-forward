@@ -9,6 +9,7 @@ import (
 
 	"portier/cli/sources/client"
 	"portier/cli/sources/commands"
+	"portier/cli/sources/doctor"
 	"portier/cli/sources/version"
 )
 
@@ -70,18 +71,18 @@ func statusEntry(id, health string) map[string]any {
 }
 
 // runDoctorJSON runs `doctor --json` against c and decodes the report.
-func runDoctorJSON(t *testing.T, c *client.Client) (commands.DoctorReport, int) {
+func runDoctorJSON(t *testing.T, c *client.Client) (doctor.Report, int) {
 	t.Helper()
 	var out, errBuf strings.Builder
 	code := commands.RunDoctor(c, true, nil, &out, &errBuf)
-	var report commands.DoctorReport
+	var report doctor.Report
 	if err := json.Unmarshal([]byte(out.String()), &report); err != nil {
 		t.Fatalf("decoding doctor JSON: %v\noutput:\n%s", err, out.String())
 	}
 	return report, code
 }
 
-func doctorCodes(report commands.DoctorReport) []string {
+func doctorCodes(report doctor.Report) []string {
 	codes := make([]string, len(report.Checks))
 	for i, c := range report.Checks {
 		codes[i] = c.Code
@@ -89,7 +90,7 @@ func doctorCodes(report commands.DoctorReport) []string {
 	return codes
 }
 
-func doctorHasCode(report commands.DoctorReport, code string) bool {
+func doctorHasCode(report doctor.Report, code string) bool {
 	for _, c := range report.Checks {
 		if c.Code == code {
 			return true
@@ -98,7 +99,7 @@ func doctorHasCode(report commands.DoctorReport, code string) bool {
 	return false
 }
 
-func doctorSeverityOf(report commands.DoctorReport, code string) commands.DoctorSeverity {
+func doctorSeverityOf(report doctor.Report, code string) doctor.Severity {
 	for _, c := range report.Checks {
 		if c.Code == code {
 			return c.Severity

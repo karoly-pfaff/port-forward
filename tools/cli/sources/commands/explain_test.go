@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"portier/cli/sources/commands"
+	"portier/cli/sources/doctor"
 )
 
 func TestExplain_ConfigCode(t *testing.T) {
@@ -39,7 +40,7 @@ func TestExplain_JSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	var exp commands.Explanation
+	var exp doctor.Explanation
 	if err := json.Unmarshal([]byte(out.String()), &exp); err != nil {
 		t.Fatalf("decoding JSON: %v\noutput:\n%s", err, out.String())
 	}
@@ -130,7 +131,7 @@ func TestExplain_ListJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	var list []commands.Explanation
+	var list []doctor.Explanation
 	if err := json.Unmarshal([]byte(out.String()), &list); err != nil {
 		t.Fatalf("decoding JSON list: %v\noutput:\n%s", err, out.String())
 	}

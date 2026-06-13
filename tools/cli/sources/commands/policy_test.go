@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"portier/cli/sources/commands"
+	"portier/cli/sources/policy"
 )
 
 // writeTempFile writes content to a uniquely named file in t.TempDir and returns
@@ -31,10 +32,10 @@ func runPolicyCheck(t *testing.T, jsonOutput bool, configPath, policyPath string
 }
 
 // runPolicyCheckJSON runs `policy check --json` and decodes the report.
-func runPolicyCheckJSON(t *testing.T, configPath, policyPath string) (commands.PolicyReport, int) {
+func runPolicyCheckJSON(t *testing.T, configPath, policyPath string) (policy.Report, int) {
 	t.Helper()
 	out, errBuf, code := runPolicyCheck(t, true, configPath, policyPath)
-	var report commands.PolicyReport
+	var report policy.Report
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
 		t.Fatalf("decoding policy JSON: %v\nstdout:\n%s\nstderr:\n%s", err, out, errBuf)
 	}
@@ -42,7 +43,7 @@ func runPolicyCheckJSON(t *testing.T, configPath, policyPath string) (commands.P
 }
 
 // findingCodes returns the ordered list of finding codes in a report.
-func findingCodes(report commands.PolicyReport) []string {
+func findingCodes(report policy.Report) []string {
 	codes := make([]string, len(report.Findings))
 	for i, f := range report.Findings {
 		codes[i] = f.Code
@@ -51,7 +52,7 @@ func findingCodes(report commands.PolicyReport) []string {
 }
 
 // hasFinding reports whether the report contains a finding with the given code.
-func hasFinding(report commands.PolicyReport, code string) bool {
+func hasFinding(report policy.Report, code string) bool {
 	for _, f := range report.Findings {
 		if f.Code == code {
 			return true

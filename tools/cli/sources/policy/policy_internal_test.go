@@ -1,16 +1,20 @@
-package commands
+package policy
 
 // White-box tests for the policy parser/evaluator/report helpers. These lock the
 // internal behavior (default application, report derivation, severity tags) that
 // the black-box command tests rely on.
 
-import "testing"
+import (
+	"testing"
+
+	"portier/cli/sources/config"
+)
 
 func TestParsePolicy_AppliesPermissiveDefaults(t *testing.T) {
 	// An empty rules object must default to the permissive baseline.
-	pol, err := parsePolicy([]byte(`{"schemaVersion": 1, "rules": {}}`))
+	pol, err := Parse([]byte(`{"schemaVersion": 1, "rules": {}}`))
 	if err != nil {
-		t.Fatalf("parsePolicy: %v", err)
+		t.Fatalf("Parse: %v", err)
 	}
 	if pol.requireGroup {
 		t.Errorf("requireGroup default = true, want false")
@@ -30,7 +34,7 @@ func TestParsePolicy_AppliesPermissiveDefaults(t *testing.T) {
 }
 
 func TestParsePolicy_ExplicitValuesOverrideDefaults(t *testing.T) {
-	pol, err := parsePolicy([]byte(`{"schemaVersion": 1, "rules": {
+	pol, err := Parse([]byte(`{"schemaVersion": 1, "rules": {
 		"requireGroup": true,
 		"allowLanExposure": false,
 		"allowPrivilegedPorts": false,
@@ -38,7 +42,7 @@ func TestParsePolicy_ExplicitValuesOverrideDefaults(t *testing.T) {
 		"forbidDuplicateBindings": true
 	}}`))
 	if err != nil {
-		t.Fatalf("parsePolicy: %v", err)
+		t.Fatalf("Parse: %v", err)
 	}
 	if !pol.requireGroup || pol.allowLanExposure || pol.allowPrivilegedPorts || pol.allowAutostart || !pol.forbidDuplicateBindings {
 		t.Errorf("explicit policy not applied: %+v", pol)
@@ -46,9 +50,9 @@ func TestParsePolicy_ExplicitValuesOverrideDefaults(t *testing.T) {
 }
 
 func TestParsePolicy_OmittedRulesObjectIsPermissive(t *testing.T) {
-	pol, err := parsePolicy([]byte(`{"schemaVersion": 1}`))
+	pol, err := Parse([]byte(`{"schemaVersion": 1}`))
 	if err != nil {
-		t.Fatalf("parsePolicy: %v", err)
+		t.Fatalf("Parse: %v", err)
 	}
 	if pol.requireGroup || !pol.allowLanExposure {
 		t.Errorf("omitted rules object should be permissive: %+v", pol)
@@ -71,8 +75,8 @@ func TestParsePolicy_Errors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := parsePolicy([]byte(tc.data)); err == nil {
-				t.Errorf("parsePolicy(%q) = nil error, want error", tc.data)
+			if _, err := Parse([]byte(tc.data)); err == nil {
+				t.Errorf("Parse(%q) = nil error, want error", tc.data)
 			}
 		})
 	}
@@ -95,11 +99,11 @@ func TestBoolOr(t *testing.T) {
 }
 
 func TestNewPolicyReport_SummaryAndResult(t *testing.T) {
-	r := newPolicyReport([]PolicyFinding{
-		{Code: "a", Severity: PolicyInfo},
-		{Code: "b", Severity: PolicyError},
-		{Code: "c", Severity: PolicyWarning},
-		{Code: "d", Severity: PolicyError},
+	r := NewReport([]Finding{
+		{Code: "a", Severity: Info},
+		{Code: "b", Severity: Error},
+		{Code: "c", Severity: Warning},
+		{Code: "d", Severity: Error},
 	})
 	if r.Summary.Info != 1 || r.Summary.Warning != 1 || r.Summary.Error != 2 {
 		t.Errorf("summary = %+v, want info=1 warning=1 error=2", r.Summary)
@@ -110,7 +114,7 @@ func TestNewPolicyReport_SummaryAndResult(t *testing.T) {
 }
 
 func TestNewPolicyReport_NilFindingsPasses(t *testing.T) {
-	r := newPolicyReport(nil)
+	r := NewReport(nil)
 	if r.Findings == nil {
 		t.Errorf("findings should be a non-nil empty slice")
 	}
@@ -120,56 +124,56 @@ func TestNewPolicyReport_NilFindingsPasses(t *testing.T) {
 }
 
 func TestPolicyExitCode(t *testing.T) {
-	pass := newPolicyReport([]PolicyFinding{{Code: policyValid, Severity: PolicyInfo}})
-	if policyExitCode(pass) != 0 {
-		t.Errorf("exit code for info-only = %d, want 0", policyExitCode(pass))
+	pass := NewReport([]Finding{{Code: codeValid, Severity: Info}})
+	if ExitCode(pass) != 0 {
+		t.Errorf("exit code for info-only = %d, want 0", ExitCode(pass))
 	}
-	fail := newPolicyReport([]PolicyFinding{{Code: policyAutostartForbidden, Severity: PolicyError}})
-	if policyExitCode(fail) != 1 {
-		t.Errorf("exit code for error = %d, want 1", policyExitCode(fail))
+	fail := NewReport([]Finding{{Code: codeAutostartForbidden, Severity: Error}})
+	if ExitCode(fail) != 1 {
+		t.Errorf("exit code for error = %d, want 1", ExitCode(fail))
 	}
 }
 
 func TestPolicySeverityTag(t *testing.T) {
-	cases := map[PolicySeverity]string{
-		PolicyInfo:    "[INFO]",
-		PolicyWarning: "[WARN]",
-		PolicyError:   "[ERROR]",
-		"weird":       "[?]",
+	cases := map[Severity]string{
+		Info:    "[INFO]",
+		Warning: "[WARN]",
+		Error:   "[ERROR]",
+		"weird": "[?]",
 	}
 	for sev, want := range cases {
-		if got := policySeverityTag(sev); got != want {
-			t.Errorf("policySeverityTag(%q) = %q, want %q", sev, got, want)
+		if got := severityTag(sev); got != want {
+			t.Errorf("severityTag(%q) = %q, want %q", sev, got, want)
 		}
 	}
 }
 
 func TestEvaluatePolicy_ValidWhenPermissive(t *testing.T) {
-	rules := []rawConfigRule{
+	rules := []config.Rule{
 		{Name: "A", Protocol: "tcp", ListenHost: "0.0.0.0", ListenPort: 22, TargetHost: "x", TargetPort: 1, Enabled: true},
 	}
 	// Permissive policy: nothing enabled.
-	report := evaluatePolicy(rules, resolvedPolicy{
+	report := Evaluate(rules, Policy{
 		allowLanExposure: true, allowPrivilegedPorts: true, allowAutostart: true,
 	})
-	if len(report.Findings) != 1 || report.Findings[0].Code != policyValid {
+	if len(report.Findings) != 1 || report.Findings[0].Code != codeValid {
 		t.Errorf("permissive policy should yield policy.valid, got %+v", report.Findings)
 	}
 }
 
 func TestEvaluatePolicy_DuplicateBindingLastAndSingle(t *testing.T) {
-	rules := []rawConfigRule{
+	rules := []config.Rule{
 		{Name: "A", Protocol: "tcp", ListenHost: "127.0.0.1", ListenPort: 48080, TargetHost: "x", TargetPort: 1, Group: "g"},
 		{Name: "B", Protocol: "tcp", ListenHost: "127.0.0.1", ListenPort: 48080, TargetHost: "y", TargetPort: 2, Group: "g"},
 	}
-	report := evaluatePolicy(rules, resolvedPolicy{
+	report := Evaluate(rules, Policy{
 		allowLanExposure: true, allowPrivilegedPorts: true, allowAutostart: true,
 		forbidDuplicateBindings: true,
 	})
 	if len(report.Findings) != 1 {
 		t.Fatalf("expected a single duplicate-binding finding, got %+v", report.Findings)
 	}
-	if report.Findings[0].Code != policyDuplicateBindingForbidden {
-		t.Errorf("finding code = %q, want %q", report.Findings[0].Code, policyDuplicateBindingForbidden)
+	if report.Findings[0].Code != codeDuplicateBindingForbidden {
+		t.Errorf("finding code = %q, want %q", report.Findings[0].Code, codeDuplicateBindingForbidden)
 	}
 }

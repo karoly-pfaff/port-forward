@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"portier/cli/sources/client"
+	"portier/cli/sources/config"
 	"portier/cli/sources/output"
 )
 
@@ -183,7 +184,7 @@ func printGroupActionHuman(resp *client.GroupActionResponse, w io.Writer) {
 }
 
 // validateGroupArg trims and validates a group argument with the same rules the
-// API enforces (non-empty, ≤ groupMaxLength characters, no control characters).
+// API enforces (non-empty, ≤ config.GroupMaxLength characters, no control characters).
 // Local pre-check only; the server remains authoritative. Returns the trimmed
 // group, an error message, and ok.
 func validateGroupArg(raw string) (string, string, bool) {
@@ -191,10 +192,10 @@ func validateGroupArg(raw string) (string, string, bool) {
 	if g == "" {
 		return "", "group is required.", false
 	}
-	if utf8.RuneCountInString(g) > groupMaxLength {
-		return "", fmt.Sprintf("group must be %d characters or fewer.", groupMaxLength), false
+	if utf8.RuneCountInString(g) > config.GroupMaxLength {
+		return "", fmt.Sprintf("group must be %d characters or fewer.", config.GroupMaxLength), false
 	}
-	if hasControlChar(g) {
+	if config.HasControlChar(g) {
 		return "", "group must not contain control characters.", false
 	}
 	return g, "", true

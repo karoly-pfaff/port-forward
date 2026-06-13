@@ -104,7 +104,7 @@ func RunDiagnosticsExport(c *client.Client, jsonOutput bool, args []string, stdo
 		return 0
 	}
 
-	if err := writePrettyJSON(*flagOut, bundle); err != nil {
+	if err := output.WritePrettyJSON(*flagOut, bundle); err != nil {
 		fmt.Fprintf(stderr, "Error writing %s: %v\n", *flagOut, err)
 		return 1
 	}
@@ -136,7 +136,7 @@ func RunDiagnosticsExport(c *client.Client, jsonOutput bool, args []string, stdo
 		fmt.Fprintf(stdout, "Exported diagnostics to %s\n", *flagOut)
 	}
 	fmt.Fprintf(stdout, "  %d %s, %d statuses, %d activity events",
-		len(bundle.Rules), pluralRule(len(bundle.Rules)),
+		len(bundle.Rules), output.PluralRule(len(bundle.Rules)),
 		len(bundle.Statuses), len(bundle.Activity.Events))
 	if *flagRunDiagnostics {
 		fmt.Fprintf(stdout, ", %d diagnostics results", len(bundle.Diagnostics))

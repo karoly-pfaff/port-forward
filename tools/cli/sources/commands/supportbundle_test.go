@@ -14,6 +14,7 @@ import (
 
 	"portier/cli/sources/client"
 	"portier/cli/sources/commands"
+	"portier/cli/sources/doctor"
 )
 
 func readJSONFile(t *testing.T, path string, into any) {
@@ -130,7 +131,7 @@ func TestSupportBundle_ExplanationsIncludeAllCodes(t *testing.T) {
 	var stdout, stderr strings.Builder
 	commands.RunSupportBundle(client.New(srv.URL), false, []string{"--out", out}, &stdout, &stderr)
 
-	var list []commands.Explanation
+	var list []doctor.Explanation
 	readJSONFile(t, filepath.Join(out, "explanations.json"), &list)
 	if len(list) != 20 {
 		t.Errorf("explanations.json has %d entries, want 20", len(list))
