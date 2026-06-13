@@ -310,6 +310,21 @@ func TestRun_WorkflowPlanDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_WorkflowRunbookDispatch(t *testing.T) {
+	// workflow runbook is fully offline — no server needed, an invalid --url is
+	// ignored. A valid workflow file produces a runbook and exits 0.
+	dir := t.TempDir()
+	wf := filepath.Join(dir, "workflow.json")
+	wfContent := `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","runtime":true,"policy":"p.json"}]}`
+	if err := os.WriteFile(wf, []byte(wfContent), 0o644); err != nil {
+		t.Fatalf("writing temp workflow: %v", err)
+	}
+	code := run([]string{"--url", "ftp://bad-scheme", "workflow", "runbook", "--file", wf})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
 func TestRun_WorkflowTemplateDispatch(t *testing.T) {
 	// workflow template is fully offline — no server needed, an invalid --url is
 	// ignored. Rendering a built-in template exits 0.

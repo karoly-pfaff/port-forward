@@ -796,6 +796,34 @@ Exit codes: `0` the workflow plan is valid; `1` the workflow parsed but the plan
 
 > This slice validates, plans, and explains workflows only — it does not run them. Step execution and reporting are deferred to a later v1.11 slice.
 
+### `portier workflow runbook --file <workflow.json>`
+
+Preview the ordered list of Portier CLI commands a **valid** workflow maps to — the manual commands you would run to carry it out. Still **not execution**: it parses and validates the workflow, then maps each step to a command. It does **not execute** any command, never contacts the runtime, never reads the files a step refers to (or inspects their contents), and never mutates any file except the requested `--out` file.
+
+```
+portier workflow runbook --file <workflow.json> [--json] [--out <file>]
+```
+
+Each step maps to a command preview:
+
+| Step | Command preview |
+| --- | --- |
+| `policy.check` (config) | `portier policy check --config <f> --policy <f>` |
+| `policy.check` (runtime) | `portier policy check --runtime --policy <f>` |
+| `policy.review` | `portier policy review --current <f> --candidate <f> --policy <f>` |
+| `policy.baseline.compare` (report file) | `portier policy baseline compare --baseline <f> --report <f>` |
+| `policy.baseline.compare` (reportFrom) | `... --report <report-from:step-id>` + a note |
+
+For a `reportFrom` step the runbook does **not** invent a file path — it emits an explicit `<report-from:step-id>` **placeholder** and a note telling you to replace it with the report that step produces (e.g. run that step with `--out`).
+
+Human output is a numbered list ending in `Result: ready`. `--json` emits `{ workflow, steps: [{ id, type, command, display, notes }], summary: { total }, result }`, where `command` is the canonical argv token array and `display` is a best-effort copy/paste string (Portier never shell-executes it; tokens with whitespace/quotes are single-quoted). `--out <file>` also writes that JSON (with `--json`, stdout and the file are byte-identical).
+
+If the workflow is **invalid**, `workflow runbook` prints the plan (the validation errors) and exits `1` — exactly like `workflow plan` — and produces **no runbook and no `--out` file**. Fix the workflow (see `workflow plan --explain`) and re-run.
+
+Exit codes: `0` the workflow is valid and a runbook was produced; `1` the workflow parsed but the plan is invalid, **or** an `--out` write failure; `2` missing/invalid arguments (including a missing `--file` or `--out` value), or an unreadable/malformed workflow file. Runbook generation never contacts the runtime, so there is no connection-failure (`3`) exit code.
+
+> The runbook is a **preview only** — Portier does not run the listed commands. Workflow execution is deferred to a later v1.11 slice.
+
 ### `portier workflow template <name>` / `--list`
 
 Print a built-in **workflow template** (or list the available ones) so you don't have to write the workflow JSON schema by hand. Fully **offline** — never contacts the runtime, never executes a step, never reads referenced workflow input files, and never modifies any file except the requested `--out` file. A rendered template is a complete workflow file (`schemaVersion: 1`) that can be passed straight to `portier workflow plan --file <file>`.
