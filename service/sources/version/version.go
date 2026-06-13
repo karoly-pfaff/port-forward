@@ -6,4 +6,4 @@ package version
 // it at compile time:
 //
 //	go build -ldflags "-X portier/service/sources/version.Version=1.7.0" ...
-var Version = "1.9.0"
+var Version = "1.10.0"

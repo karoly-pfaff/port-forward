@@ -4,9 +4,11 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — Automation, Policies & Safe Operations
+## [1.10.0] — 2026-06-13 — Automation, Policies & Safe Operations
 
-v1.10 helps operators define and evaluate **safe operating rules** before any automation or enforcement exists. It starts with **dry-run policy evaluation only** — built entirely in the Go CLI as a pure API client, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**). UDP stays first-class: there is **no `allowUdp`/protocol-restriction policy**.
+v1.10 gives operators a **local-first, dry-run policy toolkit** for defining and evaluating safe operating rules — entirely in the Go CLI, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**) and **no enforcement, automation, mutation, scheduler, or telemetry**. The CLI stays a pure API client; UDP stays first-class (there is **no `allowUdp`/protocol-restriction policy**).
+
+The toolkit (Slices 1–8): an **offline policy dry-run evaluator** — `policy check --config <file> --policy <file>` against a small JSON policy of boolean guardrails (`requireGroup`/`allowLanExposure`/`allowPrivilegedPorts`/`allowAutostart`/`forbidDuplicateBindings`) with stable finding codes; **runtime policy check** — `policy check --runtime` evaluates the live runtime config read-only via the existing config-export path (offline `--config` stays fully offline); **policy finding explanations** — `portier explain <code>`/`--list` and inline `policy check --explain` (plus a neutral leaf `explain` package); **policy report export** — `policy check --out <file>` with `--json --out` byte parity; **built-in policy templates** — `policy template --list`/`<name>`/`--out` (`permissive`, `local-safe`, `managed`); **policy-aware config review** — `policy review --current --candidate --policy` (compact change summary + candidate evaluation); **policy baseline snapshots** — `policy baseline create`/`compare` (accepted findings, deterministic fingerprints, new/resolved/unchanged); and an offline **AI handoff prompt** (`docs/prompts/policy.md`). A **CLI architecture cleanup** moved general model/result types out of the catch-all `commands` package into focused domain packages (`config`, `doctor`, `policy`, `planview`, `output`, `explain`) — `commands` is handlers-only. A **Slice 8 consistency audit** verified the command surface, JSON schemas, exit codes, safety, and architecture boundaries (PASS WITH NOTES). The **CLI coverage gate was ratcheted 95% → 97%** (actual ~97.6%); no other gates changed, none lowered.
 
 ### Slice 8: Policy toolkit consistency audit — PASS WITH NOTES
 
