@@ -167,6 +167,31 @@ func TestPolicyCheckRuntime_OutJSONByteParity(t *testing.T) {
 	}
 }
 
+func TestPolicyCheckRuntime_JSONExplainOutByteParity(t *testing.T) {
+	// The full --runtime --json --explain --out combination: stdout (JSON with
+	// the additive explanations map + runtime source) must be byte-identical to
+	// the written file.
+	srv := makeExportServer(t, exposedRuntimeRules)
+	defer srv.Close()
+	pol := writeTempFile(t, "pol.json", `{"schemaVersion":1,"rules":{"allowLanExposure":false}}`)
+	outPath := filepath.Join(t.TempDir(), "report.json")
+
+	out, _, code := runPolicyCheckRuntime(t, true, srv.URL, pol, "--explain", "--out", outPath)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1", code)
+	}
+	fileData, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("reading report file: %v", err)
+	}
+	if out != string(fileData) {
+		t.Errorf("stdout and file differ\nstdout:\n%q\nfile:\n%q", out, string(fileData))
+	}
+	if !strings.Contains(string(fileData), `"explanations"`) || !strings.Contains(string(fileData), `"source": "runtime"`) {
+		t.Errorf("exported report should carry explanations + runtime source:\n%s", string(fileData))
+	}
+}
+
 func TestPolicyCheckRuntime_ExplainAddsExplanations(t *testing.T) {
 	srv := makeExportServer(t, exposedRuntimeRules)
 	defer srv.Close()

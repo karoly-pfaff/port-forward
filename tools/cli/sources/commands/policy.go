@@ -26,17 +26,20 @@ type ConnFlags struct {
 
 const policyHelp = `Usage: portier policy <subcommand> [options]
 
-Evaluate Portier config files against a small, offline policy file, and inspect
-built-in policy templates.
+Evaluate a Portier config against a policy file, review a candidate config,
+baseline accepted findings, and inspect built-in policy templates. All policy
+commands are read-only and dry-run — no enforcement, no automation, no mutation.
 
 Subcommands:
-  check --config <file> --policy <file>   Evaluate a config against a policy (read-only, offline)
+  check (--config <file> | --runtime) --policy <file>
+                                          Evaluate a local config file (offline) or the live
+                                          runtime config (read-only) against a policy
   review --current <file> --candidate <file> --policy <file>
                                           Compare current vs candidate config and evaluate the
-                                          candidate against a policy (read-only, offline)
+                                          candidate against a policy (offline)
   baseline create|compare ...             Save an accepted policy report as a baseline, or compare
                                           a fresh report against it (offline)
-  template <name> | --list                Print a built-in policy template, or list them
+  template <name> | --list                Print a built-in policy template, or list them (offline)
   help                                    Show this help message
 
 Run 'portier policy check --help', 'portier policy review --help',

@@ -8,6 +8,19 @@ All notable changes to Portier are documented here.
 
 v1.10 helps operators define and evaluate **safe operating rules** before any automation or enforcement exists. It starts with **dry-run policy evaluation only** — built entirely in the Go CLI as a pure API client, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**). UDP stays first-class: there is **no `allowUdp`/protocol-restriction policy**.
 
+### Slice 8: Policy toolkit consistency audit — PASS WITH NOTES
+
+Focused audit of the v1.10 policy toolkit (Slices 1–7) — audit/cleanup only, no new features. **Result: PASS, v1.10 policy toolkit ready for finalization.**
+
+- **Command surface (verified, live battery).** `policy check` (`--config`/`--runtime`, `--json`/`--out`/`--explain` and all combinations incl. `--runtime --json --out --explain`), `policy review`, `policy baseline create`/`compare`, `policy template <name>`/`--list`, and `explain --list`. Source selection is correct: exactly one of `--config`/`--runtime`; both → exit 2; neither → exit 2. Offline `--config` mode ignores even a malformed `--url` (proven: bad `--url` + offline still exits 1 for violations, never resolves the runtime URL).
+- **JSON schemas (verified).** `policy check` → `{source?, explanations?, findings, summary, result}` (`source`/`explanations` additive, omitted when unused); `policy review` → `{review, findings, summary, result, explanations?}`; baseline file → `{schemaVersion, createdAt, source?, result, findings:[{fingerprint, code, severity, title, message}]}` (no raw config/details/explanations); `baseline compare` → `{summary:{new,resolved,unchanged}, result, new, resolved, unchanged}`; `template` → list `{templates:[{name,title,description}]}`, single `{name,title,description,policy}`, `--out` bare policy JSON. `--json --out` byte parity holds across check (incl. `--explain`, both `--config` and `--runtime`), review, and report export.
+- **Exit codes (verified).** check 0/1/2/3 (runtime-unreachable → 3, export/API failure → 1); review 0/1/2; template 0/1/2; baseline create 0/1/2; baseline compare 0/1/2 — all as documented.
+- **Safety (verified).** Offline commands never resolve/use the runtime URL; runtime check is read-only (the export test server fails on any non-GET request); no command mutates config/policy/report/baseline inputs (only explicit `--out` files written); no probing, enforcement, scheduler, telemetry, or env/process/log collection; no `allowUdp`/protocol restriction; baselines store only fingerprinted finding snapshots.
+- **Architecture (verified).** `commands` stays handlers-only; the `policy` package imports only `config`/`explain`/`output` (no `client`/`commands`, no import cycle) — the runtime fetch + client-DTO→`config.Rule` mapping live in the command layer (`loadCheckRules`/`exportedRules`). `go vet` clean.
+- **Fix made:** the top-level `portier policy` help intro was stale (claimed the whole toolkit was "offline" and listed only check + templates). Updated it to describe check/review/baseline/template, note all policy commands are read-only/dry-run, and show `check (--config | --runtime)`. One small test added (`--runtime --json --explain --out` byte parity). No behavior change beyond the help text.
+
+`validate:contract` **234/234**; CLI coverage **97.6%** (gate 97 PASS, none lowered); lint/typecheck/vet clean. No new durable rule — the audit confirms the Slice 1–7 rules. No release blockers; no deferred non-blockers.
+
 ### Added — Slice 7: Policy baseline snapshots
 
 - **`portier policy baseline create --from-report <report.json> --out <baseline.json>`.** Saves an accepted set of policy findings as a compact baseline file (a dry-run "these findings were accepted at this point" snapshot). Works on any policy report JSON produced by `policy check` or `policy review` (`--json`/`--out`). Fully offline — never contacts the runtime, never mutates the report.
