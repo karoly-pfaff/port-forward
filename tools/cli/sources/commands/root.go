@@ -35,6 +35,7 @@ Commands:
   doctor               Run live runtime diagnostic checks (reachability, version, health)
   explain <code>       Explain a doctor/check code (offline; 'portier explain --list')
   policy               Evaluate a config against a policy file (offline; 'portier policy check')
+  workflow             Plan/validate a local workflow file (offline; 'portier workflow plan')
   support-bundle       Collect doctor artifacts into a directory ('--out <dir>')
   config               Manage config: validate, doctor, export, import (run 'portier config help')
   group                Operate on rules by group: list, start, stop (run 'portier group help')

@@ -295,6 +295,27 @@ func TestRun_ExplainListDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_WorkflowPlanDispatch(t *testing.T) {
+	// workflow plan is fully offline — no server needed, and an invalid --url is
+	// ignored. A valid workflow file exits 0.
+	dir := t.TempDir()
+	wf := filepath.Join(dir, "workflow.json")
+	wfContent := `{"schemaVersion":1,"steps":[{"id":"a","type":"policy.check","runtime":true,"policy":"p.json"}]}`
+	if err := os.WriteFile(wf, []byte(wfContent), 0o644); err != nil {
+		t.Fatalf("writing temp workflow: %v", err)
+	}
+	code := run([]string{"--url", "ftp://bad-scheme", "workflow", "plan", "--file", wf})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
+func TestRun_WorkflowDispatch_NoSubcommand(t *testing.T) {
+	if code := run([]string{"workflow"}); code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
 func TestRun_PolicyCheckDispatch(t *testing.T) {
 	// policy check is fully offline — no server needed, and an invalid --url is
 	// ignored. A compliant config against a strict policy exits 0.

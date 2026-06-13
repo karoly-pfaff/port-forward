@@ -54,6 +54,7 @@ const coverpkg = [
   "portier/cli/sources/output",
   "portier/cli/sources/planview",
   "portier/cli/sources/policy",
+  "portier/cli/sources/workflow",
 ].join(",");
 
 console.log("[coverage-tools-cli] Running CLI tests with coverage...\n");

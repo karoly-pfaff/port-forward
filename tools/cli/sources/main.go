@@ -60,6 +60,10 @@ func run(args []string) int {
 		// lazily resolves the runtime URL inside the handler (offline modes never
 		// touch it). Pass the connection flags so runtime mode can build a client.
 		return commands.RunPolicy(*flagJSON, commands.ConnFlags{URL: *flagURL, Host: *flagHost, Port: *flagPort}, remaining[1:], os.Stdout, os.Stderr)
+	case "workflow":
+		// workflow planning is fully offline (it only validates a local workflow
+		// file and never contacts the runtime) — no URL resolution needed.
+		return commands.RunWorkflow(*flagJSON, remaining[1:], os.Stdout, os.Stderr)
 	case "runtime":
 		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
 		if err != nil {

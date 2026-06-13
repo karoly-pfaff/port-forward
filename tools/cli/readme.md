@@ -755,6 +755,45 @@ portier policy check --config portier.json --policy policy.json
 
 To ask an AI assistant to help interpret a policy report, Portier ships a reusable, copy-paste prompt in [`docs/prompts/policy.md`](../../docs/prompts/policy.md). As with the doctor prompt, **Portier never sends anything anywhere** (no AI integration, upload, or telemetry) — it is plain text *you* paste into an assistant of your choice along with output you generated locally (e.g. `portier policy check --json --explain`). The policy prompt frames each finding as a **policy choice**, not necessarily a product defect, and separates safe next actions from changes that need admin/security review.
 
+### `portier workflow plan --file <workflow.json>`
+
+Plan and validate a local **workflow** — an ordered sequence of existing safe Portier operations described in a small JSON file. Fully **offline** and **dry-run**: it reads the workflow file, validates its schema and step references, and prints a deterministic plan. It does **not execute** any step, never contacts the runtime, never reads the files a step refers to, never applies or imports configs, never enforces a policy, and never mutates any file except the requested `--out` file.
+
+```
+portier workflow plan --file <workflow.json> [--json] [--out <file>]
+```
+
+Workflow file format (`schemaVersion: 1`):
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "local-policy-check",
+  "steps": [
+    { "id": "check-current", "type": "policy.check",
+      "config": "portier.json", "policy": "local-safe.policy.json" },
+    { "id": "compare-baseline", "type": "policy.baseline.compare",
+      "baseline": "policy-baseline.json", "reportFrom": "check-current" }
+  ]
+}
+```
+
+Supported step types and their required fields:
+
+| Step type | Required fields |
+| --- | --- |
+| `policy.check` | Exactly one of `config` (a file) or `runtime` (`true`), plus `policy` (a file). |
+| `policy.review` | `current`, `candidate`, and `policy` (all files). |
+| `policy.baseline.compare` | `baseline` (a file), plus exactly one of `report` (a file) or `reportFrom` (the id of an earlier step). |
+
+Validation rules: `schemaVersion` must be `1`; at least one step is required; every step needs a unique, non-empty `id`; the step `type` must be supported with its required fields present; a `reportFrom` must reference a step that appears **earlier** in the file. Unknown fields anywhere in the file are **rejected** (to catch typos). Planning is structural only — it validates references; it does **not** open or parse the files a step refers to (so a missing referenced file does not fail the plan). `name` is optional (it renders as `(unnamed)` when absent).
+
+The plan lists each step as `[VALID]`/`[INVALID]` with the inputs it would use (valid) or the reason it is invalid, then a summary and a `Result: valid`/`Result: invalid` line. `--json` emits the full plan (`{ schemaVersion, name, steps, summary, result }`); `--out <file>` also writes that JSON to a file (with `--json`, stdout and the file are byte-identical).
+
+Exit codes: `0` the workflow plan is valid; `1` the workflow parsed but the plan is invalid (one or more invalid steps) **or** an `--out` write failure; `2` missing/invalid arguments (including a missing `--file` or `--out` value), or an unreadable/malformed workflow file (including a missing or unsupported `schemaVersion`, or no steps). Workflow planning never contacts the runtime, so there is no connection-failure (`3`) exit code.
+
+> This first slice validates and plans workflows only — it does not run them. Step execution and reporting are deferred to a later v1.11 slice.
+
 ### `portier version`
 
 Show the CLI version.

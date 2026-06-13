@@ -4,6 +4,26 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — Local Intelligence & Workflow Automation (v1.11, in development)
+
+v1.11 stays **local-first** and makes Portier better at understanding, explaining, and automating local forwarding workflows. All new tooling lives in the Go CLI as a **pure API client** — no runtime/API/server/service/client contract change (`validate:contract` stays **234/234**), no enforcement, no scheduler, no background automation, no telemetry.
+
+### Added — Slice 1: Workflow plan dry-run
+
+- **`portier workflow plan --file <workflow.json>`.** Reads a local **workflow** file (an ordered sequence of existing safe Portier operations), validates its schema and step references, and prints a deterministic plan. Fully **offline and dry-run**: it does **not execute** any step, never contacts the runtime, never reads the files a step refers to, never applies/imports configs, never enforces a policy, and never mutates any file except the requested `--out` file. `--json` emits the full plan; `--out <file>` also writes that JSON (with `--json`, stdout and the file are byte-identical).
+- **Workflow file format (`schemaVersion: 1`).** A `name` (optional) and a non-empty `steps` array. Supported step types (validated, not executed): `policy.check` (exactly one of `config`/`runtime`, plus `policy`), `policy.review` (`current`/`candidate`/`policy`), and `policy.baseline.compare` (`baseline`, plus exactly one of `report`/`reportFrom`). A `reportFrom` must reference a step that appears **earlier** in the file (so the dependency graph is inherently acyclic). Unknown fields anywhere are **rejected** (to catch typos); step ids must be unique and non-empty.
+- **Plan model.** `{schemaVersion, name, steps:[{id, type, status(valid|invalid), message, inputs, dependsOn}], summary:{total, valid, invalid}, result(valid|invalid)}` — kept separate from the policy/doctor report models. Human output tags each step `[VALID]`/`[INVALID]` and ends with a summary and `Result:` line.
+- **Exit codes.** `0` the plan is valid; `1` the workflow parsed but the plan is invalid (one or more invalid steps) **or** an `--out` write failure; `2` missing/invalid arguments (including a missing `--file`/`--out` value) or an unreadable/malformed workflow file (missing/unsupported `schemaVersion`, or no steps). No connection-failure (`3`) code — planning never contacts the runtime.
+
+### Notes (Slice 1)
+
+- CLI-only, fully offline, `validate:contract` stays **234/234**. The workflow schema, parser, validator, plan model, and rendering live in a new domain package `tools/cli/sources/workflow` (`File`/`Step`/`Parse`, `Plan`/`StepPlan`/`PlanSummary`/`BuildPlan`, `PlanExitCode`, `PrintHuman`, `Emit`/`EmitOptions`); `commands` stays handlers-only (`RunWorkflow`/`RunWorkflowPlan`). The command dispatches **offline** from `main.go` (like `explain`/`policy`) — no URL resolution.
+- Workflow planning **composes existing safe operations by reference only** — it validates that a step names a known operation with coherent inputs; it does not duplicate policy/doctor semantics and does not run them. Step **execution** and reporting are deferred to a later v1.11 slice.
+- Covered by white-box `workflow/workflow_internal_test.go` (parse/schema/unknown-field/empty-steps; every step type valid + each invalid path; duplicate id; reportFrom unknown/later/self; mixed counts; exit code; human rendering incl. placeholders) and black-box `commands/workflow_test.go` (valid/invalid/usage exits, JSON shape, `--out` write + `--json --out` byte parity + write-failure, **no file mutation**, **does not open referenced files**, dispatch/help) + a `main_test.go` offline dispatch case.
+- CLI coverage **97.6% → 97.7%** (gate 97 PASS, **not raised** — the ~0.7% buffer above 97 is too thin to move to 98 safely). The new `workflow` package is at 98.6%; the only uncovered line is the documented structurally-unreachable `json.Marshal`-on-concrete-`Plan` encode branch in `Emit` (same as policy/doctor).
+
+---
+
 ## [1.10.0] — 2026-06-13 — Automation, Policies & Safe Operations
 
 v1.10 gives operators a **local-first, dry-run policy toolkit** for defining and evaluating safe operating rules — entirely in the Go CLI, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**) and **no enforcement, automation, mutation, scheduler, or telemetry**. The CLI stays a pure API client; UDP stays first-class (there is **no `allowUdp`/protocol-restriction policy**).
