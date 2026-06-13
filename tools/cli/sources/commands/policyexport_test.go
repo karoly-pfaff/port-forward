@@ -22,7 +22,7 @@ import (
 func runPolicyCheckArgs(t *testing.T, jsonOutput bool, extra ...string) (string, string, int) {
 	t.Helper()
 	var out, errBuf strings.Builder
-	code := commands.RunPolicyCheck(jsonOutput, extra, &out, &errBuf)
+	code := commands.RunPolicyCheck(jsonOutput, commands.ConnFlags{}, extra, &out, &errBuf)
 	return out.String(), errBuf.String(), code
 }
 

@@ -7,10 +7,21 @@ import (
 	"os"
 	"strings"
 
+	"portier/cli/sources/client"
 	"portier/cli/sources/config"
 	"portier/cli/sources/output"
 	"portier/cli/sources/policy"
 )
+
+// ConnFlags carries the global connection flags so an otherwise-offline command
+// can lazily resolve a runtime URL ONLY when a runtime mode is requested. The
+// offline policy subcommands never touch it; `policy check --runtime` resolves
+// the URL and builds a client on demand inside the handler.
+type ConnFlags struct {
+	URL  string
+	Host string
+	Port int
+}
 
 const policyHelp = `Usage: portier policy <subcommand> [options]
 
@@ -99,12 +110,22 @@ Examples:
 `
 
 const policyCheckHelp = `Usage: portier policy check --config <config-file> --policy <policy-file>
+       portier policy check --runtime --policy <policy-file>
 
-Evaluate a Portier config file against a JSON policy file. Fully offline:
-never contacts the runtime, never probes targets, and never modifies any file.
+Evaluate a Portier config against a JSON policy file. Choose exactly one config
+source: a local file (--config, fully offline) or the live runtime config
+(--runtime, read-only). Either way it is read-only and dry-run: it never probes
+targets, never enforces the policy, and never modifies the config, the policy
+file, or the runtime.
+
+Config source (exactly one required):
+  --config <file>   Evaluate a local Portier config file (fully offline — does not
+                    contact or resolve the runtime URL).
+  --runtime         Evaluate the live runtime config, read via the existing
+                    read-only config-export path (uses the global --url/--host/
+                    --port like other live commands). No new endpoint, no probing.
 
 Options:
-  --config <file>   Path to the Portier config file to evaluate (required).
   --policy <file>   Path to the JSON policy file (required).
   --explain         Show an explanation (meaning + next action) for each emitted
                     finding (inline in human output; an additive explanations map
@@ -137,27 +158,31 @@ Unknown fields in the policy file are rejected.
 
 Exit codes:
   0  Policy evaluation completed with no violations
-  1  Policy evaluation completed with one or more violations, or the --out file
-     could not be written
-  2  Missing/invalid arguments (including a missing --out value), or an
-     unreadable/malformed config or policy file (including an unsupported
-     schemaVersion)
+  1  Policy evaluation completed with one or more violations, the --out file
+     could not be written, or (runtime mode) the runtime config could not be read
+  2  Missing/invalid arguments (including a missing --out value, or both/neither
+     of --config and --runtime), or an unreadable/malformed config or policy file
+     (including an unsupported schemaVersion)
+  3  (runtime mode) The Portier runtime is unreachable
 
 Examples:
   portier policy check --config portier.json --policy policy.json
-  portier --json policy check --config portier.json --policy policy.json
+  portier policy check --runtime --policy policy.json
+  portier --json policy check --runtime --policy policy.json --explain
 `
 
-// RunPolicy dispatches the `portier policy <subcommand>` commands. Policy
-// evaluation is fully offline, so no management client is needed.
-func RunPolicy(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+// RunPolicy dispatches the `portier policy <subcommand>` commands. All
+// subcommands are offline except `policy check --runtime`, which lazily resolves
+// the runtime URL from conn inside the handler; the offline subcommands never
+// touch conn.
+func RunPolicy(jsonOutput bool, conn ConnFlags, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, policyHelp)
 		return 2
 	}
 	switch args[0] {
 	case "check":
-		return RunPolicyCheck(jsonOutput, args[1:], stdout, stderr)
+		return RunPolicyCheck(jsonOutput, conn, args[1:], stdout, stderr)
 	case "review":
 		return RunPolicyReview(jsonOutput, args[1:], stdout, stderr)
 	case "template":
@@ -172,17 +197,76 @@ func RunPolicy(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	}
 }
 
-// RunPolicyCheck evaluates a local config file against a local policy file and
-// prints a deterministic policy report. With --out it also writes the JSON report
-// to a file. It is fully offline: it never contacts the runtime, never probes
-// targets, and never modifies the config or policy file. Exit codes: 0 = no
-// violations, 1 = one or more violations (or a JSON-encode / --out write failure),
-// 2 = usage error (including a missing --out value) or an unreadable/malformed
-// config or policy file.
-func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+// exportedRules converts the read-only runtime config-export response into the
+// config domain rules the evaluator consumes. The fields map 1:1, so a runtime
+// config evaluates identically to the same config in a local file.
+func exportedRules(cfg *client.ConfigExportResponse) []config.Rule {
+	rules := make([]config.Rule, len(cfg.Rules))
+	for i, r := range cfg.Rules {
+		rules[i] = config.Rule{
+			ID:         r.ID,
+			Name:       r.Name,
+			Protocol:   r.Protocol,
+			ListenHost: r.ListenHost,
+			ListenPort: r.ListenPort,
+			TargetHost: r.TargetHost,
+			TargetPort: r.TargetPort,
+			Enabled:    r.Enabled,
+			UDPMode:    r.UDPMode,
+			Group:      r.Group,
+		}
+	}
+	return rules
+}
+
+// loadCheckRules selects the config source for `policy check` and returns the
+// rules to evaluate, the source label, and an exit code (0 = ok). With --runtime
+// it reads the live runtime config read-only via the existing config-export path
+// (lazily resolving the URL from conn — offline --config mode never does this):
+// an unreachable runtime exits 3 and a config-export/API failure exits 1 (via
+// exitWithError), NOT a fabricated policy report. With --config it parses the
+// local file fully offline. Exactly-one-source is enforced by the caller.
+func loadCheckRules(useRuntime bool, configPath string, conn ConnFlags, stderr io.Writer) ([]config.Rule, string, int) {
+	if useRuntime {
+		managementURL, err := ResolveURL(conn.URL, conn.Host, conn.Port)
+		if err != nil {
+			fmt.Fprintf(stderr, "Error: %v\n", err)
+			return nil, "", 2
+		}
+		cfg, expErr := client.New(managementURL).ExportConfig()
+		if expErr != nil {
+			return nil, "", exitWithError(expErr, stderr)
+		}
+		return exportedRules(cfg), policy.SourceRuntime, 0
+	}
+
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading config %s: %v\n", configPath, err)
+		return nil, "", 2
+	}
+	rules, parseErr := config.ParseLocal(configData)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid config %s: %v\n", configPath, parseErr)
+		return nil, "", 2
+	}
+	return rules, policy.SourceConfigFile, 0
+}
+
+// RunPolicyCheck evaluates a Portier config against a policy file and prints a
+// deterministic policy report. The config source is exactly one of --config (a
+// local file, fully offline) or --runtime (the live runtime config, read-only via
+// the existing config-export path). It never probes targets, never enforces the
+// policy, and never modifies the config, the policy file, or the runtime. Exit
+// codes: 0 = no violations, 1 = one or more violations / a JSON-encode or --out
+// write failure / (runtime) a config-export failure, 2 = usage error (including a
+// missing --out value or both/neither config source) or an unreadable/malformed
+// config or policy file, 3 = (runtime) the runtime is unreachable.
+func RunPolicyCheck(jsonOutput bool, conn ConnFlags, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("policy check", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	flagConfig := fs.String("config", "", "path to the Portier config file")
+	flagConfig := fs.String("config", "", "path to the Portier config file (offline)")
+	flagRuntime := fs.Bool("runtime", false, "evaluate the live runtime config (read-only)")
 	flagPolicy := fs.String("policy", "", "path to the policy file")
 	flagExplain := fs.Bool("explain", false, "show an explanation for each emitted finding")
 	flagOut := fs.String("out", "", "also write the JSON report to this file")
@@ -197,8 +281,14 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 
-	if *flagConfig == "" {
-		fmt.Fprintln(stderr, "Error: --config is required")
+	// Exactly one config source.
+	if *flagConfig != "" && *flagRuntime {
+		fmt.Fprintln(stderr, "Error: --config and --runtime are mutually exclusive")
+		fmt.Fprint(stderr, policyCheckHelp)
+		return 2
+	}
+	if *flagConfig == "" && !*flagRuntime {
+		fmt.Fprintln(stderr, "Error: one of --config or --runtime is required")
 		fmt.Fprint(stderr, policyCheckHelp)
 		return 2
 	}
@@ -208,17 +298,7 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 
-	configData, err := os.ReadFile(*flagConfig)
-	if err != nil {
-		fmt.Fprintf(stderr, "Error reading config %s: %v\n", *flagConfig, err)
-		return 2
-	}
-	rules, parseErr := config.ParseLocal(configData)
-	if parseErr != nil {
-		fmt.Fprintf(stderr, "Error: invalid config %s: %v\n", *flagConfig, parseErr)
-		return 2
-	}
-
+	// Validate the policy file (a usage/input error) before any runtime I/O.
 	policyData, err := os.ReadFile(*flagPolicy)
 	if err != nil {
 		fmt.Fprintf(stderr, "Error reading policy %s: %v\n", *flagPolicy, err)
@@ -230,8 +310,13 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 
+	rules, source, code := loadCheckRules(*flagRuntime, *flagConfig, conn, stderr)
+	if code != 0 {
+		return code
+	}
+
 	report := policy.Evaluate(rules, pol)
-	return policy.Emit(report, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
+	return policy.Emit(report, policy.EmitOptions{Source: source, Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
 }
 
 // loadReviewConfig reads and parses a local config file for `policy review`,

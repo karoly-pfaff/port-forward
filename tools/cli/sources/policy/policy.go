@@ -49,6 +49,13 @@ const (
 // schemaVersion is the only supported policy file schema version.
 const schemaVersion = 1
 
+// Source labels for the additive `source` field and the human "Source:" line of
+// a policy check report. They identify where the evaluated config came from.
+const (
+	SourceConfigFile = "config file"
+	SourceRuntime    = "runtime"
+)
+
 // Finding is one deterministic outcome of a policy evaluation:
 //   - Code:     stable machine-readable identifier (e.g. "policy.lan_exposure_forbidden").
 //   - Severity: info / warning / error.
@@ -309,11 +316,16 @@ func severityTag(s Severity) string {
 }
 
 // PrintHuman renders a policy report in deterministic human-readable form. When
-// withExplain is set, each finding is followed by an inline explanation block
-// (code, meaning, next action, related codes) for its finding code.
-func PrintHuman(r Report, withExplain bool, w io.Writer) {
+// source is non-empty (e.g. "config file" or "runtime") it is shown under the
+// title so the report's origin is clear. When withExplain is set, each finding is
+// followed by an inline explanation block (code, meaning, next action, related
+// codes) for its finding code.
+func PrintHuman(r Report, source string, withExplain bool, w io.Writer) {
 	fmt.Fprintln(w, "Portier Policy Check")
 	fmt.Fprintln(w)
+	if source != "" {
+		fmt.Fprintf(w, "Source: %s\n\n", source)
+	}
 	printFindings(r, withExplain, w)
 	printSummaryAndResult(r, w)
 }
@@ -345,19 +357,24 @@ func printSummaryAndResult(r Report, w io.Writer) {
 }
 
 // reportJSON is the JSON encoding of a policy report plus an optional additive
-// explanations map. Report is embedded so findings/summary/result stay at the
-// top level; Explanations is populated ONLY with --explain (and only for the
-// codes present in the report), so output without --explain is byte-identical to
-// the bare Report.
+// source label and explanations map. Report is embedded so findings/summary/
+// result stay at the top level. Source is additive (omitempty) and records the
+// config origin ("config file" / "runtime"); Explanations is populated ONLY with
+// --explain (and only for the codes present in the report). Both are omitempty so
+// existing consumers keep working.
 type reportJSON struct {
-	Report
+	Source       string                         `json:"source,omitempty"`
 	Explanations map[string]explain.Explanation `json:"explanations,omitempty"`
+	Report
 }
 
 // EmitOptions groups the presentation flags for a policy report. They affect
 // ONLY how the report is rendered/exported — never the findings, summary, result,
 // or exit code. OutPath, when non-empty, also writes the JSON report to that file.
+// Source records the config origin ("config file" / "runtime") for human output
+// and the additive JSON `source` field; an empty Source omits both.
 type EmitOptions struct {
+	Source  string
 	Explain bool
 	JSON    bool
 	OutPath string
@@ -383,7 +400,7 @@ func codesOf(r Report) []string {
 // operation failure, not a policy finding). Never mutates config/policy files and
 // never contacts the runtime.
 func Emit(r Report, opts EmitOptions, stdout, stderr io.Writer) int {
-	payload := reportJSON{Report: r}
+	payload := reportJSON{Report: r, Source: opts.Source}
 	if opts.Explain {
 		payload.Explanations = explain.ForReport(explanations, codesOf(r))
 	}
@@ -394,7 +411,7 @@ func Emit(r Report, opts EmitOptions, stdout, stderr io.Writer) int {
 			return 1
 		}
 	} else {
-		PrintHuman(r, opts.Explain, stdout)
+		PrintHuman(r, opts.Source, opts.Explain, stdout)
 	}
 
 	if opts.OutPath != "" {

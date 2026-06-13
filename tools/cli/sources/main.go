@@ -56,8 +56,10 @@ func run(args []string) int {
 		// explain is fully offline (static reference data) — no runtime needed.
 		return commands.RunExplain(*flagJSON, remaining[1:], os.Stdout, os.Stderr)
 	case "policy":
-		// policy check is fully offline (config + policy file only) — no runtime needed.
-		return commands.RunPolicy(*flagJSON, remaining[1:], os.Stdout, os.Stderr)
+		// policy subcommands are offline except `policy check --runtime`, which
+		// lazily resolves the runtime URL inside the handler (offline modes never
+		// touch it). Pass the connection flags so runtime mode can build a client.
+		return commands.RunPolicy(*flagJSON, commands.ConnFlags{URL: *flagURL, Host: *flagHost, Port: *flagPort}, remaining[1:], os.Stdout, os.Stderr)
 	case "runtime":
 		managementURL, err := commands.ResolveURL(*flagURL, *flagHost, *flagPort)
 		if err != nil {

@@ -571,13 +571,25 @@ If you want to ask an AI assistant to help interpret a doctor report, Portier sh
 
 **Portier never sends anything anywhere** — there is no AI integration, upload, or telemetry. The prompt is plain text *you* paste into an assistant of your choice, together with output you generated locally (e.g. `portier doctor --json --explain`). The prompt tells the assistant to treat the pasted report as the only source of truth, to distinguish info / warning / error / strict failures, to ground its analysis in the data, and — importantly — **never to ask you for secrets, tokens, keys, environment dumps, process lists, or logs** (the doctor tools never collect those). It asks for a verdict, prioritized findings, a risk level, and separated "safe now" vs "needs admin/network/security review" next steps.
 
-### `portier policy check --config <file> --policy <file>`
+### `portier policy check (--config <file> | --runtime) --policy <file>`
 
-Evaluate a local Portier config file against a small JSON **policy** file. Fully **offline** — it never contacts the runtime, never probes targets, and never modifies the config or policy file. This is **dry-run evaluation only**: there is no enforcement, no automation, and no config/runtime mutation.
+Evaluate a Portier config against a small JSON **policy** file. Choose **exactly one config source**: a local file (`--config`, fully offline) or the live runtime config (`--runtime`, read-only). Either way this is **dry-run evaluation only** — there is no enforcement, no automation, no target probing, and no config/policy/runtime mutation.
 
 ```
 portier policy check --config <config-file> --policy <policy-file> [--json] [--explain] [--out <file>]
+portier policy check --runtime --policy <policy-file> [--json] [--explain] [--out <file>]
 ```
+
+**Config source (exactly one required):**
+
+| Source | Behavior |
+| --- | --- |
+| `--config <file>` | Evaluate a local config file. **Fully offline** — does not contact or even resolve the runtime URL. |
+| `--runtime` | Evaluate the **live runtime config**, read via the existing read-only config-export path (`GET /api/config/export`). Uses the global `--url`/`--host`/`--port` like other live commands. No new endpoint, no probing, read-only. |
+
+Supplying **both** `--config` and `--runtime`, or **neither**, is a usage error (exit `2`). `--policy` is required and is validated **before** any runtime I/O (so an unsupported policy schema exits `2`, not a runtime error).
+
+Both the human report (a `Source: config file` / `Source: runtime` line under the title) and the JSON report carry an additive `source` field recording where the evaluated config came from. A runtime config evaluates identically to the same config in a local file — the findings, summary, result, explanations, and JSON shape are the same. In runtime mode, an **unreachable runtime exits `3`** and a **config-export/API failure exits `1`** (the standard live-CLI convention) — a runtime read failure is never wrapped as a policy finding, and no report is invented when the config could not be read.
 
 The policy file is a small JSON document (`schemaVersion: 1`) with a `rules` object of boolean guardrails:
 
@@ -628,7 +640,7 @@ Stable finding codes: `policy.valid` (info, emitted when the config complies), `
 
 **`--out <file>`** also writes the policy report to a file as deterministic pretty JSON — the **same shape as `--json`** (`findings` + `summary` + `result`, plus the additive `explanations` map under `--explain`) — for CI artifacts, reviews, and support handoff. It writes the file regardless of `--json`; in human mode stdout stays human (with a `Report written to <file>` confirmation), and in `--json` mode stdout stays pure JSON and is **byte-identical to the file**. A file-write failure is an operation failure → exit `1` (reported on stderr), overriding the report's own exit code; the file is only written after a successful marshal (no partial writes) and parent directories are not created. A malformed/unreadable config or policy still exits `2` and **writes no file**. Export never mutates the config or policy file and never contacts the runtime.
 
-Exit codes: `0` no violations; `1` one or more violations, or an `--out` write failure; `2` missing/invalid arguments (including a missing `--out` value), or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
+Exit codes: `0` no violations; `1` one or more violations, an `--out` write failure, or (runtime mode) a config-export/API failure; `2` missing/invalid arguments (including a missing `--out` value, or both/neither of `--config` and `--runtime`), or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`); `3` (runtime mode) the Portier runtime is unreachable.
 
 ### `portier policy review --current <file> --candidate <file> --policy <file>`
 

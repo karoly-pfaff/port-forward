@@ -171,7 +171,7 @@ func TestPolicyTemplate_OutWritesUsableFile(t *testing.T) {
 
 	// ...and it is directly usable by `policy check`. A compliant config passes.
 	cfg := writeTempFile(t, "config.json", compliantConfig)
-	checkCode := commands.RunPolicyCheck(false, []string{"--config", cfg, "--policy", outPath}, &strings.Builder{}, &strings.Builder{})
+	checkCode := commands.RunPolicyCheck(false, commands.ConnFlags{}, []string{"--config", cfg, "--policy", outPath}, &strings.Builder{}, &strings.Builder{})
 	if checkCode != 0 {
 		t.Errorf("generated managed policy should validate a compliant config (exit %d, want 0)", checkCode)
 	}
@@ -267,7 +267,7 @@ func TestPolicyTemplate_ListWithOutExits2(t *testing.T) {
 
 func TestPolicyTemplate_ViaRunPolicy(t *testing.T) {
 	var out, errBuf strings.Builder
-	code := commands.RunPolicy(false, []string{"template", "--list"}, &out, &errBuf)
+	code := commands.RunPolicy(false, commands.ConnFlags{}, []string{"template", "--list"}, &out, &errBuf)
 	if code != 0 {
 		t.Fatalf("RunPolicy template --list exit = %d, want 0\nstderr: %s", code, errBuf.String())
 	}

@@ -333,7 +333,7 @@ func TestPolicyReview_ViaRunPolicy(t *testing.T) {
 	cand := writeTempFile(t, "cand.json", reviewCandidate)
 	pol := writeTempFile(t, "pol.json", permissivePolicy)
 	var out, errBuf strings.Builder
-	code := commands.RunPolicy(false, []string{"review", "--current", cur, "--candidate", cand, "--policy", pol}, &out, &errBuf)
+	code := commands.RunPolicy(false, commands.ConnFlags{}, []string{"review", "--current", cur, "--candidate", cand, "--policy", pol}, &out, &errBuf)
 	if code != 0 {
 		t.Fatalf("RunPolicy review exit = %d, want 0\nstderr: %s", code, errBuf.String())
 	}

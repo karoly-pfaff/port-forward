@@ -27,7 +27,7 @@ func writeTempFile(t *testing.T, name, content string) string {
 func runPolicyCheck(t *testing.T, jsonOutput bool, configPath, policyPath string) (string, string, int) {
 	t.Helper()
 	var out, errBuf strings.Builder
-	code := commands.RunPolicyCheck(jsonOutput, []string{"--config", configPath, "--policy", policyPath}, &out, &errBuf)
+	code := commands.RunPolicyCheck(jsonOutput, commands.ConnFlags{}, []string{"--config", configPath, "--policy", policyPath}, &out, &errBuf)
 	return out.String(), errBuf.String(), code
 }
 
@@ -293,7 +293,7 @@ func TestPolicyCheck_JSONShape(t *testing.T) {
 	]`)
 	pol := writeTempFile(t, "policy.json", `{"schemaVersion": 1, "rules": {"allowLanExposure": false}}`)
 	var out, errBuf strings.Builder
-	code := commands.RunPolicyCheck(true, []string{"--config", cfg, "--policy", pol}, &out, &errBuf)
+	code := commands.RunPolicyCheck(true, commands.ConnFlags{}, []string{"--config", cfg, "--policy", pol}, &out, &errBuf)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -388,19 +388,19 @@ func TestPolicyCheck_HumanCompliantShowsPassed(t *testing.T) {
 func TestPolicyCheck_MissingConfigArg(t *testing.T) {
 	pol := writeTempFile(t, "policy.json", permissivePolicy)
 	var out, errBuf strings.Builder
-	code := commands.RunPolicyCheck(false, []string{"--policy", pol}, &out, &errBuf)
+	code := commands.RunPolicyCheck(false, commands.ConnFlags{}, []string{"--policy", pol}, &out, &errBuf)
 	if code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}
-	if !strings.Contains(errBuf.String(), "--config is required") {
-		t.Errorf("stderr missing --config required message\n%s", errBuf.String())
+	if !strings.Contains(errBuf.String(), "one of --config or --runtime is required") {
+		t.Errorf("stderr missing config-source required message\n%s", errBuf.String())
 	}
 }
 
 func TestPolicyCheck_MissingPolicyArg(t *testing.T) {
 	cfg := writeTempFile(t, "config.json", compliantConfig)
 	var out, errBuf strings.Builder
-	code := commands.RunPolicyCheck(false, []string{"--config", cfg}, &out, &errBuf)
+	code := commands.RunPolicyCheck(false, commands.ConnFlags{}, []string{"--config", cfg}, &out, &errBuf)
 	if code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}
@@ -563,14 +563,14 @@ func TestPolicyCheck_NoUDPSpecificPolicy(t *testing.T) {
 
 func TestRunPolicy_NoSubcommand(t *testing.T) {
 	var out, errBuf strings.Builder
-	if code := commands.RunPolicy(false, nil, &out, &errBuf); code != 2 {
+	if code := commands.RunPolicy(false, commands.ConnFlags{}, nil, &out, &errBuf); code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}
 }
 
 func TestRunPolicy_Help(t *testing.T) {
 	var out, errBuf strings.Builder
-	if code := commands.RunPolicy(false, []string{"help"}, &out, &errBuf); code != 0 {
+	if code := commands.RunPolicy(false, commands.ConnFlags{}, []string{"help"}, &out, &errBuf); code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}
 	if !strings.Contains(out.String(), "policy check") {
@@ -580,7 +580,7 @@ func TestRunPolicy_Help(t *testing.T) {
 
 func TestRunPolicy_UnknownSubcommand(t *testing.T) {
 	var out, errBuf strings.Builder
-	if code := commands.RunPolicy(false, []string{"bogus"}, &out, &errBuf); code != 2 {
+	if code := commands.RunPolicy(false, commands.ConnFlags{}, []string{"bogus"}, &out, &errBuf); code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}
 }
@@ -589,7 +589,7 @@ func TestRunPolicy_DispatchesCheck(t *testing.T) {
 	cfg := writeTempFile(t, "config.json", compliantConfig)
 	pol := writeTempFile(t, "policy.json", strictPolicy)
 	var out, errBuf strings.Builder
-	code := commands.RunPolicy(false, []string{"check", "--config", cfg, "--policy", pol}, &out, &errBuf)
+	code := commands.RunPolicy(false, commands.ConnFlags{}, []string{"check", "--config", cfg, "--policy", pol}, &out, &errBuf)
 	if code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}
@@ -597,7 +597,7 @@ func TestRunPolicy_DispatchesCheck(t *testing.T) {
 
 func TestPolicyCheck_Help(t *testing.T) {
 	var out, errBuf strings.Builder
-	if code := commands.RunPolicyCheck(false, []string{"--help"}, &out, &errBuf); code != 0 {
+	if code := commands.RunPolicyCheck(false, commands.ConnFlags{}, []string{"--help"}, &out, &errBuf); code != 0 {
 		t.Errorf("exit code = %d, want 0", code)
 	}
 	if !strings.Contains(out.String(), "policy check") {
@@ -607,7 +607,7 @@ func TestPolicyCheck_Help(t *testing.T) {
 
 func TestPolicyCheck_BadFlag(t *testing.T) {
 	var out, errBuf strings.Builder
-	if code := commands.RunPolicyCheck(false, []string{"--nope"}, &out, &errBuf); code != 2 {
+	if code := commands.RunPolicyCheck(false, commands.ConnFlags{}, []string{"--nope"}, &out, &errBuf); code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
 	}
 }
@@ -618,7 +618,7 @@ func TestPolicyCheck_JSONEncodeFailure(t *testing.T) {
 	cfg := writeTempFile(t, "config.json", compliantConfig)
 	pol := writeTempFile(t, "policy.json", strictPolicy)
 	var errBuf strings.Builder
-	code := commands.RunPolicyCheck(true, []string{"--config", cfg, "--policy", pol}, failingWriter{}, &errBuf)
+	code := commands.RunPolicyCheck(true, commands.ConnFlags{}, []string{"--config", cfg, "--policy", pol}, failingWriter{}, &errBuf)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}

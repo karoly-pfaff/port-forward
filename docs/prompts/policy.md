@@ -8,7 +8,8 @@ locally.
 
 Use it with:
 
-- `portier policy check --config <file> --policy <file> --json --explain` (recommended — includes machine-readable findings and explanations)
+- `portier policy check --config <file> --policy <file> --json --explain` (offline file mode — recommended; includes machine-readable findings and explanations)
+- or `portier policy check --runtime --policy <file> --json --explain` (runtime mode — evaluates the live runtime config read-only; the report carries `"source": "runtime"`)
 - or `portier policy review --current <file> --candidate <file> --policy <file> --json --explain` (a dry-run review of a candidate config; same findings/summary/result, plus a `review` change-summary block the assistant can use for context)
 - or the contents of a report exported with `--out <file>` (same JSON shape; add `--explain` to include explanations)
 - or the human output of `portier policy check ... --explain`

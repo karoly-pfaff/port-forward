@@ -21,7 +21,7 @@ const exposedConfig = `[
 func runPolicyExplain(t *testing.T, jsonOutput bool, cfg, pol string) (string, string, int) {
 	t.Helper()
 	var out, errBuf strings.Builder
-	code := commands.RunPolicyCheck(jsonOutput, []string{"--config", cfg, "--policy", pol, "--explain"}, &out, &errBuf)
+	code := commands.RunPolicyCheck(jsonOutput, commands.ConnFlags{}, []string{"--config", cfg, "--policy", pol, "--explain"}, &out, &errBuf)
 	return out.String(), errBuf.String(), code
 }
 
@@ -82,7 +82,7 @@ func TestPolicyCheck_ExplainOmittedWithoutFlag(t *testing.T) {
 	cfg := writeTempFile(t, "config.json", exposedConfig)
 	pol := writeTempFile(t, "policy.json", `{"schemaVersion": 1, "rules": {"allowLanExposure": false}}`)
 	var out, errBuf strings.Builder
-	commands.RunPolicyCheck(true, []string{"--config", cfg, "--policy", pol}, &out, &errBuf)
+	commands.RunPolicyCheck(true, commands.ConnFlags{}, []string{"--config", cfg, "--policy", pol}, &out, &errBuf)
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(out.String()), &raw); err != nil {
 		t.Fatalf("decoding JSON: %v", err)
