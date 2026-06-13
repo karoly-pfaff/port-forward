@@ -34,6 +34,7 @@ Examples:
   portier explain rules.health_error
   portier explain policy.lan_exposure_forbidden
   portier explain workflow.step.unknown_report_from
+  portier explain workflow.run.dependency_failed
   portier --json explain runtime.unreachable
   portier explain --list
 `

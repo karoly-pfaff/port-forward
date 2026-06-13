@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"portier/cli/sources/config"
+	"portier/cli/sources/explain"
 	"portier/cli/sources/output"
 	"portier/cli/sources/policy"
 )
@@ -61,6 +62,12 @@ type WorkflowRunStep struct {
 	ExitCode int    `json:"exitCode"`
 	Message  string `json:"message"`
 	Report   any    `json:"report,omitempty"`
+
+	// explainCodes are the codes worth explaining for this step under --explain: a
+	// workflow.run.* failure/skip code and/or the policy finding codes of a failed
+	// step. Unexported: it drives --explain rendering only and is NOT part of the
+	// JSON contract (the additive top-level "explanations" map carries the data).
+	explainCodes []string
 }
 
 // WorkflowRunSummary counts the steps in a run by status.
@@ -90,12 +97,13 @@ type WorkflowRun struct {
 // stepOutcome is the internal result of executing one step before it is folded
 // into a WorkflowRunStep + the run tally.
 type stepOutcome struct {
-	status      string
-	exitCode    int
-	message     string
-	report      any            // the per-step Report field (nil when none)
-	snapshot    *policy.Report // produced report for a later reportFrom (nil when none)
-	unreachable bool           // runtime was unreachable
+	status       string
+	exitCode     int
+	message      string
+	report       any            // the per-step Report field (nil when none)
+	snapshot     *policy.Report // produced report for a later reportFrom (nil when none)
+	unreachable  bool           // runtime was unreachable
+	explainCodes []string       // codes to explain for this step under --explain
 }
 
 // Run executes a valid workflow's steps in order and returns a deterministic run
@@ -113,12 +121,13 @@ func Run(f File, deps RunDeps) WorkflowRun {
 	for i, s := range f.Steps {
 		out := executeStep(s, deps, reports)
 		run.Steps[i] = WorkflowRunStep{
-			ID:       s.ID,
-			Type:     s.Type,
-			Status:   out.status,
-			ExitCode: out.exitCode,
-			Message:  out.message,
-			Report:   out.report,
+			ID:           s.ID,
+			Type:         s.Type,
+			Status:       out.status,
+			ExitCode:     out.exitCode,
+			Message:      out.message,
+			Report:       out.report,
+			explainCodes: out.explainCodes,
 		}
 		if out.snapshot != nil {
 			reports[s.ID] = out.snapshot
@@ -167,26 +176,30 @@ func execPolicyCheck(s Step, deps RunDeps) stepOutcome {
 	if s.Runtime {
 		r, err := deps.RuntimeRules()
 		if err != nil {
-			out := failOutcome(fmt.Sprintf("Runtime config could not be read: %v", err))
-			out.unreachable = errors.Is(err, ErrRuntimeUnreachable)
-			return out
+			if errors.Is(err, ErrRuntimeUnreachable) {
+				out := failOutcome(fmt.Sprintf("Runtime config could not be read: %v", err))
+				out.unreachable = true
+				out.explainCodes = []string{runCodeRuntimeUnreachable}
+				return out
+			}
+			return failInputOutcome(fmt.Sprintf("Runtime config could not be read: %v", err))
 		}
 		rules = r
 	} else {
 		data, err := deps.ReadFile(s.Config)
 		if err != nil {
-			return failOutcome(fmt.Sprintf("Error reading config %s: %v", s.Config, err))
+			return failInputOutcome(fmt.Sprintf("Error reading config %s: %v", s.Config, err))
 		}
 		parsed, perr := config.ParseLocal(data)
 		if perr != nil {
-			return failOutcome(fmt.Sprintf("Invalid config %s: %v", s.Config, perr))
+			return failInputOutcome(fmt.Sprintf("Invalid config %s: %v", s.Config, perr))
 		}
 		rules = parsed
 	}
 
 	pol, err := loadPolicy(s.Policy, deps)
 	if err != nil {
-		return failOutcome(err.Error())
+		return failInputOutcome(err.Error())
 	}
 
 	rep := policy.Evaluate(rules, pol)
@@ -198,15 +211,15 @@ func execPolicyCheck(s Step, deps RunDeps) stepOutcome {
 func execPolicyReview(s Step, deps RunDeps) stepOutcome {
 	current, err := loadRules(s.Current, "current config", deps)
 	if err != nil {
-		return failOutcome(err.Error())
+		return failInputOutcome(err.Error())
 	}
 	candidate, err := loadRules(s.Candidate, "candidate config", deps)
 	if err != nil {
-		return failOutcome(err.Error())
+		return failInputOutcome(err.Error())
 	}
 	pol, err := loadPolicy(s.Policy, deps)
 	if err != nil {
-		return failOutcome(err.Error())
+		return failInputOutcome(err.Error())
 	}
 
 	review := policy.BuildReview(current, candidate, pol)
@@ -220,6 +233,7 @@ func execPolicyReview(s Step, deps RunDeps) stepOutcome {
 		out.status = runStatusFailed
 		out.exitCode = 1
 		out.message = fmt.Sprintf("Policy review found %d %s in the candidate.", n, output.PluralWord(n, "violation", "violations"))
+		out.explainCodes = errorFindingCodes(review.Report)
 	}
 	return out
 }
@@ -234,33 +248,33 @@ func execBaselineCompare(s Step, deps RunDeps, reports map[string]*policy.Report
 	if s.Report != "" {
 		data, err := deps.ReadFile(s.Report)
 		if err != nil {
-			return failOutcome(fmt.Sprintf("Error reading report %s: %v", s.Report, err))
+			return failInputOutcome(fmt.Sprintf("Error reading report %s: %v", s.Report, err))
 		}
 		sn, serr := policy.ParseReportSnapshot(data)
 		if serr != nil {
-			return failOutcome(fmt.Sprintf("Invalid report %s: %v", s.Report, serr))
+			return failInputOutcome(fmt.Sprintf("Invalid report %s: %v", s.Report, serr))
 		}
 		snap = sn
 	} else {
 		producing := reports[s.ReportFrom]
 		if producing == nil {
-			return skipOutcome(fmt.Sprintf("Skipped: depends on step %q, which produced no policy report.", s.ReportFrom))
+			return skipDependencyOutcome(fmt.Sprintf("Skipped: depends on step %q, which produced no policy report.", s.ReportFrom))
 		}
 		sn, err := snapshotFromReport(*producing)
 		if err != nil {
 			// Unreachable in practice (a concrete report always marshals).
-			return failOutcome(fmt.Sprintf("Could not use the report from step %q: %v", s.ReportFrom, err))
+			return failInputOutcome(fmt.Sprintf("Could not use the report from step %q: %v", s.ReportFrom, err))
 		}
 		snap = sn
 	}
 
 	data, err := deps.ReadFile(s.Baseline)
 	if err != nil {
-		return failOutcome(fmt.Sprintf("Error reading baseline %s: %v", s.Baseline, err))
+		return failInputOutcome(fmt.Sprintf("Error reading baseline %s: %v", s.Baseline, err))
 	}
 	baseline, berr := policy.ParseBaseline(data)
 	if berr != nil {
-		return failOutcome(fmt.Sprintf("Invalid baseline %s: %v", s.Baseline, berr))
+		return failInputOutcome(fmt.Sprintf("Invalid baseline %s: %v", s.Baseline, berr))
 	}
 
 	cmp := policy.Compare(baseline, snap)
@@ -274,6 +288,7 @@ func execBaselineCompare(s Step, deps RunDeps, reports map[string]*policy.Report
 		out.status = runStatusFailed
 		out.exitCode = 1
 		out.message = fmt.Sprintf("%d new %s compared to the baseline.", n, output.PluralWord(n, "finding", "findings"))
+		out.explainCodes = newFindingCodes(cmp)
 	}
 	return out
 }
@@ -292,6 +307,7 @@ func policyReportOutcome(rep policy.Report, label string) stepOutcome {
 		out.status = runStatusFailed
 		out.exitCode = 1
 		out.message = fmt.Sprintf("%s found %d %s.", label, n, output.PluralWord(n, "violation", "violations"))
+		out.explainCodes = errorFindingCodes(rep)
 	}
 	return out
 }
@@ -341,10 +357,28 @@ func failOutcome(message string) stepOutcome {
 	return stepOutcome{status: runStatusFailed, exitCode: 1, message: message}
 }
 
+// failInputOutcome builds a failed step outcome for an unreadable/malformed step
+// input (config/policy/baseline/report file, or the runtime config), tagging it
+// with the workflow.run.input_failed explanation code.
+func failInputOutcome(message string) stepOutcome {
+	out := failOutcome(message)
+	out.explainCodes = []string{runCodeInputFailed}
+	return out
+}
+
 // skipOutcome builds a skipped step outcome. A skip fails the overall run, so its
 // exit code is 1 (it did not succeed).
 func skipOutcome(message string) stepOutcome {
 	return stepOutcome{status: runStatusSkipped, exitCode: 1, message: message}
+}
+
+// skipDependencyOutcome builds a skipped step outcome for a reportFrom dependency
+// that produced no usable report, tagging it with the
+// workflow.run.dependency_failed explanation code.
+func skipDependencyOutcome(message string) stepOutcome {
+	out := skipOutcome(message)
+	out.explainCodes = []string{runCodeDependencyFailed}
+	return out
 }
 
 // RunExitCode maps a run to a CLI exit code: 3 when a runtime step could not reach
@@ -373,8 +407,12 @@ func runStatusTag(status string) string {
 }
 
 // PrintRunHuman renders a workflow run as a deterministic, human-readable list of
-// step results ending in a summary and Result line.
-func PrintRunHuman(run WorkflowRun, w io.Writer) {
+// step results ending in a summary and Result line. When withExplain is set, each
+// FAILED or SKIPPED step is followed by inline explanation blocks (code, meaning,
+// next action) for its codes — a workflow.run.* failure/skip code and/or the
+// policy finding codes that failed it. Passed steps are never explained (a passed
+// step needs no explanation), so passed-only runs stay quiet under --explain.
+func PrintRunHuman(run WorkflowRun, withExplain bool, w io.Writer) {
 	fmt.Fprintln(w, "Portier Workflow Run")
 	fmt.Fprintln(w)
 	name := run.Workflow
@@ -383,6 +421,7 @@ func PrintRunHuman(run WorkflowRun, w io.Writer) {
 	}
 	fmt.Fprintf(w, "Workflow: %s\n\n", name)
 
+	reg := runExplainRegistry()
 	for _, s := range run.Steps {
 		label := s.ID
 		typeLabel := s.Type
@@ -391,6 +430,11 @@ func PrintRunHuman(run WorkflowRun, w io.Writer) {
 		}
 		fmt.Fprintf(w, "%-9s %s  (%s)\n", runStatusTag(s.Status), label, typeLabel)
 		fmt.Fprintf(w, "          %s\n", s.Message)
+		if withExplain && s.Status != runStatusPassed {
+			for _, code := range dedupeStrings(s.explainCodes) {
+				explain.PrintInline(reg, code, w)
+			}
+		}
 		fmt.Fprintln(w)
 	}
 
@@ -402,24 +446,43 @@ func PrintRunHuman(run WorkflowRun, w io.Writer) {
 	fmt.Fprintf(w, "\nResult: %s\n", run.Result)
 }
 
+// runJSON is the JSON encoding of a workflow run plus an optional additive
+// explanations map. WorkflowRun is embedded so workflow/steps/summary/result stay
+// at the top level; Explanations is populated ONLY with --explain (and only for
+// the codes the run emitted that need explaining). It is omitempty, so without
+// --explain — and when --explain emits no explainable codes — the output is
+// byte-identical to encoding the WorkflowRun directly.
+type runJSON struct {
+	WorkflowRun
+	Explanations map[string]explain.Explanation `json:"explanations,omitempty"`
+}
+
 // EmitRun prints a run report (JSON when jsonOutput is set, otherwise human) and,
 // when outPath is non-empty, also writes the exact same JSON report to that file
-// (byte-identical to the --json stdout output). It returns the run's exit code,
-// except that a JSON-encode or file-write failure overrides it with 1 (an
-// operation failure). It never mutates the workflow file and never contacts the
-// runtime (the run already happened).
-func EmitRun(run WorkflowRun, jsonOutput bool, outPath string, stdout, stderr io.Writer) int {
+// (byte-identical to the --json stdout output). With explain it adds inline
+// explanations (human blocks under failed/skipped steps; an additive
+// `explanations` map in JSON, deduplicated by code) — WITHOUT changing the steps,
+// summary, result, or exit code. It returns the run's exit code, except that a
+// JSON-encode or file-write failure overrides it with 1 (an operation failure). It
+// never mutates the workflow file and never contacts the runtime (the run already
+// happened).
+func EmitRun(run WorkflowRun, jsonOutput, explainOut bool, outPath string, stdout, stderr io.Writer) int {
+	payload := runJSON{WorkflowRun: run}
+	if explainOut {
+		payload.Explanations = explain.ForReport(runExplainRegistry(), ExplanationCodesForRun(run))
+	}
+
 	if jsonOutput {
-		if err := output.PrintJSON(stdout, run); err != nil {
+		if err := output.PrintJSON(stdout, payload); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
 	} else {
-		PrintRunHuman(run, stdout)
+		PrintRunHuman(run, explainOut, stdout)
 	}
 
 	if outPath != "" {
-		if err := output.WritePrettyJSON(outPath, run); err != nil {
+		if err := output.WritePrettyJSON(outPath, payload); err != nil {
 			fmt.Fprintf(stderr, "Error writing %s: %v\n", outPath, err)
 			return 1
 		}

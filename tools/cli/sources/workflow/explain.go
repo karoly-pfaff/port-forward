@@ -126,9 +126,11 @@ var explanations = map[string]explain.Explanation{
 	},
 }
 
-// Explanations returns the workflow explanation registry. The `explain` command
-// merges this with other domains' registries (doctor, policy) for unified lookup
-// and listing.
+// Explanations returns the full workflow explanation registry — the
+// workflow.step.* plan-validation codes merged with the workflow.run.* execution
+// codes (RunExplanations). The `explain` command merges this with other domains'
+// registries (doctor, policy) for unified lookup and listing, so `explain <code>`
+// and `explain --list` cover both workflow code families.
 func Explanations() map[string]explain.Explanation {
-	return explanations
+	return explain.Merge(explanations, runExplanations)
 }

@@ -519,7 +519,7 @@ portier explain <code> [--json]
 portier explain --list [--json]
 ```
 
-Covers all 41 stable codes: the 8 config-doctor codes and 12 live-doctor codes emitted by `portier config doctor` / `portier doctor`, the 6 policy finding codes emitted by `portier policy check` (`policy.valid`, `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`), and the 15 workflow step-validation codes emitted by `portier workflow plan` (`workflow.step.valid` plus the 14 invalid-step codes such as `workflow.step.unknown_report_from` and `workflow.step.conflicting_config_sources`). Human output:
+Covers all 44 stable codes: the 8 config-doctor codes and 12 live-doctor codes emitted by `portier config doctor` / `portier doctor`, the 6 policy finding codes emitted by `portier policy check` (`policy.valid`, `policy.group_required`, `policy.lan_exposure_forbidden`, `policy.privileged_port_forbidden`, `policy.autostart_forbidden`, `policy.duplicate_binding_forbidden`), the 15 workflow step-validation codes emitted by `portier workflow plan` (`workflow.step.valid` plus the 14 invalid-step codes such as `workflow.step.unknown_report_from` and `workflow.step.conflicting_config_sources`), and the 3 workflow-run codes emitted by `portier workflow run` (`workflow.run.dependency_failed`, `workflow.run.runtime_unreachable`, `workflow.run.input_failed`). Human output:
 
 ```
 config.duplicate_binding
@@ -799,7 +799,7 @@ Exit codes: `0` the workflow plan is valid; `1` the workflow parsed but the plan
 Execute a **valid** workflow's steps in order and print a deterministic run report. Execution is strictly **read-only**: it runs only the existing safe step types by calling the policy evaluator/review/baseline-compare directly. It **never** runs a shell command (or the runbook display text), applies/imports configs, enforces a policy, schedules anything, or mutates the runtime/config/policy/baseline/report files. The only runtime contact is a read-only runtime-config read for a `policy.check` runtime step.
 
 ```
-portier workflow run --file <workflow.json> [--json] [--out <file>]
+portier workflow run --file <workflow.json> [--json] [--explain] [--out <file>]
 ```
 
 Step execution and status:
@@ -818,9 +818,11 @@ Human output tags each step `[PASSED]`/`[FAILED]`/`[SKIPPED]` and ends in `Resul
 
 If the workflow is **invalid**, `workflow run` prints the plan (the validation errors) and exits `1` — exactly like `workflow plan`/`runbook` — and runs **no step** and writes **no `--out` file**.
 
+**`--explain`** adds an inline explanation (code, meaning, next action, related codes) for each **failed or skipped** step, reusing the same registry as `portier explain`. A failed `policy.check`/`policy.review` explains the **policy finding codes** it produced; a failed `policy.baseline.compare` explains the **underlying new-finding codes**; a step skipped because its `reportFrom` dependency produced no report explains **`workflow.run.dependency_failed`**; a runtime step that can't reach the runtime explains **`workflow.run.runtime_unreachable`**; an unreadable/malformed referenced input (config/policy/baseline/report file, or the runtime config) explains **`workflow.run.input_failed`**. **Passed steps are never explained.** In human output each failed/skipped step is followed by an indented `Code:`/`Meaning:`/`What to do:` block; in `--json` an additive top-level `explanations` map (`code → { title, meaning, action, ... }`, deduplicated) is added — populated **only** with `--explain` (and omitted entirely when a run emits no explainable codes, e.g. an all-passed run). `--explain` does **not** change the steps, summary, result, or exit code — without it the JSON is byte-identical to before, and `--json --out --explain` keeps stdout/file byte-identical. Use `portier explain <code>` to look up any code (including the three `workflow.run.*` codes) directly.
+
 Exit codes: `0` all executed steps passed (none skipped); `1` one or more steps failed or were skipped, the workflow plan was invalid, or an `--out` write failure; `2` missing/invalid arguments (including a missing `--file`/`--out` value), or an unreadable/malformed workflow file; `3` a `policy.check` runtime step could not reach the runtime (matching `policy check --runtime`). A referenced file that is unreadable/malformed during the run is a **step failure** (exit 1), not a usage error.
 
-> `workflow run` is **read-only execution** — it evaluates policies and compares baselines but never changes anything (no apply/import, no enforcement, no shell commands, no scheduling). `--explain` is not supported for `workflow run` yet.
+> `workflow run` is **read-only execution** — it evaluates policies and compares baselines but never changes anything (no apply/import, no enforcement, no shell commands, no scheduling). `--explain` adds explanation text only; it never changes which steps run or the exit code.
 
 ### `portier workflow runbook --file <workflow.json>`
 

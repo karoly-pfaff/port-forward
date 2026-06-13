@@ -167,8 +167,8 @@ func TestExplain_ListJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &list); err != nil {
 		t.Fatalf("decoding JSON list: %v\noutput:\n%s", err, out.String())
 	}
-	if len(list) != 41 {
-		t.Errorf("list length = %d, want 41 (8 config doctor + 12 live doctor + 6 policy + 15 workflow)", len(list))
+	if len(list) != 44 {
+		t.Errorf("list length = %d, want 44 (8 config doctor + 12 live doctor + 6 policy + 15 workflow step + 3 workflow run)", len(list))
 	}
 	// Sorted by code.
 	for i := 1; i < len(list); i++ {

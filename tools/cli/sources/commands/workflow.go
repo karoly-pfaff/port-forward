@@ -51,9 +51,16 @@ files (config/policy/baseline/report) are read HERE (during the run), unlike
 
 Options:
   --file <file>   Path to the workflow JSON file (required).
-  --out <file>    Also write the JSON run report to <file> (same shape as --json).
-                  With --json the JSON also prints to stdout and is byte-identical
-                  to the file.
+  --explain       Show an explanation (meaning + next action) for each FAILED or
+                  SKIPPED step — its policy finding codes and/or a workflow.run.*
+                  failure code (inline in human output; an additive explanations
+                  map in --json). Passed steps are not explained. Does not change
+                  the steps, summary, result, or exit code. Use
+                  'portier explain <code>' for any code.
+  --out <file>    Also write the JSON run report to <file> (same shape as --json,
+                  including the additive explanations map under --explain). With
+                  --json the JSON also prints to stdout and is byte-identical to
+                  the file.
 
 Step execution (read-only):
   policy.check              Evaluate a local config (offline) or the live runtime
@@ -81,6 +88,7 @@ Exit codes:
 Examples:
   portier workflow run --file workflow.json
   portier --json workflow run --file workflow.json
+  portier workflow run --file workflow.json --explain
   portier workflow run --file workflow.json --out report.json
 `
 
@@ -495,8 +503,11 @@ func makeRuntimeRules(conn ConnFlags) func() ([]config.Rule, error) {
 // read-only steps in order, printing a deterministic run report. Execution never
 // runs a shell command, never mutates any file, never applies/imports configs or
 // enforces a policy, and contacts the runtime only (read-only) for a policy.check
-// runtime step. If the workflow is invalid it prints the plan and exits 1 with no
-// step run and no --out file (like `workflow plan`/`runbook`). Exit codes: 0 all
+// runtime step. With --explain it adds inline explanations (human) / an additive
+// explanations map (JSON) for each failed/skipped step's codes, without changing
+// the steps, summary, result, or exit code. If the workflow is invalid it prints
+// the plan and exits 1 with no step run and no --out file (like
+// `workflow plan`/`runbook`). Exit codes: 0 all
 // steps passed; 1 a step failed/was skipped, the plan was invalid, or an --out
 // write failure; 2 usage error (including a missing --file/--out value) or an
 // unreadable/malformed workflow file; 3 a runtime step could not reach the runtime.
@@ -504,6 +515,7 @@ func RunWorkflowRun(jsonOutput bool, conn ConnFlags, args []string, stdout, stde
 	fs := flag.NewFlagSet("workflow run", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	flagFile := fs.String("file", "", "path to the workflow JSON file")
+	flagExplain := fs.Bool("explain", false, "explain each failed/skipped step's codes")
 	flagOut := fs.String("out", "", "also write the JSON run report to this file")
 
 	if err := fs.Parse(args); err != nil {
@@ -533,10 +545,12 @@ func RunWorkflowRun(jsonOutput bool, conn ConnFlags, args []string, stdout, stde
 	}
 
 	// A workflow runs only from a VALID plan. If invalid, print the plan (the
-	// validation errors) and exit 1 — no step runs, no --out file is written.
+	// validation errors) and exit 1 — no step runs, no --out file is written. With
+	// --explain the plan emitter explains the invalid step codes (reusing the
+	// workflow plan explanations).
 	plan := workflow.BuildPlan(file)
 	if workflow.PlanExitCode(plan) != 0 {
-		return workflow.Emit(plan, workflow.EmitOptions{JSON: jsonOutput}, stdout, stderr)
+		return workflow.Emit(plan, workflow.EmitOptions{JSON: jsonOutput, Explain: *flagExplain}, stdout, stderr)
 	}
 
 	deps := workflow.RunDeps{
@@ -544,5 +558,5 @@ func RunWorkflowRun(jsonOutput bool, conn ConnFlags, args []string, stdout, stde
 		RuntimeRules: makeRuntimeRules(conn),
 	}
 	run := workflow.Run(file, deps)
-	return workflow.EmitRun(run, jsonOutput, *flagOut, stdout, stderr)
+	return workflow.EmitRun(run, jsonOutput, *flagExplain, *flagOut, stdout, stderr)
 }

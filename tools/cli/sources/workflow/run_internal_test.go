@@ -306,7 +306,7 @@ func TestPrintRunHuman_Shape(t *testing.T) {
 	deps := fakeDeps(map[string]string{"cfg.json": cleanCfg, "pol.json": strictPol}, nil, nil)
 	run := runFrom(t, `{"schemaVersion":1,"name":"demo","steps":[{"id":"c","type":"policy.check","config":"cfg.json","policy":"pol.json"}]}`, deps)
 	var sb strings.Builder
-	PrintRunHuman(run, &sb)
+	PrintRunHuman(run, false, &sb)
 	out := sb.String()
 	for _, want := range []string{"Portier Workflow Run", "Workflow: demo", "[PASSED]", "c  (policy.check)", "1 total", "1 passed", "Result: passed"} {
 		if !strings.Contains(out, want) {
@@ -319,7 +319,7 @@ func TestPrintRunHuman_Unnamed(t *testing.T) {
 	deps := fakeDeps(map[string]string{"cfg.json": cleanCfg, "pol.json": strictPol}, nil, nil)
 	run := runFrom(t, `{"schemaVersion":1,"steps":[{"id":"c","type":"policy.check","config":"cfg.json","policy":"pol.json"}]}`, deps)
 	var sb strings.Builder
-	PrintRunHuman(run, &sb)
+	PrintRunHuman(run, false, &sb)
 	if !strings.Contains(sb.String(), "Workflow: (unnamed)") {
 		t.Errorf("missing unnamed placeholder:\n%s", sb.String())
 	}
