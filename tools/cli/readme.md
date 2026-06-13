@@ -852,6 +852,32 @@ Exit codes: `0` the workflow is valid and a runbook was produced; `1` the workfl
 
 > The runbook is a **preview only** — Portier does not run the listed commands. Workflow execution is deferred to a later v1.11 slice.
 
+### `portier workflow report --from <report.json> --out <directory>`
+
+Package an **existing** workflow plan/run JSON report (from `workflow plan --json --out` or `workflow run --json --out`) into a small, local diagnostic **bundle** for manual review or AI handoff. This is a **packaging step only** — fully **offline** and read-only. It NEVER executes a workflow, runs a shell command, contacts the runtime, reads the config/policy/baseline/report files a step refers to, collects logs/environment/process data, mutates the input report, or uploads anything. It only parses the provided report and re-derives explanation metadata from the canonical registry.
+
+```
+portier workflow run --file workflow.json --json --out run.json
+portier workflow report --from run.json --out ./workflow-report
+```
+
+The bundle directory contains:
+
+| File | Contents |
+| --- | --- |
+| `manifest.json` | Bundle metadata: schema version, RFC3339 `createdAt`, `source` (`workflow-run`/`workflow-plan`), workflow, result, and the file list. |
+| `summary.txt` | Human summary: source, workflow, result, the step list (`[PASSED]`/`[FAILED]`/`[SKIPPED]`/`[VALID]`/`[INVALID]`), the explained codes, and a fixed **safety block** documenting what was and was not collected. |
+| `report.json` | The **normalized** report — each step's id/type/status/message plus the explainable codes for that step. It deliberately **drops** each run step's embedded policy/compare report, so no rule host/port detail or config payload is carried. |
+| `explanations.json` | Canonical explanations (`code → { title, meaning, action, severity, related }`) for the emitted codes — an empty object `{}` when there are none, for a stable bundle shape. |
+
+Explanations are re-derived from the report using the same registry as `portier explain`: `workflow.step.*` codes for an invalid plan, `workflow.run.dependency_failed` for a skipped run step, the `policy.*` finding codes embedded in failed run steps, and any codes already carried by a `--explain` report's `explanations` map (e.g. `workflow.run.runtime_unreachable`/`workflow.run.input_failed`). Codes are deduplicated and unknown codes are dropped.
+
+`--json` prints the manifest to stdout instead of the human confirmation. The `--out` directory is created if missing; an existing **non-empty** directory is refused (matching `portier support-bundle`) and unrelated files are never touched.
+
+Exit codes: `0` the bundle was written; `1` an output directory create/write failure; `2` missing/invalid arguments (including a missing `--from`/`--out` value) or an unreadable/malformed/unsupported input report. There is **no** connection-failure (`3`) code — the command never contacts the runtime.
+
+> The report bundle is generated from an **existing** report — `workflow report` never re-runs the workflow or reads the files a step referenced. For AI handoff, pair it with the docs-only prompt in [`docs/prompts/workflow.md`](../../docs/prompts/workflow.md): paste `summary.txt`, `report.json`, and `explanations.json`. **Portier never sends anything anywhere** (no AI integration, upload, or telemetry).
+
 ### `portier workflow template <name>` / `--list`
 
 Print a built-in **workflow template** (or list the available ones) so you don't have to write the workflow JSON schema by hand. Fully **offline** — never contacts the runtime, never executes a step, never reads referenced workflow input files, and never modifies any file except the requested `--out` file. A rendered template is a complete workflow file (`schemaVersion: 1`) that can be passed straight to `portier workflow plan --file <file>`.

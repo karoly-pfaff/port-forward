@@ -353,6 +353,22 @@ func TestRun_WorkflowRunbookDispatch(t *testing.T) {
 	}
 }
 
+func TestRun_WorkflowReportDispatch(t *testing.T) {
+	// workflow report is fully offline — it packages an existing report file, so
+	// an invalid --url is ignored. Packaging a valid run report exits 0.
+	dir := t.TempDir()
+	from := filepath.Join(dir, "run.json")
+	report := `{"workflow":"d","steps":[{"id":"c","type":"policy.check","status":"passed","exitCode":0,"message":"ok"}],"summary":{"total":1,"passed":1,"failed":0,"skipped":0},"result":"passed"}`
+	if err := os.WriteFile(from, []byte(report), 0o644); err != nil {
+		t.Fatalf("writing temp report: %v", err)
+	}
+	out := filepath.Join(dir, "bundle")
+	code := run([]string{"--url", "ftp://bad-scheme", "workflow", "report", "--from", from, "--out", out})
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
 func TestRun_WorkflowTemplateDispatch(t *testing.T) {
 	// workflow template is fully offline — no server needed, an invalid --url is
 	// ignored. Rendering a built-in template exits 0.

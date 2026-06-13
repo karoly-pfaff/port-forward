@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"portier/cli/sources/client"
 	"portier/cli/sources/config"
@@ -27,11 +28,56 @@ Subcommands:
   plan --file <workflow.json>     Validate a workflow file and print its plan
   run --file <workflow.json>      Execute a valid workflow's read-only steps
   runbook --file <workflow.json>  Preview the CLI commands a valid workflow maps to
+  report --from <report.json>     Package an existing plan/run report into a bundle
   template <name> | --list        Print a built-in workflow template, or list them
   help                            Show this help message
 
 Run 'portier workflow plan --help', 'portier workflow run --help',
-'portier workflow runbook --help', or 'portier workflow template --help' for options.
+'portier workflow runbook --help', 'portier workflow report --help', or
+'portier workflow template --help' for options.
+`
+
+const workflowReportHelp = `Usage: portier workflow report --from <report.json> --out <directory>
+
+Package an EXISTING workflow report into a small, local diagnostic bundle for
+manual review or AI handoff. The input is a JSON report produced by
+'portier workflow plan --json --out <file>' or
+'portier workflow run --json --out <file>'.
+
+This is a packaging step only — it is fully offline and read-only. It NEVER
+executes a workflow, runs a shell command, contacts the runtime, reads the
+config/policy/baseline/report files a step refers to, collects logs/environment/
+process data, mutates the input report, or uploads anything. It only parses the
+provided report and re-derives explanation metadata from the canonical registry.
+
+Options:
+  --from <file>   Path to an existing workflow plan/run JSON report (required).
+  --out <dir>     Output directory for the bundle (required). Created if missing;
+                  an existing directory must be empty (a non-empty directory is
+                  refused, matching 'portier support-bundle').
+
+Bundle contents:
+  manifest.json        Bundle metadata (schema version, time, source, workflow, result, files).
+  summary.txt          Human-readable summary (source, workflow, result, steps, explained codes, safety).
+  report.json          The normalized report (step id/type/status/message + the explainable codes per step).
+  explanations.json    Canonical explanations for the emitted codes ({} when none).
+
+Explanations are re-derived from the report: workflow.step.* codes for an invalid
+plan, workflow.run.* codes for failed/skipped run steps (a skipped step →
+workflow.run.dependency_failed), and policy.* codes for the findings embedded in
+failed run steps; any codes carried by a --explain report's explanations map are
+also included. The bundle never includes raw configs, secrets, or runtime data.
+
+Exit codes:
+  0  Bundle written
+  1  Output directory create/write failure
+  2  Missing/invalid arguments (including a missing --from/--out value), or an
+     unreadable/malformed/unsupported input report
+
+Examples:
+  portier workflow run --file workflow.json --json --out run.json
+  portier workflow report --from run.json --out ./workflow-report
+  portier --json workflow report --from run.json --out ./workflow-report
 `
 
 const workflowRunHelp = `Usage: portier workflow run --file <workflow.json> [--out <file>]
@@ -250,6 +296,8 @@ func RunWorkflow(jsonOutput bool, conn ConnFlags, args []string, stdout, stderr 
 		return RunWorkflowTemplate(jsonOutput, args[1:], stdout, stderr)
 	case "runbook":
 		return RunWorkflowRunbook(jsonOutput, args[1:], stdout, stderr)
+	case "report":
+		return RunWorkflowReport(jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, workflowHelp)
 		return 0
@@ -559,4 +607,79 @@ func RunWorkflowRun(jsonOutput bool, conn ConnFlags, args []string, stdout, stde
 	}
 	run := workflow.Run(file, deps)
 	return workflow.EmitRun(run, jsonOutput, *flagExplain, *flagOut, stdout, stderr)
+}
+
+// RunWorkflowReport packages an EXISTING workflow plan/run JSON report into a
+// local diagnostic bundle directory. It is fully offline and read-only: it parses
+// ONLY the provided report, and never executes a workflow, runs a shell command,
+// contacts the runtime, reads the config/policy/baseline/report files a step
+// refers to, collects logs/env/process data, mutates the input, or uploads
+// anything. The bundle assembly lives in the `workflow` package (handlers-only
+// here). Exit codes: 0 = bundle written, 1 = output directory create/write
+// failure, 2 = usage error (including a missing --from/--out value) or an
+// unreadable/malformed/unsupported input report.
+func RunWorkflowReport(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("workflow report", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagFrom := fs.String("from", "", "path to an existing workflow plan/run JSON report")
+	flagOut := fs.String("out", "", "output directory for the report bundle")
+
+	if err := fs.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			fmt.Fprint(stdout, workflowReportHelp)
+			return 0
+		}
+		fmt.Fprintf(stderr, "Error: %v\n\n", err)
+		fmt.Fprint(stderr, workflowReportHelp)
+		return 2
+	}
+	if *flagFrom == "" {
+		fmt.Fprintln(stderr, "Error: --from is required")
+		fmt.Fprint(stderr, workflowReportHelp)
+		return 2
+	}
+	if *flagOut == "" {
+		fmt.Fprintln(stderr, "Error: --out is required")
+		fmt.Fprint(stderr, workflowReportHelp)
+		return 2
+	}
+
+	data, err := os.ReadFile(*flagFrom)
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading report %s: %v\n", *flagFrom, err)
+		return 2
+	}
+	report, parseErr := workflow.ParseSupportReport(data)
+	if parseErr != nil {
+		fmt.Fprintf(stderr, "Error: invalid report %s: %v\n", *flagFrom, parseErr)
+		return 2
+	}
+
+	// Prepare the output directory (create if missing, refuse a non-empty
+	// directory) — same convention as `portier support-bundle`.
+	if err := prepareBundleDir(*flagOut); err != nil {
+		fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 1
+	}
+
+	manifest, err := workflow.WriteSupportReport(*flagOut, report, time.Now())
+	if err != nil {
+		fmt.Fprintf(stderr, "Error writing report bundle: %v\n", err)
+		return 1
+	}
+
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, manifest); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
+	total := len(manifest.Files) + 1 // + manifest.json
+	fmt.Fprintf(stdout, "Workflow report written to %s\n", *flagOut)
+	fmt.Fprintf(stdout, "  %d %s\n", total, output.PluralWord(total, "file", "files"))
+	fmt.Fprintf(stdout, "  Source: %s\n", manifest.Source)
+	fmt.Fprintf(stdout, "  Result: %s\n", manifest.Result)
+	return 0
 }
