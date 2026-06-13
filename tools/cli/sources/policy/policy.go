@@ -344,11 +344,12 @@ type reportJSON struct {
 }
 
 // EmitOptions groups the presentation flags for a policy report. They affect
-// ONLY how the report is rendered — never the findings, summary, result, or exit
-// code.
+// ONLY how the report is rendered/exported — never the findings, summary, result,
+// or exit code. OutPath, when non-empty, also writes the JSON report to that file.
 type EmitOptions struct {
 	Explain bool
 	JSON    bool
+	OutPath string
 }
 
 // codesOf returns the finding codes of a report, in order.
@@ -360,24 +361,42 @@ func codesOf(r Report) []string {
 	return codes
 }
 
-// Emit prints a policy report (JSON when opts.JSON is set, otherwise human) and
-// returns its exit code. With opts.Explain it adds inline explanations (human
-// blocks; an additive `explanations` map in JSON, deduplicated by code) for the
-// finding codes present in the report — without changing findings, summary,
-// result, or the exit code. A JSON-encode failure overrides the exit code with 1.
+// Emit prints a policy report (JSON when opts.JSON is set, otherwise human) and,
+// when opts.OutPath is non-empty, also writes the exact same JSON report to that
+// file (the same `{findings, summary, result}` shape as --json, plus the additive
+// `explanations` map under --explain). With opts.Explain it adds inline
+// explanations (human blocks; an additive `explanations` map in JSON, deduplicated
+// by code) for the finding codes present in the report — without changing
+// findings, summary, result, or the exit code. It returns the report's exit code,
+// except that a JSON-encode or file-write failure overrides it with 1 (an
+// operation failure, not a policy finding). Never mutates config/policy files and
+// never contacts the runtime.
 func Emit(r Report, opts EmitOptions, stdout, stderr io.Writer) int {
+	payload := reportJSON{Report: r}
+	if opts.Explain {
+		payload.Explanations = explain.ForReport(explanations, codesOf(r))
+	}
+
 	if opts.JSON {
-		payload := reportJSON{Report: r}
-		if opts.Explain {
-			payload.Explanations = explain.ForReport(explanations, codesOf(r))
-		}
 		if err := output.PrintJSON(stdout, payload); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
-		return ExitCode(r)
+	} else {
+		PrintHuman(r, opts.Explain, stdout)
 	}
 
-	PrintHuman(r, opts.Explain, stdout)
+	if opts.OutPath != "" {
+		if err := output.WritePrettyJSON(opts.OutPath, payload); err != nil {
+			fmt.Fprintf(stderr, "Error writing %s: %v\n", opts.OutPath, err)
+			return 1
+		}
+		// In human mode, confirm the export on stdout (doctor --out does the same).
+		// In JSON mode stdout must stay valid JSON, so stay silent.
+		if !opts.JSON {
+			fmt.Fprintf(stdout, "\nReport written to %s\n", opts.OutPath)
+		}
+	}
+
 	return ExitCode(r)
 }

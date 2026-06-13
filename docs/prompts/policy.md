@@ -9,6 +9,7 @@ locally.
 Use it with:
 
 - `portier policy check --config <file> --policy <file> --json --explain` (recommended — includes machine-readable findings and explanations)
+- or the contents of a report exported with `--out <file>` (same JSON shape; add `--explain` to include explanations)
 - or the human output of `portier policy check ... --explain`
 
 A policy report describes whether a config **complies with an operator-defined

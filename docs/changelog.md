@@ -8,6 +8,18 @@ All notable changes to Portier are documented here.
 
 v1.10 helps operators define and evaluate **safe operating rules** before any automation or enforcement exists. It starts with **dry-run policy evaluation only** — built entirely in the Go CLI as a pure API client, with **no runtime/API/server/service/client contract change** (`validate:contract` stays **234/234**). UDP stays first-class: there is **no `allowUdp`/protocol-restriction policy**.
 
+### Added — Slice 3: Policy report export
+
+- **`portier policy check --out <file>`.** Writes the policy report to a file as deterministic pretty JSON, for CI artifacts, reviews, and support handoff. The exported file uses the **same shape as `--json`** (`findings` + `summary` + `result`, plus the additive `explanations` map under `--explain`) — there is no second report schema.
+- **Output behavior mirrors the v1.9 doctor `--out` convention.** `--out` writes the file regardless of `--json`; in human mode stdout stays human (with a `Report written to <file>` confirmation), in `--json` mode stdout stays pure JSON and is **byte-identical to the file**. `--explain --out` writes the explanations map to the file (and prints inline explanations in human stdout); `--json --explain --out` keeps stdout/file byte-identical.
+- **Errors are operation failures, not findings.** A file-write failure exits `1` (with a clear `Error writing <file>` on stderr) — it overrides the report's own exit code; a missing `--out` value exits `2`. A malformed/unreadable config or policy still exits `2` and **writes no file** (no success-looking report). The file is only written after a successful marshal (no partial writes); parent directories are not created.
+
+### Notes (Slice 3)
+
+- CLI-only, fully offline: no config/policy mutation, no runtime access, no target probing, no telemetry/upload. `validate:contract` stays **234/234**; the CLI stays a pure API client. Report construction lives in the `policy` package (`policy.Emit`/`EmitOptions.OutPath`), file writing reuses `output.WritePrettyJSON`, and `commands` remains handlers-only.
+- Reuses the existing `--json` payload (`reportJSON`) — the same bytes go to stdout and the file, so `--json --out` parity is guaranteed by construction.
+- CLI coverage held at **97.8%** (gate 97, not lowered — the ~0.8% buffer is too tight to raise to 98 safely; the new export branches are covered by black-box command tests). No gates lowered.
+
 ### Added — Slice 2: Policy finding explanations
 
 - **`portier explain` now covers policy finding codes.** `portier explain policy.lan_exposure_forbidden` (and every policy code) prints a deterministic explanation (meaning + what to do + related codes); `portier explain --list` now lists all **26** codes (8 config-doctor + 12 live-doctor + 6 policy), sorted. Doctor code explanations are unchanged.

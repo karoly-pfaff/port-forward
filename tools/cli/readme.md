@@ -576,7 +576,7 @@ If you want to ask an AI assistant to help interpret a doctor report, Portier sh
 Evaluate a local Portier config file against a small JSON **policy** file. Fully **offline** — it never contacts the runtime, never probes targets, and never modifies the config or policy file. This is **dry-run evaluation only**: there is no enforcement, no automation, and no config/runtime mutation.
 
 ```
-portier policy check --config <config-file> --policy <policy-file> [--json] [--explain]
+portier policy check --config <config-file> --policy <policy-file> [--json] [--explain] [--out <file>]
 ```
 
 The policy file is a small JSON document (`schemaVersion: 1`) with a `rules` object of boolean guardrails:
@@ -626,7 +626,9 @@ Stable finding codes: `policy.valid` (info, emitted when the config complies), `
 
 **`--explain`** adds an inline explanation (code, meaning, next action, related codes) for each emitted finding, reusing the same registry as `portier explain`. In human output each finding is followed by an indented `Code:`/`Meaning:`/`What to do:` block; in `--json` an additive top-level `explanations` map (`code → { title, meaning, action, ... }`, deduplicated by code) is added for the emitted finding codes only. `--explain` does **not** change the findings, summary, result, or exit code — without it the JSON is byte-identical to before (the `explanations` map is omitted). Explanations describe what a guardrail means and what an operator can do; they never claim Portier enforces a policy or fixes a violation automatically.
 
-Exit codes: `0` no violations; `1` one or more violations; `2` missing/invalid arguments, or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
+**`--out <file>`** also writes the policy report to a file as deterministic pretty JSON — the **same shape as `--json`** (`findings` + `summary` + `result`, plus the additive `explanations` map under `--explain`) — for CI artifacts, reviews, and support handoff. It writes the file regardless of `--json`; in human mode stdout stays human (with a `Report written to <file>` confirmation), and in `--json` mode stdout stays pure JSON and is **byte-identical to the file**. A file-write failure is an operation failure → exit `1` (reported on stderr), overriding the report's own exit code; the file is only written after a successful marshal (no partial writes) and parent directories are not created. A malformed/unreadable config or policy still exits `2` and **writes no file**. Export never mutates the config or policy file and never contacts the runtime.
+
+Exit codes: `0` no violations; `1` one or more violations, or an `--out` write failure; `2` missing/invalid arguments (including a missing `--out` value), or an unreadable/malformed config or policy file (including an unsupported `schemaVersion`).
 
 ### Using policy output with an AI assistant
 

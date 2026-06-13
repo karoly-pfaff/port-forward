@@ -32,6 +32,10 @@ Options:
   --explain         Show an explanation (meaning + next action) for each emitted
                     finding (inline in human output; an additive explanations map
                     in --json). Does not change findings, result, or exit code.
+  --out <file>      Also write the JSON report to <file> (same shape as --json,
+                    including the additive explanations map under --explain). The
+                    file is written regardless of --json; with --json the JSON
+                    also prints to stdout (stdout and file are byte-identical).
 
 Policy file format (schemaVersion 1):
   {
@@ -56,9 +60,11 @@ Unknown fields in the policy file are rejected.
 
 Exit codes:
   0  Policy evaluation completed with no violations
-  1  Policy evaluation completed with one or more violations
-  2  Missing/invalid arguments, or an unreadable/malformed config or policy file
-     (including an unsupported schemaVersion)
+  1  Policy evaluation completed with one or more violations, or the --out file
+     could not be written
+  2  Missing/invalid arguments (including a missing --out value), or an
+     unreadable/malformed config or policy file (including an unsupported
+     schemaVersion)
 
 Examples:
   portier policy check --config portier.json --policy policy.json
@@ -86,16 +92,19 @@ func RunPolicy(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 }
 
 // RunPolicyCheck evaluates a local config file against a local policy file and
-// prints a deterministic policy report. It is fully offline: it never contacts
-// the runtime, never probes targets, and never modifies any file. Exit codes:
-// 0 = no violations, 1 = one or more violations (or a JSON-encode failure),
-// 2 = usage error or an unreadable/malformed config or policy file.
+// prints a deterministic policy report. With --out it also writes the JSON report
+// to a file. It is fully offline: it never contacts the runtime, never probes
+// targets, and never modifies the config or policy file. Exit codes: 0 = no
+// violations, 1 = one or more violations (or a JSON-encode / --out write failure),
+// 2 = usage error (including a missing --out value) or an unreadable/malformed
+// config or policy file.
 func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("policy check", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	flagConfig := fs.String("config", "", "path to the Portier config file")
 	flagPolicy := fs.String("policy", "", "path to the policy file")
 	flagExplain := fs.Bool("explain", false, "show an explanation for each emitted finding")
+	flagOut := fs.String("out", "", "also write the JSON report to this file")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -141,5 +150,5 @@ func RunPolicyCheck(jsonOutput bool, args []string, stdout, stderr io.Writer) in
 	}
 
 	report := policy.Evaluate(rules, pol)
-	return policy.Emit(report, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput}, stdout, stderr)
+	return policy.Emit(report, policy.EmitOptions{Explain: *flagExplain, JSON: jsonOutput, OutPath: *flagOut}, stdout, stderr)
 }
