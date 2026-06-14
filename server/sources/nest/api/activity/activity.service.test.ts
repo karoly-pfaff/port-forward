@@ -1,12 +1,8 @@
 import type { ActivityEvent } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import type { ActivityListParams } from "../../../activity/activity-store.js";
-import {
-  ActivityService,
-  parseActivityLimit,
-  type ActivityClearer,
-  type ActivityReader,
-} from "./activity.service.js";
+import { ActivityService, parseActivityLimit } from "./activity.service.js";
+import type { ActivityClearer, ActivityReader } from "./activity.reader.js";
 
 /** Records the params/clears it was asked for and returns a fixed event list. */
 class RecordingStore implements ActivityReader, ActivityClearer {

@@ -1,28 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ActivityEvent, ActivityEventType, ActivitySeverity } from "@portier/shared";
 import type { ActivityListParams } from "../../../activity/activity-store.js";
-
-/**
- * Narrow read-only view of the activity store the GET endpoint needs. The real
- * domain `ActivityStore` satisfies it; tests inject a fake. Keeping the
- * dependency to this interface (not the concrete class) is the DI seam future
- * runtime-dependent endpoints will reuse.
- */
-export interface ActivityReader {
-  list(params: ActivityListParams): ActivityEvent[];
-}
-
-/** Narrow write capability for `DELETE /api/activity` (clears the in-memory log). */
-export interface ActivityClearer {
-  clear(): void;
-}
-
-/**
- * Injection token for the activity store. The bound value satisfies both
- * `ActivityReader` (GET) and `ActivityClearer` (DELETE); each consumer narrows to
- * what it needs.
- */
-export const ACTIVITY_STORE = "ACTIVITY_STORE";
+import { ACTIVITY_STORE, type ActivityClearer, type ActivityReader } from "./activity.reader.js";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;

@@ -1,8 +1,9 @@
 import { Controller, Get, Inject } from "@nestjs/common";
+import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { RuntimeService } from "./runtime.service.js";
 import {
+  RuntimeInfoResponseDto,
   toRuntimeInfoResponseDto,
-  type RuntimeInfoResponseDto,
 } from "./runtime.response.dto.js";
 
 /**
@@ -11,11 +12,14 @@ import {
  * `RuntimeInfoResponseDto` at the HTTP boundary (matching the existing Express
  * route). Read-only and always `200`; no runtime logic lives here.
  */
+@ApiTags("runtime")
 @Controller("api/runtime")
 export class RuntimeController {
   constructor(@Inject(RuntimeService) private readonly runtime: RuntimeService) {}
 
   @Get()
+  @ApiOperation({ summary: "Runtime info", description: "Returns runtime/version/uptime/process metadata." })
+  @ApiOkResponse({ type: RuntimeInfoResponseDto, description: "Runtime info." })
   get(): RuntimeInfoResponseDto {
     return toRuntimeInfoResponseDto(this.runtime.get());
   }

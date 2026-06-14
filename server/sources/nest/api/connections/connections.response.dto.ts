@@ -1,16 +1,14 @@
 import type { LiveConnectionsResponse } from "@portier/shared";
+import { ConnectionsResponseDto } from "../../common/api-schemas.js";
+
+export { ConnectionsResponseDto } from "../../common/api-schemas.js";
 
 /**
- * Response DTO for `GET /api/connections` — the `LiveConnectionsResponse` object
- * Express returns (the shared REST-contract shape). The mapper is a structural
- * copy at the HTTP boundary: a fresh object preserving the
- * `generatedAt`/`tcpConnections`/`udpSessions`/`ruleSummaries` field order, with
- * each nested record freshly copied (it would become an explicit field pick only
- * to hide a future internal-only field).
+ * Maps the domain live-connections snapshot to the `ConnectionsResponseDto` shape
+ * at the HTTP boundary — a fresh object + fresh arrays of fresh records (the DTO
+ * class is the OpenAPI schema, defined in `common/api-schemas.ts`; this mapper is
+ * the covered logic).
  */
-export type ConnectionsResponseDto = LiveConnectionsResponse;
-
-/** Maps the live-connections snapshot to the response DTO (fresh object + fresh arrays). */
 export function toConnectionsResponseDto(
   snapshot: LiveConnectionsResponse
 ): ConnectionsResponseDto {

@@ -1,7 +1,8 @@
 import { Module } from "@nestjs/common";
 import { ActivityStore } from "../../../activity/activity-store.js";
 import { ActivityController } from "./activity.controller.js";
-import { ACTIVITY_STORE, ActivityService, type ActivityReader } from "./activity.service.js";
+import { ActivityService } from "./activity.service.js";
+import { ACTIVITY_STORE, type ActivityReader } from "./activity.reader.js";
 
 /**
  * `GET /api/activity`. The `ACTIVITY_STORE` token defaults to a fresh in-memory

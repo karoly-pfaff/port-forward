@@ -89,6 +89,44 @@ slices, each guarded by `npm run validate:contract`.
   routes keep NestJS's default error shape. Controllers raise
   `ApiBadRequestException(string[])` rather than hand-rolling the envelope.
 
+### Migration status (endpoint inventory)
+
+The **read-side `/api` migration is complete** (v1.14 Slice 11). Every endpoint
+below is **shadow-only** — served by the Nest app only under `npm run start:nest`;
+the Express server (`sources/index.ts` + `sources/api.ts`) remains the **default
+active runtime** and serves all routes unchanged. `validate:contract` is 234/234.
+
+| Endpoint | Module | Request DTO | Response DTO | Provider token | Builder / volatile |
+|---|---|---|---|---|---|
+| `GET /health` | `health/` | — (no input) | typed constant¹ | — | — |
+| `GET /api/ports/advisory` | `api/ports/` | `PortsAdvisoryQueryDto` + pipe | `PortsAdvisoryResponseDto` | — (pure shared logic) | — |
+| `GET /api/activity` | `api/activity/` | endpoint-local coercion² | `ActivityListResponseDto` | `ACTIVITY_STORE` (`ActivityReader`) | — |
+| `DELETE /api/activity` | `api/activity/` | — (no input) | — (`204` no body)³ | `ACTIVITY_STORE` (`ActivityClearer`) | — |
+| `GET /api/status` | `api/status/` | — (no input) | `StatusListResponseDto` | `STATUS_READER` | — |
+| `GET /api/forwards` | `api/forwards/` | — (no input) | `ForwardsListResponseDto` | `FORWARDS_READER` | — |
+| `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
+| `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
+| `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
+
+Every migrated endpoint has a byte-for-byte Express↔Nest parity test
+(`*.integration.test.ts`) covering empty/default and (where relevant) seeded
+state plus documented error cases; none normalizes or strips a volatile field.
+
+Notes: ¹ `/health` is a scaffold liveness probe **outside the `/api` contract**;
+it returns a typed constant from `HealthService` (no domain/runtime data to map),
+so it needs no response-DTO mapper. ² `GET /api/activity`'s query is pure silent
+coercion-with-fallback (always `200`) — a transform-only DTO would add ceremony
+and risk parity drift, so the coercion stays endpoint-local in the service
+(documented parity exception); its **response** is still mapped. ³ `204`-empty
+responses have no JSON body, so they have no response DTO (the absent body is the
+response, matching Express).
+
+**Deferred (Milestone 3+, write/lifecycle/static):** rule CRUD
+(`POST`/`PATCH`/`DELETE /api/forwards`), start/stop/reorder, group actions,
+diagnose, `POST /api/config/import`, `POST /api/config/plan`/`apply`, and static
+client serving — all stay with Express. The next milestone is **write/lifecycle**,
+not more read endpoints.
+
 Layout:
 
 ```text
@@ -101,7 +139,7 @@ sources/nest/
   health/                       # GET /health (controller → service → module)
   api/
     ports/                      # GET /api/ports/advisory — request: *.query.dto + pipe; response: *.response.dto + mapper
-    activity/                   # GET + DELETE /api/activity (injected ACTIVITY_STORE; ActivityReader + ActivityClearer)
+    activity/                   # GET + DELETE /api/activity (ACTIVITY_STORE + ActivityReader/ActivityClearer in activity.reader.ts; response: *.response.dto + mapper)
     status/                     # GET /api/status (injected STATUS_READER; response: *.response.dto + mapper)
     forwards/                   # GET /api/forwards (injected FORWARDS_READER; response: *.response.dto + mapper)
     runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; response: *.response.dto + mapper)
@@ -113,14 +151,47 @@ sources/nest/
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
     api-errors.ts                # ApiBadRequestException(string[]) — controllers raise this, not a literal
     api-validation.pipe.ts       # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
+    api-schemas.ts               # @ApiProperty OpenAPI schema classes (ApiErrorResponseDto + response DTOs + item shapes) — metadata-only, coverage-excluded
+  openapi/
+    openapi.ts                  # generateOpenApiDocument()/serialize/write helpers + OPENAPI_OUTPUT_PATH — fully covered
+    generate.ts                 # logic-free `npm run generate:apidoc` entry — coverage-excluded
   testing/
     api-parity.ts               # Express↔Nest parity harness (boot, fetch, deterministic compare)
 ```
 
-Every `sources/nest/` file is covered at **100%** (statements/branches/functions).
-Startup logic lives in `bootstrap.ts` / `nest-options.ts` so the only
-coverage-excluded file is the logic-free `main.ts` process entry, mirroring how
-`sources/index.ts` is excluded.
+### API documentation (generated OpenAPI)
+
+The API documentation is **generated from the NestJS controller/DTO metadata**
+(`@ApiTags`/`@ApiOperation`/`@Api*Response`/`@ApiProperty`) — it is not
+hand-written. Generate it with:
+
+```bash
+npm run generate:apidoc          # from the repo root (delegates to -w server)
+npm run generate:apidoc -w server
+```
+
+- **Output: `docs/api/openapi.json`** — an OpenAPI 3 document, **tracked in git**
+  so it can be reviewed/versioned. Regenerate it whenever a migrated endpoint or
+  its DTOs change; an `openapi.test.ts` drift guard fails CI if the tracked file
+  is stale (the message tells you to run `generate:apidoc`).
+- Generation is **offline** — it inspects the Nest app's metadata via
+  `SwaggerModule.createDocument` without listening on a socket, and **does not
+  change Express** (the default runtime) or switch the active runtime. No Swagger
+  UI / `/docs` route is exposed.
+- The document is **deterministic** (stable JSON + trailing newline), so
+  regeneration is idempotent.
+- **Response DTOs are the OpenAPI schema source.** The decorated schema classes
+  live in `common/api-schemas.ts` (`@ApiProperty`, each `implements` its
+  `@portier/shared` type so a contract drift is a compile error); the response
+  **mappers** stay in each feature's `*.response.dto.ts` (the covered logic). The
+  error envelope is `ApiErrorResponseDto` (`{ errors: string[] }`).
+
+Every `sources/nest/` file with executable logic is covered at **100%**
+(statements/branches/functions). The only coverage-excluded nest files are the
+two logic-free process entries (`main.ts`, `openapi/generate.ts` — their helpers
+are fully covered) and the metadata-only `common/api-schemas.ts` (decorated
+`@ApiProperty` schema classes that are never instantiated — no executable logic).
+This mirrors how `sources/index.ts` is excluded.
 
 ## Scripts
 
@@ -130,8 +201,9 @@ npm run build      -w server   # tsc → build/ (includes the nest scaffold)
 npm run typecheck  -w server
 npm run test       -w server   # all server tests (Express + nest scaffold)
 
-npm run build:nest -w server   # build (alias — nest is part of the unified server build)
-npm run start:nest -w server   # run the NestJS scaffold (scaffold only — not the active server)
+npm run build:nest -w server      # build (alias — nest is part of the unified server build)
+npm run start:nest -w server      # run the NestJS scaffold (scaffold only — not the active server)
+npm run generate:apidoc -w server # regenerate docs/api/openapi.json from Nest metadata
 npm run test:nest  -w server   # run only the nest scaffold tests
 ```
 
@@ -161,6 +233,18 @@ management server's default `127.0.0.1:47831`.
   than adding a transform-only DTO. The request validation pipe takes the DTO
   class **explicitly** (esbuild doesn't emit `design:paramtypes`) and throws
   `ApiBadRequestException` → `400 { errors }`. Mappers/DTOs are 100% covered.
+- **DTOs are also the API-doc source.** Each migrated endpoint must carry enough
+  Swagger metadata to generate good OpenAPI docs in the **same slice** (no
+  "document it later"): `@ApiTags`/`@ApiOperation` on the controller, an
+  `@Api*Response` for each status (`@ApiOkResponse({ type, isArray })`,
+  `@ApiNoContentResponse` for `204`, `@ApiBadRequestResponse({ type: ApiErrorResponseDto })`
+  for validation errors), `@ApiQuery` for query params (the esbuild/tsx transform
+  does not emit the `@Query` DTO's reflected type, so query params are documented
+  explicitly), and a decorated schema class (in `common/api-schemas.ts`,
+  `@ApiProperty` with **explicit** types, `implements` the shared type) for every
+  response/body shape. After changing an endpoint or its DTOs, run
+  `npm run generate:apidoc` and commit the updated `docs/api/openapi.json` (the
+  drift test enforces this).
 - **API contract parity is mandatory** — every migration step keeps
   `npm run validate:contract` green (TS↔Go), and no public API path/DTO is
   renamed for cosmetic reasons. Each migrated endpoint is also checked

@@ -18,6 +18,7 @@
     "build:server": "npm run build -w server",
     "build:client": "npm run build -w client",
     "build:service": "go -C service build -o build/portier-service ./sources",
+    "generate:apidoc": "npm run generate:apidoc -w server",
     "build:cli": "go -C tools/cli build -o build/portier-cli ./sources",
     "build:replay": "go -C tools/replay build -o build/replay ./sources",
     "start:dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",

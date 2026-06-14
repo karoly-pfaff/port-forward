@@ -15,7 +15,13 @@ export default defineConfig({
       // its constituents (resolveNestListenOptions, bootstrap, reportBootstrapFailure) are fully
       // unit-covered, and importing main.ts would start a real listener as a side effect. Same
       // rationale as index.ts. All other nest/ files are covered at 100%.
-      exclude: ["sources/**/*.test.ts", "sources/test-helpers.ts", "sources/index.ts", "sources/nest/main.ts", "sources/forwarders/types.ts", "build/**", "*.config.ts"]
+      // nest/openapi/generate.ts is the OpenAPI-doc generation process entry — logic-free wiring
+      // (its helpers in nest/openapi/openapi.ts are fully unit-covered).
+      // nest/common/api-schemas.ts is metadata-only: decorated `@ApiProperty` schema classes that
+      // mirror the @portier/shared REST types for OpenAPI generation. They are NEVER instantiated
+      // (controllers reference them via @ApiOkResponse; the response mappers — the covered logic —
+      // return plain objects), so there is no executable logic to cover, only decorator metadata.
+      exclude: ["sources/**/*.test.ts", "sources/test-helpers.ts", "sources/index.ts", "sources/nest/main.ts", "sources/nest/openapi/generate.ts", "sources/nest/common/api-schemas.ts", "sources/forwarders/types.ts", "build/**", "*.config.ts"]
     }
   }
 });

@@ -1,6 +1,7 @@
 import { Controller, Delete, Get, HttpCode, Inject, Query } from "@nestjs/common";
+import { ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { ActivityService } from "./activity.service.js";
-import { toActivityListResponseDto, type ActivityListResponseDto } from "./activity-list.response.dto.js";
+import { ActivityListResponseDto, toActivityListResponseDto } from "./activity-list.response.dto.js";
 
 /**
  * Transport adapter for `/api/activity`.
@@ -15,11 +16,18 @@ import { toActivityListResponseDto, type ActivityListResponseDto } from "./activ
  *   response, matching the existing Express route exactly). `@HttpCode(204)` is
  *   required because NestJS defaults `DELETE` to `200`.
  */
+@ApiTags("activity")
 @Controller("api/activity")
 export class ActivityController {
   constructor(@Inject(ActivityService) private readonly activity: ActivityService) {}
 
   @Get()
+  @ApiOperation({ summary: "List activity events", description: "Returns recent activity events, newest first." })
+  @ApiQuery({ name: "limit", required: false, type: Number, description: "Max events (1–500, default 100)." })
+  @ApiQuery({ name: "ruleId", required: false, type: String, description: "Filter by rule id." })
+  @ApiQuery({ name: "type", required: false, type: String, description: "Filter by event type." })
+  @ApiQuery({ name: "severity", required: false, type: String, description: "Filter by severity." })
+  @ApiOkResponse({ type: ActivityListResponseDto, description: "Matching activity events." })
   list(
     @Query("limit") limit?: string,
     @Query("ruleId") ruleId?: string,
@@ -31,6 +39,8 @@ export class ActivityController {
 
   @Delete()
   @HttpCode(204)
+  @ApiOperation({ summary: "Clear the activity log", description: "Clears the in-memory activity log." })
+  @ApiNoContentResponse({ description: "Activity log cleared. No response body." })
   clear(): void {
     this.activity.clear();
   }

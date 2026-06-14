@@ -14,7 +14,7 @@ import {
   startNestServer,
   type ParityServer,
 } from "../../testing/api-parity.js";
-import { ACTIVITY_STORE } from "./activity.service.js";
+import { ACTIVITY_STORE } from "./activity.reader.js";
 
 /** Minimal RuleStore so the Express app can be built; the activity route never uses it. */
 class EmptyStore implements RuleStore {

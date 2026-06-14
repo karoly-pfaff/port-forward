@@ -1,0 +1,1044 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "description": "Scaffold liveness probe (outside the frozen /api contract).",
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The server is alive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "server": {
+                      "type": "string",
+                      "enum": [
+                        "node"
+                      ]
+                    },
+                    "name": {
+                      "type": "string",
+                      "example": "Portier"
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "server",
+                    "name"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/ports/advisory": {
+      "get": {
+        "description": "Returns the port advisories (LAN exposure, privileged/common port, …) for a port.",
+        "operationId": "PortsController_getAdvisory",
+        "parameters": [
+          {
+            "name": "listenHost",
+            "required": false,
+            "in": "query",
+            "description": "Listen host (e.g. 0.0.0.0).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "purpose",
+            "required": true,
+            "in": "query",
+            "description": "Binding purpose.",
+            "schema": {
+              "enum": [
+                "management",
+                "forward"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "required": true,
+            "in": "query",
+            "description": "Port (1–65535).",
+            "schema": {
+              "example": 8080,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Advisories for the port.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PortAdvisoryDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Port advisories for a listen binding",
+        "tags": [
+          "ports"
+        ]
+      }
+    },
+    "/api/activity": {
+      "get": {
+        "description": "Returns recent activity events, newest first.",
+        "operationId": "ActivityController_list",
+        "parameters": [
+          {
+            "name": "severity",
+            "required": false,
+            "in": "query",
+            "description": "Filter by severity.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Filter by event type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ruleId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by rule id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Max events (1–500, default 100).",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching activity events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List activity events",
+        "tags": [
+          "activity"
+        ]
+      },
+      "delete": {
+        "description": "Clears the in-memory activity log.",
+        "operationId": "ActivityController_clear",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Activity log cleared. No response body."
+          }
+        },
+        "summary": "Clear the activity log",
+        "tags": [
+          "activity"
+        ]
+      }
+    },
+    "/api/status": {
+      "get": {
+        "description": "Returns the current status of every forward rule.",
+        "operationId": "StatusController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Status for each rule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ForwardStatusDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Per-rule status",
+        "tags": [
+          "status"
+        ]
+      }
+    },
+    "/api/forwards": {
+      "get": {
+        "description": "Returns every forward rule with its port advisories.",
+        "operationId": "ForwardsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "All forward rules.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ForwardRuleResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "List forward rules",
+        "tags": [
+          "forwards"
+        ]
+      }
+    },
+    "/api/runtime": {
+      "get": {
+        "description": "Returns runtime/version/uptime/process metadata.",
+        "operationId": "RuntimeController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Runtime info.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeInfoResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Runtime info",
+        "tags": [
+          "runtime"
+        ]
+      }
+    },
+    "/api/config/export": {
+      "get": {
+        "description": "Returns the current forward rules as an exportable config.",
+        "operationId": "ConfigExportController_export",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Exported config snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigExportResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Export config",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/connections": {
+      "get": {
+        "description": "Returns live TCP connections, UDP sessions, and per-rule summaries.",
+        "operationId": "ConnectionsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Live connection snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionsResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Live connections",
+        "tags": [
+          "connections"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Portier API",
+    "description": "Portier management API — NestJS-generated documentation for the migrated read surface. The Express server remains the default active runtime; these routes are also served by the NestJS scaffold under `npm run start:nest`.",
+    "version": "1.14",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": ""
+    },
+    {
+      "name": "ports",
+      "description": ""
+    },
+    {
+      "name": "activity",
+      "description": ""
+    },
+    {
+      "name": "status",
+      "description": ""
+    },
+    {
+      "name": "forwards",
+      "description": ""
+    },
+    {
+      "name": "runtime",
+      "description": ""
+    },
+    {
+      "name": "config",
+      "description": ""
+    },
+    {
+      "name": "connections",
+      "description": ""
+    }
+  ],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "PortAdvisoryDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "COMMON_PORT",
+              "PRIVILEGED_PORT",
+              "OUTSIDE_RECOMMENDED_RANGE",
+              "LAN_EXPOSURE",
+              "MANAGEMENT_LAN_EXPOSURE"
+            ],
+            "description": "Advisory code."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "danger"
+            ],
+            "description": "Advisory severity."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable advisory message."
+          }
+        },
+        "required": [
+          "code",
+          "severity",
+          "message"
+        ]
+      },
+      "ApiErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "description": "One or more human-readable error messages.",
+            "example": [
+              "port must be an integer from 1 to 65535."
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "errors"
+        ]
+      },
+      "ActivityEventDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable event id."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Event timestamp (ISO 8601)."
+          },
+          "type": {
+            "type": "string",
+            "description": "Activity event type (e.g. rule.created, config.imported)."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "success",
+              "warning",
+              "error"
+            ],
+            "description": "Event severity."
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "Related rule id, if any."
+          },
+          "ruleName": {
+            "type": "string",
+            "description": "Related rule name, if any."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ],
+            "description": "Related protocol, if any."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable message."
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional structured details (string/number/boolean/null values)."
+          }
+        },
+        "required": [
+          "id",
+          "timestamp",
+          "type",
+          "severity",
+          "message"
+        ]
+      },
+      "ActivityListResponseDto": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "description": "Matching activity events (newest first).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityEventDto"
+            }
+          }
+        },
+        "required": [
+          "events"
+        ]
+      },
+      "ForwardStatusDto": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "description": "Id of the rule this status describes."
+          },
+          "running": {
+            "type": "boolean",
+            "description": "Whether the forwarder is running."
+          },
+          "health": {
+            "type": "string",
+            "enum": [
+              "healthy",
+              "warning",
+              "error"
+            ],
+            "description": "Derived operator health."
+          },
+          "activeConnections": {
+            "type": "number",
+            "description": "Active TCP connections."
+          },
+          "bytesIn": {
+            "type": "number",
+            "description": "Total bytes received."
+          },
+          "bytesOut": {
+            "type": "number",
+            "description": "Total bytes sent."
+          },
+          "packetsIn": {
+            "type": "number",
+            "description": "Total UDP packets received."
+          },
+          "packetsOut": {
+            "type": "number",
+            "description": "Total UDP packets sent."
+          },
+          "activeUdpSessions": {
+            "type": "number",
+            "description": "Active UDP sessions."
+          },
+          "lastError": {
+            "type": "string",
+            "description": "Last error message, if any."
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the forwarder started."
+          }
+        },
+        "required": [
+          "ruleId",
+          "running",
+          "health",
+          "bytesIn",
+          "bytesOut"
+        ]
+      },
+      "ForwardRuleResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable rule id."
+          },
+          "name": {
+            "type": "string",
+            "description": "Operator-facing rule name."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ],
+            "description": "Forwarding protocol."
+          },
+          "listenHost": {
+            "type": "string",
+            "description": "Local listen host.",
+            "example": "127.0.0.1"
+          },
+          "listenPort": {
+            "type": "number",
+            "description": "Local listen port.",
+            "example": 48010
+          },
+          "targetHost": {
+            "type": "string",
+            "description": "Forward target host."
+          },
+          "targetPort": {
+            "type": "number",
+            "description": "Forward target port."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the rule autostarts."
+          },
+          "udpMode": {
+            "type": "string",
+            "enum": [
+              "one-way",
+              "bidirectional-last-client",
+              "bidirectional-multi-client"
+            ],
+            "description": "UDP forwarding mode (UDP rules only)."
+          },
+          "group": {
+            "type": "string",
+            "description": "Optional grouping label."
+          },
+          "advisories": {
+            "description": "Port advisories for the rule's listen binding.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortAdvisoryDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "protocol",
+          "listenHost",
+          "listenPort",
+          "targetHost",
+          "targetPort",
+          "enabled",
+          "advisories"
+        ]
+      },
+      "RuntimeInfoResponseDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Portier"
+          },
+          "version": {
+            "type": "string",
+            "example": "1.13.0"
+          },
+          "runtime": {
+            "type": "string",
+            "enum": [
+              "node",
+              "go"
+            ],
+            "description": "Runtime implementation serving the API."
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "windows",
+              "macos",
+              "linux",
+              "unknown"
+            ]
+          },
+          "arch": {
+            "type": "string",
+            "enum": [
+              "x64",
+              "arm64",
+              "unknown"
+            ]
+          },
+          "uptimeSeconds": {
+            "type": "number",
+            "description": "Seconds since the runtime started."
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "managementHost": {
+            "type": "string"
+          },
+          "managementPort": {
+            "type": "number"
+          },
+          "configPath": {
+            "type": "string"
+          },
+          "staticDir": {
+            "type": "string"
+          },
+          "serviceMode": {
+            "type": "boolean"
+          },
+          "pid": {
+            "type": "number",
+            "description": "Process id."
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "runtime",
+          "platform",
+          "arch",
+          "uptimeSeconds",
+          "startedAt",
+          "managementHost",
+          "managementPort",
+          "configPath",
+          "staticDir",
+          "serviceMode",
+          "pid"
+        ]
+      },
+      "ForwardRuleDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable rule id."
+          },
+          "name": {
+            "type": "string",
+            "description": "Operator-facing rule name."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ],
+            "description": "Forwarding protocol."
+          },
+          "listenHost": {
+            "type": "string",
+            "description": "Local listen host.",
+            "example": "127.0.0.1"
+          },
+          "listenPort": {
+            "type": "number",
+            "description": "Local listen port.",
+            "example": 48010
+          },
+          "targetHost": {
+            "type": "string",
+            "description": "Forward target host."
+          },
+          "targetPort": {
+            "type": "number",
+            "description": "Forward target port."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the rule autostarts."
+          },
+          "udpMode": {
+            "type": "string",
+            "enum": [
+              "one-way",
+              "bidirectional-last-client",
+              "bidirectional-multi-client"
+            ],
+            "description": "UDP forwarding mode (UDP rules only)."
+          },
+          "group": {
+            "type": "string",
+            "description": "Optional grouping label."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "protocol",
+          "listenHost",
+          "listenPort",
+          "targetHost",
+          "targetPort",
+          "enabled"
+        ]
+      },
+      "ConfigExportResponseDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": [
+              "1"
+            ],
+            "description": "Export schema version."
+          },
+          "exportedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the config was exported."
+          },
+          "rules": {
+            "description": "Exported forward rules.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForwardRuleDto"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "exportedAt",
+          "rules"
+        ]
+      },
+      "TcpConnectionInfoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "ruleName": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp"
+            ]
+          },
+          "clientAddress": {
+            "type": "string"
+          },
+          "clientPort": {
+            "type": "number"
+          },
+          "targetAddress": {
+            "type": "string"
+          },
+          "targetPort": {
+            "type": "number"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMs": {
+            "type": "number",
+            "description": "Connection duration in milliseconds."
+          },
+          "bytesIn": {
+            "type": "number"
+          },
+          "bytesOut": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "ruleId",
+          "ruleName",
+          "protocol",
+          "clientAddress",
+          "clientPort",
+          "targetAddress",
+          "targetPort",
+          "startedAt",
+          "durationMs",
+          "bytesIn",
+          "bytesOut",
+          "status"
+        ]
+      },
+      "UdpSessionInfoDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "ruleName": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "udp"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "one-way",
+              "bidirectional-last-client",
+              "bidirectional-multi-client"
+            ]
+          },
+          "clientAddress": {
+            "type": "string"
+          },
+          "clientPort": {
+            "type": "number"
+          },
+          "targetAddress": {
+            "type": "string"
+          },
+          "targetPort": {
+            "type": "number"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "idleMs": {
+            "type": "number",
+            "description": "Idle time in milliseconds."
+          },
+          "packetsIn": {
+            "type": "number"
+          },
+          "packetsOut": {
+            "type": "number"
+          },
+          "bytesIn": {
+            "type": "number"
+          },
+          "bytesOut": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "idle"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "ruleId",
+          "ruleName",
+          "protocol",
+          "mode",
+          "clientAddress",
+          "clientPort",
+          "targetAddress",
+          "targetPort",
+          "startedAt",
+          "lastSeenAt",
+          "idleMs",
+          "packetsIn",
+          "packetsOut",
+          "bytesIn",
+          "bytesOut",
+          "status"
+        ]
+      },
+      "RuleLiveSummaryDto": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string"
+          },
+          "ruleName": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          },
+          "activeTcpConnections": {
+            "type": "number"
+          },
+          "activeUdpSessions": {
+            "type": "number"
+          },
+          "bytesIn": {
+            "type": "number"
+          },
+          "bytesOut": {
+            "type": "number"
+          },
+          "packetsIn": {
+            "type": "number"
+          },
+          "packetsOut": {
+            "type": "number"
+          },
+          "lastTrafficAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Most recent traffic time, or null."
+          }
+        },
+        "required": [
+          "ruleId",
+          "ruleName",
+          "protocol",
+          "activeTcpConnections",
+          "activeUdpSessions",
+          "bytesIn",
+          "bytesOut",
+          "packetsIn",
+          "packetsOut",
+          "lastTrafficAt"
+        ]
+      },
+      "ConnectionsResponseDto": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the snapshot was generated."
+          },
+          "tcpConnections": {
+            "description": "Live TCP connections.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TcpConnectionInfoDto"
+            }
+          },
+          "udpSessions": {
+            "description": "Live UDP sessions.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UdpSessionInfoDto"
+            }
+          },
+          "ruleSummaries": {
+            "description": "Per-rule live traffic summary.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleLiveSummaryDto"
+            }
+          }
+        },
+        "required": [
+          "generatedAt",
+          "tcpConnections",
+          "udpSessions",
+          "ruleSummaries"
+        ]
+      }
+    }
+  }
+}
