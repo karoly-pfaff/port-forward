@@ -8,6 +8,18 @@ All notable changes to Portier are documented here.
 
 v1.14 is an **architecture-migration release, not a feature release**: it moves the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. The Go service remains the preferred runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (still **234/234**). The migration is incremental and reversible — the existing Express server stays the active runtime until a NestJS replacement is explicitly validated.
 
+### Added — Slice 6: migrate `GET /api/forwards` into NestJS
+
+The next manager-backed read endpoint, reusing the Slice-5 read-provider pattern.
+
+- **Migrated `GET /api/forwards`** (`server/sources/nest/api/forwards/`): `ForwardsController` (transport adapter) → `ForwardsService` (maps each rule to a `ForwardRuleResponse` — `{ ...rule, advisories }` — using the shared `getPortAdvisories`, exactly as the Express route's private `toRuleResponse`) → a narrow **`ForwardsReader { listRules(): ForwardRule[] }`** behind the **`FORWARDS_READER`** token (default = trivial `emptyForwardsReader`). Returns the `ForwardRuleResponse[]` array verbatim; read-only and always `200` (no error branch). Only the **list read** is migrated — every write/lifecycle route under `/api/forwards/...` (`POST`/`PATCH`/`DELETE`/`reorder`/`:id/start|stop`/`groups`/`diagnose`) stays with Express.
+- **Why this endpoint:** exact-parity-safe — rule fields are static and `getPortAdvisories` is deterministic, so there are no volatile fields. It reuses the Slice-5 manager-read provider/fake pattern and is the natural step before `/api/connections`/`/api/config/export` (both deferred — they carry `generatedAt`/`exportedAt` timestamps).
+- **Provider pattern:** mirrors `STATUS_READER` — production code holds no manager/store dependency; the domain `ForwardManager` satisfies `ForwardsReader` and is bound to the token in tests (and when Nest becomes active) via `@nestjs/testing` `overrideProvider`. No advisory/contract constants duplicated (reuses `@portier/shared` `getPortAdvisories`, like the ports endpoint).
+- **Parity** proven byte-for-byte for an empty manager and a seeded manager (two stopped rules, including a `0.0.0.0` rule so the response carries a `LAN_EXPOSURE` advisory) by sharing the **same `ForwardManager` instance** between Express (`createApp(manager)`) and Nest. No real sockets/forwarders started (rules stopped).
+- **Existing parity preserved:** `GET /api/ports/advisory`, `GET /api/activity`, and `GET /api/status` parity still pass; `/health`, the `/api/*` 404 envelope, and non-API no-leak re-confirmed. The Slice-1 `app.integration.test.ts` "unknown /api route" probe was changed from `/api/forwards` (now migrated) to `/api/not-migrated`.
+- **Still scaffold-only:** served only under `npm run start:nest`; the Express server remains the default active runtime and its `/api/forwards` is unchanged. `validate:contract` stays **234/234**.
+- **100% coverage of all new/changed Nest code** (forwards reader/service/controller/module, `app.module.ts`); 118 nest tests (9 added). Server coverage 99.0%/95.4%/100% (gate 95/92/99 PASS, none lowered).
+
 ### Added — Slice 5: migrate `GET /api/status` into NestJS (runtime/manager read-provider pattern)
 
 The first **manager-dependent** read endpoint, establishing the narrow runtime-read provider seam.

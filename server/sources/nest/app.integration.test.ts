@@ -30,7 +30,8 @@ describe("NestJS scaffold app (integration)", () => {
   });
 
   it("returns the contract 404 envelope for an unknown /api route", async () => {
-    const response = await fetch(`${baseUrl}/api/forwards`);
+    // Use a path that is not (yet) migrated into the Nest scaffold.
+    const response = await fetch(`${baseUrl}/api/not-migrated`);
 
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ errors: ["API route was not found."] });

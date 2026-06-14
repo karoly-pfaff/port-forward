@@ -45,6 +45,11 @@ slices, each guarded by `npm run validate:contract`.
   domain `ForwardManager` satisfies it and is bound in tests / when Nest is
   active). The first manager-dependent read; byte-for-byte parity-tested with
   stopped rules (no volatile fields); shadow-only under `start:nest`.
+- `GET /api/forwards` (v1.14 Slice 6) — read-only rule list (each rule decorated
+  with port advisories via the shared `getPortAdvisories`) over a narrow
+  `ForwardsReader` (`FORWARDS_READER` token, same provider pattern as status).
+  Byte-for-byte parity-tested; shadow-only. The write/lifecycle routes under
+  `/api/forwards/...` stay with Express, deferred.
 - All `/api/*` errors → the Portier `{ "errors": ["..."] }` envelope via the
   global `ApiErrorEnvelopeFilter` (v1.14 Slice 3): unmatched routes →
   `404 ["API route was not found."]`, controller-raised `400`s carry their
@@ -66,6 +71,7 @@ sources/nest/
     ports/                      # GET /api/ports/advisory (controller → service → module)
     activity/                   # GET /api/activity (controller → service → module; injected ACTIVITY_STORE)
     status/                     # GET /api/status (controller → service → reader; injected STATUS_READER)
+    forwards/                   # GET /api/forwards (controller → service → reader; injected FORWARDS_READER)
   common/
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
