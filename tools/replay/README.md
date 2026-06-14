@@ -39,8 +39,9 @@ Detection is based on JSON shape / manifest shape, **not the filename**:
 ## Usage
 
 ```text
-replay [--json] plan    --from <file-or-dir> [--out <file>]
-replay [--json] analyze --from <file-or-dir> [--out <file>]
+replay [--json] plan     --from <file-or-dir> [--out <file>]
+replay [--json] analyze  --from <file-or-dir> [--out <file>]
+replay [--json] timeline --from <file-or-dir> [--out <file>]
 ```
 
 - `--from <path>` — a workflow run/plan report file, a history export file, or a
@@ -115,6 +116,51 @@ shortlist, and the most recent run. The analysis schema (`schemaVersion: 1`) is 
 **local tool schema**, separate from the replay-plan schema. Deterministic
 ordering: codes and workflow counts by count descending then name/code ascending;
 IDs ascending; insights in a stable order.
+
+### `timeline` — ordered reconstruction
+
+`timeline` reconstructs an ordered view of what the saved artifact says happened.
+Each timeline brackets the artifact's own saved events with clearly-marked
+**synthetic** lifecycle events (a `*-start` and a `*-result`/`*-end`). It never
+infers timestamps the artifact does not contain — ordering is by saved order only.
+
+```text
+$ replay timeline --from run-report.json
+Portier Replay Timeline
+
+Source: workflow-run-report
+Workflow: policy-baseline-check
+Result: failed
+
+1. workflow-start [started]
+   Workflow replay timeline reconstructed from saved report.
+
+2. check-config [passed] policy.check
+   Exit code: 0
+
+3. compare-baseline [failed] policy.baseline.compare
+   Exit code: 1
+   Codes: policy.lan_exposure_forbidden
+
+4. workflow-result [failed]
+   Workflow result: failed.
+
+Summary:
+- 4 events
+- 1 passed
+- 1 failed
+- 0 skipped
+- 2 synthetic
+```
+
+Per artifact: run reports build a step timeline; plan reports a validation
+timeline (valid/invalid); history exports a run timeline in **newest-first** stored
+order (each run event carries id, createdAt, workflow, result, per-run summary, and
+codes); support bundles use the bundle's own `manifest.json`/`report.json`. Every
+event carries a `synthetic` boolean and the summary reports a `synthetic` count, so
+reconstruction markers are always distinguishable from saved events. The timeline
+schema (`schemaVersion: 1`) is a **local tool schema**, separate from the plan and
+analysis schemas.
 
 ## Replay plan
 

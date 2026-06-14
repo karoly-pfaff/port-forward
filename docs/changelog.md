@@ -8,6 +8,15 @@ All notable changes to Portier are documented here.
 
 v1.13 builds a **standalone offline replay/analysis tool beside the CLI** — `portier-replay`, a separate Go module under `tools/replay/`, **not** a `portier workflow replay` subcommand. It analyzes saved Portier workflow artifacts after the fact and is strictly offline and read-only. `validate:contract` stays **234/234** (no shared/server/service/client/API/DTO/contract change — the replay tool is wholly independent of the runtime).
 
+### Added — Slice 4: Replay timeline command
+
+- **`replay [--json] timeline --from <file-or-dir> [--out <file>]`** — reconstructs a deterministic, ordered timeline of what a saved artifact says happened. Analysis only: no workflow execution, no runtime contact, no referenced-file reads, no mutation.
+- **Per-artifact timelines:** run reports → a step timeline (status/exit code/codes per step); plan reports → a validation timeline (valid/invalid + validation codes); history exports → a run timeline in **newest-first** stored order (each event carries id, createdAt, workflow, result, per-run summary, codes); support-report bundle directories → a timeline from the bundle's own `manifest.json`/`report.json`.
+- **Synthetic vs saved events:** each timeline brackets the artifact's saved events with clearly-marked synthetic lifecycle events (`*-start` / `*-result`/`*-end`); every event carries a `synthetic` boolean and the summary reports a `synthetic` count. No timestamps are invented — ordering is by saved order only.
+- **Timeline model (`schemaVersion: 1`, a local tool schema, separate from the plan and analysis schemas):** `{source, workflow?, result?, events[], summary{total,passed,failed,skipped,valid,invalid,synthetic}}`. Human and JSON output; `--json --out` byte-identical (single marshaller).
+- **Exit codes:** `0` timeline created; `1` an output-write or JSON-encode failure; `2` a usage error or an unreadable/malformed/unsupported artifact. No exit `3` — timeline never contacts a runtime.
+- Model/builders in `tools/replay/sources/core/timeline.go`, rendering in `core/render_timeline.go`, command runner in `commands/timeline.go`; reuses the existing detection helpers. `replay plan` and `replay analyze` are unchanged. **Replay module coverage 96.4%** (core 97.0%, commands 94.8%) — meets the ≥95% module bar; the remaining uncovered code is structurally-unreachable defensive branches (encode-on-concrete-type, post-detection re-decode, `os.ReadFile`-after-stat, the unused-classifier `default` arm) plus the `main()` `os.Exit` wrapper. A `failWriter`-driven test covers the real stdout-write-failure path of `plan`/`analyze`/`timeline` under `--json`.
+
 ### Changed — Slice 3: Replay tool naming & package-structure polish
 
 - **Binary renamed `portier-replay` → `replay`** (`replay.exe` on Windows). `npm run build:replay` now outputs `tools/replay/build/replay`; the previous Slice 1/2 entries above describe the same tool under its earlier `portier-replay` name.

@@ -46,6 +46,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runPlan(*flagJSON, remaining[1:], stdout, stderr)
 	case "analyze":
 		return runAnalyze(*flagJSON, remaining[1:], stdout, stderr)
+	case "timeline":
+		return runTimeline(*flagJSON, remaining[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "Unknown command %q\n\n", remaining[0])
 		printHelp(stderr)
@@ -160,12 +162,14 @@ func printHelp(w io.Writer) {
 	fmt.Fprint(w, `replay - offline analysis for saved Portier workflow artifacts
 
 Usage:
-  replay [--json] plan    --from <file-or-dir> [--out <file>]
-  replay [--json] analyze --from <file-or-dir> [--out <file>]
+  replay [--json] plan     --from <file-or-dir> [--out <file>]
+  replay [--json] analyze  --from <file-or-dir> [--out <file>]
+  replay [--json] timeline --from <file-or-dir> [--out <file>]
 
 Commands:
   plan      Report what offline replay/analysis a saved artifact can support
   analyze   Produce deterministic offline analysis from a saved artifact
+  timeline  Reconstruct a deterministic ordered timeline from a saved artifact
   help      Show this help
 
 Flags:
