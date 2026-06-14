@@ -48,6 +48,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runAnalyze(*flagJSON, remaining[1:], stdout, stderr)
 	case "timeline":
 		return runTimeline(*flagJSON, remaining[1:], stdout, stderr)
+	case "compare":
+		return runCompare(*flagJSON, remaining[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "Unknown command %q\n\n", remaining[0])
 		printHelp(stderr)
@@ -165,17 +167,21 @@ Usage:
   replay [--json] plan     --from <file-or-dir> [--out <file>]
   replay [--json] analyze  --from <file-or-dir> [--out <file>]
   replay [--json] timeline --from <file-or-dir> [--out <file>]
+  replay [--json] compare  --left <file-or-dir> --right <file-or-dir> [--out <file>]
 
 Commands:
   plan      Report what offline replay/analysis a saved artifact can support
   analyze   Produce deterministic offline analysis from a saved artifact
   timeline  Reconstruct a deterministic ordered timeline from a saved artifact
+  compare   Compare two saved artifacts offline and report what changed
   help      Show this help
 
 Flags:
-  --json           Output as machine-readable JSON
-  --from <path>    A workflow run/plan report, history export, or report bundle dir
-  --out <file>     Write the JSON output to a file
+  --json            Output as machine-readable JSON
+  --from <path>     A workflow run/plan report, history export, or report bundle dir
+  --left <path>     The left artifact for compare
+  --right <path>    The right artifact for compare
+  --out <file>      Write the JSON output to a file
 
 This tool is offline and read-only. It never executes workflows, contacts the
 runtime, reads referenced config/policy/baseline/report files, mutates inputs, or

@@ -8,6 +8,14 @@ All notable changes to Portier are documented here.
 
 v1.13 builds a **standalone offline replay/analysis tool beside the CLI** — `portier-replay`, a separate Go module under `tools/replay/`, **not** a `portier workflow replay` subcommand. It analyzes saved Portier workflow artifacts after the fact and is strictly offline and read-only. `validate:contract` stays **234/234** (no shared/server/service/client/API/DTO/contract change — the replay tool is wholly independent of the runtime).
 
+### Added — Slice 5: Replay compare command
+
+- **`replay [--json] compare --left <file-or-dir> --right <file-or-dir> [--out <file>]`** — compares two saved artifacts offline and reports what changed. Analysis only: no workflow execution, no runtime contact, no referenced-file reads, no mutation.
+- **Same-kind comparisons** produce a full deterministic diff — changed result/validity, step/run count deltas, added/removed/unchanged emitted-code sets, changed failed/skipped step sets (run), changed invalid step set (plan), history run-count deltas + workflow-distribution deltas + changed failed-run sets, and a changed most-recent run. **Mixed-kind comparisons** produce a deterministic *limited* result (the two source kinds + a clear "detailed comparison is limited" marker + a pointer to `replay analyze`), never a crash.
+- **Compare model (`schemaVersion: 1`, a local tool schema, separate from the plan/analysis/timeline schemas):** `{left, right, summary{sameKind,changed,changeCount}, changes[], sets{<dim>:{added,removed,unchanged}}, insights[]}`. Changes are emitted in a stable semantic order (not map iteration); set values and workflow-distribution deltas are sorted ascending; `sets` slices are always `[]` not null. Human and JSON output; `--json --out` byte-identical.
+- **Exit codes:** `0` comparison created; `1` an output-write or JSON-encode failure; `2` a usage error (missing `--left`/`--right`, bad flag) or an unreadable/malformed/unsupported artifact. No exit `3` — compare never contacts a runtime.
+- Built on a single-parse `compareFacts` extractor that reuses the existing detection and raw structs. Model/builders in `tools/replay/sources/core/compare.go`, rendering in `core/render_compare.go`, runner in `commands/compare.go`. `replay plan`/`analyze`/`timeline` are unchanged. **Replay module coverage 96.4%** (core 96.7%, commands 94.7%; `go test -coverpkg=./...`) — meets the ≥95% module bar.
+
 ### Added — Slice 4: Replay timeline command
 
 - **`replay [--json] timeline --from <file-or-dir> [--out <file>]`** — reconstructs a deterministic, ordered timeline of what a saved artifact says happened. Analysis only: no workflow execution, no runtime contact, no referenced-file reads, no mutation.

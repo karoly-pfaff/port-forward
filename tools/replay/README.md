@@ -42,11 +42,14 @@ Detection is based on JSON shape / manifest shape, **not the filename**:
 replay [--json] plan     --from <file-or-dir> [--out <file>]
 replay [--json] analyze  --from <file-or-dir> [--out <file>]
 replay [--json] timeline --from <file-or-dir> [--out <file>]
+replay [--json] compare  --left <file-or-dir> --right <file-or-dir> [--out <file>]
 ```
 
 - `--from <path>` — a workflow run/plan report file, a history export file, or a
   support-report bundle **directory** (whose `manifest.json` — and, for `analyze`,
   `report.json`/`explanations.json` — are read; no other file).
+- `--left <path>` / `--right <path>` — the two artifacts for `compare` (same path
+  forms as `--from`).
 - `--json` — emit JSON instead of human-readable text.
 - `--out <file>` — also write the JSON output to a file. Under `--json` the stdout
   bytes and the file bytes are identical.
@@ -161,6 +164,45 @@ event carries a `synthetic` boolean and the summary reports a `synthetic` count,
 reconstruction markers are always distinguishable from saved events. The timeline
 schema (`schemaVersion: 1`) is a **local tool schema**, separate from the plan and
 analysis schemas.
+
+### `compare` — offline diff of two artifacts
+
+`compare` parses two saved artifacts and reports what changed between them using
+only their offline contents.
+
+```text
+$ replay compare --left before.json --right after.json
+Portier Replay Compare
+
+Left:
+- Source: workflow-run-report
+- Workflow: policy-baseline-check
+- Result: passed
+
+Right:
+- Source: workflow-run-report
+- Workflow: policy-baseline-check
+- Result: failed
+
+Changes:
+- Result changed from passed to failed.
+- New emitted codes appeared.
+  - policy.lan_exposure_forbidden
+
+Insights:
+- Result changed from passed to failed.
+- New emitted codes appeared.
+```
+
+**Same-kind** comparisons produce a full diff: changed result/validity, step or run
+count deltas, added/removed/unchanged code sets, changed failed/skipped/invalid
+step sets, history workflow-distribution deltas, and changed failed-run sets.
+**Mixed-kind** comparisons (e.g. a run report vs a history export) produce a
+deterministic *limited* result — the two source kinds plus a clear
+"detailed comparison is limited" marker — never a crash and never a false claim of
+equivalence. Changes are emitted in a stable semantic order and set values are
+sorted ascending. The compare schema (`schemaVersion: 1`) is a **local tool
+schema**, separate from the plan, analysis, and timeline schemas.
 
 ## Replay plan
 
