@@ -8,6 +8,18 @@ All notable changes to Portier are documented here.
 
 v1.14 is an **architecture-migration release, not a feature release**: it moves the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. The Go service remains the preferred runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (still **234/234**). The migration is incremental and reversible — the existing Express server stays the active runtime until a NestJS replacement is explicitly validated.
 
+### Added — Slice 5: migrate `GET /api/status` into NestJS (runtime/manager read-provider pattern)
+
+The first **manager-dependent** read endpoint, establishing the narrow runtime-read provider seam.
+
+- **Migrated `GET /api/status`** (`server/sources/nest/api/status/`): `StatusController` (transport adapter) → `StatusService` (returns the injected reader's `listStatus()`) → a narrow **`StatusReader { listStatus(): ForwardStatus[] }`** behind the **`STATUS_READER`** token (`status.reader.ts`). The response is the `ForwardStatus[]` array verbatim, matching Express. Read-only and always `200` (no error branch).
+- **Why this endpoint:** chosen as the smallest manager-dependent read with **no volatile fields** — `ForwardStatus.startedAt` only appears for *running* rules, and counters are `0`/absent when stopped, so seeding **stopped** rules (which endpoint tests must do anyway — no sockets) gives **exact byte-for-byte parity** with no normalization. (`/api/config/export` and `/api/connections` carry `exportedAt`/`generatedAt` timestamps and were skipped for that reason.)
+- **Runtime/manager read-provider pattern:** the production status code holds **no manager/store dependency** — the `STATUS_READER` token defaults to a trivial `emptyStatusReader` (`{ listStatus: () => [] }`, the scaffold has no runtime wired). The real domain `ForwardManager` satisfies `StatusReader` and is bound to the token in tests (and when Nest becomes the active runtime). This seam is what the remaining manager-backed read endpoints (`/api/forwards`, `/api/connections`) will reuse.
+- **Parity** proven byte-for-byte for an empty manager and for a seeded manager (two stopped tcp/udp rules): the **same `ForwardManager` instance** is shared between Express (`createApp(manager)`) and Nest (`STATUS_READER` overridden via `@nestjs/testing`'s `overrideProvider`), so identical data + identical `listStatus()` give identical output. Added `@nestjs/testing` (server devDependency, Nest 11) — justified because a `ForwardManager` requires a backing store and cannot be cleanly seeded post-construction via `app.get` the way the mutable `ActivityStore` was; the seeded manager stays in test code. No new npm advisories.
+- **Existing parity preserved:** `GET /api/ports/advisory` and `GET /api/activity` parity still pass; `/health`, the `/api/*` 404 envelope, and non-API no-leak re-confirmed. No real sockets/listeners/forwarders are created (rules stay stopped).
+- **Still scaffold-only:** served only under `npm run start:nest`; the Express server remains the default active runtime and its `/api/status` is unchanged. `validate:contract` stays **234/234**.
+- **100% coverage of all new/changed Nest code** (status reader/service/controller/module, `app.module.ts`); 109 nest tests (8 added). Server coverage 99.0%/95.4%/100% (gate 95/92/99 PASS, none lowered).
+
 ### Added — Slice 4: migrate `GET /api/activity` into NestJS (injected-store DI pattern)
 
 The next safe read-only endpoint, establishing the inject-a-dependency-behind-a-token/fake pattern.
