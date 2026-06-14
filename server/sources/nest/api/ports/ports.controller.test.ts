@@ -1,32 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { ApiBadRequestException } from "../../common/api-errors.js";
+import type { PortAdvisory } from "@portier/shared";
+import { describe, expect, it, vi } from "vitest";
 import { PortsController } from "./ports.controller.js";
-import type { AdvisoryResult, PortsService } from "./ports.service.js";
-
-function controllerWith(result: AdvisoryResult): PortsController {
-  const stub = { resolveAdvisories: () => result } as unknown as PortsService;
-  return new PortsController(stub);
-}
+import { PortsAdvisoryQueryDto } from "./ports-advisory.query.dto.js";
+import type { PortsService } from "./ports.service.js";
 
 describe("PortsController.getAdvisory", () => {
-  it("returns the advisories when the service resolves them", () => {
-    const advisories = [{ code: "LAN_EXPOSURE", severity: "warning", message: "x" }] as const;
-    const controller = controllerWith({ ok: true, advisories: [...advisories] });
+  it("delegates the validated query to the service and returns its advisories", () => {
+    const advisories: PortAdvisory[] = [{ code: "LAN_EXPOSURE", severity: "warning", message: "x" }];
+    const getAdvisories = vi.fn(() => advisories);
+    const controller = new PortsController({ getAdvisories } as unknown as PortsService);
 
-    expect(controller.getAdvisory("48001", "forward", "0.0.0.0")).toEqual([...advisories]);
-  });
-
-  it("throws an ApiBadRequestException carrying the service errors (shared layer owns the envelope)", () => {
-    const controller = controllerWith({ ok: false, errors: ["purpose must be management or forward."] });
-
-    try {
-      controller.getAdvisory("48001", "bogus");
-      expect.unreachable("expected an ApiBadRequestException");
-    } catch (error) {
-      expect(error).toBeInstanceOf(ApiBadRequestException);
-      expect((error as ApiBadRequestException).getResponse()).toEqual({
-        errors: ["purpose must be management or forward."],
-      });
-    }
+    const query = Object.assign(new PortsAdvisoryQueryDto(), { port: 48001, purpose: "forward" as const });
+    expect(controller.getAdvisory(query)).toBe(advisories);
+    expect(getAdvisories).toHaveBeenCalledWith(query);
   });
 });

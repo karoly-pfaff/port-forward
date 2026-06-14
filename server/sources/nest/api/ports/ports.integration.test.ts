@@ -48,8 +48,11 @@ describe("GET /api/ports/advisory (Nest)", () => {
     `${BASE}?port=47831&purpose=management`,
     `${BASE}?port=80&purpose=forward`,
     `${BASE}?port=70000&purpose=forward`, // invalid port
+    `${BASE}?port=1.5&purpose=forward`, // non-integer port
+    `${BASE}?port=abc&purpose=forward`, // non-numeric port
     `${BASE}?port=48001&purpose=bogus`, // invalid purpose
     `${BASE}?purpose=forward`, // missing port
+    `${BASE}?port=48001&purpose=forward&unexpected=1`, // extra query param is ignored, not rejected
   ])("matches the existing Express route for %s", async (path) => {
     const [expressResponse, nestResponse] = await Promise.all([
       fetchApi(express.baseUrl, path),

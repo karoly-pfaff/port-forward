@@ -76,6 +76,7 @@ sources/nest/
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
     api-errors.ts                # ApiBadRequestException(string[]) — controllers raise this, not a literal
+    api-validation.pipe.ts       # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
   testing/
     api-parity.ts               # Express↔Nest parity harness (boot, fetch, deterministic compare)
 ```
@@ -108,6 +109,14 @@ management server's default `127.0.0.1:47831`.
   features compose as modules. Controllers must **not hand-roll the `{ errors }`
   envelope** — raise `ApiBadRequestException(string[])` (or another API exception)
   and let the shared `ApiErrorEnvelopeFilter` produce the contract shape.
+- Validate/coerce query and body inputs with **DTO classes** (`class-validator` /
+  `class-transformer`) applied via `ApiValidationPipe(Dto)` (`@Query(new
+  ApiValidationPipe(Dto))`), matching the existing Express coercion exactly so
+  parity stays byte-for-byte; the pipe throws `ApiBadRequestException` →
+  `400 { errors }`. The pipe takes the DTO class **explicitly** (esbuild doesn't
+  emit `design:paramtypes`). An endpoint with no validation errors (pure
+  coercion-with-fallback, e.g. `/api/activity`) keeps its coercion in the service
+  rather than adding a transform-only DTO.
 - **API contract parity is mandatory** — every migration step keeps
   `npm run validate:contract` green (TS↔Go), and no public API path/DTO is
   renamed for cosmetic reasons. Each migrated endpoint is also checked
