@@ -5,7 +5,9 @@
     "outDir": "build",
     "declaration": true,
     "declarationMap": true,
-    "types": ["node"]
+    "types": ["node"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": ["sources/**/*.ts"]
 }
