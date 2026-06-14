@@ -244,6 +244,102 @@ func itoa(i int) string {
 	return string(b)
 }
 
+func filterRuns() []HistoryRun {
+	// Newest-first, as the store holds them.
+	return []HistoryRun{
+		{ID: "c", Workflow: "beta", Result: "failed", Codes: []string{"policy.autostart_forbidden"}},
+		{ID: "b", Workflow: "beta", Result: "failed", Codes: []string{"policy.lan_exposure_forbidden", "workflow.run.input_failed"}},
+		{ID: "a", Workflow: "alpha", Result: "passed"},
+	}
+}
+
+func idsOf(runs []HistoryRun) []string {
+	ids := make([]string, len(runs))
+	for i, r := range runs {
+		ids[i] = r.ID
+	}
+	return ids
+}
+
+func TestApplyHistoryFilters_NoFilters(t *testing.T) {
+	got := ApplyHistoryFilters(filterRuns(), HistoryFilters{})
+	if !reflect.DeepEqual(idsOf(got), []string{"c", "b", "a"}) {
+		t.Errorf("ids = %v, want all newest-first", idsOf(got))
+	}
+}
+
+func TestApplyHistoryFilters_AND(t *testing.T) {
+	cases := []struct {
+		name   string
+		filter HistoryFilters
+		want   []string
+	}{
+		{"result", HistoryFilters{Result: "failed"}, []string{"c", "b"}},
+		{"workflow", HistoryFilters{Workflow: "beta"}, []string{"c", "b"}},
+		{"code", HistoryFilters{Code: "policy.lan_exposure_forbidden"}, []string{"b"}},
+		{"limit", HistoryFilters{Limit: 2}, []string{"c", "b"}},
+		{"all AND", HistoryFilters{Result: "failed", Workflow: "beta", Code: "policy.autostart_forbidden"}, []string{"c"}},
+		{"unmatched code", HistoryFilters{Code: "no.such.code"}, []string{}},
+		{"limit after filter", HistoryFilters{Result: "failed", Limit: 1}, []string{"c"}},
+	}
+	for _, tc := range cases {
+		got := idsOf(ApplyHistoryFilters(filterRuns(), tc.filter))
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: ids = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestApplyHistoryFilters_DoesNotMutateInput(t *testing.T) {
+	runs := filterRuns()
+	before := append([]HistoryRun{}, runs...)
+	_ = ApplyHistoryFilters(runs, HistoryFilters{Result: "failed", Limit: 1})
+	if !reflect.DeepEqual(runs, before) {
+		t.Errorf("ApplyHistoryFilters mutated the input slice")
+	}
+}
+
+func TestValidHistoryResult(t *testing.T) {
+	for _, ok := range []string{"passed", "failed"} {
+		if !ValidHistoryResult(ok) {
+			t.Errorf("ValidHistoryResult(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "invalid", "PASSED", "skipped", "ok"} {
+		if ValidHistoryResult(bad) {
+			t.Errorf("ValidHistoryResult(%q) = true, want false", bad)
+		}
+	}
+}
+
+func TestBuildHistoryListView_NoFiltersOmitsFilters(t *testing.T) {
+	view := BuildHistoryListView(History{Runs: filterRuns()}, HistoryFilters{})
+	if view.Filters != nil {
+		t.Errorf("filters should be nil when none active, got %+v", view.Filters)
+	}
+	if view.Shown != 3 || view.TotalStored != 3 {
+		t.Errorf("shown/total = %d/%d, want 3/3", view.Shown, view.TotalStored)
+	}
+	// Runs must be non-nil (stable [] shape) even on an empty history.
+	empty := BuildHistoryListView(History{}, HistoryFilters{})
+	if empty.Runs == nil {
+		t.Errorf("Runs should be non-nil empty slice")
+	}
+}
+
+func TestBuildHistoryListView_WithFilters(t *testing.T) {
+	view := BuildHistoryListView(History{Runs: filterRuns()}, HistoryFilters{Result: "failed", Limit: 1})
+	if view.Filters == nil || view.Filters.Result != "failed" || view.Filters.Limit != 1 {
+		t.Fatalf("filters = %+v", view.Filters)
+	}
+	if view.Shown != 1 || view.TotalStored != 3 {
+		t.Errorf("shown/total = %d/%d, want 1/3", view.Shown, view.TotalStored)
+	}
+	if idsOf(view.Runs)[0] != "c" {
+		t.Errorf("expected newest failed run c, got %v", idsOf(view.Runs))
+	}
+}
+
 func TestBuildHistoryExport_Empty(t *testing.T) {
 	export := BuildHistoryExport(History{SchemaVersion: HistorySchemaVersion}, fixedTime())
 	if export.SchemaVersion != HistoryExportSchemaVersion {

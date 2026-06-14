@@ -269,12 +269,16 @@ func TestWorkflowHistoryList_EmptyJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	var h workflow.History
-	if err := json.Unmarshal([]byte(out.String()), &h); err != nil {
-		t.Fatalf("decode: %v\n%s", err, out.String())
+	view := decodeListView(t, out.String())
+	if view.SchemaVersion != workflow.HistorySchemaVersion || view.Shown != 0 || view.TotalStored != 0 || len(view.Runs) != 0 {
+		t.Errorf("view = %+v", view)
 	}
-	if h.SchemaVersion != workflow.HistorySchemaVersion || len(h.Runs) != 0 {
-		t.Errorf("history = %+v", h)
+	if view.Filters != nil {
+		t.Errorf("filters should be omitted when none active, got %+v", view.Filters)
+	}
+	// runs must serialize as [] (not null) for a stable shape.
+	if !strings.Contains(out.String(), `"runs": []`) {
+		t.Errorf("empty list should emit runs: []; got %s", out.String())
 	}
 }
 
@@ -309,6 +313,276 @@ func TestWorkflowHistoryList_ReadFailure(t *testing.T) {
 	code := RunWorkflowHistory(false, []string{"list"}, &out, &errBuf)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (malformed history)", code)
+	}
+}
+
+// --- history list filtering (Slice 3) ---
+
+func decodeListView(t *testing.T, s string) workflow.HistoryListView {
+	t.Helper()
+	var v workflow.HistoryListView
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		t.Fatalf("decode list view: %v\n%s", err, s)
+	}
+	return v
+}
+
+// seedFilterHistory writes three runs; appended a,b,c so newest-first is c,b,a.
+func seedFilterHistory(t *testing.T) string {
+	t.Helper()
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	store := workflow.NewHistoryStore(histPath)
+	runs := []workflow.HistoryRun{
+		{ID: "a", Workflow: "alpha", Result: "passed", Summary: workflow.WorkflowRunSummary{Total: 1, Passed: 1}},
+		{ID: "b", Workflow: "beta", Result: "failed", Summary: workflow.WorkflowRunSummary{Total: 1, Failed: 1}, Codes: []string{"policy.lan_exposure_forbidden", "workflow.run.input_failed"}},
+		{ID: "c", Workflow: "beta", Result: "failed", Summary: workflow.WorkflowRunSummary{Total: 1, Failed: 1}, Codes: []string{"policy.autostart_forbidden"}},
+	}
+	for _, r := range runs {
+		if err := store.Append(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return histPath
+}
+
+func listIDs(view workflow.HistoryListView) []string {
+	ids := make([]string, len(view.Runs))
+	for i, r := range view.Runs {
+		ids[i] = r.ID
+	}
+	return ids
+}
+
+func runFilterJSON(t *testing.T, args ...string) (workflow.HistoryListView, int) {
+	t.Helper()
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(true, append([]string{"list"}, args...), &out, &errBuf)
+	if code != 0 {
+		return workflow.HistoryListView{}, code
+	}
+	return decodeListView(t, out.String()), code
+}
+
+func TestWorkflowHistoryListFilter_Result(t *testing.T) {
+	seedFilterHistory(t)
+	view, code := runFilterJSON(t, "--result", "failed")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := listIDs(view); !reflect.DeepEqual(got, []string{"c", "b"}) {
+		t.Errorf("ids = %v, want [c b] (newest-first failed)", got)
+	}
+	if view.Shown != 2 || view.TotalStored != 3 {
+		t.Errorf("shown/total = %d/%d, want 2/3", view.Shown, view.TotalStored)
+	}
+}
+
+func TestWorkflowHistoryListFilter_InvalidResult(t *testing.T) {
+	seedFilterHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"list", "--result", "bogus"}, &out, &errBuf); code != 2 {
+		t.Fatalf("exit = %d, want 2 (invalid result)", code)
+	}
+	// An explicit empty value is also rejected.
+	out.Reset()
+	errBuf.Reset()
+	if code := RunWorkflowHistory(false, []string{"list", "--result", ""}, &out, &errBuf); code != 2 {
+		t.Fatalf("empty result exit = %d, want 2", code)
+	}
+}
+
+func TestWorkflowHistoryListFilter_Workflow(t *testing.T) {
+	seedFilterHistory(t)
+	view, code := runFilterJSON(t, "--workflow", "beta")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := listIDs(view); !reflect.DeepEqual(got, []string{"c", "b"}) {
+		t.Errorf("ids = %v, want [c b]", got)
+	}
+	// Exact, case-sensitive: "Beta" matches nothing.
+	view2, _ := runFilterJSON(t, "--workflow", "Beta")
+	if view2.Shown != 0 {
+		t.Errorf("case-sensitive workflow match should be empty, got %v", listIDs(view2))
+	}
+}
+
+func TestWorkflowHistoryListFilter_WorkflowEmpty(t *testing.T) {
+	seedFilterHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"list", "--workflow", ""}, &out, &errBuf); code != 2 {
+		t.Fatalf("exit = %d, want 2 (empty workflow)", code)
+	}
+}
+
+func TestWorkflowHistoryListFilter_Code(t *testing.T) {
+	seedFilterHistory(t)
+	view, code := runFilterJSON(t, "--code", "policy.lan_exposure_forbidden")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := listIDs(view); !reflect.DeepEqual(got, []string{"b"}) {
+		t.Errorf("ids = %v, want [b]", got)
+	}
+}
+
+func TestWorkflowHistoryListFilter_CodeEmpty(t *testing.T) {
+	seedFilterHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"list", "--code", ""}, &out, &errBuf); code != 2 {
+		t.Fatalf("exit = %d, want 2 (empty code)", code)
+	}
+}
+
+func TestWorkflowHistoryListFilter_CodeUnmatchedIsEmptySuccess(t *testing.T) {
+	seedFilterHistory(t)
+	view, code := runFilterJSON(t, "--code", "no.such.code")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 for unmatched code", code)
+	}
+	if view.Shown != 0 || len(view.Runs) != 0 || view.TotalStored != 3 {
+		t.Errorf("view = %+v, want empty match with totalStored 3", view)
+	}
+}
+
+func TestWorkflowHistoryListFilter_Limit(t *testing.T) {
+	seedFilterHistory(t)
+	view, code := runFilterJSON(t, "--limit", "2")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := listIDs(view); !reflect.DeepEqual(got, []string{"c", "b"}) {
+		t.Errorf("ids = %v, want newest two [c b]", got)
+	}
+	if view.Shown != 2 || view.TotalStored != 3 {
+		t.Errorf("shown/total = %d/%d, want 2/3", view.Shown, view.TotalStored)
+	}
+}
+
+func TestWorkflowHistoryListFilter_InvalidLimits(t *testing.T) {
+	seedFilterHistory(t)
+	for _, val := range []string{"0", "-1", "abc"} {
+		var out, errBuf strings.Builder
+		if code := RunWorkflowHistory(false, []string{"list", "--limit", val}, &out, &errBuf); code != 2 {
+			t.Errorf("--limit %q exit = %d, want 2", val, code)
+		}
+	}
+}
+
+func TestWorkflowHistoryListFilter_ANDComposition(t *testing.T) {
+	seedFilterHistory(t)
+	view, code := runFilterJSON(t, "--result", "failed", "--workflow", "beta", "--code", "policy.autostart_forbidden", "--limit", "10")
+	if code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := listIDs(view); !reflect.DeepEqual(got, []string{"c"}) {
+		t.Errorf("ids = %v, want [c] (AND of all filters)", got)
+	}
+}
+
+func TestWorkflowHistoryListFilter_JSONShape(t *testing.T) {
+	seedFilterHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"list", "--result", "failed", "--limit", "5"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	view := decodeListView(t, out.String())
+	if view.Filters == nil || view.Filters.Result != "failed" || view.Filters.Limit != 5 {
+		t.Errorf("filters = %+v", view.Filters)
+	}
+	if view.Filters.Workflow != "" || view.Filters.Code != "" {
+		t.Errorf("inactive filter fields should be empty/omitted: %+v", view.Filters)
+	}
+	if view.Shown != 2 || view.TotalStored != 3 {
+		t.Errorf("shown/total = %d/%d", view.Shown, view.TotalStored)
+	}
+	// Inactive filter fields must be omitted from the `filters` object itself
+	// (run entries legitimately carry their own "workflow" key, so inspect the
+	// filters sub-object precisely).
+	var raw struct {
+		Filters map[string]any `json:"filters"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &raw); err != nil {
+		t.Fatalf("decode raw: %v", err)
+	}
+	if _, ok := raw.Filters["workflow"]; ok {
+		t.Errorf("inactive filter key 'workflow' should be omitted: %v", raw.Filters)
+	}
+	if _, ok := raw.Filters["code"]; ok {
+		t.Errorf("inactive filter key 'code' should be omitted: %v", raw.Filters)
+	}
+	if _, ok := raw.Filters["result"]; !ok {
+		t.Errorf("active filter key 'result' missing: %v", raw.Filters)
+	}
+}
+
+func TestWorkflowHistoryListFilter_HumanShowsFiltersAndSummary(t *testing.T) {
+	seedFilterHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"list", "--result", "failed", "--workflow", "beta", "--code", "policy.autostart_forbidden", "--limit", "5"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	s := out.String()
+	for _, want := range []string{"Filters:", "- Result: failed", "- Workflow: beta", "- Code: policy.autostart_forbidden", "- Limit: 5", "Summary:", "- 1 shown", "- 3 total stored"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("human output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestWorkflowHistoryListFilter_HumanNoMatch(t *testing.T) {
+	seedFilterHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"list", "--code", "no.such.code"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	s := out.String()
+	for _, want := range []string{"No workflow history entries matched the filters.", "- 0 shown", "- 3 total stored"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("no-match output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestWorkflowHistoryListFilter_EmptyHistoryWithFilters(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	view, code := runFilterJSON(t, "--result", "failed")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if view.Shown != 0 || view.TotalStored != 0 || len(view.Runs) != 0 {
+		t.Errorf("view = %+v, want empty", view)
+	}
+}
+
+func TestWorkflowHistoryListFilter_ReadFailure(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	if err := os.WriteFile(histPath, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	useHistoryPath(t, histPath)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"list", "--result", "failed"}, &out, &errBuf); code != 1 {
+		t.Fatalf("exit = %d, want 1 (read failure with filters)", code)
+	}
+}
+
+func TestWorkflowHistoryListFilter_DoesNotMutateStore(t *testing.T) {
+	histPath := seedFilterHistory(t)
+	before, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, code := runFilterJSON(t, "--result", "failed", "--limit", "1"); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	after, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("filtering mutated the history store")
 	}
 }
 

@@ -885,7 +885,7 @@ Exit codes: `0` the bundle was written; `1` an output directory create/write fai
 Inspect the **opt-in** local workflow run history recorded by [`workflow run --record-history`](#portier-workflow-run---file-workflowjson). Fully **offline** — these commands read and write a local history file only and **never contact the runtime**, run anything, or mutate any config/policy.
 
 ```
-portier workflow history list [--json]
+portier workflow history list [--result <passed|failed>] [--workflow <name>] [--code <code>] [--limit <n>] [--json]
 portier workflow history show <run-id> [--json]
 portier workflow history export --out <file> [--json]
 portier workflow history clear --yes
@@ -893,12 +893,32 @@ portier workflow history clear --yes
 
 History stores **compact metadata only** — run id, `createdAt` (RFC3339 UTC), workflow name, result, summary counts, compact per-step metadata (`id`/`type`/`status`/`exitCode`), and the deduped+sorted explanation/finding codes a run emitted. It **never** stores raw configs, policies, full embedded policy reports, file contents, logs, environment variables, process data, secrets, runtime URLs, or tokens. The store is **bounded** to the most recent **100** runs (newest first) and lives at `<user-config-dir>/portier/workflow-history.json`.
 
-- **`list`** prints recorded runs newest-first (or a clear empty message when none); `--json` emits `{ schemaVersion, runs: [ { id, createdAt, workflow, result, summary, steps, codes? } ] }`.
+- **`list`** prints recorded runs newest-first (or a clear empty message when none), optionally filtered (see below); `--json` emits `{ schemaVersion, filters?, shown, totalStored, runs: [ { id, createdAt, workflow, result, summary, steps, codes? } ] }`.
 - **`show <run-id>`** prints one recorded run (human or `--json`).
 - **`export --out <file>`** writes a compact JSON **snapshot** of the history to `<file>` for archiving or sharing (see below).
 - **`clear --yes`** deletes the local history file; `--yes` is required (already-empty/missing is a success).
 
-Exit codes: `0` success — including `list`/`export` with no runs and `clear` when already empty; `1` an unknown run id (`show`) or a history read/write failure; `2` missing/invalid arguments (a missing run id for `show`, a missing `--out` value for `export`, or `clear` without `--yes`). There is **no** connection-failure (`3`) code — these commands never contact the runtime.
+Exit codes: `0` success — including `list` with no matches, `list`/`export` with no runs, and `clear` when already empty; `1` an unknown run id (`show`) or a history read/write failure; `2` missing/invalid arguments (an invalid `list` filter value, a missing run id for `show`, a missing `--out` value for `export`, or `clear` without `--yes`). There is **no** connection-failure (`3`) code — these commands never contact the runtime.
+
+#### `workflow history list` filters
+
+`list` accepts optional filters that operate **only on the local compact history** (never the runtime or any referenced file):
+
+| Filter | Behaviour |
+| --- | --- |
+| `--result <passed\|failed>` | Keep only runs with this exact result. Any other value exits `2`. |
+| `--workflow <name>` | Keep only runs whose workflow name matches exactly (case-sensitive). An empty value exits `2`. |
+| `--code <code>` | Keep only runs whose `codes` list contains this exact code (older/no-longer-explainable codes are allowed). An empty value exits `2`. An unmatched code is an empty result with exit `0`. |
+| `--limit <n>` | Keep at most the newest `n` matches (`n` > 0). `0`, negative, or non-numeric exits `2`. |
+
+Filters **combine with AND** (a run must match all of them), and `--limit` is applied **after** filtering, so it returns the newest `n` matches. An empty match set is a success (exit `0`), not an error.
+
+Human output shows an active **Filters** block and a `Summary` (`N shown` / `N total stored`); a no-match prints "No workflow history entries matched the filters." With `--json`, the `filters` object is present **only when a filter is active** (and contains only the active fields):
+
+```
+portier workflow history list --result failed --workflow policy-baseline-check --limit 10
+portier --json workflow history list --result failed --code workflow.run.input_failed
+```
 
 #### `workflow history export`
 

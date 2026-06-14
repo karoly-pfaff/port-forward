@@ -67,6 +67,95 @@ type History struct {
 	Runs          []HistoryRun `json:"runs"`
 }
 
+// HistoryFilters describes the optional, AND-combined filters for listing the
+// workflow run history (v1.12 Slice 3). A zero value means "no filter". All
+// matching is over the compact local history metadata only — it never reads raw
+// reports, configs, or any external data. The JSON tags double as the `filters`
+// object emitted under --json (only active fields appear).
+type HistoryFilters struct {
+	Result   string `json:"result,omitempty"`   // exact run result ("passed"/"failed")
+	Workflow string `json:"workflow,omitempty"` // exact workflow name
+	Code     string `json:"code,omitempty"`     // run whose codes contain this code
+	Limit    int    `json:"limit,omitempty"`    // keep at most the newest N matches
+}
+
+// hasAny reports whether any filter is active.
+func (f HistoryFilters) hasAny() bool {
+	return f.Result != "" || f.Workflow != "" || f.Code != "" || f.Limit > 0
+}
+
+// ValidHistoryResult reports whether result is an accepted `--result` filter
+// value. Only the run-result values the store can actually contain are accepted
+// (an invalid plan is never recorded, so only passed/failed exist).
+func ValidHistoryResult(result string) bool {
+	return result == runResultPassed || result == runResultFailed
+}
+
+// ApplyHistoryFilters returns the runs matching every active filter, preserving
+// the input order (newest first). The limit is applied AFTER filtering, so it
+// returns the newest N matches. It returns a non-nil slice (possibly empty) and
+// never mutates the input. An unmatched filter simply yields an empty slice.
+func ApplyHistoryFilters(runs []HistoryRun, f HistoryFilters) []HistoryRun {
+	out := make([]HistoryRun, 0, len(runs))
+	for _, r := range runs {
+		if f.Result != "" && r.Result != f.Result {
+			continue
+		}
+		if f.Workflow != "" && r.Workflow != f.Workflow {
+			continue
+		}
+		if f.Code != "" && !containsString(r.Codes, f.Code) {
+			continue
+		}
+		out = append(out, r)
+	}
+	if f.Limit > 0 && len(out) > f.Limit {
+		out = out[:f.Limit]
+	}
+	return out
+}
+
+// HistoryListView is the result of listing the history with optional filters. It
+// is the JSON contract for `workflow history list` under --json: the matched runs
+// (newest first), the active filters (omitted when none), and the shown vs
+// total-stored counts. It carries only compact history metadata.
+type HistoryListView struct {
+	SchemaVersion int             `json:"schemaVersion"`
+	Filters       *HistoryFilters `json:"filters,omitempty"`
+	Shown         int             `json:"shown"`
+	TotalStored   int             `json:"totalStored"`
+	Runs          []HistoryRun    `json:"runs"`
+}
+
+// BuildHistoryListView applies the filters to a loaded history and builds the
+// list view. `filters` is included only when at least one filter is active
+// (deterministic: the key is present iff filtering is in effect, and within it
+// only active fields appear). It does not mutate h.
+func BuildHistoryListView(h History, f HistoryFilters) HistoryListView {
+	filtered := ApplyHistoryFilters(h.Runs, f)
+	view := HistoryListView{
+		SchemaVersion: HistorySchemaVersion,
+		Shown:         len(filtered),
+		TotalStored:   len(h.Runs),
+		Runs:          filtered,
+	}
+	if f.hasAny() {
+		ff := f
+		view.Filters = &ff
+	}
+	return view
+}
+
+// containsString reports whether list contains s.
+func containsString(list []string, s string) bool {
+	for _, v := range list {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
 // HistoryExportSchemaVersion is the schema version of the workflow-history export
 // snapshot (v1.12 Slice 2). It is independent of the on-disk HistorySchemaVersion.
 const HistoryExportSchemaVersion = 1

@@ -35,10 +35,16 @@ file contents, logs, environment variables, process data, secrets, runtime URLs,
 or tokens. History is bounded to the most recent 100 runs.
 
 Subcommands:
-  list                 List recorded runs (newest first).
+  list [filters]       List recorded runs (newest first), optionally filtered.
   show <run-id>        Show one recorded run by id.
   export --out <file>  Write a compact JSON snapshot of the history to a file.
   clear --yes          Delete the local history file (requires --yes).
+
+List filters (AND-combined; all operate only on local compact history):
+  --result <passed|failed>  Keep only runs with this result.
+  --workflow <name>         Keep only runs with this exact workflow name.
+  --code <code>             Keep only runs whose codes contain this exact code.
+  --limit <n>               Keep at most the newest N matching runs (n > 0).
 
 Options:
   --json           Output as machine-readable JSON (list/show; with export, also
@@ -47,11 +53,11 @@ Options:
   --yes            Confirm deletion (clear).
 
 Exit codes:
-  0  Success (including 'list'/'export' with no runs and 'clear' when already
-     empty)
+  0  Success (including 'list' with no matches, 'list'/'export' with no runs, and
+     'clear' when already empty)
   1  An unknown run id ('show'), or a history read/write failure
-  2  Missing/invalid arguments (a missing run id for 'show', a missing --out value
-     for 'export', or 'clear' without --yes)
+  2  Missing/invalid arguments (an invalid 'list' filter value, a missing run id
+     for 'show', a missing --out value for 'export', or 'clear' without --yes)
 
 The export snapshot is compact metadata only — it never contains raw configs,
 policies, full reports, logs, environment variables, process data, runtime URLs,
@@ -62,7 +68,9 @@ executes a workflow, or reads the files a workflow step refers to.
 Examples:
   portier workflow run --file workflow.json --record-history
   portier workflow history list
-  portier --json workflow history list
+  portier workflow history list --result failed --limit 10
+  portier workflow history list --workflow policy-baseline-check
+  portier --json workflow history list --code policy.lan_exposure_forbidden
   portier workflow history show 20260614T101530Z-policy-baseline-check-a1b2c3d4
   portier workflow history export --out workflow-history-export.json
   portier --json workflow history export --out workflow-history-export.json
@@ -129,14 +137,41 @@ func RunWorkflowHistory(jsonOutput bool, args []string, stdout, stderr io.Writer
 	}
 }
 
-// runWorkflowHistoryList prints all recorded runs (newest first), or a clear empty
-// message. Exit codes: 0 success (including empty), 1 a history read failure.
+// runWorkflowHistoryList prints recorded runs (newest first), optionally filtered
+// by result/workflow/code/limit (AND-combined). Filtering operates only on the
+// compact local history; it never contacts the runtime or reads workflow files.
+// Exit codes: 0 success (including an empty match set), 1 a history read failure,
+// 2 an invalid filter value.
 func runWorkflowHistoryList(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("workflow history list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
+	flagResult := fs.String("result", "", "filter by run result (passed|failed)")
+	flagWorkflow := fs.String("workflow", "", "filter by exact workflow name")
+	flagCode := fs.String("code", "", "filter by an emitted code (exact match)")
+	flagLimit := fs.Int("limit", 0, "return at most the newest N matching runs")
 	if code, done := parseHistoryFlags(fs, args, stdout, stderr); done {
 		return code
 	}
+
+	// Validate filter inputs (CLI usage errors → exit 2). fs.Visit distinguishes
+	// an explicitly-set flag from its default, so `--workflow ""` / `--code ""` /
+	// `--limit 0` are rejected while an absent flag simply means "no filter".
+	// (A non-numeric --limit already failed flag parsing above → exit 2.)
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if set["result"] && !workflow.ValidHistoryResult(*flagResult) {
+		return historyUsageError(stderr, fmt.Sprintf("invalid --result %q (expected one of: passed, failed)", *flagResult))
+	}
+	if set["workflow"] && *flagWorkflow == "" {
+		return historyUsageError(stderr, "--workflow requires a non-empty value")
+	}
+	if set["code"] && *flagCode == "" {
+		return historyUsageError(stderr, "--code requires a non-empty value")
+	}
+	if set["limit"] && *flagLimit <= 0 {
+		return historyUsageError(stderr, fmt.Sprintf("--limit must be a positive integer (got %d)", *flagLimit))
+	}
+	filters := workflow.HistoryFilters{Result: *flagResult, Workflow: *flagWorkflow, Code: *flagCode, Limit: *flagLimit}
 
 	store, err := historyStore()
 	if err != nil {
@@ -149,26 +184,23 @@ func runWorkflowHistoryList(jsonOutput bool, args []string, stdout, stderr io.Wr
 		return 1
 	}
 
+	view := workflow.BuildHistoryListView(hist, filters)
 	if jsonOutput {
-		if err := output.PrintJSON(stdout, hist); err != nil {
+		if err := output.PrintJSON(stdout, view); err != nil {
 			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
 			return 1
 		}
 		return 0
 	}
-
-	fmt.Fprintln(stdout, "Portier Workflow History")
-	fmt.Fprintln(stdout)
-	if len(hist.Runs) == 0 {
-		fmt.Fprintln(stdout, "No workflow runs recorded.")
-		fmt.Fprintln(stdout, "Record a run with 'portier workflow run --file <workflow.json> --record-history'.")
-		return 0
-	}
-	for _, r := range hist.Runs {
-		printHistoryRunHuman(r, stdout)
-		fmt.Fprintln(stdout)
-	}
+	printHistoryListHuman(view, stdout)
 	return 0
+}
+
+// historyUsageError prints a filter usage error + help and returns exit code 2.
+func historyUsageError(stderr io.Writer, msg string) int {
+	fmt.Fprintf(stderr, "Error: %s\n", msg)
+	fmt.Fprint(stderr, workflowHistoryHelp)
+	return 2
 }
 
 // runWorkflowHistoryShow prints one recorded run by id. Exit codes: 0 success, 1 an
@@ -336,6 +368,52 @@ func printHistoryRunHuman(r workflow.HistoryRun, w io.Writer) {
 	if len(r.Codes) > 0 {
 		fmt.Fprintf(w, "  Codes: %s\n", strings.Join(r.Codes, ", "))
 	}
+}
+
+// printHistoryListHuman renders a (possibly filtered) history list: an optional
+// Filters block, the matched runs, and a shown/total-stored summary. The pristine
+// first-run case (no filters, nothing stored) keeps the original guidance message
+// with no summary block.
+func printHistoryListHuman(view workflow.HistoryListView, w io.Writer) {
+	fmt.Fprintln(w, "Portier Workflow History")
+	fmt.Fprintln(w)
+
+	if view.Filters == nil && view.TotalStored == 0 {
+		fmt.Fprintln(w, "No workflow runs recorded.")
+		fmt.Fprintln(w, "Record a run with 'portier workflow run --file <workflow.json> --record-history'.")
+		return
+	}
+
+	if f := view.Filters; f != nil {
+		fmt.Fprintln(w, "Filters:")
+		if f.Result != "" {
+			fmt.Fprintf(w, "- Result: %s\n", f.Result)
+		}
+		if f.Workflow != "" {
+			fmt.Fprintf(w, "- Workflow: %s\n", f.Workflow)
+		}
+		if f.Code != "" {
+			fmt.Fprintf(w, "- Code: %s\n", f.Code)
+		}
+		if f.Limit > 0 {
+			fmt.Fprintf(w, "- Limit: %d\n", f.Limit)
+		}
+		fmt.Fprintln(w)
+	}
+
+	if len(view.Runs) == 0 {
+		fmt.Fprintln(w, "No workflow history entries matched the filters.")
+		fmt.Fprintln(w)
+	} else {
+		for _, r := range view.Runs {
+			printHistoryRunHuman(r, w)
+			fmt.Fprintln(w)
+		}
+	}
+
+	fmt.Fprintln(w, "Summary:")
+	fmt.Fprintf(w, "- %d shown\n", view.Shown)
+	fmt.Fprintf(w, "- %d total stored\n", view.TotalStored)
 }
 
 // printHistoryExportHuman renders the export confirmation, including the run count

@@ -8,6 +8,20 @@ All notable changes to Portier are documented here.
 
 v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change).
 
+### Added — Slice 3: Workflow history filtering
+
+- **Filters on `portier workflow history list`.** `--result <passed|failed>` (exact run result), `--workflow <name>` (exact, case-sensitive), `--code <code>` (run whose `codes` list contains the code, exact match), and `--limit <n>` (keep at most the newest `n` matches). Filtering operates **only on the compact local history** — it never contacts the runtime, executes a workflow, reads workflow-referenced files, or collects logs/env/process data.
+- **AND composition.** All active filters must match. `--limit` is applied **after** filtering, so it returns the newest `n` matches (the history is newest-first).
+- **Empty match sets are success.** A filter that matches nothing (including an unknown `--code`, which may name an older code no longer explainable) returns an empty list and exits `0`.
+- **Human output** shows an active **Filters** block and a `Summary` with `N shown` / `N total stored`; a no-match shows "No workflow history entries matched the filters." The pristine first-run case (nothing recorded, no filters) keeps its original guidance message.
+- **`--json`** emits `{ schemaVersion, filters?, shown, totalStored, runs }`. The `filters` object is present **only when at least one filter is active**, and within it only the active fields appear (`omitempty`); `runs` is always an array (`[]` when empty).
+- **Exit codes.** `0` success (including an empty match set); `1` a history read failure; `2` an invalid filter value (an unknown `--result`, an empty `--workflow`/`--code`, or a `--limit` that is non-positive or non-numeric). No exit `3` — listing never contacts the runtime.
+
+### Notes (Slice 3)
+
+- CLI-only, `validate:contract` stays **234/234**, no API/DTO/contract change. The filter model + matching + list-view live in the `workflow` package (`workflow/history.go`: `HistoryFilters`, `ApplyHistoryFilters`, `HistoryListView`, `BuildHistoryListView`, `ValidHistoryResult`); `commands` stays **handlers-only** (`runWorkflowHistoryList` parses/validates the flags via `fs.Visit` for set-vs-default and calls the workflow helpers). The `workflow` history code still never imports `client`/`commands` and never contacts the runtime; filtering does not mutate the store.
+- Covered by white-box `workflow/history_internal_test.go` (no-filter pass-through, per-filter + AND composition + limit-after-filter + unmatched-code, no-input-mutation, `ValidHistoryResult` allowlist, list-view filters-omitted/included + non-nil empty runs) and `commands/workflow_history_internal_test.go` (result/workflow/code/limit, invalid result/empty workflow/empty code/invalid limits → 2, AND composition, JSON shape incl. `omitempty` filter keys, human Filters+Summary + no-match, empty-history-with-filters, read failure → 1, store-not-mutated). CLI coverage **97.6%** (gate **97 PASS**, not lowered/raised); the new filter helpers and handler paths are 100% covered.
+
 ### Added — Slice 2: Workflow history export
 
 - **`portier workflow history export --out <file>`.** Writes a compact, deterministic JSON snapshot of the local workflow history to a file for manual archiving or sharing. Fully **offline and read-only** — it loads the history store, builds the snapshot, and writes it; it **never** mutates the store, contacts the runtime, executes a workflow, or reads the files a workflow step refers to.
