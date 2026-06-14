@@ -39,6 +39,7 @@ Subcommands:
   stats [filters]      Summarize the (optionally filtered) history.
   show <run-id>        Show one recorded run by id.
   export --out <file>  Write a compact JSON snapshot of the history to a file.
+  prune <mode> --yes   Remove entries (by retention or filter; requires --yes).
   clear --yes          Delete the local history file (requires --yes).
 
 List/stats filters (AND-combined; all operate only on local compact history):
@@ -46,6 +47,10 @@ List/stats filters (AND-combined; all operate only on local compact history):
   --workflow <name>         Keep only runs with this exact workflow name.
   --code <code>             Keep only runs whose codes contain this exact code.
   --limit <n>               Keep at most the newest N matching runs (n > 0).
+
+Prune modes (exactly one; destructive, requires --yes; never accepts --limit):
+  --keep <n>                Keep the newest N entries, remove older ones (n >= 0).
+  --result/--workflow/--code  Remove entries matching these filters (AND-combined).
 
 Options:
   --json           Output as machine-readable JSON (list/show; with export, also
@@ -55,10 +60,11 @@ Options:
 
 Exit codes:
   0  Success (including 'list'/'stats' with no matches, 'list'/'stats'/'export'
-     with no runs, and 'clear' when already empty)
+     with no runs, 'prune' that removed 0 entries, and 'clear' when already empty)
   1  An unknown run id ('show'), or a history read/write failure
   2  Missing/invalid arguments (an invalid 'list'/'stats' filter value, a missing
-     run id for 'show', a missing --out value for 'export', or 'clear' without
+     run id for 'show', a missing --out value for 'export', a missing/ambiguous
+     'prune' mode or invalid --keep/filter value, or 'prune'/'clear' without
      --yes)
 
 The export snapshot is compact metadata only — it never contains raw configs,
@@ -75,6 +81,8 @@ Examples:
   portier --json workflow history list --code policy.lan_exposure_forbidden
   portier workflow history stats
   portier --json workflow history stats --result failed
+  portier workflow history prune --keep 50 --yes
+  portier workflow history prune --result passed --workflow nightly-check --yes
   portier workflow history show 20260614T101530Z-policy-baseline-check-a1b2c3d4
   portier workflow history export --out workflow-history-export.json
   portier --json workflow history export --out workflow-history-export.json
@@ -131,6 +139,8 @@ func RunWorkflowHistory(jsonOutput bool, args []string, stdout, stderr io.Writer
 		return runWorkflowHistoryExport(jsonOutput, args[1:], stdout, stderr)
 	case "stats":
 		return runWorkflowHistoryStats(jsonOutput, args[1:], stdout, stderr)
+	case "prune":
+		return runWorkflowHistoryPrune(jsonOutput, args[1:], stdout, stderr)
 	case "clear":
 		return runWorkflowHistoryClear(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -204,6 +214,93 @@ func runWorkflowHistoryStats(jsonOutput bool, args []string, stdout, stderr io.W
 	return 0
 }
 
+// runWorkflowHistoryPrune removes entries from the local history, either by
+// retention (--keep N keeps the newest N) or by filter (--result/--workflow/--code
+// remove matching entries). Exactly one mode is required, and the destructive
+// operation requires --yes. It mutates ONLY the compact local history store — it
+// never contacts the runtime, executes a workflow, reads workflow files, or
+// touches configs/policies/reports. Exit codes: 0 success (including removed 0),
+// 1 a history read/write failure, 2 a usage error (no/ambiguous mode, invalid
+// keep/filter value, or missing --yes).
+func runWorkflowHistoryPrune(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("workflow history prune", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flagKeep := fs.Int("keep", 0, "keep the newest N entries, removing older ones")
+	flagResult := fs.String("result", "", "remove runs with this result (passed|failed)")
+	flagWorkflow := fs.String("workflow", "", "remove runs with this exact workflow name")
+	flagCode := fs.String("code", "", "remove runs whose codes contain this exact code")
+	flagYes := fs.Bool("yes", false, "confirm the destructive prune")
+	if code, done := parseHistoryFlags(fs, args, stdout, stderr); done {
+		return code
+	}
+
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	keepMode := set["keep"]
+	filterMode := set["result"] || set["workflow"] || set["code"]
+
+	// Exactly one explicit mode; the two modes are mutually exclusive.
+	switch {
+	case !keepMode && !filterMode:
+		return historyUsageError(stderr, "prune requires a mode: --keep <n> or at least one filter (--result/--workflow/--code)")
+	case keepMode && filterMode:
+		return historyUsageError(stderr, "--keep cannot be combined with filters")
+	}
+
+	var opts workflow.HistoryPruneOptions
+	if keepMode {
+		if *flagKeep < 0 {
+			return historyUsageError(stderr, fmt.Sprintf("--keep must be a non-negative integer (got %d)", *flagKeep))
+		}
+		keep := *flagKeep
+		opts.Keep = &keep
+	} else {
+		if set["result"] && !workflow.ValidHistoryResult(*flagResult) {
+			return historyUsageError(stderr, fmt.Sprintf("invalid --result %q (expected one of: passed, failed)", *flagResult))
+		}
+		if set["workflow"] && *flagWorkflow == "" {
+			return historyUsageError(stderr, "--workflow requires a non-empty value")
+		}
+		if set["code"] && *flagCode == "" {
+			return historyUsageError(stderr, "--code requires a non-empty value")
+		}
+		opts.Filters = workflow.HistoryFilters{Result: *flagResult, Workflow: *flagWorkflow, Code: *flagCode}
+	}
+
+	// Destructive: require explicit confirmation BEFORE touching the store.
+	if !*flagYes {
+		return historyUsageError(stderr, "prune is destructive and requires --yes to confirm")
+	}
+
+	store, code, done := loadHistoryStore(stderr)
+	if done {
+		return code
+	}
+	hist, err := store.Load()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading history %s: %v\n", store.Path(), err)
+		return 1
+	}
+
+	kept, result := workflow.PruneHistory(hist, opts)
+	if result.Removed > 0 {
+		if err := store.Save(kept); err != nil {
+			fmt.Fprintf(stderr, "Error writing history %s: %v\n", store.Path(), err)
+			return 1
+		}
+	}
+
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, result); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	printHistoryPruneHuman(result, stdout)
+	return 0
+}
+
 // parseHistoryFilters defines and parses the shared list/stats filter flags
 // (--result/--workflow/--code/--limit) on fs, then validates them. It returns the
 // resolved filters, or (filters, exitCode, true) when the caller should return
@@ -237,14 +334,24 @@ func parseHistoryFilters(fs *flag.FlagSet, args []string, stdout, stderr io.Writ
 	return workflow.HistoryFilters{Result: *flagResult, Workflow: *flagWorkflow, Code: *flagCode, Limit: *flagLimit}, 0, false
 }
 
+// loadHistoryStore resolves the history store path. It returns (store, exitCode,
+// true) when the caller should return exitCode (1 on a path-resolution failure).
+func loadHistoryStore(stderr io.Writer) (*workflow.HistoryStore, int, bool) {
+	store, err := historyStore()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: could not resolve history path: %v\n", err)
+		return nil, 1, true
+	}
+	return store, 0, false
+}
+
 // loadHistoryForRead resolves the store path and loads the history for a
 // read-only command. It returns (history, exitCode, true) when the caller should
 // return exitCode (1 on a path-resolution or read failure).
 func loadHistoryForRead(stderr io.Writer) (workflow.History, int, bool) {
-	store, err := historyStore()
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: could not resolve history path: %v\n", err)
-		return workflow.History{}, 1, true
+	store, code, done := loadHistoryStore(stderr)
+	if done {
+		return workflow.History{}, code, true
 	}
 	hist, err := store.Load()
 	if err != nil {
@@ -533,6 +640,16 @@ func printHistoryStatsHuman(stats workflow.HistoryStats, w io.Writer) {
 			fmt.Fprintf(w, "- %s: %d\n", cc.Code, cc.Count)
 		}
 	}
+}
+
+// printHistoryPruneHuman renders the prune outcome (removed/kept/before/after).
+func printHistoryPruneHuman(result workflow.HistoryPruneResult, w io.Writer) {
+	fmt.Fprintln(w, "Workflow history pruned.")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Removed: %d\n", result.Removed)
+	fmt.Fprintf(w, "Kept: %d\n", result.Kept)
+	fmt.Fprintf(w, "Total before: %d\n", result.TotalBefore)
+	fmt.Fprintf(w, "Total after: %d\n", result.TotalAfter)
 }
 
 // printHistoryExportHuman renders the export confirmation, including the run count

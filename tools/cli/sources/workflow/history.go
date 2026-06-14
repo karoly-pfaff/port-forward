@@ -91,6 +91,22 @@ func ValidHistoryResult(result string) bool {
 	return result == runResultPassed || result == runResultFailed
 }
 
+// runMatchesFilters reports whether a run matches the result/workflow/code
+// filters (Limit is a list/stats concern, not a per-run match, so it is ignored
+// here). An empty filter field matches everything.
+func runMatchesFilters(r HistoryRun, f HistoryFilters) bool {
+	if f.Result != "" && r.Result != f.Result {
+		return false
+	}
+	if f.Workflow != "" && r.Workflow != f.Workflow {
+		return false
+	}
+	if f.Code != "" && !containsString(r.Codes, f.Code) {
+		return false
+	}
+	return true
+}
+
 // ApplyHistoryFilters returns the runs matching every active filter, preserving
 // the input order (newest first). The limit is applied AFTER filtering, so it
 // returns the newest N matches. It returns a non-nil slice (possibly empty) and
@@ -98,16 +114,9 @@ func ValidHistoryResult(result string) bool {
 func ApplyHistoryFilters(runs []HistoryRun, f HistoryFilters) []HistoryRun {
 	out := make([]HistoryRun, 0, len(runs))
 	for _, r := range runs {
-		if f.Result != "" && r.Result != f.Result {
-			continue
+		if runMatchesFilters(r, f) {
+			out = append(out, r)
 		}
-		if f.Workflow != "" && r.Workflow != f.Workflow {
-			continue
-		}
-		if f.Code != "" && !containsString(r.Codes, f.Code) {
-			continue
-		}
-		out = append(out, r)
 	}
 	if f.Limit > 0 && len(out) > f.Limit {
 		out = out[:f.Limit]
@@ -268,6 +277,61 @@ func sortCounts[T any](items []T, key func(T) (int, string)) {
 		}
 		return ki < kj
 	})
+}
+
+// HistoryPruneOptions selects which entries a prune keeps. Exactly one mode is
+// used: keep-mode (Keep non-nil) keeps the newest Keep entries; otherwise
+// filter-mode REMOVES entries matching Filters (Result/Workflow/Code, AND-combined;
+// Limit is ignored). The command layer enforces "exactly one mode".
+type HistoryPruneOptions struct {
+	Keep    *int           // keep-mode: keep the newest *Keep entries (>= 0)
+	Filters HistoryFilters // filter-mode: remove entries matching these
+}
+
+// HistoryPruneResult reports the outcome of a prune. It is the JSON contract for
+// `workflow history prune` under --json.
+type HistoryPruneResult struct {
+	SchemaVersion int `json:"schemaVersion"`
+	Removed       int `json:"removed"`
+	Kept          int `json:"kept"`
+	TotalBefore   int `json:"totalBefore"`
+	TotalAfter    int `json:"totalAfter"`
+}
+
+// PruneHistory computes the kept history and the prune result from a loaded
+// history and options. It is pure — it never mutates h's runs in place and never
+// touches anything but the in-memory data. Keep-mode keeps the newest N (the
+// store is newest-first); filter-mode keeps the entries NOT matching the filters.
+// An unmatched filter (or a keep N >= the entry count) removes nothing.
+func PruneHistory(h History, opts HistoryPruneOptions) (History, HistoryPruneResult) {
+	before := len(h.Runs)
+	var kept []HistoryRun
+	if opts.Keep != nil {
+		n := *opts.Keep
+		if n < 0 {
+			n = 0
+		}
+		if n >= before {
+			kept = append([]HistoryRun{}, h.Runs...) // keep all (copy; no removal)
+		} else {
+			kept = append([]HistoryRun{}, h.Runs[:n]...) // newest n
+		}
+	} else {
+		kept = make([]HistoryRun, 0, before)
+		for _, r := range h.Runs {
+			if !runMatchesFilters(r, opts.Filters) {
+				kept = append(kept, r)
+			}
+		}
+	}
+	result := HistoryPruneResult{
+		SchemaVersion: HistorySchemaVersion,
+		Removed:       before - len(kept),
+		Kept:          len(kept),
+		TotalBefore:   before,
+		TotalAfter:    len(kept),
+	}
+	return History{SchemaVersion: HistorySchemaVersion, Runs: kept}, result
 }
 
 // containsString reports whether list contains s.
@@ -471,6 +535,14 @@ func (s *HistoryStore) Append(run HistoryRun) error {
 	if len(h.Runs) > historyMaxRuns {
 		h.Runs = h.Runs[:historyMaxRuns]
 	}
+	return s.write(h)
+}
+
+// Save writes the given history to the store, stamping the current schema
+// version. The parent directory is created if missing. Used by prune to persist
+// the kept entries; it never contacts the runtime.
+func (s *HistoryStore) Save(h History) error {
+	h.SchemaVersion = HistorySchemaVersion
 	return s.write(h)
 }
 

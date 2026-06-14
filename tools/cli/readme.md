@@ -880,7 +880,7 @@ Exit codes: `0` the bundle was written; `1` an output directory create/write fai
 
 > The report bundle is generated from an **existing** report — `workflow report` never re-runs the workflow or reads the files a step referenced. For AI handoff, pair it with the docs-only prompt in [`prompts/workflow.md`](../../prompts/workflow.md): paste `summary.txt`, `report.json`, and `explanations.json`. **Portier never sends anything anywhere** (no AI integration, upload, or telemetry).
 
-### `portier workflow history list|stats|show|export|clear`
+### `portier workflow history list|stats|show|export|prune|clear`
 
 Inspect the **opt-in** local workflow run history recorded by [`workflow run --record-history`](#portier-workflow-run---file-workflowjson). Fully **offline** — these commands read and write a local history file only and **never contact the runtime**, run anything, or mutate any config/policy.
 
@@ -889,6 +889,7 @@ portier workflow history list  [--result <passed|failed>] [--workflow <name>] [-
 portier workflow history stats [--result <passed|failed>] [--workflow <name>] [--code <code>] [--limit <n>] [--json]
 portier workflow history show <run-id> [--json]
 portier workflow history export --out <file> [--json]
+portier workflow history prune <--keep <n> | --result/--workflow/--code> --yes [--json]
 portier workflow history clear --yes
 ```
 
@@ -898,9 +899,10 @@ History stores **compact metadata only** — run id, `createdAt` (RFC3339 UTC), 
 - **`stats`** summarizes the (optionally filtered) history by result, workflow, step status/type, and code (see below).
 - **`show <run-id>`** prints one recorded run (human or `--json`).
 - **`export --out <file>`** writes a compact JSON **snapshot** of the history to `<file>` for archiving or sharing (see below).
+- **`prune`** removes entries by retention (`--keep <n>`) or filter (`--result`/`--workflow`/`--code`); destructive, requires `--yes` (see below).
 - **`clear --yes`** deletes the local history file; `--yes` is required (already-empty/missing is a success).
 
-Exit codes: `0` success — including `list`/`stats` with no matches, `list`/`stats`/`export` with no runs, and `clear` when already empty; `1` an unknown run id (`show`) or a history read/write failure; `2` missing/invalid arguments (an invalid `list`/`stats` filter value, a missing run id for `show`, a missing `--out` value for `export`, or `clear` without `--yes`). There is **no** connection-failure (`3`) code — these commands never contact the runtime.
+Exit codes: `0` success — including `list`/`stats` with no matches, `list`/`stats`/`export` with no runs, `prune` that removed 0 entries, and `clear` when already empty; `1` an unknown run id (`show`) or a history read/write failure; `2` missing/invalid arguments (an invalid `list`/`stats` filter value, a missing run id for `show`, a missing `--out` value for `export`, a missing/ambiguous `prune` mode or invalid `--keep`/filter value, or `prune`/`clear` without `--yes`). There is **no** connection-failure (`3`) code — these commands never contact the runtime.
 
 #### `workflow history list`/`stats` filters
 
@@ -957,6 +959,25 @@ Snapshot shape:
 ```
 
 The `runs` entries are the same compact records as the store (newest first, codes left exactly as stored). The `safety` object's eight flags are **always false** — an explicit statement that the snapshot carries compact metadata only (no raw configs/policies, full reports, logs, environment, process data, runtime URLs, or tokens). With the global `--json` the snapshot is also printed to stdout, **byte-identical** to the file (`portier --json workflow history export --out <file>`). Exit codes: `0` written (including an empty snapshot); `1` a history read failure, an output write failure, or a JSON-encode failure; `2` a missing `--out` value.
+
+#### `workflow history prune`
+
+`workflow history prune` removes entries from the local history. It is **destructive and requires `--yes`**, and mutates **only the compact local history store** — it never contacts the runtime, executes a workflow, reads workflow-referenced files, or touches configs/policies/reports. Exactly one mode is required:
+
+| Mode | Behaviour |
+| --- | --- |
+| `--keep <n>` | Keep the newest `n` entries, remove the rest (`n >= 0`; `--keep 0` removes all). |
+| `--result`/`--workflow`/`--code` | Remove entries **matching** these filters (AND-combined, same semantics as `list`). |
+
+`--keep` and filters are mutually exclusive; `--limit` is **not** accepted for prune. A no-mode invocation, `--keep` + filters, a negative/non-numeric `--keep`, or an invalid filter value is a usage error (exit `2`, no mutation). An empty match (or `--keep n >=` the entry count) removes `0` entries and exits `0`; missing history is a no-op that **creates no file**.
+
+```
+portier workflow history prune --keep 50 --yes
+portier workflow history prune --result passed --workflow nightly-check --yes
+portier --json workflow history prune --code policy.lan_exposure_forbidden --yes
+```
+
+Human output reports `Removed`/`Kept`/`Total before`/`Total after`; `--json` emits `{ schemaVersion, removed, kept, totalBefore, totalAfter }`. Exit codes: `0` success (including `removed 0`); `1` a history read/write failure; `2` a usage error (no/ambiguous mode, invalid `--keep`/filter value, or missing `--yes`).
 
 > Workflow history is **opt-in local observability** — Portier records nothing unless you pass `--record-history`, adds no telemetry/upload, and runs no background collection.
 

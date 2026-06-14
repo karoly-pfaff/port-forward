@@ -454,6 +454,132 @@ func TestBuildHistoryStats_DoesNotMutateInput(t *testing.T) {
 	}
 }
 
+// --- prune (Slice 5) ---
+
+func intPtr(n int) *int { return &n }
+
+func TestPruneHistory_KeepNewestN(t *testing.T) {
+	h := History{Runs: filterRuns()} // newest-first: c, b, a
+	kept, result := PruneHistory(h, HistoryPruneOptions{Keep: intPtr(2)})
+	if got := idsOf(kept.Runs); !reflect.DeepEqual(got, []string{"c", "b"}) {
+		t.Errorf("kept = %v, want newest two [c b]", got)
+	}
+	if result.Removed != 1 || result.Kept != 2 || result.TotalBefore != 3 || result.TotalAfter != 2 {
+		t.Errorf("result = %+v", result)
+	}
+	if kept.SchemaVersion != HistorySchemaVersion {
+		t.Errorf("schemaVersion = %d", kept.SchemaVersion)
+	}
+}
+
+func TestPruneHistory_KeepZeroRemovesAll(t *testing.T) {
+	kept, result := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Keep: intPtr(0)})
+	if len(kept.Runs) != 0 || result.Removed != 3 || result.Kept != 0 || result.TotalAfter != 0 {
+		t.Errorf("kept=%v result=%+v", kept.Runs, result)
+	}
+}
+
+func TestPruneHistory_NegativeKeepClampsToZero(t *testing.T) {
+	// Defensive: the command rejects a negative --keep, but PruneHistory clamps a
+	// negative Keep to 0 (remove all) rather than panicking on a negative slice.
+	kept, result := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Keep: intPtr(-1)})
+	if len(kept.Runs) != 0 || result.Removed != 3 || result.Kept != 0 {
+		t.Errorf("negative keep: kept=%v result=%+v, want all removed", kept.Runs, result)
+	}
+}
+
+func TestPruneHistory_KeepMoreThanStoredRemovesNothing(t *testing.T) {
+	kept, result := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Keep: intPtr(10)})
+	if result.Removed != 0 || result.Kept != 3 {
+		t.Errorf("result = %+v, want removed 0 kept 3", result)
+	}
+	if !reflect.DeepEqual(idsOf(kept.Runs), []string{"c", "b", "a"}) {
+		t.Errorf("kept = %v, want all newest-first", idsOf(kept.Runs))
+	}
+}
+
+func TestPruneHistory_FilterRemovesMatching(t *testing.T) {
+	// filterRuns: c(beta,failed), b(beta,failed), a(alpha,passed).
+	// Remove result=failed → keeps only a.
+	kept, result := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Filters: HistoryFilters{Result: "failed"}})
+	if got := idsOf(kept.Runs); !reflect.DeepEqual(got, []string{"a"}) {
+		t.Errorf("kept = %v, want [a]", got)
+	}
+	if result.Removed != 2 || result.Kept != 1 {
+		t.Errorf("result = %+v", result)
+	}
+}
+
+func TestPruneHistory_FilterByWorkflowAndCode(t *testing.T) {
+	keptW, rW := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Filters: HistoryFilters{Workflow: "beta"}})
+	if got := idsOf(keptW.Runs); !reflect.DeepEqual(got, []string{"a"}) || rW.Removed != 2 {
+		t.Errorf("workflow prune kept=%v removed=%d", got, rW.Removed)
+	}
+	// Remove runs containing policy.lan_exposure_forbidden → only b has it.
+	keptC, rC := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Filters: HistoryFilters{Code: "policy.lan_exposure_forbidden"}})
+	if got := idsOf(keptC.Runs); !reflect.DeepEqual(got, []string{"c", "a"}) || rC.Removed != 1 {
+		t.Errorf("code prune kept=%v removed=%d", got, rC.Removed)
+	}
+}
+
+func TestPruneHistory_FilterANDComposition(t *testing.T) {
+	// Remove result=failed AND workflow=beta → c and b both match → keeps a.
+	kept, result := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Filters: HistoryFilters{Result: "failed", Workflow: "beta"}})
+	if got := idsOf(kept.Runs); !reflect.DeepEqual(got, []string{"a"}) || result.Removed != 2 {
+		t.Errorf("AND prune kept=%v removed=%d", got, result.Removed)
+	}
+}
+
+func TestPruneHistory_EmptyMatchRemovesNothing(t *testing.T) {
+	kept, result := PruneHistory(History{Runs: filterRuns()}, HistoryPruneOptions{Filters: HistoryFilters{Code: "no.such.code"}})
+	if result.Removed != 0 || result.Kept != 3 {
+		t.Errorf("result = %+v, want removed 0 kept 3", result)
+	}
+	if !reflect.DeepEqual(idsOf(kept.Runs), []string{"c", "b", "a"}) {
+		t.Errorf("kept = %v", idsOf(kept.Runs))
+	}
+}
+
+func TestPruneHistory_EmptyHistory(t *testing.T) {
+	keptK, rK := PruneHistory(History{}, HistoryPruneOptions{Keep: intPtr(5)})
+	if rK.Removed != 0 || rK.Kept != 0 || rK.TotalBefore != 0 || rK.TotalAfter != 0 || len(keptK.Runs) != 0 {
+		t.Errorf("keep on empty: kept=%v result=%+v", keptK.Runs, rK)
+	}
+	keptF, rF := PruneHistory(History{}, HistoryPruneOptions{Filters: HistoryFilters{Result: "failed"}})
+	if rF.Removed != 0 || rF.Kept != 0 {
+		t.Errorf("filter on empty: result=%+v", rF)
+	}
+	_ = keptF
+}
+
+func TestPruneHistory_DoesNotMutateInput(t *testing.T) {
+	runs := filterRuns()
+	before := append([]HistoryRun{}, runs...)
+	_, _ = PruneHistory(History{Runs: runs}, HistoryPruneOptions{Keep: intPtr(1)})
+	if !reflect.DeepEqual(runs, before) {
+		t.Errorf("PruneHistory mutated the input runs")
+	}
+	_, _ = PruneHistory(History{Runs: runs}, HistoryPruneOptions{Filters: HistoryFilters{Result: "failed"}})
+	if !reflect.DeepEqual(runs, before) {
+		t.Errorf("PruneHistory (filter) mutated the input runs")
+	}
+}
+
+func TestHistoryStore_SaveRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wh.json")
+	store := NewHistoryStore(path)
+	if err := store.Save(History{Runs: []HistoryRun{{ID: "a"}, {ID: "b"}}}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.SchemaVersion != HistorySchemaVersion || len(got.Runs) != 2 || got.Runs[0].ID != "a" {
+		t.Errorf("round-trip = %+v", got)
+	}
+}
+
 func TestBuildHistoryExport_Empty(t *testing.T) {
 	export := BuildHistoryExport(History{SchemaVersion: HistorySchemaVersion}, fixedTime())
 	if export.SchemaVersion != HistoryExportSchemaVersion {

@@ -1189,6 +1189,316 @@ func TestWorkflowHistoryStats_FlagEdges(t *testing.T) {
 	}
 }
 
+// --- history prune ---
+
+// seedPruneHistory writes four runs; appended a,b,c,d so newest-first is d,c,b,a.
+func seedPruneHistory(t *testing.T) string {
+	t.Helper()
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	store := workflow.NewHistoryStore(histPath)
+	runs := []workflow.HistoryRun{
+		{ID: "a", Workflow: "alpha", Result: "passed"},
+		{ID: "b", Workflow: "alpha", Result: "passed"},
+		{ID: "c", Workflow: "beta", Result: "failed", Codes: []string{"policy.lan_exposure_forbidden"}},
+		{ID: "d", Workflow: "beta", Result: "failed"},
+	}
+	for _, r := range runs {
+		if err := store.Append(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return histPath
+}
+
+func decodePrune(t *testing.T, s string) workflow.HistoryPruneResult {
+	t.Helper()
+	var r workflow.HistoryPruneResult
+	if err := json.Unmarshal([]byte(s), &r); err != nil {
+		t.Fatalf("decode prune: %v\n%s", err, s)
+	}
+	return r
+}
+
+func storeIDs(t *testing.T, path string) []string {
+	t.Helper()
+	h, err := workflow.NewHistoryStore(path).Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	ids := make([]string, len(h.Runs))
+	for i, r := range h.Runs {
+		ids[i] = r.ID
+	}
+	return ids
+}
+
+func TestWorkflowHistoryPrune_KeepNewest(t *testing.T) {
+	histPath := seedPruneHistory(t) // newest-first d,c,b,a
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(true, []string{"prune", "--keep", "2", "--yes"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit = %d\n%s", code, errBuf.String())
+	}
+	r := decodePrune(t, out.String())
+	if r.Removed != 2 || r.Kept != 2 || r.TotalBefore != 4 || r.TotalAfter != 2 {
+		t.Errorf("result = %+v", r)
+	}
+	if got := storeIDs(t, histPath); !reflect.DeepEqual(got, []string{"d", "c"}) {
+		t.Errorf("kept store = %v, want newest two [d c]", got)
+	}
+}
+
+func TestWorkflowHistoryPrune_KeepZeroRemovesAll(t *testing.T) {
+	histPath := seedPruneHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"prune", "--keep", "0", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := storeIDs(t, histPath); len(got) != 0 {
+		t.Errorf("store should be empty, got %v", got)
+	}
+	for _, want := range []string{"Workflow history pruned.", "Removed: 4", "Kept: 0", "Total before: 4", "Total after: 0"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("human output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestWorkflowHistoryPrune_FilterByResult(t *testing.T) {
+	histPath := seedPruneHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"prune", "--result", "failed", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	r := decodePrune(t, out.String())
+	if r.Removed != 2 || r.Kept != 2 {
+		t.Errorf("result = %+v", r)
+	}
+	// c and d (failed) removed; a and b (passed) kept, newest-first b,a.
+	if got := storeIDs(t, histPath); !reflect.DeepEqual(got, []string{"b", "a"}) {
+		t.Errorf("kept store = %v, want [b a]", got)
+	}
+}
+
+func TestWorkflowHistoryPrune_FilterByWorkflowAndCode(t *testing.T) {
+	histPath := seedPruneHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"prune", "--workflow", "beta", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if got := storeIDs(t, histPath); !reflect.DeepEqual(got, []string{"b", "a"}) {
+		t.Errorf("workflow prune kept = %v, want [b a]", got)
+	}
+
+	histPath2 := seedPruneHistory(t)
+	out.Reset()
+	errBuf.Reset()
+	if code := RunWorkflowHistory(true, []string{"prune", "--code", "policy.lan_exposure_forbidden", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	// Only c has the code → removed; kept d,b,a (newest-first).
+	if got := storeIDs(t, histPath2); !reflect.DeepEqual(got, []string{"d", "b", "a"}) {
+		t.Errorf("code prune kept = %v, want [d b a]", got)
+	}
+}
+
+func TestWorkflowHistoryPrune_FilterANDComposition(t *testing.T) {
+	histPath := seedPruneHistory(t)
+	var out, errBuf strings.Builder
+	// Remove result=failed AND workflow=alpha → no run matches both → removes 0.
+	if code := RunWorkflowHistory(true, []string{"prune", "--result", "failed", "--workflow", "alpha", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	r := decodePrune(t, out.String())
+	if r.Removed != 0 || r.Kept != 4 {
+		t.Errorf("AND prune (no match) result = %+v", r)
+	}
+	if got := storeIDs(t, histPath); !reflect.DeepEqual(got, []string{"d", "c", "b", "a"}) {
+		t.Errorf("store unchanged expected, got %v", got)
+	}
+}
+
+func TestWorkflowHistoryPrune_EmptyMatchRemovesNothing(t *testing.T) {
+	histPath := seedPruneHistory(t)
+	before, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"prune", "--code", "no.such.code", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	r := decodePrune(t, out.String())
+	if r.Removed != 0 || r.Kept != 4 {
+		t.Errorf("result = %+v, want removed 0", r)
+	}
+	// A no-op prune must not rewrite the store file.
+	after, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("no-op prune rewrote the store")
+	}
+}
+
+func TestWorkflowHistoryPrune_MissingYesExit2NoMutation(t *testing.T) {
+	histPath := seedPruneHistory(t)
+	before, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"prune", "--keep", "1"}, &out, &errBuf); code != 2 {
+		t.Fatalf("exit = %d, want 2 (missing --yes)", code)
+	}
+	if !strings.Contains(errBuf.String(), "requires --yes") {
+		t.Errorf("expected --yes message, got: %s", errBuf.String())
+	}
+	after, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("prune without --yes mutated the store")
+	}
+}
+
+func TestWorkflowHistoryPrune_ModeValidation(t *testing.T) {
+	seedPruneHistory(t)
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"no mode", []string{"prune", "--yes"}},
+		{"keep + filter", []string{"prune", "--keep", "2", "--result", "failed", "--yes"}},
+		{"negative keep", []string{"prune", "--keep", "-1", "--yes"}},
+		{"non-numeric keep", []string{"prune", "--keep", "abc", "--yes"}},
+		{"invalid result", []string{"prune", "--result", "bogus", "--yes"}},
+		{"empty workflow", []string{"prune", "--workflow", "", "--yes"}},
+		{"empty code", []string{"prune", "--code", "", "--yes"}},
+	}
+	for _, tc := range cases {
+		var out, errBuf strings.Builder
+		if code := RunWorkflowHistory(false, tc.args, &out, &errBuf); code != 2 {
+			t.Errorf("%s: exit = %d, want 2", tc.name, code)
+		}
+	}
+}
+
+func TestWorkflowHistoryPrune_EmptyHistory(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"prune", "--keep", "5", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	r := decodePrune(t, out.String())
+	if r.Removed != 0 || r.Kept != 0 || r.TotalBefore != 0 || r.TotalAfter != 0 {
+		t.Errorf("result = %+v, want all zero", r)
+	}
+}
+
+func TestWorkflowHistoryPrune_MissingHistoryCreatesNoFile(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"prune", "--result", "failed", "--yes"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if _, err := os.Stat(histPath); !os.IsNotExist(err) {
+		t.Errorf("a no-op prune on missing history must not create a file (stat err = %v)", err)
+	}
+}
+
+func TestWorkflowHistoryPrune_ReadFailure(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	if err := os.WriteFile(histPath, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	useHistoryPath(t, histPath)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"prune", "--keep", "1", "--yes"}, &out, &errBuf); code != 1 {
+		t.Fatalf("exit = %d, want 1 (read failure)", code)
+	}
+}
+
+func TestWorkflowHistoryPrune_WriteFailure(t *testing.T) {
+	// Seed a populated, loadable history, then make the file read-only so the
+	// prune rewrite (Save) fails after a successful Load — exercising the command's
+	// write-failure exit-1 branch.
+	histPath := seedPruneHistory(t)
+	if err := os.Chmod(histPath, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(histPath, 0o644) })
+	// If the file is still writable (e.g. running as root), the write-failure path
+	// cannot be exercised — skip rather than fail spuriously.
+	if f, err := os.OpenFile(histPath, os.O_WRONLY, 0); err == nil {
+		_ = f.Close()
+		t.Skip("history file still writable (likely root); cannot test write failure")
+	}
+
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"prune", "--keep", "0", "--yes"}, &out, &errBuf); code != 1 {
+		t.Fatalf("exit = %d, want 1 (write failure)", code)
+	}
+	if !strings.Contains(errBuf.String(), "Error writing") {
+		t.Errorf("expected write error, got: %s", errBuf.String())
+	}
+}
+
+func TestWorkflowHistoryPrune_DoesNotMutateOnUsageError(t *testing.T) {
+	histPath := seedPruneHistory(t)
+	before, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out, errBuf strings.Builder
+	_ = RunWorkflowHistory(false, []string{"prune", "--keep", "2", "--result", "failed", "--yes"}, &out, &errBuf)
+	after, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("usage-error prune mutated the store")
+	}
+}
+
+func TestWorkflowHistoryPrune_PathResolutionFailure(t *testing.T) {
+	useFailingHistoryPath(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"prune", "--keep", "1", "--yes"}, &out, &errBuf); code != 1 {
+		t.Fatalf("exit = %d, want 1 (path resolution failure)", code)
+	}
+}
+
+func TestWorkflowHistoryPrune_JSONEncodeFailure(t *testing.T) {
+	seedPruneHistory(t)
+	var errBuf strings.Builder
+	// keep 10 removes nothing → no Save → reaches the JSON encode path.
+	if code := runWorkflowHistoryPrune(true, []string{"--keep", "10", "--yes"}, histFailWriter{}, &errBuf); code != 1 {
+		t.Errorf("prune JSON encode failure exit = %d, want 1", code)
+	}
+}
+
+func TestWorkflowHistoryPrune_FlagEdges(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	cases := []struct {
+		args []string
+		want int
+	}{
+		{[]string{"prune", "--help"}, 0},
+		{[]string{"prune", "--bogus"}, 2},
+	}
+	for _, tc := range cases {
+		var out, errBuf strings.Builder
+		if code := RunWorkflowHistory(false, tc.args, &out, &errBuf); code != tc.want {
+			t.Errorf("%v: exit = %d, want %d", tc.args, code, tc.want)
+		}
+	}
+}
+
 // --- dispatch ---
 
 func TestWorkflowHistory_NoSubcommandExit2(t *testing.T) {

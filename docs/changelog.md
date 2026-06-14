@@ -8,6 +8,19 @@ All notable changes to Portier are documented here.
 
 v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change).
 
+### Added — Slice 5: Workflow history prune
+
+- **`portier workflow history prune`.** Removes entries from the local history in one of two explicit modes — **retention** (`--keep <n>` keeps the newest `n`, removing older ones) or **filter** (`--result`/`--workflow`/`--code` remove matching entries, AND-combined). It is **destructive and requires `--yes`**. It mutates **only the compact local history store** — it never contacts the runtime, executes a workflow, reads workflow-referenced files, collects logs/env/process data, or touches configs/policies/reports.
+- **Exactly one mode.** No mode, or `--keep` combined with filters, is a usage error (exit `2`). `--keep` must be a non-negative integer (`--keep 0` removes all); `--limit` is **not** accepted for prune. Filter values are validated like `list`/`stats` (unknown `--result`, empty `--workflow`/`--code` → `2`).
+- **Empty match is a successful no-op** — a filter (or `--keep n >=` the entry count) matching nothing removes `0` and exits `0`. Missing history is treated as empty: prune succeeds with `removed 0, kept 0` and **creates no file**. A no-op prune does not rewrite the store.
+- **Output.** Human prints `Removed`/`Kept`/`Total before`/`Total after`; `--json` emits `{ schemaVersion, removed, kept, totalBefore, totalAfter }`.
+- **Exit codes.** `0` success (including `removed 0`); `1` a history read/write failure; `2` a usage error (no/ambiguous mode, invalid `--keep`/filter value, or missing `--yes`). No exit `3` — prune never contacts the runtime. Any usage error leaves the store untouched.
+
+### Notes (Slice 5)
+
+- CLI-only, `validate:contract` stays **234/234**, no API/DTO/contract change. The prune model + pure helper live in the `workflow` package (`workflow/history.go`: `HistoryPruneOptions`, `HistoryPruneResult`, `PruneHistory`, plus a `HistoryStore.Save` and a shared `runMatchesFilters` predicate factored out of `ApplyHistoryFilters`); `commands` stays **handlers-only** (`runWorkflowHistoryPrune` parses/validates the mode + `--yes`, loads via the new `loadHistoryStore`, and saves only when `removed > 0`). The `workflow` history code still never imports `client`/`commands` and never contacts the runtime; prune mutates only the history store.
+- Covered by white-box `workflow/history_internal_test.go` (keep newest N, keep 0 removes all, keep ≥ count / negative-clamp / empty history, filter by result/workflow/code, AND composition, empty match, no-input-mutation, `Save` round-trip) and `commands/workflow_history_internal_test.go` (keep + keep-0 human, filter prune + AND no-op, empty match no-rewrite, missing `--yes` → 2 no-mutation, mode validation table → 2, empty/missing history → 0 no-file, read failure → 1, write failure → 1 (read-only file), usage-error no-mutation, path-resolution → 1, JSON-encode → 1, flag edges). CLI coverage **97.8%** (gate **97 PASS**, not lowered/raised — still short of a stable 98% buffer); the new prune helpers and handler are 100% covered.
+
 ### Added — Slice 4: Workflow history stats
 
 - **`portier workflow history stats`.** Summarizes the (optionally filtered) local workflow run history by result, workflow name, step status, step type, and emitted code. Computed **only from compact local history metadata** — it never contacts the runtime, executes a workflow, reads workflow-referenced files, or scans raw reports.
