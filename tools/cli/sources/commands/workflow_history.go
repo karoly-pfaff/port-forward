@@ -22,7 +22,7 @@ import (
 	"portier/cli/sources/workflow"
 )
 
-const workflowHistoryHelp = `Usage: portier workflow history <list|show|clear> [options]
+const workflowHistoryHelp = `Usage: portier workflow history <list|stats|show|export|prune|clear> [options]
 
 Inspect the local, opt-in workflow run history recorded by
 'portier workflow run --record-history'. Fully offline: these commands read and
@@ -53,10 +53,11 @@ Prune modes (exactly one; destructive, requires --yes; never accepts --limit):
   --result/--workflow/--code  Remove entries matching these filters (AND-combined).
 
 Options:
-  --json           Output as machine-readable JSON (list/show; with export, also
-                   print the snapshot to stdout, byte-identical to the file).
+  --json           Output as machine-readable JSON (list/show/stats/prune; with
+                   export, also print the snapshot to stdout, byte-identical to
+                   the file).
   --out <file>     Output file for the export snapshot (export).
-  --yes            Confirm deletion (clear).
+  --yes            Confirm the destructive operation (prune, clear).
 
 Exit codes:
   0  Success (including 'list'/'stats' with no matches, 'list'/'stats'/'export'

@@ -115,8 +115,8 @@ Options:
                   never records raw configs, policies, full reports, secrets, logs,
                   environment, process data, runtime URLs, or tokens. History is
                   bounded to the most recent 100 runs. Inspect it with
-                  'portier workflow history list|show|clear'. Without this flag,
-                  nothing is recorded.
+                  'portier workflow history list|stats|show|export|prune|clear'.
+                  Without this flag, nothing is recorded.
 
 Step execution (read-only):
   policy.check              Evaluate a local config (offline) or the live runtime
