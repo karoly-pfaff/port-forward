@@ -4,9 +4,18 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — v1.13 Local Replay & Offline Analysis (in progress)
+## [1.13.0] — 2026-06-14 — Local Replay & Offline Analysis
 
-v1.13 builds a **standalone offline replay/analysis tool beside the CLI** — `portier-replay`, a separate Go module under `tools/replay/`, **not** a `portier workflow replay` subcommand. It analyzes saved Portier workflow artifacts after the fact and is strictly offline and read-only. `validate:contract` stays **234/234** (no shared/server/service/client/API/DTO/contract change — the replay tool is wholly independent of the runtime).
+v1.13 adds a **standalone offline replay/analysis tool beside the CLI** — the `replay` binary (`replay.exe` on Windows), a separate Go module under `tools/replay/` (`portier/replay`), **not** a `portier workflow replay` subcommand. It analyzes saved Portier workflow artifacts after the fact and is strictly offline and read-only — it never executes workflows, contacts the runtime, reads the files an artifact references, mutates inputs, imports `tools/cli`/runtime clients, uploads, collects logs/env/process data, or enforces policy. The Portier CLI remains the operational artifact **producer**; `replay` is the offline **analyzer**. All replay schemas are local tool schemas; **`validate:contract` stays 234/234** (no shared/server/service/client/API/DTO/contract change — the replay tool is wholly independent of the runtime).
+
+**Highlights**
+
+- **Standalone replay tool** under `tools/replay/` — its own stdlib-only Go module, separate binary `replay`/`replay.exe`, built by `npm run build:replay`.
+- **Five offline commands:** `replay plan` (what analysis an artifact supports), `replay analyze` (deterministic findings/insights), `replay timeline` (ordered reconstruction with explicit synthetic vs saved events), `replay compare` (diff two artifacts; mixed-kind limited), and `replay explain` (explain emitted codes; preserves unknown codes; `--code`/`--list` modes).
+- **Package structure:** command handling and core domain logic are separated — `tools/replay/sources/commands` (dispatch / arg parsing / runners) and `tools/replay/sources/core` (detection, local DTOs, models, builders, renderers, explanation registry). `core` never imports `commands`; neither imports `tools/cli`.
+- **Consistent surface:** every command supports `--json`/`--out` with byte-identical parity, a `schemaVersion: 1` local schema, deterministic output, and the shared exit-code policy — `0` success (incl. no-codes / no-diff), `1` output-write/JSON-encode failure, `2` usage / unreadable / malformed / unsupported input; **no `3`** (replay never contacts a runtime).
+- **Safety boundaries** documented and test-covered (no workflow execution, no runtime contact, no referenced-file reads, no input mutation, no uploads/telemetry, no policy enforcement).
+- **Hard replay coverage gate:** `tools/replay` has a machine-enforced **≥95% module-wide coverage gate** — the `replay` component in `scripts/validate-coverage.js` (run via `npm run validate:coverage:replay`), fed by the new reporter `scripts/coverage-tools-replay.js` (`npm run coverage:replay`). Verified at **96.5%** (core 96.7%, commands 94.9%). Existing CLI/workspace coverage gates are unchanged.
 
 ### Audited — Slice 7: Replay toolkit consistency audit — PASS
 
