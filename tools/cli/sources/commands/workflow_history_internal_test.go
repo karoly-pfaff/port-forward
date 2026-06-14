@@ -936,6 +936,259 @@ func TestWorkflowHistoryExport_JSONEncodeFailure(t *testing.T) {
 	}
 }
 
+// --- history stats ---
+
+// seedStatsHistory writes four runs; appended a,b,c,d so newest-first is d,c,b,a.
+func seedStatsHistory(t *testing.T) string {
+	t.Helper()
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	store := workflow.NewHistoryStore(histPath)
+	runs := []workflow.HistoryRun{
+		{ID: "a", Workflow: "alpha", Result: "passed", Steps: []workflow.HistoryStep{{Type: "policy.check", Status: "passed"}}},
+		{ID: "b", Workflow: "alpha", Result: "passed", Steps: []workflow.HistoryStep{{Type: "policy.review", Status: "passed"}, {Type: "policy.check", Status: "skipped"}}},
+		{ID: "c", Workflow: "beta", Result: "failed", Steps: []workflow.HistoryStep{{Type: "policy.check", Status: "failed"}}, Codes: []string{"policy.lan_exposure_forbidden", "policy.autostart_forbidden"}},
+		{ID: "d", Workflow: "beta", Result: "failed", Steps: []workflow.HistoryStep{{Type: "policy.check", Status: "passed"}, {Type: "policy.baseline.compare", Status: "failed"}}, Codes: []string{"policy.lan_exposure_forbidden"}},
+	}
+	for _, r := range runs {
+		if err := store.Append(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return histPath
+}
+
+func decodeStats(t *testing.T, s string) workflow.HistoryStats {
+	t.Helper()
+	var st workflow.HistoryStats
+	if err := json.Unmarshal([]byte(s), &st); err != nil {
+		t.Fatalf("decode stats: %v\n%s", err, s)
+	}
+	return st
+}
+
+func TestWorkflowHistoryStats_EmptyHuman(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"stats"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	s := out.String()
+	for _, want := range []string{"Portier Workflow History Stats", "- 0 shown", "- 0 total stored", "Result: no history"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("empty stats missing %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestWorkflowHistoryStats_EmptyJSON(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"stats"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	st := decodeStats(t, out.String())
+	if st.SchemaVersion != workflow.HistorySchemaVersion || st.TotalStored != 0 || st.Shown != 0 || st.Filters != nil {
+		t.Errorf("stats = %+v", st)
+	}
+	// Grouped arrays must serialize as [] (not null).
+	for _, key := range []string{`"workflows": []`, `"stepTypes": []`, `"codes": []`} {
+		if !strings.Contains(out.String(), key) {
+			t.Errorf("expected %s in %s", key, out.String())
+		}
+	}
+}
+
+func TestWorkflowHistoryStats_JSONCounts(t *testing.T) {
+	seedStatsHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"stats"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	st := decodeStats(t, out.String())
+	if st.TotalStored != 4 || st.Shown != 4 {
+		t.Errorf("total/shown = %d/%d, want 4/4", st.TotalStored, st.Shown)
+	}
+	if st.Results.Passed != 2 || st.Results.Failed != 2 {
+		t.Errorf("results = %+v", st.Results)
+	}
+	if st.Steps.Passed != 3 || st.Steps.Failed != 2 || st.Steps.Skipped != 1 {
+		t.Errorf("steps = %+v", st.Steps)
+	}
+	// Deterministic grouped sorting (count desc, key asc).
+	if !reflect.DeepEqual(st.Workflows, []workflow.WorkflowCount{{Name: "alpha", Count: 2}, {Name: "beta", Count: 2}}) {
+		t.Errorf("workflows = %+v", st.Workflows)
+	}
+	if st.StepTypes[0].Type != "policy.check" || st.StepTypes[0].Count != 4 {
+		t.Errorf("stepTypes[0] = %+v, want policy.check=4", st.StepTypes[0])
+	}
+	if !reflect.DeepEqual(st.Codes, []workflow.CodeCount{{Code: "policy.lan_exposure_forbidden", Count: 2}, {Code: "policy.autostart_forbidden", Count: 1}}) {
+		t.Errorf("codes = %+v", st.Codes)
+	}
+}
+
+func TestWorkflowHistoryStats_HumanShape(t *testing.T) {
+	seedStatsHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"stats"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	s := out.String()
+	for _, want := range []string{
+		"Runs:", "- 4 shown", "- 4 total stored", "- 2 passed", "- 2 failed",
+		"Steps:", "- 3 passed", "- 2 failed", "- 1 skipped",
+		"Workflows:", "- alpha: 2", "- beta: 2",
+		"Step types:", "- policy.check: 4",
+		"Codes:", "- policy.lan_exposure_forbidden: 2",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("stats human output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestWorkflowHistoryStats_FilterResult(t *testing.T) {
+	seedStatsHistory(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(true, []string{"stats", "--result", "failed"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	st := decodeStats(t, out.String())
+	if st.Filters == nil || st.Filters.Result != "failed" {
+		t.Fatalf("filters = %+v", st.Filters)
+	}
+	if st.Shown != 2 || st.TotalStored != 4 || st.Results.Failed != 2 || st.Results.Passed != 0 {
+		t.Errorf("stats = %+v", st)
+	}
+	if !reflect.DeepEqual(st.Workflows, []workflow.WorkflowCount{{Name: "beta", Count: 2}}) {
+		t.Errorf("workflows = %+v", st.Workflows)
+	}
+}
+
+func TestWorkflowHistoryStats_FilterWorkflowCodeLimitAND(t *testing.T) {
+	seedStatsHistory(t)
+	// failed + workflow beta + code present + limit 10 → c and d match.
+	st, _ := statsJSON(t, "--result", "failed", "--workflow", "beta", "--code", "policy.lan_exposure_forbidden", "--limit", "10")
+	if st.Shown != 2 {
+		t.Errorf("shown = %d, want 2 (AND)", st.Shown)
+	}
+	// Narrow with the autostart code present only in c.
+	st2, _ := statsJSON(t, "--code", "policy.autostart_forbidden")
+	if st2.Shown != 1 {
+		t.Errorf("shown = %d, want 1", st2.Shown)
+	}
+	// Limit applies before stats: newest 1 of the failed runs (d).
+	st3, _ := statsJSON(t, "--result", "failed", "--limit", "1")
+	if st3.Shown != 1 || st3.Results.Failed != 1 {
+		t.Errorf("limited stats = %+v", st3)
+	}
+}
+
+func statsJSON(t *testing.T, args ...string) (workflow.HistoryStats, int) {
+	t.Helper()
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(true, append([]string{"stats"}, args...), &out, &errBuf)
+	if code != 0 {
+		return workflow.HistoryStats{}, code
+	}
+	return decodeStats(t, out.String()), code
+}
+
+func TestWorkflowHistoryStats_EmptyMatchZeroStats(t *testing.T) {
+	seedStatsHistory(t)
+	st, code := statsJSON(t, "--code", "no.such.code")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 for unmatched filter", code)
+	}
+	if st.Shown != 0 || st.TotalStored != 4 {
+		t.Errorf("shown/total = %d/%d, want 0/4", st.Shown, st.TotalStored)
+	}
+	if st.Results.Passed != 0 || st.Results.Failed != 0 || len(st.Workflows) != 0 || len(st.Codes) != 0 {
+		t.Errorf("expected zero stats on empty match: %+v", st)
+	}
+}
+
+func TestWorkflowHistoryStats_InvalidFilters(t *testing.T) {
+	seedStatsHistory(t)
+	cases := [][]string{
+		{"stats", "--result", "bogus"},
+		{"stats", "--workflow", ""},
+		{"stats", "--code", ""},
+		{"stats", "--limit", "0"},
+		{"stats", "--limit", "-3"},
+		{"stats", "--limit", "abc"},
+	}
+	for _, args := range cases {
+		var out, errBuf strings.Builder
+		if code := RunWorkflowHistory(false, args, &out, &errBuf); code != 2 {
+			t.Errorf("%v: exit = %d, want 2", args, code)
+		}
+	}
+}
+
+func TestWorkflowHistoryStats_ReadFailure(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	if err := os.WriteFile(histPath, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	useHistoryPath(t, histPath)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"stats"}, &out, &errBuf); code != 1 {
+		t.Fatalf("exit = %d, want 1 (malformed history)", code)
+	}
+}
+
+func TestWorkflowHistoryStats_PathResolutionFailure(t *testing.T) {
+	useFailingHistoryPath(t)
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"stats"}, &out, &errBuf); code != 1 {
+		t.Fatalf("exit = %d, want 1 (path resolution failure)", code)
+	}
+}
+
+func TestWorkflowHistoryStats_JSONEncodeFailure(t *testing.T) {
+	seedStatsHistory(t)
+	var errBuf strings.Builder
+	if code := runWorkflowHistoryStats(true, nil, histFailWriter{}, &errBuf); code != 1 {
+		t.Errorf("stats JSON encode failure exit = %d, want 1", code)
+	}
+}
+
+func TestWorkflowHistoryStats_DoesNotMutateStore(t *testing.T) {
+	histPath := seedStatsHistory(t)
+	before, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, code := statsJSON(t, "--result", "failed"); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	after, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("stats mutated the history store")
+	}
+}
+
+func TestWorkflowHistoryStats_FlagEdges(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	cases := []struct {
+		args []string
+		want int
+	}{
+		{[]string{"stats", "--help"}, 0},
+		{[]string{"stats", "--bogus"}, 2},
+	}
+	for _, tc := range cases {
+		var out, errBuf strings.Builder
+		if code := RunWorkflowHistory(false, tc.args, &out, &errBuf); code != tc.want {
+			t.Errorf("%v: exit = %d, want %d", tc.args, code, tc.want)
+		}
+	}
+}
+
 // --- dispatch ---
 
 func TestWorkflowHistory_NoSubcommandExit2(t *testing.T) {

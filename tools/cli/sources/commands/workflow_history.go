@@ -36,11 +36,12 @@ or tokens. History is bounded to the most recent 100 runs.
 
 Subcommands:
   list [filters]       List recorded runs (newest first), optionally filtered.
+  stats [filters]      Summarize the (optionally filtered) history.
   show <run-id>        Show one recorded run by id.
   export --out <file>  Write a compact JSON snapshot of the history to a file.
   clear --yes          Delete the local history file (requires --yes).
 
-List filters (AND-combined; all operate only on local compact history):
+List/stats filters (AND-combined; all operate only on local compact history):
   --result <passed|failed>  Keep only runs with this result.
   --workflow <name>         Keep only runs with this exact workflow name.
   --code <code>             Keep only runs whose codes contain this exact code.
@@ -53,11 +54,12 @@ Options:
   --yes            Confirm deletion (clear).
 
 Exit codes:
-  0  Success (including 'list' with no matches, 'list'/'export' with no runs, and
-     'clear' when already empty)
+  0  Success (including 'list'/'stats' with no matches, 'list'/'stats'/'export'
+     with no runs, and 'clear' when already empty)
   1  An unknown run id ('show'), or a history read/write failure
-  2  Missing/invalid arguments (an invalid 'list' filter value, a missing run id
-     for 'show', a missing --out value for 'export', or 'clear' without --yes)
+  2  Missing/invalid arguments (an invalid 'list'/'stats' filter value, a missing
+     run id for 'show', a missing --out value for 'export', or 'clear' without
+     --yes)
 
 The export snapshot is compact metadata only — it never contains raw configs,
 policies, full reports, logs, environment variables, process data, runtime URLs,
@@ -71,6 +73,8 @@ Examples:
   portier workflow history list --result failed --limit 10
   portier workflow history list --workflow policy-baseline-check
   portier --json workflow history list --code policy.lan_exposure_forbidden
+  portier workflow history stats
+  portier --json workflow history stats --result failed
   portier workflow history show 20260614T101530Z-policy-baseline-check-a1b2c3d4
   portier workflow history export --out workflow-history-export.json
   portier --json workflow history export --out workflow-history-export.json
@@ -125,6 +129,8 @@ func RunWorkflowHistory(jsonOutput bool, args []string, stdout, stderr io.Writer
 		return runWorkflowHistoryShow(jsonOutput, args[1:], stdout, stderr)
 	case "export":
 		return runWorkflowHistoryExport(jsonOutput, args[1:], stdout, stderr)
+	case "stats":
+		return runWorkflowHistoryStats(jsonOutput, args[1:], stdout, stderr)
 	case "clear":
 		return runWorkflowHistoryClear(args[1:], stdout, stderr)
 	case "help", "--help", "-h":
@@ -145,43 +151,14 @@ func RunWorkflowHistory(jsonOutput bool, args []string, stdout, stderr io.Writer
 func runWorkflowHistoryList(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("workflow history list", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	flagResult := fs.String("result", "", "filter by run result (passed|failed)")
-	flagWorkflow := fs.String("workflow", "", "filter by exact workflow name")
-	flagCode := fs.String("code", "", "filter by an emitted code (exact match)")
-	flagLimit := fs.Int("limit", 0, "return at most the newest N matching runs")
-	if code, done := parseHistoryFlags(fs, args, stdout, stderr); done {
+	filters, code, done := parseHistoryFilters(fs, args, stdout, stderr)
+	if done {
 		return code
 	}
 
-	// Validate filter inputs (CLI usage errors → exit 2). fs.Visit distinguishes
-	// an explicitly-set flag from its default, so `--workflow ""` / `--code ""` /
-	// `--limit 0` are rejected while an absent flag simply means "no filter".
-	// (A non-numeric --limit already failed flag parsing above → exit 2.)
-	set := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
-	if set["result"] && !workflow.ValidHistoryResult(*flagResult) {
-		return historyUsageError(stderr, fmt.Sprintf("invalid --result %q (expected one of: passed, failed)", *flagResult))
-	}
-	if set["workflow"] && *flagWorkflow == "" {
-		return historyUsageError(stderr, "--workflow requires a non-empty value")
-	}
-	if set["code"] && *flagCode == "" {
-		return historyUsageError(stderr, "--code requires a non-empty value")
-	}
-	if set["limit"] && *flagLimit <= 0 {
-		return historyUsageError(stderr, fmt.Sprintf("--limit must be a positive integer (got %d)", *flagLimit))
-	}
-	filters := workflow.HistoryFilters{Result: *flagResult, Workflow: *flagWorkflow, Code: *flagCode, Limit: *flagLimit}
-
-	store, err := historyStore()
-	if err != nil {
-		fmt.Fprintf(stderr, "Error: could not resolve history path: %v\n", err)
-		return 1
-	}
-	hist, err := store.Load()
-	if err != nil {
-		fmt.Fprintf(stderr, "Error reading history %s: %v\n", store.Path(), err)
-		return 1
+	hist, code, done := loadHistoryForRead(stderr)
+	if done {
+		return code
 	}
 
 	view := workflow.BuildHistoryListView(hist, filters)
@@ -194,6 +171,87 @@ func runWorkflowHistoryList(jsonOutput bool, args []string, stdout, stderr io.Wr
 	}
 	printHistoryListHuman(view, stdout)
 	return 0
+}
+
+// runWorkflowHistoryStats summarizes the (optionally filtered) local history by
+// result, workflow, step status/type, and emitted code. It reuses the same
+// filters as `list` (applied before computing stats) and reads only compact
+// history metadata — it never contacts the runtime or reads workflow files. Exit
+// codes: 0 success (including empty/missing history and empty match sets), 1 a
+// history read failure, 2 an invalid filter value.
+func runWorkflowHistoryStats(jsonOutput bool, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("workflow history stats", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	filters, code, done := parseHistoryFilters(fs, args, stdout, stderr)
+	if done {
+		return code
+	}
+
+	hist, code, done := loadHistoryForRead(stderr)
+	if done {
+		return code
+	}
+
+	stats := workflow.BuildHistoryStats(hist, filters)
+	if jsonOutput {
+		if err := output.PrintJSON(stdout, stats); err != nil {
+			fmt.Fprintf(stderr, "Error encoding JSON: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	printHistoryStatsHuman(stats, stdout)
+	return 0
+}
+
+// parseHistoryFilters defines and parses the shared list/stats filter flags
+// (--result/--workflow/--code/--limit) on fs, then validates them. It returns the
+// resolved filters, or (filters, exitCode, true) when the caller should return
+// exitCode (help/parse error → from parseHistoryFlags; an invalid filter value →
+// 2). fs.Visit distinguishes an explicitly-set flag from its default so an empty
+// --workflow/--code or a non-positive --limit is rejected while an absent flag
+// means "no filter". A non-numeric --limit already failed flag parsing → 2.
+func parseHistoryFilters(fs *flag.FlagSet, args []string, stdout, stderr io.Writer) (workflow.HistoryFilters, int, bool) {
+	flagResult := fs.String("result", "", "filter by run result (passed|failed)")
+	flagWorkflow := fs.String("workflow", "", "filter by exact workflow name")
+	flagCode := fs.String("code", "", "filter by an emitted code (exact match)")
+	flagLimit := fs.Int("limit", 0, "keep at most the newest N matching runs")
+	if code, done := parseHistoryFlags(fs, args, stdout, stderr); done {
+		return workflow.HistoryFilters{}, code, true
+	}
+
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	if set["result"] && !workflow.ValidHistoryResult(*flagResult) {
+		return workflow.HistoryFilters{}, historyUsageError(stderr, fmt.Sprintf("invalid --result %q (expected one of: passed, failed)", *flagResult)), true
+	}
+	if set["workflow"] && *flagWorkflow == "" {
+		return workflow.HistoryFilters{}, historyUsageError(stderr, "--workflow requires a non-empty value"), true
+	}
+	if set["code"] && *flagCode == "" {
+		return workflow.HistoryFilters{}, historyUsageError(stderr, "--code requires a non-empty value"), true
+	}
+	if set["limit"] && *flagLimit <= 0 {
+		return workflow.HistoryFilters{}, historyUsageError(stderr, fmt.Sprintf("--limit must be a positive integer (got %d)", *flagLimit)), true
+	}
+	return workflow.HistoryFilters{Result: *flagResult, Workflow: *flagWorkflow, Code: *flagCode, Limit: *flagLimit}, 0, false
+}
+
+// loadHistoryForRead resolves the store path and loads the history for a
+// read-only command. It returns (history, exitCode, true) when the caller should
+// return exitCode (1 on a path-resolution or read failure).
+func loadHistoryForRead(stderr io.Writer) (workflow.History, int, bool) {
+	store, err := historyStore()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error: could not resolve history path: %v\n", err)
+		return workflow.History{}, 1, true
+	}
+	hist, err := store.Load()
+	if err != nil {
+		fmt.Fprintf(stderr, "Error reading history %s: %v\n", store.Path(), err)
+		return workflow.History{}, 1, true
+	}
+	return hist, 0, false
 }
 
 // historyUsageError prints a filter usage error + help and returns exit code 2.
@@ -384,22 +442,7 @@ func printHistoryListHuman(view workflow.HistoryListView, w io.Writer) {
 		return
 	}
 
-	if f := view.Filters; f != nil {
-		fmt.Fprintln(w, "Filters:")
-		if f.Result != "" {
-			fmt.Fprintf(w, "- Result: %s\n", f.Result)
-		}
-		if f.Workflow != "" {
-			fmt.Fprintf(w, "- Workflow: %s\n", f.Workflow)
-		}
-		if f.Code != "" {
-			fmt.Fprintf(w, "- Code: %s\n", f.Code)
-		}
-		if f.Limit > 0 {
-			fmt.Fprintf(w, "- Limit: %d\n", f.Limit)
-		}
-		fmt.Fprintln(w)
-	}
+	printHistoryFilterBlock(view.Filters, w)
 
 	if len(view.Runs) == 0 {
 		fmt.Fprintln(w, "No workflow history entries matched the filters.")
@@ -414,6 +457,82 @@ func printHistoryListHuman(view workflow.HistoryListView, w io.Writer) {
 	fmt.Fprintln(w, "Summary:")
 	fmt.Fprintf(w, "- %d shown\n", view.Shown)
 	fmt.Fprintf(w, "- %d total stored\n", view.TotalStored)
+}
+
+// printHistoryFilterBlock prints the active-filters block (followed by a blank
+// line) when any filter is set; it prints nothing when filters is nil.
+func printHistoryFilterBlock(f *workflow.HistoryFilters, w io.Writer) {
+	if f == nil {
+		return
+	}
+	fmt.Fprintln(w, "Filters:")
+	if f.Result != "" {
+		fmt.Fprintf(w, "- Result: %s\n", f.Result)
+	}
+	if f.Workflow != "" {
+		fmt.Fprintf(w, "- Workflow: %s\n", f.Workflow)
+	}
+	if f.Code != "" {
+		fmt.Fprintf(w, "- Code: %s\n", f.Code)
+	}
+	if f.Limit > 0 {
+		fmt.Fprintf(w, "- Limit: %d\n", f.Limit)
+	}
+	fmt.Fprintln(w)
+}
+
+// printHistoryStatsHuman renders the history stats: an optional Filters block, the
+// run/step buckets, and the deterministically-sorted grouped tables. Empty/missing
+// history (nothing stored) prints a short "no history" form. Empty grouped tables
+// are omitted.
+func printHistoryStatsHuman(stats workflow.HistoryStats, w io.Writer) {
+	fmt.Fprintln(w, "Portier Workflow History Stats")
+	fmt.Fprintln(w)
+
+	printHistoryFilterBlock(stats.Filters, w)
+
+	if stats.TotalStored == 0 {
+		fmt.Fprintln(w, "Runs:")
+		fmt.Fprintf(w, "- %d shown\n", stats.Shown)
+		fmt.Fprintf(w, "- %d total stored\n", stats.TotalStored)
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Result: no history")
+		return
+	}
+
+	fmt.Fprintln(w, "Runs:")
+	fmt.Fprintf(w, "- %d shown\n", stats.Shown)
+	fmt.Fprintf(w, "- %d total stored\n", stats.TotalStored)
+	fmt.Fprintf(w, "- %d passed\n", stats.Results.Passed)
+	fmt.Fprintf(w, "- %d failed\n", stats.Results.Failed)
+	fmt.Fprintln(w)
+
+	fmt.Fprintln(w, "Steps:")
+	fmt.Fprintf(w, "- %d passed\n", stats.Steps.Passed)
+	fmt.Fprintf(w, "- %d failed\n", stats.Steps.Failed)
+	fmt.Fprintf(w, "- %d skipped\n", stats.Steps.Skipped)
+
+	if len(stats.Workflows) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Workflows:")
+		for _, wc := range stats.Workflows {
+			fmt.Fprintf(w, "- %s: %d\n", wc.Name, wc.Count)
+		}
+	}
+	if len(stats.StepTypes) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Step types:")
+		for _, st := range stats.StepTypes {
+			fmt.Fprintf(w, "- %s: %d\n", st.Type, st.Count)
+		}
+	}
+	if len(stats.Codes) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Codes:")
+		for _, cc := range stats.Codes {
+			fmt.Fprintf(w, "- %s: %d\n", cc.Code, cc.Count)
+		}
+	}
 }
 
 // printHistoryExportHuman renders the export confirmation, including the run count

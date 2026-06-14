@@ -340,6 +340,120 @@ func TestBuildHistoryListView_WithFilters(t *testing.T) {
 	}
 }
 
+// statsRuns returns a richer fixture for stats: 4 runs (newest-first c,d,b,a) so
+// counts/sorting are non-trivial. (Order here is newest-first as the store holds.)
+func statsRuns() []HistoryRun {
+	return []HistoryRun{
+		{ID: "d", Workflow: "beta", Result: "failed", Steps: []HistoryStep{{Type: "policy.check", Status: "passed"}, {Type: "policy.baseline.compare", Status: "failed"}}, Codes: []string{"policy.lan_exposure_forbidden"}},
+		{ID: "c", Workflow: "beta", Result: "failed", Steps: []HistoryStep{{Type: "policy.check", Status: "failed"}}, Codes: []string{"policy.lan_exposure_forbidden", "policy.autostart_forbidden"}},
+		{ID: "b", Workflow: "alpha", Result: "passed", Steps: []HistoryStep{{Type: "policy.review", Status: "passed"}, {Type: "policy.check", Status: "skipped"}}},
+		{ID: "a", Workflow: "alpha", Result: "passed", Steps: []HistoryStep{{Type: "policy.check", Status: "passed"}}},
+	}
+}
+
+func TestBuildHistoryStats_Empty(t *testing.T) {
+	stats := BuildHistoryStats(History{}, HistoryFilters{})
+	if stats.SchemaVersion != HistorySchemaVersion || stats.TotalStored != 0 || stats.Shown != 0 {
+		t.Errorf("stats = %+v", stats)
+	}
+	if stats.Filters != nil {
+		t.Errorf("filters should be nil when none active")
+	}
+	// Grouped slices must be non-nil for a stable shape.
+	if stats.Workflows == nil || stats.StepTypes == nil || stats.Codes == nil {
+		t.Errorf("grouped slices must be non-nil: %+v", stats)
+	}
+}
+
+func TestBuildHistoryStats_Counts(t *testing.T) {
+	stats := BuildHistoryStats(History{Runs: statsRuns()}, HistoryFilters{})
+	if stats.TotalStored != 4 || stats.Shown != 4 {
+		t.Fatalf("total/shown = %d/%d, want 4/4", stats.TotalStored, stats.Shown)
+	}
+	if stats.Results.Passed != 2 || stats.Results.Failed != 2 {
+		t.Errorf("results = %+v, want 2/2", stats.Results)
+	}
+	// Steps: passed = a(1)+b.review(1)+d.check(1) = 3; failed = c.check(1)+d.compare(1) = 2; skipped = b(1) = 1.
+	if stats.Steps.Passed != 3 || stats.Steps.Failed != 2 || stats.Steps.Skipped != 1 {
+		t.Errorf("steps = %+v, want 3/2/1", stats.Steps)
+	}
+}
+
+func TestBuildHistoryStats_GroupedSortingAndCounts(t *testing.T) {
+	stats := BuildHistoryStats(History{Runs: statsRuns()}, HistoryFilters{})
+
+	// Workflows: alpha=2, beta=2 → tie broken by name ascending → alpha, beta.
+	if !reflect.DeepEqual(stats.Workflows, []WorkflowCount{{Name: "alpha", Count: 2}, {Name: "beta", Count: 2}}) {
+		t.Errorf("workflows = %+v", stats.Workflows)
+	}
+
+	// Step types: policy.check appears in a,b,c,d steps = 4; policy.baseline.compare = 1; policy.review = 1.
+	// Count desc then key asc → policy.check(4), policy.baseline.compare(1), policy.review(1).
+	wantTypes := []StepTypeCount{{Type: "policy.check", Count: 4}, {Type: "policy.baseline.compare", Count: 1}, {Type: "policy.review", Count: 1}}
+	if !reflect.DeepEqual(stats.StepTypes, wantTypes) {
+		t.Errorf("stepTypes = %+v, want %+v", stats.StepTypes, wantTypes)
+	}
+
+	// Codes (runs containing the code): policy.lan_exposure_forbidden in c,d = 2;
+	// policy.autostart_forbidden in c = 1. Count desc then code asc.
+	wantCodes := []CodeCount{{Code: "policy.lan_exposure_forbidden", Count: 2}, {Code: "policy.autostart_forbidden", Count: 1}}
+	if !reflect.DeepEqual(stats.Codes, wantCodes) {
+		t.Errorf("codes = %+v, want %+v", stats.Codes, wantCodes)
+	}
+}
+
+func TestBuildHistoryStats_CodeCountsRunsNotOccurrences(t *testing.T) {
+	// A run with a duplicated code in its slice would still count once per run; the
+	// store dedupes, but assert the run-level semantics explicitly.
+	runs := []HistoryRun{
+		{ID: "x", Workflow: "w", Result: "failed", Codes: []string{"c1"}},
+		{ID: "y", Workflow: "w", Result: "failed", Codes: []string{"c1"}},
+	}
+	stats := BuildHistoryStats(History{Runs: runs}, HistoryFilters{})
+	if !reflect.DeepEqual(stats.Codes, []CodeCount{{Code: "c1", Count: 2}}) {
+		t.Errorf("codes = %+v, want c1=2 (one per run)", stats.Codes)
+	}
+}
+
+func TestBuildHistoryStats_WithFilters(t *testing.T) {
+	stats := BuildHistoryStats(History{Runs: statsRuns()}, HistoryFilters{Result: "failed"})
+	if stats.Filters == nil || stats.Filters.Result != "failed" {
+		t.Fatalf("filters = %+v", stats.Filters)
+	}
+	if stats.TotalStored != 4 || stats.Shown != 2 {
+		t.Errorf("total/shown = %d/%d, want 4/2", stats.TotalStored, stats.Shown)
+	}
+	if stats.Results.Passed != 0 || stats.Results.Failed != 2 {
+		t.Errorf("results = %+v, want 0/2 after result filter", stats.Results)
+	}
+	// Only beta runs (c,d) are failed.
+	if !reflect.DeepEqual(stats.Workflows, []WorkflowCount{{Name: "beta", Count: 2}}) {
+		t.Errorf("workflows = %+v", stats.Workflows)
+	}
+}
+
+func TestBuildHistoryStats_EmptyMatchZeroStats(t *testing.T) {
+	stats := BuildHistoryStats(History{Runs: statsRuns()}, HistoryFilters{Code: "no.such.code"})
+	if stats.TotalStored != 4 || stats.Shown != 0 {
+		t.Errorf("total/shown = %d/%d, want 4/0", stats.TotalStored, stats.Shown)
+	}
+	if stats.Results.Passed != 0 || stats.Results.Failed != 0 {
+		t.Errorf("results should be zero on no match: %+v", stats.Results)
+	}
+	if len(stats.Workflows) != 0 || len(stats.StepTypes) != 0 || len(stats.Codes) != 0 {
+		t.Errorf("grouped tables should be empty on no match: %+v", stats)
+	}
+}
+
+func TestBuildHistoryStats_DoesNotMutateInput(t *testing.T) {
+	runs := statsRuns()
+	before := append([]HistoryRun{}, runs...)
+	_ = BuildHistoryStats(History{Runs: runs}, HistoryFilters{Result: "failed", Limit: 1})
+	if !reflect.DeepEqual(runs, before) {
+		t.Errorf("BuildHistoryStats mutated the input slice")
+	}
+}
+
 func TestBuildHistoryExport_Empty(t *testing.T) {
 	export := BuildHistoryExport(History{SchemaVersion: HistorySchemaVersion}, fixedTime())
 	if export.SchemaVersion != HistoryExportSchemaVersion {

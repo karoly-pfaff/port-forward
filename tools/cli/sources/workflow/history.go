@@ -146,6 +146,130 @@ func BuildHistoryListView(h History, f HistoryFilters) HistoryListView {
 	return view
 }
 
+// HistoryResultCounts counts runs by result (the fixed run-result values).
+type HistoryResultCounts struct {
+	Passed int `json:"passed"`
+	Failed int `json:"failed"`
+}
+
+// HistoryStepCounts counts steps by status across the in-scope runs.
+type HistoryStepCounts struct {
+	Passed  int `json:"passed"`
+	Failed  int `json:"failed"`
+	Skipped int `json:"skipped"`
+}
+
+// WorkflowCount is a per-workflow-name run count.
+type WorkflowCount struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// StepTypeCount is a per-step-type step count.
+type StepTypeCount struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
+}
+
+// CodeCount is the number of RUNS containing a given emitted code (codes are
+// deduped per run, so this counts runs, not total occurrences).
+type CodeCount struct {
+	Code  string `json:"code"`
+	Count int    `json:"count"`
+}
+
+// HistoryStats is the deterministic summary of the (optionally filtered) local
+// workflow history (v1.12 Slice 4). It is computed from compact history metadata
+// only — never raw reports or referenced files. Grouped counts are arrays sorted
+// by count descending then key ascending; the fixed result/step buckets are
+// objects with stable keys.
+type HistoryStats struct {
+	SchemaVersion int                 `json:"schemaVersion"`
+	Filters       *HistoryFilters     `json:"filters,omitempty"`
+	TotalStored   int                 `json:"totalStored"`
+	Shown         int                 `json:"shown"`
+	Results       HistoryResultCounts `json:"results"`
+	Steps         HistoryStepCounts   `json:"steps"`
+	Workflows     []WorkflowCount     `json:"workflows"`
+	StepTypes     []StepTypeCount     `json:"stepTypes"`
+	Codes         []CodeCount         `json:"codes"`
+}
+
+// BuildHistoryStats applies the filters and summarizes the matching runs. It
+// reads only compact history metadata and never mutates h. Grouped counts are
+// sorted by count descending then key ascending; `filters` is included only when
+// at least one filter is active (mirroring BuildHistoryListView). Grouped slices
+// are always non-nil (`[]`) for a stable shape.
+func BuildHistoryStats(h History, f HistoryFilters) HistoryStats {
+	filtered := ApplyHistoryFilters(h.Runs, f)
+	stats := HistoryStats{
+		SchemaVersion: HistorySchemaVersion,
+		TotalStored:   len(h.Runs),
+		Shown:         len(filtered),
+		Workflows:     []WorkflowCount{},
+		StepTypes:     []StepTypeCount{},
+		Codes:         []CodeCount{},
+	}
+	if f.hasAny() {
+		ff := f
+		stats.Filters = &ff
+	}
+
+	workflows := map[string]int{}
+	stepTypes := map[string]int{}
+	codes := map[string]int{}
+	for _, r := range filtered {
+		switch r.Result {
+		case runResultPassed:
+			stats.Results.Passed++
+		case runResultFailed:
+			stats.Results.Failed++
+		}
+		workflows[r.Workflow]++
+		for _, s := range r.Steps {
+			switch s.Status {
+			case runStatusPassed:
+				stats.Steps.Passed++
+			case runStatusFailed:
+				stats.Steps.Failed++
+			case runStatusSkipped:
+				stats.Steps.Skipped++
+			}
+			stepTypes[s.Type]++
+		}
+		for _, c := range r.Codes {
+			codes[c]++ // codes are deduped per run → counts runs containing c
+		}
+	}
+
+	for name, count := range workflows {
+		stats.Workflows = append(stats.Workflows, WorkflowCount{Name: name, Count: count})
+	}
+	for typ, count := range stepTypes {
+		stats.StepTypes = append(stats.StepTypes, StepTypeCount{Type: typ, Count: count})
+	}
+	for code, count := range codes {
+		stats.Codes = append(stats.Codes, CodeCount{Code: code, Count: count})
+	}
+	sortCounts(stats.Workflows, func(w WorkflowCount) (int, string) { return w.Count, w.Name })
+	sortCounts(stats.StepTypes, func(s StepTypeCount) (int, string) { return s.Count, s.Type })
+	sortCounts(stats.Codes, func(c CodeCount) (int, string) { return c.Count, c.Code })
+	return stats
+}
+
+// sortCounts sorts items by count descending, then by key ascending — a
+// deterministic order for the grouped stats tables.
+func sortCounts[T any](items []T, key func(T) (int, string)) {
+	sort.Slice(items, func(i, j int) bool {
+		ci, ki := key(items[i])
+		cj, kj := key(items[j])
+		if ci != cj {
+			return ci > cj
+		}
+		return ki < kj
+	})
+}
+
 // containsString reports whether list contains s.
 func containsString(list []string, s string) bool {
 	for _, v := range list {

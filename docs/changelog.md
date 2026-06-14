@@ -8,6 +8,20 @@ All notable changes to Portier are documented here.
 
 v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change).
 
+### Added — Slice 4: Workflow history stats
+
+- **`portier workflow history stats`.** Summarizes the (optionally filtered) local workflow run history by result, workflow name, step status, step type, and emitted code. Computed **only from compact local history metadata** — it never contacts the runtime, executes a workflow, reads workflow-referenced files, or scans raw reports.
+- **Filters.** Reuses the Slice 3 filters exactly — `--result`, `--workflow`, `--code`, `--limit` — applied **before** computing stats, AND-combined. No new filter types.
+- **Counts.** `totalStored`/`shown`, result counts (passed/failed), step status counts (passed/failed/skipped), and grouped counts for workflows, step types, and codes. **Code counts count the runs containing each code** (history stores deduped codes per run), not total occurrences. Grouped tables are sorted **count descending, then key ascending** (deterministic).
+- **`--json`** emits `{ schemaVersion, filters?, totalStored, shown, results, steps, workflows[], stepTypes[], codes[] }`. The `filters` object appears **only when a filter is active** (and contains only the active fields); grouped arrays are always present (`[]` when empty).
+- **Human output** shows an optional Filters block, `Runs`/`Steps` buckets, and the grouped tables (empty grouped tables are omitted). Empty/missing history prints a short `Result: no history` form.
+- **Empty history and empty match sets are success** (exit `0` with zero stats). Exit codes: `0` success; `1` a history read failure; `2` an invalid filter value. No exit `3` — stats never contacts the runtime.
+
+### Notes (Slice 4)
+
+- CLI-only, `validate:contract` stays **234/234**, no API/DTO/contract change. The stats model + counting + deterministic sorting live in the `workflow` package (`workflow/history.go`: `HistoryStats`, `HistoryResultCounts`, `HistoryStepCounts`, `WorkflowCount`/`StepTypeCount`/`CodeCount`, `BuildHistoryStats`, the generic `sortCounts`); `commands` stays **handlers-only** (`runWorkflowHistoryStats`). The list/stats flag parsing+validation was factored into a shared `parseHistoryFilters`, and the store load into `loadHistoryForRead`, used by both `list` and `stats`; the human Filters block is a shared `printHistoryFilterBlock`. The `workflow` history code still never imports `client`/`commands` and never contacts the runtime; stats does not mutate the store.
+- Covered by white-box `workflow/history_internal_test.go` (empty stats, result/step/workflow/step-type/code counts, **code counts = runs containing code**, deterministic count-desc/key-asc sorting, filtered stats, empty-match zero stats, no-input-mutation) and `commands/workflow_history_internal_test.go` (empty human/JSON with `[]` grouped arrays, JSON counts + sorting, human shape, per-filter + AND + limit-before-stats, empty-match → 0 zero stats, invalid filters → 2, read failure → 1, path-resolution failure → 1, JSON-encode failure → 1, store-not-mutated, flag edges). CLI coverage **97.7%** (gate **97 PASS**, not lowered/raised); the new stats helpers and handler are 100% covered.
+
 ### Added — Slice 3: Workflow history filtering
 
 - **Filters on `portier workflow history list`.** `--result <passed|failed>` (exact run result), `--workflow <name>` (exact, case-sensitive), `--code <code>` (run whose `codes` list contains the code, exact match), and `--limit <n>` (keep at most the newest `n` matches). Filtering operates **only on the compact local history** — it never contacts the runtime, executes a workflow, reads workflow-referenced files, or collects logs/env/process data.
