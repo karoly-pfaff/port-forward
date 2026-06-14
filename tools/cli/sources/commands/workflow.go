@@ -17,11 +17,11 @@ import (
 
 const workflowHelp = `Usage: portier workflow <subcommand> [options]
 
-Plan, validate, run, preview, or template a local workflow — an ordered sequence
-of existing safe Portier operations described in a small JSON file. Read-only and
-dry-run: it never applies/imports configs, enforces a policy, runs a shell
-command, schedules anything, or mutates any file (except the requested --out
-file). Only 'workflow run' executes the (read-only) steps; it is the only
+Plan, validate, run, preview, report on, or template a local workflow — an ordered
+sequence of existing safe Portier operations described in a small JSON file.
+Read-only and dry-run: it never applies/imports configs, enforces a policy, runs a
+shell command, schedules anything, or mutates any file (except the requested --out
+file/directory). Only 'workflow run' executes the (read-only) steps; it is the only
 subcommand that may contact the runtime, and only for a policy.check runtime step.
 
 Subcommands:

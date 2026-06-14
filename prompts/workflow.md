@@ -100,8 +100,8 @@ Here is my Portier workflow report:
 
 - This prompt is **docs-only**. There is no `--prompt` CLI helper; Portier does
   not contact any AI service.
-- It reuses the framing of [`docs/prompts/policy.md`](policy.md) and
-  [`docs/prompts/doctor.md`](doctor.md): when a workflow failure is a **policy**
+- It reuses the framing of [`prompts/policy.md`](policy.md) and
+  [`prompts/doctor.md`](doctor.md): when a workflow failure is a **policy**
   finding, the "change the rule vs. adjust the policy" guidance from the policy
   prompt applies — point the assistant at the policy finding codes in
   `explanations.json`.

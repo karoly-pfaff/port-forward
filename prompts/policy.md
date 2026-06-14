@@ -82,7 +82,7 @@ Here is my Portier policy output:
 
 - This prompt is **docs-only**. There is no `--prompt` CLI helper; Portier does
   not contact any AI service.
-- It is intentionally distinct from [`docs/prompts/doctor.md`](doctor.md): a
+- It is intentionally distinct from [`prompts/doctor.md`](doctor.md): a
   doctor report diagnoses runtime/config state, while a policy report evaluates
   compliance with operator-chosen guardrails — the framing and the "change the
   rule vs. adjust the policy" choice are policy-specific.

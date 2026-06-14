@@ -132,3 +132,17 @@ func TestRunExplainRegistry_CoversRunAndPolicy(t *testing.T) {
 		t.Errorf("runExplainRegistry missing policy.lan_exposure_forbidden")
 	}
 }
+
+// TestRunExplanations_ReturnsRunRegistry verifies the exported RunExplanations()
+// accessor returns exactly the workflow-run registry (the 3 run codes).
+func TestRunExplanations_ReturnsRunRegistry(t *testing.T) {
+	reg := RunExplanations()
+	if len(reg) != len(allWorkflowRunCodes) {
+		t.Fatalf("RunExplanations() has %d entries, want %d", len(reg), len(allWorkflowRunCodes))
+	}
+	for _, c := range allWorkflowRunCodes {
+		if exp, ok := reg[c]; !ok || exp.Code != c {
+			t.Errorf("RunExplanations() missing or mismatched run code %q", c)
+		}
+	}
+}

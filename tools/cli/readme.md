@@ -567,7 +567,7 @@ Exit codes: `0` bundle written and the doctor report passed; `1` bundle written 
 
 ### Using doctor output with an AI assistant
 
-If you want to ask an AI assistant to help interpret a doctor report, Portier ships a reusable, copy-paste **AI handoff prompt** in [`docs/prompts/doctor.md`](../../docs/prompts/doctor.md) (a full version and a short version).
+If you want to ask an AI assistant to help interpret a doctor report, Portier ships a reusable, copy-paste **AI handoff prompt** in [`prompts/doctor.md`](../../prompts/doctor.md) (a full version and a short version).
 
 **Portier never sends anything anywhere** — there is no AI integration, upload, or telemetry. The prompt is plain text *you* paste into an assistant of your choice, together with output you generated locally (e.g. `portier doctor --json --explain`). The prompt tells the assistant to treat the pasted report as the only source of truth, to distinguish info / warning / error / strict failures, to ground its analysis in the data, and — importantly — **never to ask you for secrets, tokens, keys, environment dumps, process lists, or logs** (the doctor tools never collect those). It asks for a verdict, prioritized findings, a risk level, and separated "safe now" vs "needs admin/network/security review" next steps.
 
@@ -753,7 +753,7 @@ portier policy check --config portier.json --policy policy.json
 
 ### Using policy output with an AI assistant
 
-To ask an AI assistant to help interpret a policy report, Portier ships a reusable, copy-paste prompt in [`docs/prompts/policy.md`](../../docs/prompts/policy.md). As with the doctor prompt, **Portier never sends anything anywhere** (no AI integration, upload, or telemetry) — it is plain text *you* paste into an assistant of your choice along with output you generated locally (e.g. `portier policy check --json --explain`). The policy prompt frames each finding as a **policy choice**, not necessarily a product defect, and separates safe next actions from changes that need admin/security review.
+To ask an AI assistant to help interpret a policy report, Portier ships a reusable, copy-paste prompt in [`prompts/policy.md`](../../prompts/policy.md). As with the doctor prompt, **Portier never sends anything anywhere** (no AI integration, upload, or telemetry) — it is plain text *you* paste into an assistant of your choice along with output you generated locally (e.g. `portier policy check --json --explain`). The policy prompt frames each finding as a **policy choice**, not necessarily a product defect, and separates safe next actions from changes that need admin/security review.
 
 ### `portier workflow plan --file <workflow.json>`
 
@@ -850,7 +850,7 @@ If the workflow is **invalid**, `workflow runbook` prints the plan (the validati
 
 Exit codes: `0` the workflow is valid and a runbook was produced; `1` the workflow parsed but the plan is invalid, **or** an `--out` write failure; `2` missing/invalid arguments (including a missing `--file` or `--out` value), or an unreadable/malformed workflow file. Runbook generation never contacts the runtime, so there is no connection-failure (`3`) exit code.
 
-> The runbook is a **preview only** — Portier does not run the listed commands. Workflow execution is deferred to a later v1.11 slice.
+> The runbook is a **preview only** — Portier does not run the listed commands. To actually execute a workflow's read-only steps, use [`portier workflow run`](#portier-workflow-run---file-workflowjson).
 
 ### `portier workflow report --from <report.json> --out <directory>`
 
@@ -876,7 +876,7 @@ Explanations are re-derived from the report using the same registry as `portier 
 
 Exit codes: `0` the bundle was written; `1` an output directory create/write failure; `2` missing/invalid arguments (including a missing `--from`/`--out` value) or an unreadable/malformed/unsupported input report. There is **no** connection-failure (`3`) code — the command never contacts the runtime.
 
-> The report bundle is generated from an **existing** report — `workflow report` never re-runs the workflow or reads the files a step referenced. For AI handoff, pair it with the docs-only prompt in [`docs/prompts/workflow.md`](../../docs/prompts/workflow.md): paste `summary.txt`, `report.json`, and `explanations.json`. **Portier never sends anything anywhere** (no AI integration, upload, or telemetry).
+> The report bundle is generated from an **existing** report — `workflow report` never re-runs the workflow or reads the files a step referenced. For AI handoff, pair it with the docs-only prompt in [`prompts/workflow.md`](../../prompts/workflow.md): paste `summary.txt`, `report.json`, and `explanations.json`. **Portier never sends anything anywhere** (no AI integration, upload, or telemetry).
 
 ### `portier workflow template <name>` / `--list`
 
