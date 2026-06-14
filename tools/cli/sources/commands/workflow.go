@@ -31,7 +31,7 @@ Subcommands:
   runbook --file <workflow.json>  Preview the CLI commands a valid workflow maps to
   report --from <report.json>     Package an existing plan/run report into a bundle
   template <name> | --list        Print a built-in workflow template, or list them
-  history <list|show|clear>       Inspect the opt-in local workflow run history
+  history <list|show|export|clear>  Inspect/export the opt-in workflow run history
   help                            Show this help message
 
 Run 'portier workflow plan --help', 'portier workflow run --help',

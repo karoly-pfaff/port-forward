@@ -244,6 +244,72 @@ func itoa(i int) string {
 	return string(b)
 }
 
+func TestBuildHistoryExport_Empty(t *testing.T) {
+	export := BuildHistoryExport(History{SchemaVersion: HistorySchemaVersion}, fixedTime())
+	if export.SchemaVersion != HistoryExportSchemaVersion {
+		t.Errorf("SchemaVersion = %d", export.SchemaVersion)
+	}
+	if export.Source != "workflow-history" {
+		t.Errorf("Source = %q", export.Source)
+	}
+	if export.CreatedAt != "2026-06-14T10:15:30Z" {
+		t.Errorf("CreatedAt = %q", export.CreatedAt)
+	}
+	if export.RunCount != 0 {
+		t.Errorf("RunCount = %d, want 0", export.RunCount)
+	}
+	// An empty export must serialize runs as [] (not null) for a stable shape.
+	data, err := json.Marshal(export)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"runs":[]`) {
+		t.Errorf("empty export should emit runs:[]; got %s", data)
+	}
+}
+
+func TestBuildHistoryExport_PopulatedPreservesOrderAndCompactRuns(t *testing.T) {
+	h := History{SchemaVersion: HistorySchemaVersion, Runs: []HistoryRun{
+		{ID: "newest", Workflow: "b", Result: "failed", Summary: WorkflowRunSummary{Total: 1, Failed: 1}, Steps: []HistoryStep{{ID: "s", Type: "policy.check", Status: "failed", ExitCode: 1}}, Codes: []string{"policy.lan_exposure_forbidden"}},
+		{ID: "oldest", Workflow: "a", Result: "passed", Summary: WorkflowRunSummary{Total: 1, Passed: 1}},
+	}}
+	export := BuildHistoryExport(h, fixedTime())
+	if export.RunCount != 2 {
+		t.Fatalf("RunCount = %d, want 2", export.RunCount)
+	}
+	if export.Runs[0].ID != "newest" || export.Runs[1].ID != "oldest" {
+		t.Errorf("order not preserved newest-first: %+v", export.Runs)
+	}
+	if !reflect.DeepEqual(export.Runs[0].Codes, []string{"policy.lan_exposure_forbidden"}) {
+		t.Errorf("codes not preserved: %v", export.Runs[0].Codes)
+	}
+}
+
+func TestBuildHistoryExport_SafetyAllFalse(t *testing.T) {
+	export := BuildHistoryExport(History{}, fixedTime())
+	s := export.Safety
+	if s.ContainsRawConfigs || s.ContainsRawPolicies || s.ContainsFullReports || s.ContainsLogs ||
+		s.ContainsEnvironment || s.ContainsProcessData || s.ContainsRuntimeURLs || s.ContainsTokens {
+		t.Errorf("safety flags must all be false, got %+v", s)
+	}
+	// All eight safety keys must be present in the JSON.
+	data, _ := json.Marshal(export)
+	for _, key := range []string{"containsRawConfigs", "containsRawPolicies", "containsFullReports", "containsLogs", "containsEnvironment", "containsProcessData", "containsRuntimeUrls", "containsTokens"} {
+		if !strings.Contains(string(data), key) {
+			t.Errorf("safety key %q missing from export JSON: %s", key, data)
+		}
+	}
+}
+
+func TestBuildHistoryExport_DoesNotMutateInput(t *testing.T) {
+	h := History{SchemaVersion: HistorySchemaVersion, Runs: []HistoryRun{{ID: "a"}, {ID: "b"}}}
+	before := append([]HistoryRun{}, h.Runs...)
+	_ = BuildHistoryExport(h, fixedTime())
+	if !reflect.DeepEqual(h.Runs, before) {
+		t.Errorf("BuildHistoryExport mutated the input history: %+v", h.Runs)
+	}
+}
+
 func TestHistoryStore_LoadDefaultsSchemaVersion(t *testing.T) {
 	// A valid history JSON without a schemaVersion gets the current version.
 	path := filepath.Join(t.TempDir(), "h.json")

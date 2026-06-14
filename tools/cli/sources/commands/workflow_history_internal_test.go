@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -437,6 +438,230 @@ func TestWorkflowHistoryClear_AlreadyEmptyExit0(t *testing.T) {
 	}
 }
 
+// --- history export ---
+
+// exportSnapshot is a minimal decode of the export file for assertions.
+type exportSnapshot struct {
+	SchemaVersion int    `json:"schemaVersion"`
+	CreatedAt     string `json:"createdAt"`
+	Source        string `json:"source"`
+	RunCount      int    `json:"runCount"`
+	Runs          []struct {
+		ID    string   `json:"id"`
+		Codes []string `json:"codes"`
+	} `json:"runs"`
+	Safety map[string]bool `json:"safety"`
+}
+
+func decodeExportFile(t *testing.T, path string) exportSnapshot {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read export file: %v", err)
+	}
+	var snap exportSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		t.Fatalf("decode export file: %v\n%s", err, data)
+	}
+	return snap
+}
+
+func TestWorkflowHistoryExport_EmptyHistory(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	out := filepath.Join(t.TempDir(), "export.json")
+
+	var stdout, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"export", "--out", out}, &stdout, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\n%s", code, errBuf.String())
+	}
+	snap := decodeExportFile(t, out)
+	if snap.SchemaVersion != 1 || snap.Source != "workflow-history" || snap.RunCount != 0 || snap.Runs == nil {
+		t.Errorf("empty export snapshot = %+v", snap)
+	}
+	for k, v := range snap.Safety {
+		if v {
+			t.Errorf("safety flag %q must be false", k)
+		}
+	}
+	if len(snap.Safety) != 8 {
+		t.Errorf("expected 8 safety flags, got %d", len(snap.Safety))
+	}
+	for _, want := range []string{"Workflow history export written.", "Runs: 0", "Compact metadata only"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("human output missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestWorkflowHistoryExport_Populated(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	store := workflow.NewHistoryStore(histPath)
+	// Appended oldest-first; the store prepends, so "second" ends up newest.
+	if err := store.Append(workflow.HistoryRun{ID: "first", Workflow: "a", Result: "passed", Summary: workflow.WorkflowRunSummary{Total: 1, Passed: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Append(workflow.HistoryRun{ID: "second", Workflow: "b", Result: "failed", Summary: workflow.WorkflowRunSummary{Total: 1, Failed: 1}, Codes: []string{"policy.lan_exposure_forbidden", "policy.autostart_forbidden"}}); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "export.json")
+
+	var stdout, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"export", "--out", out}, &stdout, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\n%s", code, errBuf.String())
+	}
+	snap := decodeExportFile(t, out)
+	if snap.RunCount != 2 {
+		t.Fatalf("RunCount = %d, want 2", snap.RunCount)
+	}
+	if snap.Runs[0].ID != "second" || snap.Runs[1].ID != "first" {
+		t.Errorf("export not newest-first: %+v", snap.Runs)
+	}
+	// Codes are kept exactly as stored — export does not re-order or re-dedupe
+	// (deduping/sorting happens at record time via ProjectRun).
+	if !reflect.DeepEqual(snap.Runs[0].Codes, []string{"policy.lan_exposure_forbidden", "policy.autostart_forbidden"}) {
+		t.Errorf("codes = %v", snap.Runs[0].Codes)
+	}
+	if !strings.Contains(stdout.String(), "Runs: 2") {
+		t.Errorf("human output missing run count:\n%s", stdout.String())
+	}
+}
+
+func TestWorkflowHistoryExport_NoSensitiveContent(t *testing.T) {
+	// Even if a run somehow carried a message/report-shaped value, the compact
+	// export model has no such fields, so the file must be free of them.
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{
+		ID:       "id-x",
+		Workflow: "demo",
+		Result:   "failed",
+		Summary:  workflow.WorkflowRunSummary{Total: 1, Failed: 1},
+		Steps:    []workflow.HistoryStep{{ID: "s", Type: "policy.check", Status: "failed", ExitCode: 1}},
+		Codes:    []string{"policy.lan_exposure_forbidden"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "export.json")
+	var stdout, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"export", "--out", out}, &stdout, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, banned := range []string{"\"report\"", "\"message\"", "listenHost", "targetHost", "http://", "PATH=", "USER=", "token"} {
+		if strings.Contains(string(raw), banned) {
+			t.Errorf("export file contains banned content %q:\n%s", banned, raw)
+		}
+	}
+	// Safety object must explicitly state the exclusions.
+	if !strings.Contains(string(raw), "\"safety\"") || !strings.Contains(string(raw), "containsTokens") {
+		t.Errorf("export file missing safety statement:\n%s", raw)
+	}
+}
+
+func TestWorkflowHistoryExport_JSONByteParity(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{ID: "id-x", Workflow: "demo", Result: "passed", Summary: workflow.WorkflowRunSummary{Total: 1, Passed: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "export.json")
+
+	var stdout, errBuf strings.Builder
+	code := RunWorkflowHistory(true, []string{"export", "--out", out}, &stdout, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\n%s", code, errBuf.String())
+	}
+	fileBytes, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stdout.String() != string(fileBytes) {
+		t.Errorf("--json stdout and --out file are not byte-identical\nstdout:\n%s\nfile:\n%s", stdout.String(), fileBytes)
+	}
+}
+
+func TestWorkflowHistoryExport_MissingOut(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var stdout, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"export"}, &stdout, &errBuf); code != 2 {
+		t.Errorf("exit code = %d, want 2 (missing --out)", code)
+	}
+}
+
+func TestWorkflowHistoryExport_ReadFailure(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	if err := os.WriteFile(histPath, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	useHistoryPath(t, histPath)
+	out := filepath.Join(t.TempDir(), "export.json")
+	var stdout, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"export", "--out", out}, &stdout, &errBuf); code != 1 {
+		t.Fatalf("exit code = %d, want 1 (malformed history)", code)
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("no export file should be written on a read failure (stat err = %v)", err)
+	}
+}
+
+func TestWorkflowHistoryExport_WriteFailure(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	// A regular file used as the parent directory makes the output write fail
+	// (output.WritePrettyJSON does not create parent directories).
+	blocker := histTempFile(t, "blocker", "x")
+	out := filepath.Join(blocker, "export.json")
+	var stdout, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"export", "--out", out}, &stdout, &errBuf); code != 1 {
+		t.Fatalf("exit code = %d, want 1 (write failure)", code)
+	}
+	if !strings.Contains(errBuf.String(), "Error writing") {
+		t.Errorf("expected a write error, got: %s", errBuf.String())
+	}
+}
+
+func TestWorkflowHistoryExport_DoesNotMutateStore(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{ID: "id-x", Workflow: "demo", Result: "passed", Summary: workflow.WorkflowRunSummary{Total: 1, Passed: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "export.json")
+	var stdout, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"export", "--out", out}, &stdout, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	after, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("export mutated the history store\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+func TestWorkflowHistoryExport_JSONEncodeFailure(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{ID: "id-x"}); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "export.json")
+	var errBuf strings.Builder
+	if code := runWorkflowHistoryExport(true, []string{"--out", out}, histFailWriter{}, &errBuf); code != 1 {
+		t.Errorf("export JSON encode failure exit = %d, want 1", code)
+	}
+}
+
 // --- dispatch ---
 
 func TestWorkflowHistory_NoSubcommandExit2(t *testing.T) {
@@ -485,7 +710,7 @@ func TestHistoryDefaults(t *testing.T) {
 
 func TestWorkflowHistory_PathResolutionFailures(t *testing.T) {
 	useFailingHistoryPath(t)
-	for _, args := range [][]string{{"list"}, {"show", "any"}, {"clear", "--yes"}} {
+	for _, args := range [][]string{{"list"}, {"show", "any"}, {"export", "--out", "x.json"}, {"clear", "--yes"}} {
 		var out, errBuf strings.Builder
 		code := RunWorkflowHistory(false, args, &out, &errBuf)
 		if code != 1 {
@@ -513,6 +738,9 @@ func TestWorkflowHistory_FlagParseEdges(t *testing.T) {
 		{"show too many", []string{"show", "a", "b"}, 2},
 		{"clear help", []string{"clear", "--help"}, 0},
 		{"clear bad flag", []string{"clear", "--bogus"}, 2},
+		{"export help", []string{"export", "--help"}, 0},
+		{"export bad flag", []string{"export", "--bogus"}, 2},
+		{"export missing out value", []string{"export", "--out"}, 2},
 	}
 	for _, tc := range cases {
 		var out, errBuf strings.Builder

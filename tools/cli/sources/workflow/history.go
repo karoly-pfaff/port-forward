@@ -67,6 +67,69 @@ type History struct {
 	Runs          []HistoryRun `json:"runs"`
 }
 
+// HistoryExportSchemaVersion is the schema version of the workflow-history export
+// snapshot (v1.12 Slice 2). It is independent of the on-disk HistorySchemaVersion.
+const HistoryExportSchemaVersion = 1
+
+// HistorySafety is the explicit, self-documenting statement of what a workflow
+// history export deliberately excludes. Every field is always false — the export
+// carries compact metadata only, never raw configs/policies, full reports, logs,
+// environment, process data, runtime URLs, or tokens. The flags exist so a reader
+// (human or tool) can confirm the snapshot's safety boundary without inspecting it.
+type HistorySafety struct {
+	ContainsRawConfigs  bool `json:"containsRawConfigs"`
+	ContainsRawPolicies bool `json:"containsRawPolicies"`
+	ContainsFullReports bool `json:"containsFullReports"`
+	ContainsLogs        bool `json:"containsLogs"`
+	ContainsEnvironment bool `json:"containsEnvironment"`
+	ContainsProcessData bool `json:"containsProcessData"`
+	ContainsRuntimeURLs bool `json:"containsRuntimeUrls"`
+	ContainsTokens      bool `json:"containsTokens"`
+}
+
+// HistoryExport is the deterministic, compact snapshot of the local workflow
+// history produced by `workflow history export`. It reuses the same compact
+// HistoryRun entries as the store (newest first) plus snapshot metadata and an
+// explicit safety statement. It is built locally from the existing history — it
+// never carries raw configs, policies, full reports, secrets, or runtime data.
+type HistoryExport struct {
+	SchemaVersion int           `json:"schemaVersion"`
+	CreatedAt     string        `json:"createdAt"`
+	Source        string        `json:"source"`
+	RunCount      int           `json:"runCount"`
+	Runs          []HistoryRun  `json:"runs"`
+	Safety        HistorySafety `json:"safety"`
+}
+
+// BuildHistoryExport builds the export snapshot from a loaded History. It copies
+// the compact run entries verbatim (preserving the store's newest-first order and
+// the already-deduped+sorted codes), stamps createdAt (injected for tests), and
+// attaches the all-false safety statement. An empty/missing history yields a valid
+// snapshot with runCount 0 and an empty runs array. It does not mutate h.
+func BuildHistoryExport(h History, createdAt time.Time) HistoryExport {
+	runs := h.Runs
+	if runs == nil {
+		runs = []HistoryRun{} // emit [] (not null) for a stable shape
+	}
+	return HistoryExport{
+		SchemaVersion: HistoryExportSchemaVersion,
+		CreatedAt:     createdAt.UTC().Format(time.RFC3339),
+		Source:        "workflow-history",
+		RunCount:      len(runs),
+		Runs:          runs,
+		Safety: HistorySafety{
+			ContainsRawConfigs:  false,
+			ContainsRawPolicies: false,
+			ContainsFullReports: false,
+			ContainsLogs:        false,
+			ContainsEnvironment: false,
+			ContainsProcessData: false,
+			ContainsRuntimeURLs: false,
+			ContainsTokens:      false,
+		},
+	}
+}
+
 // idSanitizer collapses any run of non-alphanumeric characters in a workflow name
 // into a single hyphen so a run id stays a safe, readable token.
 var idSanitizer = regexp.MustCompile(`[^a-z0-9]+`)

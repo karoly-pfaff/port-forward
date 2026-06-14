@@ -887,6 +887,7 @@ Inspect the **opt-in** local workflow run history recorded by [`workflow run --r
 ```
 portier workflow history list [--json]
 portier workflow history show <run-id> [--json]
+portier workflow history export --out <file> [--json]
 portier workflow history clear --yes
 ```
 
@@ -894,9 +895,34 @@ History stores **compact metadata only** — run id, `createdAt` (RFC3339 UTC), 
 
 - **`list`** prints recorded runs newest-first (or a clear empty message when none); `--json` emits `{ schemaVersion, runs: [ { id, createdAt, workflow, result, summary, steps, codes? } ] }`.
 - **`show <run-id>`** prints one recorded run (human or `--json`).
+- **`export --out <file>`** writes a compact JSON **snapshot** of the history to `<file>` for archiving or sharing (see below).
 - **`clear --yes`** deletes the local history file; `--yes` is required (already-empty/missing is a success).
 
-Exit codes: `0` success — including `list` with no runs and `clear` when already empty; `1` an unknown run id (`show`) or a history read/write failure; `2` missing/invalid arguments (a missing run id for `show`, or `clear` without `--yes`). There is **no** connection-failure (`3`) code — these commands never contact the runtime.
+Exit codes: `0` success — including `list`/`export` with no runs and `clear` when already empty; `1` an unknown run id (`show`) or a history read/write failure; `2` missing/invalid arguments (a missing run id for `show`, a missing `--out` value for `export`, or `clear` without `--yes`). There is **no** connection-failure (`3`) code — these commands never contact the runtime.
+
+#### `workflow history export`
+
+`workflow history export --out <file>` writes a **compact, deterministic snapshot** of the local history. It is fully **offline and read-only** — it never mutates the store, contacts the runtime, executes a workflow, or reads the files a workflow step refers to. A missing/empty history exports a valid empty snapshot (`runCount: 0`) and exits `0`. An existing `--out` file is overwritten; its parent directory must already exist (consistent with the other single-file `--out` exports).
+
+Snapshot shape:
+
+```
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-06-14T10:15:30Z",
+  "source": "workflow-history",
+  "runCount": 2,
+  "runs": [ { "id", "createdAt", "workflow", "result", "summary", "steps", "codes"? } ],
+  "safety": {
+    "containsRawConfigs": false, "containsRawPolicies": false,
+    "containsFullReports": false, "containsLogs": false,
+    "containsEnvironment": false, "containsProcessData": false,
+    "containsRuntimeUrls": false, "containsTokens": false
+  }
+}
+```
+
+The `runs` entries are the same compact records as the store (newest first, codes left exactly as stored). The `safety` object's eight flags are **always false** — an explicit statement that the snapshot carries compact metadata only (no raw configs/policies, full reports, logs, environment, process data, runtime URLs, or tokens). With the global `--json` the snapshot is also printed to stdout, **byte-identical** to the file (`portier --json workflow history export --out <file>`). Exit codes: `0` written (including an empty snapshot); `1` a history read failure, an output write failure, or a JSON-encode failure; `2` a missing `--out` value.
 
 > Workflow history is **opt-in local observability** — Portier records nothing unless you pass `--record-history`, adds no telemetry/upload, and runs no background collection.
 

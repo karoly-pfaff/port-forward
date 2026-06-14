@@ -8,6 +8,19 @@ All notable changes to Portier are documented here.
 
 v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change).
 
+### Added — Slice 2: Workflow history export
+
+- **`portier workflow history export --out <file>`.** Writes a compact, deterministic JSON snapshot of the local workflow history to a file for manual archiving or sharing. Fully **offline and read-only** — it loads the history store, builds the snapshot, and writes it; it **never** mutates the store, contacts the runtime, executes a workflow, or reads the files a workflow step refers to.
+- **Snapshot schema** (`schemaVersion: 1`): `createdAt` (RFC3339 UTC), `source: "workflow-history"`, `runCount`, `runs` (the compact history entries, newest first, exactly as stored — codes are not re-ordered or re-deduped), and an explicit **`safety`** object whose eight flags (`containsRawConfigs`, `containsRawPolicies`, `containsFullReports`, `containsLogs`, `containsEnvironment`, `containsProcessData`, `containsRuntimeUrls`, `containsTokens`) are **always false**, stating what the snapshot excludes. The snapshot carries the same compact metadata as the store — never raw configs, policies, full reports, host/port payloads, file contents, logs, environment variables, process data, secrets, runtime URLs, or tokens.
+- **Empty/missing history** exports a valid snapshot with `runCount: 0` and `runs: []` and exits `0`.
+- **Human output** confirms the file, run count, and a fixed safety block; **`--json`** (global) prints the same snapshot to stdout **byte-identical** to the file.
+- **Exit codes.** `0` written (including an empty snapshot); `1` a history read failure, an output write failure, or a JSON-encode failure; `2` a missing `--out` value. The `--out` parent directory must already exist (consistent with the other single-file `--out` exports — `policy check --out`, `doctor --out`, `workflow template --out`); an existing file is overwritten.
+
+### Notes (Slice 2)
+
+- CLI-only, `validate:contract` stays **234/234**, no API/DTO/contract change. The export model + projection live in the `workflow` package (`workflow/history.go`: `HistoryExport`/`HistorySafety`/`BuildHistoryExport`, with `createdAt` injected for tests); `commands` stays **handlers-only** (`workflow_history.go`: `runWorkflowHistoryExport` loads the store, calls `BuildHistoryExport`, and writes via `output.WritePrettyJSON`/`output.PrintJSON`). The `workflow` history code still never imports `client`/`commands` and never contacts the runtime. The export reuses the stored `HistoryRun` entries verbatim (it does **not** mutate the store).
+- Covered by white-box `workflow/history_internal_test.go` (empty snapshot emits `runs:[]`, populated preserves newest-first order + codes, safety all-false with all eight keys present, deterministic `createdAt`, does-not-mutate-input) and `commands/workflow_history_internal_test.go` (empty/populated export, run count, newest-first, no sensitive content, `--json`/file **byte parity**, missing `--out`/missing-value → 2, read failure → 1 with no file written, write failure → 1, store-not-mutated, JSON-encode failure → 1, path-resolution failure, flag edges). CLI coverage **97.6%** (gate **97 PASS**, not lowered/raised); the new `BuildHistoryExport`/`runWorkflowHistoryExport`/`printHistoryExportHuman` are 100% covered.
+
 ### Added — Slice 1: Local workflow run history
 
 - **Opt-in local workflow run history.** `portier workflow run --file <workflow.json> --record-history` records a **compact** entry about a completed run in a local history file. Without `--record-history`, nothing is recorded — there is no always-on or background collection.
