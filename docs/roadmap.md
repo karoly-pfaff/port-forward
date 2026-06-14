@@ -2085,6 +2085,10 @@ v1.13 implements the real offline replay tool that reconstructs and explains exp
 
 Replay is a separate tool under `tools/replay/`, **not** a `portier replay` subcommand inside `tools/cli`.
 
+### Slice 1 — Standalone replay tool scaffold (delivered)
+
+Scaffolded `tools/replay/` as a separate Go module (`portier/replay`, stdlib-only) with the `portier-replay` binary — a separate tool beside the CLI, not a `portier` subcommand, with no dependency on `tools/cli` or any runtime client. First command: `portier-replay [--json] plan --from <file-or-dir> [--out <file>]` detects an existing workflow artifact (run report, plan report, history export, or support-report bundle directory) by JSON/manifest shape and prints a deterministic **replay plan** describing the offline analyses the artifact can support (available) plus the four it never performs (execution, runtime probing, referenced-file reread, mutation/enforcement). Strictly offline and read-only; exit codes `0`/`1`/`2` (no `3`). `validate:contract` stays 234/234. Scripts: `build:replay`/`test:replay`/`validate:replay`. This is the v1.13 foundation; later slices build the actual analyses (timeline reconstruction, distributions, correlation, incident reports) on top.
+
 ### Priority 1 — `tools/replay` full offline analysis
 
 Implement the real replay tool under `tools/replay/`. It should:

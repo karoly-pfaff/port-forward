@@ -38,8 +38,9 @@ Source: `audits/v1.6-readability-naming-audit-1.md` (Naming-A).
 | **Service** / **Go service** / **native service** | The native Go implementation (`service` / `service.exe`, `service/`). The **preferred** packaged production runtime. | API runtime value is `"go"`. Avoid "Go server". |
 | **CLI** | The Go API client under `tools/cli/` (`portier` / `portier.exe`). Talks to the management API; does **not** start the service or contain runtime/forwarding logic. | Stays a pure API client. |
 | **Client** / **web UI** | The React single-page app under `client/`, served from `web/`. | "Client" = the browser UI, distinct from the "CLI". |
+| **Replay tool** | The standalone offline analysis tool under `tools/replay/` (`portier-replay`, a separate Go module `portier/replay`). Reads **saved** workflow artifacts (run/plan reports, history exports, support-report bundles) and reports what offline analysis each can support. | A **separate tool beside the CLI**, not a `portier` subcommand. Strictly **offline and read-only** — never executes workflows, contacts the runtime, reads referenced files, mutates inputs, enforces policy, or uploads. Its schemas are local tool schemas (not the REST contract). |
 
-The two runtimes implement **one** REST contract; the CLI carries a third (DTO-only) copy. `validate:contract` guards parity across all three.
+The two runtimes implement **one** REST contract; the CLI carries a third (DTO-only) copy. `validate:contract` guards parity across all three. The replay tool reads exported artifacts after the fact — it is not part of the live REST contract.
 
 ---
 

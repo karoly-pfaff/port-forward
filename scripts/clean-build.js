@@ -20,6 +20,7 @@ const targets = [
   "shared/build",
   "service/build",
   "tools/cli/build",
+  "tools/replay/build",
 ];
 
 for (const rel of targets) {

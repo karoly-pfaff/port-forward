@@ -4,6 +4,22 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — v1.13 Local Replay & Offline Analysis (in progress)
+
+v1.13 builds a **standalone offline replay/analysis tool beside the CLI** — `portier-replay`, a separate Go module under `tools/replay/`, **not** a `portier workflow replay` subcommand. It analyzes saved Portier workflow artifacts after the fact and is strictly offline and read-only. `validate:contract` stays **234/234** (no shared/server/service/client/API/DTO/contract change — the replay tool is wholly independent of the runtime).
+
+### Added — Slice 1: Standalone replay tool scaffold
+
+- **New tool `portier-replay`** (`tools/replay/`, module `portier/replay`, stdlib-only). It is a separate binary beside `portier` — not a CLI subcommand — and is independently testable. It does not import `tools/cli` or any runtime client package.
+- **`portier-replay [--json] plan --from <file-or-dir> [--out <file>]`.** Detects an existing workflow artifact and prints a deterministic **replay plan** answering "What offline replay/analysis can this saved artifact support?" — it does **not** replay by re-executing anything.
+- **Input detection by JSON/manifest shape (not filename):** workflow **run** reports (`workflow run --json --out`), workflow **plan** reports (`workflow plan --json --out`), workflow **history exports** (`workflow history export --out`), and workflow **support-report bundle** directories (`workflow report --out`, whose `manifest.json` is the only file read).
+- **Replay plan model (`schemaVersion: 1`, a local tool schema — no REST/API contract).** Each plan lists `available` analyses gated on the inputs the artifact contains (step timeline, step-status summary, validation summary, history distributions, failed-run shortlist, explanation lookup, summary/report inspection) and `unavailable` analyses — always including the four the tool deliberately never performs: workflow re-execution, runtime probing, referenced-file reread, and mutation/enforcement. Human and JSON output; `--json --out` is byte-identical.
+- **Exit codes:** `0` plan produced; `1` an output-write or JSON-encode failure; `2` a usage error or an unreadable/malformed/unsupported input artifact. No exit `3` — the tool never contacts a runtime.
+- **Safety boundary (held by construction):** offline and read-only — never executes workflows, contacts the runtime, reads the config/policy/baseline/report files an artifact refers to, mutates inputs, applies/imports configs, enforces policy, schedules jobs, runs shell commands, uploads anything, or collects logs/environment/process data.
+- **Scripts:** `npm run build:replay` / `test:replay` / `validate:replay`; `build:clean` now also removes `tools/replay/build`.
+
+---
+
 ## [1.12.0] — 2026-06-14 — Local History & Observability
 
 v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change). The **CLI coverage gate remains 97%** (actual ~97.8%); no gates were lowered.

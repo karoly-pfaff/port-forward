@@ -540,6 +540,20 @@ npm run validate:coverage          # all five components — coverage gates enfo
 
 See [tools/cli/readme.md](tools/cli/readme.md) for full usage, exit codes, and planned commands.
 
+### Replay tool (`portier-replay`)
+
+`portier-replay` is a **separate, offline analysis tool beside the CLI** (under `tools/replay/`, its own Go module) — not a `portier` subcommand. It reads existing Portier workflow artifacts (run/plan reports, history exports, support-report bundles) and reports what offline analysis each saved artifact can support. It is strictly offline and read-only: it never executes workflows, contacts the runtime, reads referenced config/policy/baseline/report files, mutates inputs, or uploads anything.
+
+```powershell
+portier-replay [--json] plan --from <file-or-dir> [--out <file>]
+
+npm run build:replay      # builds tools/replay/build/portier-replay
+npm run test:replay       # go test ./... inside tools/replay
+npm run validate:replay   # test:replay + build:replay
+```
+
+See [tools/replay/README.md](tools/replay/README.md) for details and the safety boundary.
+
 ---
 
 ## Scripts
