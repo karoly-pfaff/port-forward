@@ -50,7 +50,12 @@ replay [--json] compare  --left <file-or-dir> --right <file-or-dir> [--out <file
 replay [--json] explain  --from <file-or-dir> [--out <file>]
 replay [--json] explain  --code <code>
 replay [--json] explain  --list
+replay version          # or: replay --version
 ```
+
+The version is exposed like the Portier CLI — `replay version` / `replay --version`
+prints `Portier replay <version>` (the version constant lives in
+`tools/replay/sources/version/version.go` and tracks the overall Portier release).
 
 - `--from <path>` — a workflow run/plan report file, a history export file, or a
   support-report bundle **directory** (whose `manifest.json` — and, for `analyze`,

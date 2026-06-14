@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"portier/replay/sources/core"
+	"portier/replay/sources/version"
 )
 
 // Run is the testable entry point. Exit codes: 0 success; 1 an output-write or
@@ -21,6 +22,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(io.Discard) // suppress default usage output; we print our own
 
 	flagJSON := fs.Bool("json", false, "output as machine-readable JSON")
+	flagVersion := fs.Bool("version", false, "show replay tool version and exit")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -32,6 +34,11 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 
+	if *flagVersion {
+		PrintVersion(stdout)
+		return 0
+	}
+
 	remaining := fs.Args()
 	if len(remaining) == 0 {
 		printHelp(stdout)
@@ -41,6 +48,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	switch remaining[0] {
 	case "help":
 		printHelp(stdout)
+		return 0
+	case "version":
+		PrintVersion(stdout)
 		return 0
 	case "plan":
 		return runPlan(*flagJSON, remaining[1:], stdout, stderr)
@@ -161,6 +171,11 @@ func runAnalyze(jsonOut bool, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// PrintVersion writes the replay tool version.
+func PrintVersion(w io.Writer) {
+	fmt.Fprintf(w, "Portier replay %s\n", version.Version)
+}
+
 // printHelp writes the tool's usage text.
 func printHelp(w io.Writer) {
 	fmt.Fprint(w, `replay - offline analysis for saved Portier workflow artifacts
@@ -180,10 +195,12 @@ Commands:
   timeline  Reconstruct a deterministic ordered timeline from a saved artifact
   compare   Compare two saved artifacts offline and report what changed
   explain   Explain the emitted codes found in a saved artifact (or a code/the registry)
+  version   Show the replay tool version
   help      Show this help
 
 Flags:
   --json            Output as machine-readable JSON
+  --version         Show the replay tool version and exit
   --from <path>     A workflow run/plan report, history export, or report bundle dir
   --left <path>     The left artifact for compare
   --right <path>    The right artifact for compare

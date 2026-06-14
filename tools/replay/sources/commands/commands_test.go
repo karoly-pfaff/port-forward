@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"portier/replay/sources/version"
 )
 
 // runCLI invokes run() with captured stdout/stderr.
@@ -58,10 +60,38 @@ func TestRun_NoArgs_PrintsHelp(t *testing.T) {
 		t.Errorf("help should use the 'replay' binary name, not 'portier-replay': %q", out)
 	}
 	// Help must list every command and document the exit codes.
-	for _, want := range []string{"plan", "analyze", "timeline", "compare", "explain", "Exit codes:", "no exit 3"} {
+	for _, want := range []string{"plan", "analyze", "timeline", "compare", "explain", "version", "Exit codes:", "no exit 3"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help missing %q:\n%s", want, out)
 		}
+	}
+}
+
+func TestRun_VersionFlag(t *testing.T) {
+	code, out, _ := runCLI("--version")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	want := "Portier replay " + version.Version
+	if !strings.Contains(out, want) {
+		t.Errorf("--version output = %q, want it to contain %q", out, want)
+	}
+}
+
+func TestRun_VersionCommand(t *testing.T) {
+	code, out, _ := runCLI("version")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	if !strings.Contains(out, "Portier replay "+version.Version) {
+		t.Errorf("version output = %q", out)
+	}
+}
+
+func TestVersion_IsCurrentRelease(t *testing.T) {
+	// The replay tool version tracks the overall Portier release version.
+	if version.Version != "1.13.0" {
+		t.Errorf("version.Version = %q, want 1.13.0", version.Version)
 	}
 }
 
