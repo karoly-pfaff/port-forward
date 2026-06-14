@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { ActivityEventType, ActivitySeverity, ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, GroupActionResult, ImportMode, ImportResult, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
 import { deriveRuleHealth, listenKey, validateForwardRule, validateForwardRulePatch } from "@portier/shared";
+import { buildExportedConfig } from "./config-export.js";
 import type { Forwarder, ForwarderStatus } from "./forwarders/types.js";
 import { TcpForwarder } from "./forwarders/tcp-forwarder.js";
 import { UdpForwarder } from "./forwarders/udp-forwarder.js";
@@ -301,12 +302,8 @@ export class ForwardManager {
     await this.persist();
   }
 
-  exportConfig(): ExportedConfig {
-    const config: ExportedConfig = {
-      version: "1",
-      exportedAt: new Date().toISOString(),
-      rules: this.listRules()
-    };
+  exportConfig(now: Date = new Date()): ExportedConfig {
+    const config = buildExportedConfig({ rules: this.listRules(), now });
     this.activity?.add({
       type: "config.exported",
       severity: "info",

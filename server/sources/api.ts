@@ -30,10 +30,11 @@ export interface AppOptions {
   activity?: ActivityStore;
   runtimeInfo?: RuntimeInfoOptions;
   /**
-   * Optional clock used only for `GET /api/runtime`'s `uptimeSeconds`. Defaults
-   * to the real wall clock; production never overrides it. A minimal, test-only
-   * seam (like `runtimeInfo.startedAt`) so the runtime endpoint can be parity-
-   * tested deterministically against the NestJS implementation.
+   * Optional clock for the volatile-timestamp endpoints — `GET /api/runtime`'s
+   * `uptimeSeconds` and `GET /api/config/export`'s `exportedAt`. Defaults to the
+   * real wall clock; production never overrides it. A minimal, test-only seam
+   * (like `runtimeInfo.startedAt`) so these endpoints can be parity-tested
+   * deterministically against the NestJS implementation.
    */
   now?: () => Date;
 }
@@ -201,7 +202,7 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
   // ── Config import/export ─────────────────────────────────────────────────────
 
   app.get("/api/config/export", (_request, response) => {
-    response.json(manager.exportConfig());
+    response.json(manager.exportConfig((options.now ?? (() => new Date()))()));
   });
 
   app.post("/api/config/import", async (request, response, next) => {

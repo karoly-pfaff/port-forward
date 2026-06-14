@@ -56,12 +56,23 @@ slices, each guarded by `npm run validate:contract`.
   Express route and the Nest `RuntimeService` call one shared pure builder
   (`buildRuntimeInfo` in `sources/runtime-info.ts`), so the shape cannot drift.
   Volatile values come from three narrow readers — `ClockReader`/`CLOCK_READER`
-  (generic `now()`, reusable for `/api/connections` `generatedAt` /
-  `/api/config/export` `exportedAt`), `ProcessReader`/`PROCESS_READER`, and
-  `RuntimeInfoReader`/`RUNTIME_INFO_READER`. Byte-for-byte parity-tested by booting
-  Express and Nest with the **same fixed clock + runtime info** (real process →
-  matching `pid`/`platform`/`arch`), so `uptimeSeconds` is deterministic and **no
-  field is normalized/stripped**. Shadow-only.
+  (generic `now()`, now shared from `common/clock.reader.ts`),
+  `ProcessReader`/`PROCESS_READER`, and `RuntimeInfoReader`/`RUNTIME_INFO_READER`.
+  Byte-for-byte parity-tested by booting Express and Nest with the **same fixed
+  clock + runtime info** (real process → matching `pid`/`platform`/`arch`), so
+  `uptimeSeconds` is deterministic and **no field is normalized/stripped**.
+  Shadow-only.
+- `GET /api/config/export` (v1.14 Slice 10) — the second volatile read endpoint
+  (`exportedAt`). Both the Express manager (`ForwardManager.exportConfig`) and the
+  Nest `ConfigExportService` build the snapshot via the shared pure builder
+  `buildExportedConfig` (in `sources/config-export.ts`), with `exportedAt` stamped
+  from the shared `ClockReader`. Read-only over a narrow
+  `ConfigExportReader`/`CONFIG_EXPORT_READER`; the `config.exported` activity
+  emission (a write side-effect) stays with the Express manager, deferred with the
+  config-write migration. Byte-for-byte parity-tested by booting both apps with the
+  same fixed clock + the same seeded manager (`exportedAt` and rules deterministic,
+  **no field normalized/stripped**). Shadow-only; config import/write stays with
+  Express.
 - All `/api/*` errors → the Portier `{ "errors": ["..."] }` envelope via the
   global `ApiErrorEnvelopeFilter` (v1.14 Slice 3): unmatched routes →
   `404 ["API route was not found."]`, controller-raised `400`s carry their
@@ -85,7 +96,9 @@ sources/nest/
     status/                     # GET /api/status (injected STATUS_READER; response: *.response.dto + mapper)
     forwards/                   # GET /api/forwards (injected FORWARDS_READER; response: *.response.dto + mapper)
     runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; response: *.response.dto + mapper)
+    config/                     # GET /api/config/export (volatile exportedAt: CONFIG_EXPORT_READER + shared CLOCK_READER; shared buildExportedConfig; response: *.response.dto + mapper)
   common/
+    clock.reader.ts              # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider for volatile-timestamp endpoints
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
     api-errors.ts                # ApiBadRequestException(string[]) — controllers raise this, not a literal

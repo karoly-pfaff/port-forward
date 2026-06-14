@@ -9,23 +9,12 @@ import type { RuntimeInfoOptions } from "../../../runtime-info.js";
  * injected readers instead of being read inline. Production binds readers over
  * the real clock/process; tests override them with fixed values.
  *
- * `ClockReader` is deliberately generic (not runtime-specific) so later volatile
- * endpoints — `GET /api/connections` (`generatedAt`), `GET /api/config/export`
- * (`exportedAt`) — can reuse the same provider/token.
+ * The clock provider (`ClockReader`/`CLOCK_READER`) was promoted to
+ * `common/clock.reader.ts` once `GET /api/config/export` (Slice 10) also needed
+ * it; it is re-exported here so the runtime feature's imports stay stable.
  */
 
-/** Live wall-clock provider (reused by any endpoint with a timestamp field). */
-export interface ClockReader {
-  now(): Date;
-}
-
-/** Injection token for the clock reader. */
-export const CLOCK_READER = "CLOCK_READER";
-
-/** Production clock: the real wall clock. */
-export const defaultClockReader: ClockReader = {
-  now: () => new Date(),
-};
+export { type ClockReader, CLOCK_READER, defaultClockReader } from "../../common/clock.reader.js";
 
 /** Process-metadata provider (`pid`/`platform`/`arch`). */
 export interface ProcessReader {
