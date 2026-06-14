@@ -36,6 +36,10 @@ slices, each guarded by `npm run validate:contract`.
   route. **Byte-for-byte identical to the existing Express route** (parity-tested)
   and served only under `start:nest`; the Express server still serves the
   default route unchanged.
+- `GET /api/activity` (v1.14 Slice 4) — read-only activity list over an injected
+  `ActivityReader` (`ACTIVITY_STORE` token, default = a fresh domain
+  `ActivityStore`). Byte-for-byte parity-tested; shadow-only under `start:nest`.
+  `DELETE /api/activity` (a mutation) stays with Express, deferred.
 - All `/api/*` errors → the Portier `{ "errors": ["..."] }` envelope via the
   global `ApiErrorEnvelopeFilter` (v1.14 Slice 3): unmatched routes →
   `404 ["API route was not found."]`, controller-raised `400`s carry their
@@ -55,6 +59,7 @@ sources/nest/
   health/                       # GET /health (controller → service → module)
   api/
     ports/                      # GET /api/ports/advisory (controller → service → module)
+    activity/                   # GET /api/activity (controller → service → module; injected ACTIVITY_STORE)
   common/
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
@@ -99,6 +104,10 @@ management server's default `127.0.0.1:47831`.
 - The existing Express server **remains the active runtime** until a NestJS
   replacement is explicitly validated (contract + runtime smoke + E2E).
 - No endpoint is migrated without tests and contract validation.
+- An endpoint that needs runtime/domain state is wired through a **narrow
+  injection token + interface** (e.g. `ACTIVITY_STORE` / `ActivityReader`), with
+  a fake/seeded instance in tests — **never** a real forwarding/socket runtime in
+  endpoint tests.
 - **New migration code reaches 100% meaningful coverage** — keep startup glue in
   covered helpers (not the process entry) and never broadly exclude new Nest code
   or lower a coverage gate to pass.

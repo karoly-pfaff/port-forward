@@ -1,0 +1,59 @@
+import type { ActivityEvent } from "@portier/shared";
+import { describe, expect, it } from "vitest";
+import type { ActivityListParams } from "../../../activity/activity-store.js";
+import { ActivityService, type ActivityReader, parseActivityLimit } from "./activity.service.js";
+
+/** Records the params it was asked for and returns a fixed event list. */
+class RecordingReader implements ActivityReader {
+  lastParams?: ActivityListParams;
+  readonly events: ActivityEvent[] = [
+    { id: "1", timestamp: "2026-06-14T00:00:00.000Z", type: "rule.started", severity: "success", message: "m" },
+  ];
+
+  list(params: ActivityListParams): ActivityEvent[] {
+    this.lastParams = params;
+    return this.events;
+  }
+}
+
+describe("parseActivityLimit", () => {
+  it.each([
+    [undefined, 100],
+    ["", 100],
+    ["abc", 100],
+    ["0", 100],
+    ["-3", 100],
+    ["5.5", 100],
+    ["5", 5],
+    ["500", 500],
+    ["600", 500],
+  ])("coerces %j to %d", (raw, expected) => {
+    expect(parseActivityLimit(raw)).toBe(expected);
+  });
+});
+
+describe("ActivityService.list", () => {
+  it("defaults all params and returns the store events", () => {
+    const reader = new RecordingReader();
+    const service = new ActivityService(reader);
+
+    const result = service.list();
+
+    expect(result).toEqual({ events: reader.events });
+    expect(reader.lastParams).toEqual({ limit: 100, ruleId: undefined, type: undefined, severity: undefined });
+  });
+
+  it("passes through the parsed filters and clamps the limit", () => {
+    const reader = new RecordingReader();
+    const service = new ActivityService(reader);
+
+    service.list("600", "rule-1", "rule.error", "error");
+
+    expect(reader.lastParams).toEqual({
+      limit: 500,
+      ruleId: "rule-1",
+      type: "rule.error",
+      severity: "error",
+    });
+  });
+});

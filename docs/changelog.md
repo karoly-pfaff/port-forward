@@ -8,6 +8,17 @@ All notable changes to Portier are documented here.
 
 v1.14 is an **architecture-migration release, not a feature release**: it moves the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. The Go service remains the preferred runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (still **234/234**). The migration is incremental and reversible — the existing Express server stays the active runtime until a NestJS replacement is explicitly validated.
 
+### Added — Slice 4: migrate `GET /api/activity` into NestJS (injected-store DI pattern)
+
+The next safe read-only endpoint, establishing the inject-a-dependency-behind-a-token/fake pattern.
+
+- **Migrated `GET /api/activity`** (`server/sources/nest/api/activity/`): `ActivityController` (transport adapter — extracts the optional `limit`/`ruleId`/`type`/`severity` query params) → `ActivityService` (maps them to the store's `ActivityListParams` with the SAME coercion as Express — `limit` defaults to 100 / clamps to 500, filters pass through — then delegates to the injected store). Read-only and **always `200 { events: [...] }`** (no error branches). Only the read is migrated; `DELETE /api/activity` (a mutation) stays with Express and is deferred.
+- **Why this endpoint:** chosen over `GET /api/runtime` because activity gives **true byte-for-byte parity** — its response carries no inherently time/process-varying fields (runtime's `uptimeSeconds`/`pid` would force a parity normalization) — and it best establishes the **dependency-injection-behind-a-narrow-token** pattern the heavier manager-dependent endpoints (status/forwards/connections) will reuse.
+- **DI seam:** a narrow `ActivityReader { list(params): ActivityEvent[] }` interface + `ACTIVITY_STORE` token (`activity.service.ts`); the module defaults it to a fresh in-memory `ActivityStore` (the domain store, not Express internals). Tests use `app.get(ACTIVITY_STORE)` to seed the Nest app's own store and share that exact instance with the Express app, so identical data + identical `list()` logic give byte-for-byte parity — **no `@nestjs/testing` dependency needed**.
+- **Express↔Nest parity** proven across 10 query variations (no filter, `limit` valid/zero/non-numeric/over-max, each filter, an unknown `ruleId` → `[]`, and a combined filter); `/health`, the `/api/*` 404 envelope, and non-API no-leak all re-confirmed; `GET /api/ports/advisory` parity still passes after the new module import.
+- **Still scaffold-only:** served by the Nest app only under `npm run start:nest`; the Express server remains the default active runtime and its `/api/activity` is unchanged. `validate:contract` stays **234/234**.
+- **100% coverage of all new/changed Nest code** (activity controller/service/module, `app.module.ts`); 101 nest tests (26 added): `parseActivityLimit` table, service param-mapping via a recording fake reader, controller delegation, and the integration + parity suite. Server coverage 99.0%/95.4%/100% (gate 95/92/99 PASS, none lowered).
+
 ### Added — Slice 3: shared NestJS `/api` error-envelope layer
 
 A reusable error layer so migrated Nest controllers never hand-roll the Portier `{ errors: [...] }` envelope.
