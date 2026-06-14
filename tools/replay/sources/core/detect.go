@@ -1,4 +1,4 @@
-package replay
+package core
 
 // Input detection for the offline replay tool. Detection is based on the JSON
 // shape / manifest shape of an existing Portier workflow artifact — never on the

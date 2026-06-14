@@ -1,6 +1,6 @@
-# portier-replay
+# replay
 
-`portier-replay` is a **separate, offline analysis tool beside the Portier CLI** —
+`replay` is a **separate, offline analysis tool beside the Portier CLI** —
 not a `portier` subcommand. It reads existing Portier workflow artifacts and reports
 what offline replay/analysis each saved artifact can support.
 
@@ -39,19 +39,24 @@ Detection is based on JSON shape / manifest shape, **not the filename**:
 ## Usage
 
 ```text
-portier-replay [--json] plan --from <file-or-dir> [--out <file>]
+replay [--json] plan    --from <file-or-dir> [--out <file>]
+replay [--json] analyze --from <file-or-dir> [--out <file>]
 ```
 
 - `--from <path>` — a workflow run/plan report file, a history export file, or a
-  support-report bundle **directory** (whose `manifest.json` is read).
-- `--json` — emit the replay plan as JSON instead of human-readable text.
-- `--out <file>` — also write the replay plan JSON to a file. Under `--json` the
-  stdout bytes and the file bytes are identical.
+  support-report bundle **directory** (whose `manifest.json` — and, for `analyze`,
+  `report.json`/`explanations.json` — are read; no other file).
+- `--json` — emit JSON instead of human-readable text.
+- `--out <file>` — also write the JSON output to a file. Under `--json` the stdout
+  bytes and the file bytes are identical.
 
-### Example
+### `plan` — capability preview
+
+`plan` reports *what* offline analysis a saved artifact can support (it does not
+run any analysis).
 
 ```text
-$ portier-replay plan --from run-report.json
+$ replay plan --from run-report.json
 Portier Replay Plan
 
 Source: workflow-run-report
@@ -73,6 +78,43 @@ Summary:
 - 3 available
 - 4 unavailable
 ```
+
+### `analyze` — offline analysis
+
+`analyze` produces deterministic analysis *from the artifact contents only* — step
+or run tallies, an emitted-code distribution, findings, and plain-language
+insights.
+
+```text
+$ replay analyze --from run-report.json
+Portier Replay Analysis
+
+Source: workflow-run-report
+Workflow: policy-baseline-check
+Result: failed
+
+Step summary:
+- 2 total
+- 1 passed
+- 1 failed
+- 0 skipped
+
+Codes:
+- policy.lan_exposure_forbidden: 1
+
+Findings:
+- Workflow has failed steps.
+
+Insights:
+- Workflow failed because one or more steps failed.
+```
+
+For a history export `analyze` reports run tallies, a workflow distribution, a
+code distribution (counting the **runs** that contain each code), a failed-run
+shortlist, and the most recent run. The analysis schema (`schemaVersion: 1`) is a
+**local tool schema**, separate from the replay-plan schema. Deterministic
+ordering: codes and workflow counts by count descending then name/code ascending;
+IDs ascending; insights in a stable order.
 
 ## Replay plan
 
@@ -98,10 +140,22 @@ REST/API contract and is independent of the workflow artifact schemas it analyze
 ## Build & test
 
 ```text
-npm run build:replay      # builds tools/replay/build/portier-replay
+npm run build:replay      # builds tools/replay/build/replay
 npm run test:replay       # go test ./...
 npm run validate:replay   # test + build
 ```
 
 The tool is its own Go module (`portier/replay`) and depends only on the Go
 standard library. It does not import `tools/cli` or any runtime client packages.
+
+## Structure
+
+```text
+tools/replay/sources/
+  main.go        # thin entry point: os.Exit(commands.Run(...))
+  commands/      # CLI dispatch, argument parsing, command runners
+  core/          # artifact detection + replay plan/analysis models, builders, renderers
+```
+
+`commands` depends on `core`; `core` never depends on `commands` (domain logic
+stays free of argument parsing). Neither package depends on `tools/cli`.

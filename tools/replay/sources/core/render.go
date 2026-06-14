@@ -1,4 +1,4 @@
-package replay
+package core
 
 // Rendering for the replay plan: deterministic human-readable text and a single
 // JSON marshaller used for both stdout (--json) and the --out file so the two are

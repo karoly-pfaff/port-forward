@@ -8,6 +8,21 @@ All notable changes to Portier are documented here.
 
 v1.13 builds a **standalone offline replay/analysis tool beside the CLI** — `portier-replay`, a separate Go module under `tools/replay/`, **not** a `portier workflow replay` subcommand. It analyzes saved Portier workflow artifacts after the fact and is strictly offline and read-only. `validate:contract` stays **234/234** (no shared/server/service/client/API/DTO/contract change — the replay tool is wholly independent of the runtime).
 
+### Changed — Slice 3: Replay tool naming & package-structure polish
+
+- **Binary renamed `portier-replay` → `replay`** (`replay.exe` on Windows). `npm run build:replay` now outputs `tools/replay/build/replay`; the previous Slice 1/2 entries above describe the same tool under its earlier `portier-replay` name.
+- **Domain package `sources/replay` → `sources/core`** and **CLI dispatch extracted to `sources/commands`**. `main.go` is now a thin entry point (`os.Exit(commands.Run(...))`); `commands` owns argument parsing and the command runners and depends on `core`; `core` (artifact detection + replay plan/analysis models, builders, renderers) never depends on `commands`. Neither package imports `tools/cli`.
+- Behavior-preserving: command output, exit codes, schemas, and the offline/read-only safety boundary are unchanged. Help text and command examples now read `replay …`. Docs and scripts updated. `validate:contract` stays **234/234**; replay package coverage held (core 97.5%, commands 90.5% — the dispatch handlers' only uncovered lines are the same unreachable marshal/write-error branches).
+
+### Added — Slice 2: Replay analyze command
+
+- **`portier-replay [--json] analyze --from <file-or-dir> [--out <file>]`** — the first real offline analysis command. It inspects a saved artifact and produces deterministic analysis **from the artifact contents only**.
+- **Per-artifact analysis:** workflow **run** reports (step tallies, first/failed/skipped steps, emitted-code distribution, result-based findings/insights, runtime-unreachable/input-failed detection); workflow **plan** reports (valid/invalid tallies, invalid step IDs, `workflow.step.*` codes, plan readiness); workflow **history exports** (run tallies, workflow distribution, code distribution counting the **runs** containing each code, failed-run shortlist, most-common code, most-recent run, empty-export handling); workflow **support-report bundle** directories (step summary + codes from the bundle's own `manifest.json`/`report.json`/`explanations.json` only — no other file read).
+- **Analysis model (`schemaVersion: 1`, a local tool schema, separate from the replay-plan schema):** `{source, workflow?, result?, summary{steps,runs}, codes[], workflows?, findings[], insights[]}`. Deterministic sorting (codes/workflows by count desc then name/code asc; IDs asc; stable insight order). Human and JSON output; `--json --out` byte-identical.
+- **Exit codes:** `0` analysis created; `1` an output-write or JSON-encode failure; `2` a usage error or an unreadable/malformed/unsupported artifact. No exit `3` — analysis never contacts a runtime.
+- **Safety boundary (held by construction, test-proven):** parses only the supplied artifact (or explicit support-bundle files); never executes workflows, contacts the runtime, reads the config/policy/baseline/report files an artifact refers to, mutates inputs, applies/imports, enforces policy, runs shell commands, uploads, or collects logs/environment/process data.
+- The existing `portier-replay plan` command and the entire Portier CLI are unchanged. Replay package coverage: **94.1% → 97.5%** after adding focused tests (≈97.8% Slice-1 baseline maintained); remaining gaps are unreachable defensive branches.
+
 ### Added — Slice 1: Standalone replay tool scaffold
 
 - **New tool `portier-replay`** (`tools/replay/`, module `portier/replay`, stdlib-only). It is a separate binary beside `portier` — not a CLI subcommand — and is independently testable. It does not import `tools/cli` or any runtime client package.

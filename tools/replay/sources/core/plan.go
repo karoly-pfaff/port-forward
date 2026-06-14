@@ -1,4 +1,4 @@
-package replay
+package core
 
 // Replay plan model + builder. A replay plan answers a single question:
 // "What offline replay/analysis can this saved artifact support?" It does NOT
