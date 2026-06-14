@@ -8,6 +8,15 @@ All notable changes to Portier are documented here.
 
 v1.13 builds a **standalone offline replay/analysis tool beside the CLI** — `portier-replay`, a separate Go module under `tools/replay/`, **not** a `portier workflow replay` subcommand. It analyzes saved Portier workflow artifacts after the fact and is strictly offline and read-only. `validate:contract` stays **234/234** (no shared/server/service/client/API/DTO/contract change — the replay tool is wholly independent of the runtime).
 
+### Added — Slice 6: Replay explain command
+
+- **`replay [--json] explain --from <file-or-dir> [--out <file>]`** — collects the emitted codes a saved artifact records and maps the known ones to local offline explanations. Also `replay explain --code <code>` (explain one code) and `replay explain --list` (list every known code); the three modes are mutually exclusive. Analysis only: no workflow execution, no runtime contact, no referenced-file reads, no mutation.
+- **Inputs:** the four workflow artifacts (run/plan reports, history export, support-report bundle directory) **plus** replay tool outputs (analysis/timeline/compare JSON), detected by shape. Codes are deduped and **sorted ascending**; **unknown codes are preserved and marked `known: false`**, never dropped. An artifact with no codes is a success (exit 0) with a clear notice.
+- **Local explanation registry** in `tools/replay/sources/core` (24 codes: `workflow.step.*`, `workflow.run.*`, `policy.*`) — it does NOT import the CLI explain registry or any runtime package. Doctor/runtime codes are out of scope (they never appear in workflow artifacts) and are reported as unknown if encountered.
+- **Explain model (`schemaVersion: 1`, a local tool schema, separate from the plan/analysis/timeline/compare schemas):** `{source, codeCount, known, unknown, explanations:[{code, known, title, severity, meaning, suggestion}]}`. Human and JSON output; `--json --out` byte-identical.
+- **Exit codes:** `0` explanations produced (including when no codes are found); `1` an output-write or JSON-encode failure; `2` a usage error (no/duplicate mode, bad flag) or an unreadable/malformed/unsupported artifact. No exit `3` — explain never contacts a runtime.
+- Built by reusing the existing detection + the `compareFacts` extractor for workflow-artifact codes (no new duplicate parsing). Model/registry/extraction in `tools/replay/sources/core/explain.go`, rendering in `core/render_explain.go`, runner in `commands/explain.go`. `replay plan`/`analyze`/`timeline`/`compare` are unchanged. **Replay module coverage 96.5%** (core 96.7%, commands 94.9%; `go test -coverpkg=./...`) — meets the ≥95% module bar.
+
 ### Added — Slice 5: Replay compare command
 
 - **`replay [--json] compare --left <file-or-dir> --right <file-or-dir> [--out <file>]`** — compares two saved artifacts offline and reports what changed. Analysis only: no workflow execution, no runtime contact, no referenced-file reads, no mutation.

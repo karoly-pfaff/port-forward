@@ -50,6 +50,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runTimeline(*flagJSON, remaining[1:], stdout, stderr)
 	case "compare":
 		return runCompare(*flagJSON, remaining[1:], stdout, stderr)
+	case "explain":
+		return runExplain(*flagJSON, remaining[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "Unknown command %q\n\n", remaining[0])
 		printHelp(stderr)
@@ -168,12 +170,16 @@ Usage:
   replay [--json] analyze  --from <file-or-dir> [--out <file>]
   replay [--json] timeline --from <file-or-dir> [--out <file>]
   replay [--json] compare  --left <file-or-dir> --right <file-or-dir> [--out <file>]
+  replay [--json] explain  --from <file-or-dir> [--out <file>]
+  replay [--json] explain  --code <code>
+  replay [--json] explain  --list
 
 Commands:
   plan      Report what offline replay/analysis a saved artifact can support
   analyze   Produce deterministic offline analysis from a saved artifact
   timeline  Reconstruct a deterministic ordered timeline from a saved artifact
   compare   Compare two saved artifacts offline and report what changed
+  explain   Explain the emitted codes found in a saved artifact (or a code/the registry)
   help      Show this help
 
 Flags:
@@ -181,6 +187,8 @@ Flags:
   --from <path>     A workflow run/plan report, history export, or report bundle dir
   --left <path>     The left artifact for compare
   --right <path>    The right artifact for compare
+  --code <code>     Explain a single code (explain)
+  --list            List every known code (explain)
   --out <file>      Write the JSON output to a file
 
 This tool is offline and read-only. It never executes workflows, contacts the

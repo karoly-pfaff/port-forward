@@ -43,13 +43,19 @@ replay [--json] plan     --from <file-or-dir> [--out <file>]
 replay [--json] analyze  --from <file-or-dir> [--out <file>]
 replay [--json] timeline --from <file-or-dir> [--out <file>]
 replay [--json] compare  --left <file-or-dir> --right <file-or-dir> [--out <file>]
+replay [--json] explain  --from <file-or-dir> [--out <file>]
+replay [--json] explain  --code <code>
+replay [--json] explain  --list
 ```
 
 - `--from <path>` — a workflow run/plan report file, a history export file, or a
   support-report bundle **directory** (whose `manifest.json` — and, for `analyze`,
-  `report.json`/`explanations.json` — are read; no other file).
+  `report.json`/`explanations.json` — are read; no other file). `explain` also
+  accepts a replay analysis/timeline/compare JSON.
 - `--left <path>` / `--right <path>` — the two artifacts for `compare` (same path
   forms as `--from`).
+- `--code <code>` / `--list` — explain a single code, or list every known code
+  (`explain` only; mutually exclusive with `--from`).
 - `--json` — emit JSON instead of human-readable text.
 - `--out <file>` — also write the JSON output to a file. Under `--json` the stdout
   bytes and the file bytes are identical.
@@ -203,6 +209,40 @@ deterministic *limited* result — the two source kinds plus a clear
 equivalence. Changes are emitted in a stable semantic order and set values are
 sorted ascending. The compare schema (`schemaVersion: 1`) is a **local tool
 schema**, separate from the plan, analysis, and timeline schemas.
+
+### `explain` — offline code explanations
+
+`explain` collects the emitted codes an artifact records and maps the known ones to
+local offline explanations. Unknown codes are **preserved and marked unknown**,
+never dropped.
+
+```text
+$ replay explain --from run-report.json
+Portier Replay Explanations
+
+Source: workflow-run-report
+Codes: 2
+Known: 1
+Unknown: 1
+
+policy.lan_exposure_forbidden [warning]
+LAN exposure is forbidden
+The policy does not allow rules listening on LAN-exposed interfaces.
+Suggestion: Review the rule's listen host or use a policy that explicitly allows LAN exposure.
+
+custom.future.code [unknown]
+Unknown code
+This code is not known by this replay tool version.
+Suggestion: Use replay analyze or inspect the original artifact for surrounding context.
+```
+
+Codes are deduped and sorted ascending. An artifact with no codes is a success
+(exit 0) with a clear notice. `explain` accepts the four workflow artifacts plus
+replay analysis/timeline/compare JSON. The explanation registry is a **small local
+registry** (workflow step/run + policy code families); it does not import the CLI
+explain registry. `--code <code>` explains one code; `--list` lists every known
+code. The explain schema (`schemaVersion: 1`) is a **local tool schema**, separate
+from the plan, analysis, timeline, and compare schemas.
 
 ## Replay plan
 
