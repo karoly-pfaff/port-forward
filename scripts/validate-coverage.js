@@ -25,8 +25,9 @@
  * Gates (update here when ratcheting):
  *   Each gate is an object: { statements?, branches?, functions? }
  *   All specified thresholds must pass for the component to PASS.
- *   Go components (service, cli) report statements and functions only;
- *   branches are always "Unknown" from standard Go tooling.
+ *   Go components (service, cli, replay) report statements and functions only;
+ *   branches are always "Unknown" from standard Go tooling, and both statements
+ *   and functions are gated.
  *
  *   Ratcheted at v1.5.0 (2026-06-09). Ratchet upward as coverage improves.
  *
@@ -56,49 +57,25 @@ const repoRoot = resolve(scriptDir, "..");
 const coverDir = join(repoRoot, "coverage");
 
 // ── Gates ─────────────────────────────────────────────────────────────────────
-// Object: { statements?, branches?, functions? } — per-metric gates.
-// All specified thresholds must pass for the component to PASS.
-// Go components (service, cli): branches are "Unknown"; only gate statements.
+// Per-metric thresholds { statements?, branches?, functions? }; all specified
+// thresholds must pass for a component to PASS.
 //
-// Ratcheted at v1.6-pre (2026-06-09). Tooling stabilized at v1.6 Slice A (2026-06-09):
-//   - Windows vitest/v8 drive-letter deduplication added to readSummary()
-//   - Structural-zero files excluded from vitest coverage configs
-//   - Client branch/funcs gates recalibrated from pre-Slice-A values (90/79) to
-//     accurate post-deduplication actuals (89/78).  Previous gates were set from a
-//     run where ghost entries were absent; now that deduplication is always applied,
-//     the true values are consistently 89.6% branch and 78.6% funcs.
-// Actuals after Slice A (accurate): shared 100/100/100, server 95.2/91.6/100,
-//   client 95.6/89.6/78.6, service 87.7, cli 93.2
-// Actuals after Slice B: service 88.6% (gate raised 87→88).
-// Actuals after Coverage Slice C: cli 97.7% (gate raised 93→95; deterministic
-//   cross-package Go number, repeated runs stable).
-// Actuals after Coverage Slice D: service 90.3% (gate raised 88→90; two
-//   consecutive coverage:service runs both 90.3%, modified packages stable at
-//   -count=3).
-// Actuals after Coverage Slice E: server 98.9/93.57/100 (gates raised
-//   89/91/99 → 95/92/99; three consecutive coverage:server runs stable, the
-//   ghost-entry dedup keeps the number deterministic).
-// Actuals after v1.10 Slice 1: cli 97.8% (gate raised 95→97; opportunistic
-//   tightening — deterministic cross-package Go number, the policy + doctor
-//   commands keep cli ≥ 97.2% across recent slices, so 97 stays above with a
-//   ~0.8% buffer). NOTE: 97 is a tighter floor than the historical ~2% buffer —
-//   the remaining uncovered lines are documented structurally-unreachable
-//   branches (os.Exit wrapper, json.Marshal on concrete DTOs, platform
-//   filesystem-failure paths), so a future defensive-code-heavy slice could
-//   land close to this floor; that is an accepted, deliberate tightening. See
-//   the "Coverage-gate tightening" durable rule in CLAUDE.md / AGENTS.md.
-// Replay gate (v1.13): the standalone replay tool (separate Go module
-//   portier/replay) is held to a hard 95% module-wide gate. The module-wide total
-//   includes the thin main()/os.Exit wrapper (0% by nature, same untestable note as
-//   the cli main() below); the module clears 95% with the wrapper counted. Gated as
-//   statements only (Go reports no branches; functions left ungated like cli/service).
+// Policy:
+//   - shared: 100% (statements / branches / functions)
+//   - server: ~100% (95 / 92 / 99 — the highest the current actuals sustain)
+//   - client: statements ≥ 90% (gate 94); lower branch / function floors
+//   - Go (service, cli, replay): 95% statements + functions — EXCEPT service
+//     statements, which stays at 90% (platform files + flat 0% test-less packages
+//     hold its statement actual near 90.2%). Go tooling reports no branch coverage.
+//
+// Ratchet upward as coverage improves; do not lower a gate without a noted reason.
 const GATES = {
   shared:  { statements: 100, branches: 100, functions: 100 },
   server:  { statements: 95, branches: 92, functions: 99 },
   client:  { statements: 94, branches: 89, functions: 78 },
-  service: { statements: 90 },
-  cli:     { statements: 97 },
-  replay:  { statements: 95 },
+  service: { statements: 90, functions: 95 },
+  cli:     { statements: 95, functions: 95 },
+  replay:  { statements: 95, functions: 95 },
 };
 
 const ALL_COMPONENTS = Object.keys(GATES);
