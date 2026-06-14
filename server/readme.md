@@ -51,6 +51,17 @@ slices, each guarded by `npm run validate:contract`.
   `ForwardsReader` (`FORWARDS_READER` token, same provider pattern as status).
   Byte-for-byte parity-tested; shadow-only. The write/lifecycle routes under
   `/api/forwards/...` stay with Express, deferred.
+- `GET /api/runtime` (v1.14 Slice 9) — the first migrated endpoint with
+  **volatile** fields (`uptimeSeconds`, process `pid`/`platform`/`arch`). Both the
+  Express route and the Nest `RuntimeService` call one shared pure builder
+  (`buildRuntimeInfo` in `sources/runtime-info.ts`), so the shape cannot drift.
+  Volatile values come from three narrow readers — `ClockReader`/`CLOCK_READER`
+  (generic `now()`, reusable for `/api/connections` `generatedAt` /
+  `/api/config/export` `exportedAt`), `ProcessReader`/`PROCESS_READER`, and
+  `RuntimeInfoReader`/`RUNTIME_INFO_READER`. Byte-for-byte parity-tested by booting
+  Express and Nest with the **same fixed clock + runtime info** (real process →
+  matching `pid`/`platform`/`arch`), so `uptimeSeconds` is deterministic and **no
+  field is normalized/stripped**. Shadow-only.
 - All `/api/*` errors → the Portier `{ "errors": ["..."] }` envelope via the
   global `ApiErrorEnvelopeFilter` (v1.14 Slice 3): unmatched routes →
   `404 ["API route was not found."]`, controller-raised `400`s carry their
@@ -73,6 +84,7 @@ sources/nest/
     activity/                   # GET + DELETE /api/activity (injected ACTIVITY_STORE; ActivityReader + ActivityClearer)
     status/                     # GET /api/status (injected STATUS_READER; response: *.response.dto + mapper)
     forwards/                   # GET /api/forwards (injected FORWARDS_READER; response: *.response.dto + mapper)
+    runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; response: *.response.dto + mapper)
   common/
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
@@ -141,6 +153,18 @@ management server's default `127.0.0.1:47831`.
   `@HttpCode(...)` (Nest defaults `DELETE` to `200`; a `204`-empty Express route
   needs `@HttpCode(204)` + a `void` return). No DTO when the endpoint has no
   query/body input.
+- An endpoint with **volatile fields** (timestamps, uptime, pid) gets its volatile
+  values from **narrow injected readers** (`ClockReader`/`CLOCK_READER`,
+  `ProcessReader`/`PROCESS_READER`, `RuntimeInfoReader`/`RUNTIME_INFO_READER`),
+  never read inline, so the service stays pure. Parity is **byte-for-byte with no
+  field stripping/normalization**: extract a **shared pure builder** that both the
+  Express route and the Nest service call (e.g. `buildRuntimeInfo` in
+  `sources/runtime-info.ts`) so they cannot drift, and boot **both** apps with the
+  **same fixed volatile inputs** (a minimal optional, production-invisible clock
+  seam on Express `AppOptions` — like the existing `runtimeInfo.startedAt`) so the
+  otherwise-volatile field is deterministic. Never strip a field before comparing,
+  and never use fake timers / mutate global process state. `ClockReader` is generic
+  (reused by `/api/connections` `generatedAt`, `/api/config/export` `exportedAt`).
 - An endpoint that needs runtime/domain state is wired through a **narrow
   injection token + interface** (e.g. `ACTIVITY_STORE`/`ActivityReader`,
   `STATUS_READER`/`StatusReader`), with a fake/seeded instance in tests —

@@ -11,28 +11,31 @@ import type {
   ActivityEventType,
   ActivitySeverity
 } from "@portier/shared";
-import { getPortAdvisories, PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT, summarizeGroupAction, validateGroupName } from "@portier/shared";
+import { getPortAdvisories, summarizeGroupAction, validateGroupName } from "@portier/shared";
 import type { GroupActionType } from "@portier/shared";
 import type { ForwardManager } from "./forward-manager.js";
 import { ConflictError, NotFoundError, ValidationError } from "./forward-manager.js";
 import { diagnoseRule } from "./diagnose.js";
 import type { ActivityStore } from "./activity/activity-store.js";
 import { buildApplyImportFromPlan, buildConfigPlan } from "./config-plan.js";
+import { buildRuntimeInfo, type RuntimeInfoOptions } from "./runtime-info.js";
 
-export interface RuntimeInfoOptions {
-  version: string;
-  managementHost: string;
-  managementPort: number;
-  configPath: string;
-  staticDir: string;
-  serviceMode: boolean;
-  startedAt: Date;
-}
+// Re-exported for backward compatibility; the canonical definitions live in
+// ./runtime-info.ts (shared with the NestJS runtime service).
+export { normalizeArch, normalizePlatform } from "./runtime-info.js";
+export type { RuntimeInfoOptions } from "./runtime-info.js";
 
 export interface AppOptions {
   staticClientDir?: string;
   activity?: ActivityStore;
   runtimeInfo?: RuntimeInfoOptions;
+  /**
+   * Optional clock used only for `GET /api/runtime`'s `uptimeSeconds`. Defaults
+   * to the real wall clock; production never overrides it. A minimal, test-only
+   * seam (like `runtimeInfo.startedAt`) so the runtime endpoint can be parity-
+   * tested deterministically against the NestJS implementation.
+   */
+  now?: () => Date;
 }
 
 export function createApp(manager: ForwardManager, options: AppOptions = {}): express.Express {
@@ -156,22 +159,16 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
   // ── Runtime info ──────────────────────────────────────────────────────────────
 
   app.get("/api/runtime", (_request, response) => {
-    const info = options.runtimeInfo;
-    response.json({
-      name: "Portier",
-      version: info?.version ?? "unknown",
-      runtime: "node",
-      platform: normalizePlatform(process.platform),
-      arch: normalizeArch(process.arch),
-      uptimeSeconds: Math.floor((Date.now() - runtimeStartedAt.getTime()) / 1000),
-      startedAt: runtimeStartedAt.toISOString(),
-      managementHost: info?.managementHost ?? PORTIER_DEFAULT_HOST,
-      managementPort: info?.managementPort ?? PORTIER_DEFAULT_PORT,
-      configPath: info?.configPath ?? "",
-      staticDir: info?.staticDir ?? "",
-      serviceMode: info?.serviceMode ?? false,
-      pid: process.pid
-    });
+    response.json(
+      buildRuntimeInfo({
+        runtimeInfo: options.runtimeInfo,
+        startedAt: runtimeStartedAt,
+        now: (options.now ?? (() => new Date()))(),
+        pid: process.pid,
+        platform: process.platform,
+        arch: process.arch
+      })
+    );
   });
 
   // ── Activity ─────────────────────────────────────────────────────────────────
@@ -424,19 +421,6 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
 
 export function hasStaticClient(staticClientDir: string): boolean {
   return existsSync(join(staticClientDir, "index.html"));
-}
-
-export function normalizePlatform(platform: string): "windows" | "macos" | "linux" | "unknown" {
-  if (platform === "win32") return "windows";
-  if (platform === "darwin") return "macos";
-  if (platform === "linux") return "linux";
-  return "unknown";
-}
-
-export function normalizeArch(arch: string): "x64" | "arm64" | "unknown" {
-  if (arch === "x64") return "x64";
-  if (arch === "arm64") return "arm64";
-  return "unknown";
 }
 
 function toRuleResponse(rule: ForwardRule): ForwardRuleResponse {
