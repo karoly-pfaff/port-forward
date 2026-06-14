@@ -277,10 +277,20 @@ There is no exit `3` — `replay` never contacts a runtime.
 ## Build & test
 
 ```text
-npm run build:replay      # builds tools/replay/build/replay
-npm run test:replay       # go test ./...
-npm run validate:replay   # test + build
+npm run build:replay              # builds tools/replay/build/replay
+npm run test:replay               # go test ./...
+npm run validate:replay           # test + build
+npm run validate:coverage:replay  # module-wide coverage gate (hard 95% minimum)
 ```
+
+`tools/replay` has a **hard module-wide coverage gate of 95%**, enforced by
+`scripts/validate-coverage.js` (component `replay`, run via
+`npm run validate:coverage:replay`). Coverage is gathered module-wide by
+`scripts/coverage-tools-replay.js` (the reporter, equivalent to
+`go -C tools/replay test -coverpkg=./... ./...`, run as `npm run coverage:replay`),
+and the gate is applied alongside the other component gates. It is a separate gate
+from the CLI coverage gate and does not depend on the CLI module; existing CLI
+coverage gates are unchanged.
 
 The tool is its own Go module (`portier/replay`) and depends only on the Go
 standard library. It does not import `tools/cli` or any runtime client packages.

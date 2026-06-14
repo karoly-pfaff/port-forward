@@ -556,7 +556,7 @@ npm run test:replay       # go test ./... inside tools/replay
 npm run validate:replay   # test:replay + build:replay
 ```
 
-See [tools/replay/README.md](tools/replay/README.md) for details and the safety boundary.
+See [tools/replay/readme.md](tools/replay/readme.md) for details and the safety boundary.
 
 ---
 

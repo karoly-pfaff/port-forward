@@ -5,16 +5,18 @@
  *
  * Runs coverage for every component via npm scripts, then reads the
  * coverage-summary.json that each script writes to coverage/{component}/.
- * All five components — shared, server, client (TypeScript vitest) and
- * service, cli (Go) — produce the same json-summary format after running
- * their respective coverage scripts.
+ * All six components — shared, server, client (TypeScript vitest), service, cli,
+ * and replay (Go) — produce the same json-summary format after running their
+ * respective coverage scripts. The replay tool is a separate Go module
+ * (portier/replay); its coverage is gathered module-wide by coverage:replay and
+ * gated here, independently of the cli/workspace gates.
  *
  * Usage:
  *   node scripts/validate-coverage.js [--only <component>]
  *
  * Options:
  *   --only <component>   Run and check a single component only.
- *                        Valid values: shared, server, client, service, cli
+ *                        Valid values: shared, server, client, service, cli, replay
  *
  * Exit codes:
  *   0  All gates passed.
@@ -85,12 +87,18 @@ const coverDir = join(repoRoot, "coverage");
 //   filesystem-failure paths), so a future defensive-code-heavy slice could
 //   land close to this floor; that is an accepted, deliberate tightening. See
 //   the "Coverage-gate tightening" durable rule in CLAUDE.md / AGENTS.md.
+// Replay gate (v1.13): the standalone replay tool (separate Go module
+//   portier/replay) is held to a hard 95% module-wide gate. The module-wide total
+//   includes the thin main()/os.Exit wrapper (0% by nature, same untestable note as
+//   the cli main() below); the module clears 95% with the wrapper counted. Gated as
+//   statements only (Go reports no branches; functions left ungated like cli/service).
 const GATES = {
   shared:  { statements: 100, branches: 100, functions: 100 },
   server:  { statements: 95, branches: 92, functions: 99 },
   client:  { statements: 94, branches: 89, functions: 78 },
   service: { statements: 90 },
   cli:     { statements: 97 },
+  replay:  { statements: 95 },
 };
 
 const ALL_COMPONENTS = Object.keys(GATES);
