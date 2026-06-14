@@ -4,6 +4,30 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [Unreleased] — Local History & Observability (v1.12)
+
+v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change).
+
+### Added — Slice 1: Local workflow run history
+
+- **Opt-in local workflow run history.** `portier workflow run --file <workflow.json> --record-history` records a **compact** entry about a completed run in a local history file. Without `--record-history`, nothing is recorded — there is no always-on or background collection.
+- **What is stored (compact metadata only):** run id, `createdAt` (RFC3339 UTC), workflow name, result, summary counts, compact per-step metadata (`id`/`type`/`status`/`exitCode`), and the deduped+sorted explanation/finding codes the run emitted. It **never** stores raw configs, raw policies, full embedded policy reports, file contents, logs, environment variables, process data, secrets, runtime URLs, or auth tokens. A step's embedded report and message are intentionally dropped.
+- **Bounded retention.** The store keeps the most recent **100** runs (newest first), dropping the oldest when appending beyond the limit.
+- **Run id.** `<YYYYMMDDThhmmssZ>-<sanitized-workflow>-<suffix>`, e.g. `20260614T101530Z-policy-baseline-check-a1b2c3d4` (the short suffix is random in production, injected in tests).
+- **`portier workflow history list`** lists recorded runs (newest first) in human form, or a clear empty message when none; `--json` emits `{schemaVersion, runs:[…]}`.
+- **`portier workflow history show <run-id>`** prints one recorded run (human or `--json`).
+- **`portier workflow history clear --yes`** deletes the local history file (requires `--yes`; already-empty/missing is a success).
+- **Exit codes.** `workflow run --record-history`: a history **write failure is reported as a warning** and never hides the workflow result — if the run passed, the exit code becomes `1`; if the run already failed (`1`/`3`), that code is kept; runtime unreachable stays `3`. An **invalid plan is never recorded** (only completed runs are). `workflow history`: `0` success (including `list` with no runs and `clear` when already empty), `1` an unknown run id (`show`) or a history read/write failure, `2` missing/invalid arguments (a missing run id for `show`, or `clear` without `--yes`).
+- **Storage location.** `<user-config-dir>/portier/workflow-history.json` (resolved via `os.UserConfigDir()`); the path is injectable for tests.
+
+### Notes (Slice 1)
+
+- CLI-only, `validate:contract` stays **234/234**, no API/DTO/contract change. The history model, compact projection, run-id generation, and the bounded read/append/retention/clear store live in the `workflow` package (`workflow/history.go`: `History`/`HistoryRun`/`HistoryStep`, `ProjectRun`, `NewRunID`, `HistoryStore`). `commands` stays **handlers-only** (`workflow_history.go`: flag parsing, path resolution, rendering); the `workflow` history code never imports `client`/`commands` and never contacts the runtime.
+- Covered by white-box `workflow/history_internal_test.go` (compact projection, no-sensitive-data-in-JSON, code dedupe/sort, run-id shape, load missing/empty/malformed, append ordering + parent-dir creation, retention keeps latest 100, schemaVersion default, clear incl. error) and `commands/workflow_history_internal_test.go` (record-history records a compact entry with no sensitive content, no-record-without-flag, failed run records `failed`, invalid plan does not record, history-write-failure exit behavior incl. runtime-unreachable keeping exit 3, list/show/clear human+JSON, unknown/missing id, read failures, flag-parse edges, path-resolution failures, defaults) + a `main_test.go` offline dispatch case.
+- CLI coverage **97.5%** (gate **97 PASS**, not lowered, not raised — the ~0.5% statement buffer is too thin for 98). The only sub-100% lines are documented structurally-unreachable branches (the crypto/rand fallback in the id suffix and the post-`Load` filesystem-write-failure branch in the store, consistent with the rest of the CLI).
+
+---
+
 ## [1.11.0] — 2026-06-13 — Local Intelligence & Workflow Automation
 
 v1.11 stays **local-first** and makes Portier better at understanding, explaining, and automating local forwarding workflows. All new tooling lives in the Go CLI as a **pure API client** — no runtime/API/server/service/client contract change (`validate:contract` stays **234/234**), no enforcement, no scheduler, no background automation, no telemetry.

@@ -799,7 +799,7 @@ Exit codes: `0` the workflow plan is valid; `1` the workflow parsed but the plan
 Execute a **valid** workflow's steps in order and print a deterministic run report. Execution is strictly **read-only**: it runs only the existing safe step types by calling the policy evaluator/review/baseline-compare directly. It **never** runs a shell command (or the runbook display text), applies/imports configs, enforces a policy, schedules anything, or mutates the runtime/config/policy/baseline/report files. The only runtime contact is a read-only runtime-config read for a `policy.check` runtime step.
 
 ```
-portier workflow run --file <workflow.json> [--json] [--explain] [--out <file>]
+portier workflow run --file <workflow.json> [--json] [--explain] [--out <file>] [--record-history]
 ```
 
 Step execution and status:
@@ -820,7 +820,9 @@ If the workflow is **invalid**, `workflow run` prints the plan (the validation e
 
 **`--explain`** adds an inline explanation (code, meaning, next action, related codes) for each **failed or skipped** step, reusing the same registry as `portier explain`. A failed `policy.check`/`policy.review` explains the **policy finding codes** it produced; a failed `policy.baseline.compare` explains the **underlying new-finding codes**; a step skipped because its `reportFrom` dependency produced no report explains **`workflow.run.dependency_failed`**; a runtime step that can't reach the runtime explains **`workflow.run.runtime_unreachable`**; an unreadable/malformed referenced input (config/policy/baseline/report file, or the runtime config) explains **`workflow.run.input_failed`**. **Passed steps are never explained.** In human output each failed/skipped step is followed by an indented `Code:`/`Meaning:`/`What to do:` block; in `--json` an additive top-level `explanations` map (`code → { title, meaning, action, ... }`, deduplicated) is added — populated **only** with `--explain` (and omitted entirely when a run emits no explainable codes, e.g. an all-passed run). `--explain` does **not** change the steps, summary, result, or exit code — without it the JSON is byte-identical to before, and `--json --out --explain` keeps stdout/file byte-identical. Use `portier explain <code>` to look up any code (including the three `workflow.run.*` codes) directly.
 
-Exit codes: `0` all executed steps passed (none skipped); `1` one or more steps failed or were skipped, the workflow plan was invalid, or an `--out` write failure; `2` missing/invalid arguments (including a missing `--file`/`--out` value), or an unreadable/malformed workflow file; `3` a `policy.check` runtime step could not reach the runtime (matching `policy check --runtime`). A referenced file that is unreadable/malformed during the run is a **step failure** (exit 1), not a usage error.
+**`--record-history`** records a **compact** entry about the completed run in the local, **opt-in** [workflow run history](#portier-workflow-history-listshowclear) (run id, time, workflow name, result, summary counts, compact per-step metadata, and the emitted codes). It never records raw configs, policies, full reports, secrets, logs, environment, process data, runtime URLs, or tokens, and the history is bounded to the most recent **100** runs. Without `--record-history`, nothing is recorded. An **invalid plan is never recorded** (only completed runs are). A history **write failure is reported as a warning** and never hides the workflow result: if the run passed it becomes exit `1`, and if the run already failed (`1`/`3`) that code is kept with the warning added.
+
+Exit codes: `0` all executed steps passed (none skipped); `1` one or more steps failed or were skipped, the workflow plan was invalid, an `--out` write failure, or (with `--record-history`) a history write failure when the run itself passed; `2` missing/invalid arguments (including a missing `--file`/`--out` value), or an unreadable/malformed workflow file; `3` a `policy.check` runtime step could not reach the runtime (matching `policy check --runtime`). A referenced file that is unreadable/malformed during the run is a **step failure** (exit 1), not a usage error.
 
 > `workflow run` is **read-only execution** — it evaluates policies and compares baselines but never changes anything (no apply/import, no enforcement, no shell commands, no scheduling). `--explain` adds explanation text only; it never changes which steps run or the exit code.
 
@@ -877,6 +879,26 @@ Explanations are re-derived from the report using the same registry as `portier 
 Exit codes: `0` the bundle was written; `1` an output directory create/write failure; `2` missing/invalid arguments (including a missing `--from`/`--out` value) or an unreadable/malformed/unsupported input report. There is **no** connection-failure (`3`) code — the command never contacts the runtime.
 
 > The report bundle is generated from an **existing** report — `workflow report` never re-runs the workflow or reads the files a step referenced. For AI handoff, pair it with the docs-only prompt in [`prompts/workflow.md`](../../prompts/workflow.md): paste `summary.txt`, `report.json`, and `explanations.json`. **Portier never sends anything anywhere** (no AI integration, upload, or telemetry).
+
+### `portier workflow history list|show|clear`
+
+Inspect the **opt-in** local workflow run history recorded by [`workflow run --record-history`](#portier-workflow-run---file-workflowjson). Fully **offline** — these commands read and write a local history file only and **never contact the runtime**, run anything, or mutate any config/policy.
+
+```
+portier workflow history list [--json]
+portier workflow history show <run-id> [--json]
+portier workflow history clear --yes
+```
+
+History stores **compact metadata only** — run id, `createdAt` (RFC3339 UTC), workflow name, result, summary counts, compact per-step metadata (`id`/`type`/`status`/`exitCode`), and the deduped+sorted explanation/finding codes a run emitted. It **never** stores raw configs, policies, full embedded policy reports, file contents, logs, environment variables, process data, secrets, runtime URLs, or tokens. The store is **bounded** to the most recent **100** runs (newest first) and lives at `<user-config-dir>/portier/workflow-history.json`.
+
+- **`list`** prints recorded runs newest-first (or a clear empty message when none); `--json` emits `{ schemaVersion, runs: [ { id, createdAt, workflow, result, summary, steps, codes? } ] }`.
+- **`show <run-id>`** prints one recorded run (human or `--json`).
+- **`clear --yes`** deletes the local history file; `--yes` is required (already-empty/missing is a success).
+
+Exit codes: `0` success — including `list` with no runs and `clear` when already empty; `1` an unknown run id (`show`) or a history read/write failure; `2` missing/invalid arguments (a missing run id for `show`, or `clear` without `--yes`). There is **no** connection-failure (`3`) code — these commands never contact the runtime.
+
+> Workflow history is **opt-in local observability** — Portier records nothing unless you pass `--record-history`, adds no telemetry/upload, and runs no background collection.
 
 ### `portier workflow template <name>` / `--list`
 

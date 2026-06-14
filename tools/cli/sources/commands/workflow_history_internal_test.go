@@ -1,0 +1,558 @@
+package commands
+
+// White-box tests for `portier workflow run --record-history` and
+// `portier workflow history` (v1.12 Slice 1). These are white-box (package
+// commands) because they override the unexported history path/suffix seams
+// (historyStorePath / newHistorySuffix) to point at a temp file with deterministic
+// ids — the only reason they are not black-box. They exercise the exported command
+// handlers end to end.
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"portier/cli/sources/workflow"
+)
+
+// histFailWriter is an io.Writer that always errors, to exercise JSON-encode
+// failure branches.
+type histFailWriter struct{}
+
+func (histFailWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
+// useFailingHistoryPath points the path seam at a resolver that errors.
+func useFailingHistoryPath(t *testing.T) {
+	t.Helper()
+	orig := historyStorePath
+	historyStorePath = func() (string, error) { return "", errors.New("no config dir") }
+	t.Cleanup(func() { historyStorePath = orig })
+}
+
+const histStrictPolicy = `{"schemaVersion":1,"rules":{"requireGroup":true,"allowLanExposure":false,"allowPrivilegedPorts":false,"allowAutostart":false,"forbidDuplicateBindings":true}}`
+const histCleanConfig = `[{"name":"Admin","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48080,"targetHost":"h","targetPort":8080,"enabled":false,"group":"admin"}]`
+const histDirtyConfig = `[{"name":"X","protocol":"tcp","listenHost":"0.0.0.0","listenPort":80,"targetHost":"h","targetPort":8080,"enabled":true}]`
+
+// useHistoryPath points the history seam at path with deterministic suffixes and
+// restores the originals on cleanup.
+func useHistoryPath(t *testing.T, path string) {
+	t.Helper()
+	origPath := historyStorePath
+	origSuffix := newHistorySuffix
+	n := 0
+	historyStorePath = func() (string, error) { return path, nil }
+	newHistorySuffix = func() string { n++; return fmt.Sprintf("s%04d", n) }
+	t.Cleanup(func() {
+		historyStorePath = origPath
+		newHistorySuffix = origSuffix
+	})
+}
+
+// histTempFile writes content to a uniquely named file in the test temp dir.
+func histTempFile(t *testing.T, name, content string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatalf("writing %s: %v", name, err)
+	}
+	return p
+}
+
+// histWorkflowFile builds a workflow JSON file with the given steps (json.Marshal
+// keeps Windows paths escaped) and returns its path.
+func histWorkflowFile(t *testing.T, name string, steps []map[string]any) string {
+	t.Helper()
+	wf := map[string]any{"schemaVersion": 1, "name": name, "steps": steps}
+	data, err := json.Marshal(wf)
+	if err != nil {
+		t.Fatalf("marshal workflow: %v", err)
+	}
+	return histTempFile(t, "wf.json", string(data))
+}
+
+// loadHistory reads the history file at the seam path.
+func loadHistory(t *testing.T, path string) workflow.History {
+	t.Helper()
+	h, err := workflow.NewHistoryStore(path).Load()
+	if err != nil {
+		t.Fatalf("loading history: %v", err)
+	}
+	return h
+}
+
+// --- record-history on workflow run ---
+
+func TestWorkflowRunRecordHistory_RecordsCompactEntry(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+
+	cfg := histTempFile(t, "cfg.json", histCleanConfig)
+	pol := histTempFile(t, "pol.json", histStrictPolicy)
+	wf := histWorkflowFile(t, "rec-pass", []map[string]any{
+		{"id": "check", "type": "policy.check", "config": cfg, "policy": pol},
+	})
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowRun(false, ConnFlags{}, []string{"--file", wf, "--record-history"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\n%s\n%s", code, out.String(), errBuf.String())
+	}
+
+	h := loadHistory(t, histPath)
+	if len(h.Runs) != 1 {
+		t.Fatalf("recorded runs = %d, want 1", len(h.Runs))
+	}
+	r := h.Runs[0]
+	if r.Workflow != "rec-pass" || r.Result != "passed" {
+		t.Errorf("entry = %+v", r)
+	}
+	if r.ID != "" && !strings.Contains(r.ID, "rec-pass") {
+		t.Errorf("id = %q, want it to contain the workflow name", r.ID)
+	}
+	if r.Summary.Total != 1 || r.Summary.Passed != 1 {
+		t.Errorf("summary = %+v", r.Summary)
+	}
+	if len(r.Steps) != 1 || r.Steps[0].ID != "check" || r.Steps[0].Type != "policy.check" || r.Steps[0].Status != "passed" {
+		t.Errorf("steps = %+v", r.Steps)
+	}
+
+	// The raw stored file must never carry report payloads, messages, host data,
+	// the runtime URL, env, or process data.
+	raw, err := os.ReadFile(histPath)
+	if err != nil {
+		t.Fatalf("read history file: %v", err)
+	}
+	for _, banned := range []string{"\"report\"", "\"message\"", "listenHost", "targetHost", "127.0.0.1", "48080", "http://", "PATH=", "USER="} {
+		if strings.Contains(string(raw), banned) {
+			t.Errorf("history file contains banned content %q:\n%s", banned, raw)
+		}
+	}
+}
+
+func TestWorkflowRunNoRecordWithoutFlag(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+
+	cfg := histTempFile(t, "cfg.json", histCleanConfig)
+	pol := histTempFile(t, "pol.json", histStrictPolicy)
+	wf := histWorkflowFile(t, "no-rec", []map[string]any{
+		{"id": "check", "type": "policy.check", "config": cfg, "policy": pol},
+	})
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowRun(false, ConnFlags{}, []string{"--file", wf}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if _, err := os.Stat(histPath); !os.IsNotExist(err) {
+		t.Errorf("history file should not exist without --record-history (stat err = %v)", err)
+	}
+}
+
+func TestWorkflowRunRecordHistory_FailedRunRecordsFailedResult(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+
+	cfg := histTempFile(t, "cfg.json", histDirtyConfig)
+	pol := histTempFile(t, "pol.json", histStrictPolicy)
+	wf := histWorkflowFile(t, "rec-fail", []map[string]any{
+		{"id": "check", "type": "policy.check", "config": cfg, "policy": pol},
+	})
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowRun(false, ConnFlags{}, []string{"--file", wf, "--record-history"}, &out, &errBuf)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (run failed)", code)
+	}
+	h := loadHistory(t, histPath)
+	if len(h.Runs) != 1 || h.Runs[0].Result != "failed" {
+		t.Fatalf("recorded run = %+v, want one failed run", h.Runs)
+	}
+	if len(h.Runs[0].Codes) == 0 {
+		t.Errorf("expected emitted policy codes recorded for a failed run, got none")
+	}
+}
+
+func TestWorkflowRunRecordHistory_InvalidPlanDoesNotRecord(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+
+	// Missing required policy field → invalid plan.
+	wf := histWorkflowFile(t, "bad", []map[string]any{
+		{"id": "check", "type": "policy.check", "config": "x.json"},
+	})
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowRun(false, ConnFlags{}, []string{"--file", wf, "--record-history"}, &out, &errBuf)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (invalid plan)", code)
+	}
+	if _, err := os.Stat(histPath); !os.IsNotExist(err) {
+		t.Errorf("an invalid plan must not record history (stat err = %v)", err)
+	}
+}
+
+func TestWorkflowRunRecordHistory_WriteFailurePassingRunExit1(t *testing.T) {
+	// A regular file used as the parent directory makes the history write fail.
+	blocker := histTempFile(t, "blocker", "x")
+	useHistoryPath(t, filepath.Join(blocker, "wh.json"))
+
+	cfg := histTempFile(t, "cfg.json", histCleanConfig)
+	pol := histTempFile(t, "pol.json", histStrictPolicy)
+	wf := histWorkflowFile(t, "rec", []map[string]any{
+		{"id": "check", "type": "policy.check", "config": cfg, "policy": pol},
+	})
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowRun(false, ConnFlags{}, []string{"--file", wf, "--record-history"}, &out, &errBuf)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (passing run + history write failure)", code)
+	}
+	if !strings.Contains(errBuf.String(), "failed to record workflow history") {
+		t.Errorf("expected a history-failure warning, got: %s", errBuf.String())
+	}
+	if !strings.Contains(out.String(), "Result: passed") {
+		t.Errorf("the run result must still be reported: %s", out.String())
+	}
+}
+
+func TestWorkflowRunRecordHistory_WriteFailureKeepsRuntimeExit3(t *testing.T) {
+	// A runtime-unreachable run exits 3; a history write failure must NOT downgrade
+	// that to 1 — the workflow exit code is kept and a warning is added.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	deadURL := srv.URL
+	srv.Close()
+
+	blocker := histTempFile(t, "blocker", "x")
+	useHistoryPath(t, filepath.Join(blocker, "wh.json"))
+
+	pol := histTempFile(t, "pol.json", histStrictPolicy)
+	wf := histWorkflowFile(t, "rt", []map[string]any{
+		{"id": "check", "type": "policy.check", "runtime": true, "policy": pol},
+	})
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowRun(false, ConnFlags{URL: deadURL}, []string{"--file", wf, "--record-history"}, &out, &errBuf)
+	if code != 3 {
+		t.Fatalf("exit code = %d, want 3 (runtime unreachable kept despite history write failure)\n%s", code, errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "failed to record workflow history") {
+		t.Errorf("expected a history-failure warning, got: %s", errBuf.String())
+	}
+}
+
+// --- history list ---
+
+func TestWorkflowHistoryList_Empty(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"list"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "No workflow runs recorded.") {
+		t.Errorf("expected empty message, got: %s", out.String())
+	}
+}
+
+func TestWorkflowHistoryList_EmptyJSON(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(true, []string{"list"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var h workflow.History
+	if err := json.Unmarshal([]byte(out.String()), &h); err != nil {
+		t.Fatalf("decode: %v\n%s", err, out.String())
+	}
+	if h.SchemaVersion != workflow.HistorySchemaVersion || len(h.Runs) != 0 {
+		t.Errorf("history = %+v", h)
+	}
+}
+
+func TestWorkflowHistoryList_WithEntries(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	store := workflow.NewHistoryStore(histPath)
+	if err := store.Append(workflow.HistoryRun{ID: "id-1", Workflow: "demo", Result: "failed", Summary: workflow.WorkflowRunSummary{Total: 2, Passed: 1, Failed: 1}, CreatedAt: "2026-06-14T10:15:30Z", Codes: []string{"policy.lan_exposure_forbidden"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"list"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	s := out.String()
+	for _, want := range []string{"id-1", "Workflow: demo", "Result: failed", "2 total, 1 passed, 1 failed", "policy.lan_exposure_forbidden"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("list output missing %q:\n%s", want, s)
+		}
+	}
+}
+
+func TestWorkflowHistoryList_ReadFailure(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	if err := os.WriteFile(histPath, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	useHistoryPath(t, histPath)
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"list"}, &out, &errBuf)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (malformed history)", code)
+	}
+}
+
+// --- history show ---
+
+func TestWorkflowHistoryShow_Existing(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	store := workflow.NewHistoryStore(histPath)
+	if err := store.Append(workflow.HistoryRun{ID: "the-id", Workflow: "demo", Result: "failed", Summary: workflow.WorkflowRunSummary{Total: 1, Failed: 1}, CreatedAt: "2026-06-14T10:15:30Z", Codes: []string{"policy.autostart_forbidden"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"show", "the-id"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	for _, want := range []string{"the-id", "Workflow: demo", "Codes: policy.autostart_forbidden"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("show output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestWorkflowHistoryShow_JSON(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	store := workflow.NewHistoryStore(histPath)
+	if err := store.Append(workflow.HistoryRun{ID: "the-id", Workflow: "demo", Result: "passed", Summary: workflow.WorkflowRunSummary{Total: 1, Passed: 1}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(true, []string{"show", "the-id"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	var r workflow.HistoryRun
+	if err := json.Unmarshal([]byte(out.String()), &r); err != nil {
+		t.Fatalf("decode: %v\n%s", err, out.String())
+	}
+	if r.ID != "the-id" || r.Result != "passed" {
+		t.Errorf("decoded = %+v", r)
+	}
+}
+
+func TestWorkflowHistoryShow_UnknownIDExit1(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"show", "nope"}, &out, &errBuf)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (unknown id)", code)
+	}
+	if !strings.Contains(errBuf.String(), "no recorded run with id") {
+		t.Errorf("expected unknown-id error, got: %s", errBuf.String())
+	}
+}
+
+func TestWorkflowHistoryShow_MissingIDExit2(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"show"}, &out, &errBuf)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (missing id)", code)
+	}
+}
+
+func TestWorkflowHistoryShow_ReadFailure(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	if err := os.WriteFile(histPath, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	useHistoryPath(t, histPath)
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"show", "any"}, &out, &errBuf)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1 (malformed history)", code)
+	}
+}
+
+// --- history clear ---
+
+func TestWorkflowHistoryClear_WithYes(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{ID: "x"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"clear", "--yes"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if _, err := os.Stat(histPath); !os.IsNotExist(err) {
+		t.Errorf("history file should be removed after clear (stat err = %v)", err)
+	}
+	if !strings.Contains(out.String(), "Workflow history cleared.") {
+		t.Errorf("expected confirmation, got: %s", out.String())
+	}
+}
+
+func TestWorkflowHistoryClear_WithoutYesExit2(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{ID: "x"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"clear"}, &out, &errBuf)
+	if code != 2 {
+		t.Fatalf("exit code = %d, want 2 (clear without --yes)", code)
+	}
+	if _, err := os.Stat(histPath); err != nil {
+		t.Errorf("history file must NOT be removed without --yes: %v", err)
+	}
+}
+
+func TestWorkflowHistoryClear_AlreadyEmptyExit0(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	var out, errBuf strings.Builder
+	code := RunWorkflowHistory(false, []string{"clear", "--yes"}, &out, &errBuf)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (already empty)", code)
+	}
+}
+
+// --- dispatch ---
+
+func TestWorkflowHistory_NoSubcommandExit2(t *testing.T) {
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, nil, &out, &errBuf); code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
+func TestWorkflowHistory_UnknownSubcommandExit2(t *testing.T) {
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"bogus"}, &out, &errBuf); code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
+func TestWorkflowHistory_HelpExit0(t *testing.T) {
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"help"}, &out, &errBuf); code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(out.String(), "workflow history") {
+		t.Errorf("expected help text, got: %s", out.String())
+	}
+}
+
+// --- defaults / seams ---
+
+func TestHistoryDefaults(t *testing.T) {
+	// The real suffix generator returns 8 hex characters.
+	s := newHistorySuffix()
+	if len(s) != 8 {
+		t.Errorf("newHistorySuffix length = %d (%q), want 8", len(s), s)
+	}
+	// The real path resolver produces a portier-scoped workflow-history path.
+	p, err := historyStorePath()
+	if err != nil {
+		t.Skipf("user config dir unavailable: %v", err)
+	}
+	if !strings.Contains(p, "portier") || !strings.HasSuffix(p, workflow.HistoryFileName) {
+		t.Errorf("historyStorePath = %q, want a portier-scoped %s path", p, workflow.HistoryFileName)
+	}
+}
+
+// --- path-resolution failure (exit 1) ---
+
+func TestWorkflowHistory_PathResolutionFailures(t *testing.T) {
+	useFailingHistoryPath(t)
+	for _, args := range [][]string{{"list"}, {"show", "any"}, {"clear", "--yes"}} {
+		var out, errBuf strings.Builder
+		code := RunWorkflowHistory(false, args, &out, &errBuf)
+		if code != 1 {
+			t.Errorf("%v: exit code = %d, want 1 (path resolution failure)", args, code)
+		}
+		if !strings.Contains(errBuf.String(), "could not resolve history path") {
+			t.Errorf("%v: expected path-resolution error, got: %s", args, errBuf.String())
+		}
+	}
+}
+
+// --- flag parsing edge cases ---
+
+func TestWorkflowHistory_FlagParseEdges(t *testing.T) {
+	useHistoryPath(t, filepath.Join(t.TempDir(), "wh.json"))
+	cases := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"list help", []string{"list", "--help"}, 0},
+		{"list bad flag", []string{"list", "--bogus"}, 2},
+		{"show help", []string{"show", "--help"}, 0},
+		{"show bad flag", []string{"show", "--bogus"}, 2},
+		{"show too many", []string{"show", "a", "b"}, 2},
+		{"clear help", []string{"clear", "--help"}, 0},
+		{"clear bad flag", []string{"clear", "--bogus"}, 2},
+	}
+	for _, tc := range cases {
+		var out, errBuf strings.Builder
+		if code := RunWorkflowHistory(false, tc.args, &out, &errBuf); code != tc.want {
+			t.Errorf("%s: exit code = %d, want %d\n%s", tc.name, code, tc.want, errBuf.String())
+		}
+	}
+}
+
+// --- unnamed workflow rendering ---
+
+func TestWorkflowHistory_UnnamedWorkflowRendered(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{ID: "id-x", Workflow: "", Result: "passed", Summary: workflow.WorkflowRunSummary{Total: 1, Passed: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errBuf strings.Builder
+	if code := RunWorkflowHistory(false, []string{"list"}, &out, &errBuf); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	if !strings.Contains(out.String(), "Workflow: (unnamed)") {
+		t.Errorf("expected (unnamed) placeholder, got: %s", out.String())
+	}
+}
+
+// --- JSON encode failures (exit 1) ---
+
+func TestWorkflowHistory_JSONEncodeFailures(t *testing.T) {
+	histPath := filepath.Join(t.TempDir(), "wh.json")
+	useHistoryPath(t, histPath)
+	if err := workflow.NewHistoryStore(histPath).Append(workflow.HistoryRun{ID: "id-x"}); err != nil {
+		t.Fatal(err)
+	}
+	var errBuf strings.Builder
+	if code := runWorkflowHistoryList(true, nil, histFailWriter{}, &errBuf); code != 1 {
+		t.Errorf("list JSON encode failure exit = %d, want 1", code)
+	}
+	errBuf.Reset()
+	if code := runWorkflowHistoryShow(true, []string{"id-x"}, histFailWriter{}, &errBuf); code != 1 {
+		t.Errorf("show JSON encode failure exit = %d, want 1", code)
+	}
+}

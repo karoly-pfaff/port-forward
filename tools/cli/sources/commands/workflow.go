@@ -17,12 +17,13 @@ import (
 
 const workflowHelp = `Usage: portier workflow <subcommand> [options]
 
-Plan, validate, run, preview, report on, or template a local workflow — an ordered
-sequence of existing safe Portier operations described in a small JSON file.
-Read-only and dry-run: it never applies/imports configs, enforces a policy, runs a
-shell command, schedules anything, or mutates any file (except the requested --out
-file/directory). Only 'workflow run' executes the (read-only) steps; it is the only
-subcommand that may contact the runtime, and only for a policy.check runtime step.
+Plan, validate, run, preview, report on, template, or inspect the run history of a
+local workflow — an ordered sequence of existing safe Portier operations described
+in a small JSON file. Read-only and dry-run: it never applies/imports configs,
+enforces a policy, runs a shell command, schedules anything, or mutates any file
+(except the requested --out file/directory or the opt-in local history file). Only
+'workflow run' executes the (read-only) steps; it is the only subcommand that may
+contact the runtime, and only for a policy.check runtime step.
 
 Subcommands:
   plan --file <workflow.json>     Validate a workflow file and print its plan
@@ -30,11 +31,12 @@ Subcommands:
   runbook --file <workflow.json>  Preview the CLI commands a valid workflow maps to
   report --from <report.json>     Package an existing plan/run report into a bundle
   template <name> | --list        Print a built-in workflow template, or list them
+  history <list|show|clear>       Inspect the opt-in local workflow run history
   help                            Show this help message
 
 Run 'portier workflow plan --help', 'portier workflow run --help',
-'portier workflow runbook --help', 'portier workflow report --help', or
-'portier workflow template --help' for options.
+'portier workflow runbook --help', 'portier workflow report --help',
+'portier workflow template --help', or 'portier workflow history --help' for options.
 `
 
 const workflowReportHelp = `Usage: portier workflow report --from <report.json> --out <directory>
@@ -107,6 +109,14 @@ Options:
                   including the additive explanations map under --explain). With
                   --json the JSON also prints to stdout and is byte-identical to
                   the file.
+  --record-history  After the run completes, record a COMPACT entry in the local,
+                  opt-in workflow run history (run id, time, workflow name, result,
+                  summary counts, compact step metadata, and emitted codes). It
+                  never records raw configs, policies, full reports, secrets, logs,
+                  environment, process data, runtime URLs, or tokens. History is
+                  bounded to the most recent 100 runs. Inspect it with
+                  'portier workflow history list|show|clear'. Without this flag,
+                  nothing is recorded.
 
 Step execution (read-only):
   policy.check              Evaluate a local config (offline) or the live runtime
@@ -123,19 +133,25 @@ compare with new findings → failed. A failed or skipped step fails the run.
 
 Exit codes:
   0  All executed steps passed (none skipped)
-  1  One or more steps failed or were skipped; the workflow plan was invalid; or
-     an --out write failure
+  1  One or more steps failed or were skipped; the workflow plan was invalid; an
+     --out write failure; or, with --record-history, a history write failure when
+     the run itself passed
   2  Missing/invalid arguments (including a missing --file/--out value), or an
      unreadable/malformed workflow file (including a missing/unsupported
      schemaVersion, or no steps)
   3  A policy.check runtime step could not reach the runtime (matching
      'policy check --runtime')
 
+With --record-history: a history write failure is reported as a warning. If the
+run itself passed, the exit code becomes 1; if the run already failed, its exit
+code (1 or 3) is kept and the warning is added.
+
 Examples:
   portier workflow run --file workflow.json
   portier --json workflow run --file workflow.json
   portier workflow run --file workflow.json --explain
   portier workflow run --file workflow.json --out report.json
+  portier workflow run --file workflow.json --record-history
 `
 
 const workflowRunbookHelp = `Usage: portier workflow runbook --file <workflow.json> [--out <file>]
@@ -298,6 +314,8 @@ func RunWorkflow(jsonOutput bool, conn ConnFlags, args []string, stdout, stderr 
 		return RunWorkflowRunbook(jsonOutput, args[1:], stdout, stderr)
 	case "report":
 		return RunWorkflowReport(jsonOutput, args[1:], stdout, stderr)
+	case "history":
+		return RunWorkflowHistory(jsonOutput, args[1:], stdout, stderr)
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, workflowHelp)
 		return 0
@@ -565,6 +583,7 @@ func RunWorkflowRun(jsonOutput bool, conn ConnFlags, args []string, stdout, stde
 	flagFile := fs.String("file", "", "path to the workflow JSON file")
 	flagExplain := fs.Bool("explain", false, "explain each failed/skipped step's codes")
 	flagOut := fs.String("out", "", "also write the JSON run report to this file")
+	flagRecord := fs.Bool("record-history", false, "record a compact entry in the local workflow run history")
 
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -606,7 +625,36 @@ func RunWorkflowRun(jsonOutput bool, conn ConnFlags, args []string, stdout, stde
 		RuntimeRules: makeRuntimeRules(conn),
 	}
 	run := workflow.Run(file, deps)
-	return workflow.EmitRun(run, jsonOutput, *flagExplain, *flagOut, stdout, stderr)
+	exit := workflow.EmitRun(run, jsonOutput, *flagExplain, *flagOut, stdout, stderr)
+
+	// Opt-in local history recording happens AFTER the run completes and only when
+	// requested. A completed run (passed or failed) is recorded; an invalid plan
+	// returned earlier, so invalid plans are never recorded. A history write
+	// failure is reported as a warning and never hides the workflow result: if the
+	// run passed (exit 0) it becomes 1 (the requested recording failed); if the run
+	// already failed (1 or 3) that exit code is kept.
+	if *flagRecord {
+		if err := recordWorkflowHistory(run); err != nil {
+			fmt.Fprintf(stderr, "Warning: failed to record workflow history: %v\n", err)
+			if exit == 0 {
+				exit = 1
+			}
+		}
+	}
+	return exit
+}
+
+// recordWorkflowHistory projects a completed run into a compact history entry and
+// appends it to the local, bounded history store. The run id is built from the
+// current time, the workflow name, and an injected short suffix.
+func recordWorkflowHistory(run workflow.WorkflowRun) error {
+	store, err := historyStore()
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	id := workflow.NewRunID(now, run.Workflow, newHistorySuffix())
+	return store.Append(workflow.ProjectRun(run, id, now))
 }
 
 // RunWorkflowReport packages an EXISTING workflow plan/run JSON report into a

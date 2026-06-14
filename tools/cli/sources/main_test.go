@@ -384,6 +384,16 @@ func TestRun_WorkflowDispatch_NoSubcommand(t *testing.T) {
 	}
 }
 
+func TestRun_WorkflowHistoryDispatch(t *testing.T) {
+	// workflow history is fully offline — an invalid --url is ignored. `clear`
+	// without --yes is a usage error (exit 2) that returns before touching the
+	// store, proving the route reaches the handler without contacting the runtime
+	// or the real history file.
+	if code := run([]string{"--url", "ftp://bad-scheme", "workflow", "history", "clear"}); code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
 func TestRun_PolicyCheckDispatch(t *testing.T) {
 	// policy check is fully offline — no server needed, and an invalid --url is
 	// ignored. A compliant config against a strict policy exits 0.

@@ -1,0 +1,300 @@
+package workflow
+
+// White-box tests for the local workflow run history (v1.12 Slice 1): the compact
+// projection from a WorkflowRun, code dedupe/sort, run-id shape, and the store's
+// load/append/retention/clear behavior including missing and malformed files.
+// Black-box command behavior is in package commands_test.
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+)
+
+func fixedTime() time.Time {
+	return time.Date(2026, 6, 14, 10, 15, 30, 0, time.UTC)
+}
+
+// makeRun builds a WorkflowRun with the given steps and recomputes its summary +
+// result the same way Run does, so projection tests use realistic data.
+func makeRun(name string, steps []WorkflowRunStep) WorkflowRun {
+	run := WorkflowRun{Workflow: name, Steps: steps}
+	run.Summary.Total = len(steps)
+	for _, s := range steps {
+		switch s.Status {
+		case runStatusPassed:
+			run.Summary.Passed++
+		case runStatusSkipped:
+			run.Summary.Skipped++
+		default:
+			run.Summary.Failed++
+		}
+	}
+	run.Result = runResultPassed
+	if run.Summary.Failed > 0 || run.Summary.Skipped > 0 {
+		run.Result = runResultFailed
+	}
+	return run
+}
+
+func TestNewRunID_Shape(t *testing.T) {
+	id := NewRunID(fixedTime(), "Policy Baseline Check!", "a1b2c3d4")
+	want := "20260614T101530Z-policy-baseline-check-a1b2c3d4"
+	if id != want {
+		t.Errorf("NewRunID = %q, want %q", id, want)
+	}
+}
+
+func TestNewRunID_EmptyWorkflowName(t *testing.T) {
+	id := NewRunID(fixedTime(), "   ", "deadbeef")
+	want := "20260614T101530Z-workflow-deadbeef"
+	if id != want {
+		t.Errorf("NewRunID = %q, want %q", id, want)
+	}
+}
+
+func TestNewRunID_NoSuffix(t *testing.T) {
+	id := NewRunID(fixedTime(), "wf", "")
+	want := "20260614T101530Z-wf"
+	if id != want {
+		t.Errorf("NewRunID = %q, want %q", id, want)
+	}
+}
+
+func TestProjectRun_CompactFields(t *testing.T) {
+	run := makeRun("demo", []WorkflowRunStep{
+		{ID: "check", Type: "policy.check", Status: runStatusPassed, ExitCode: 0, Message: "Policy check passed.", Report: map[string]any{"secret": "should not be projected"}},
+		{ID: "compare", Type: "policy.baseline.compare", Status: runStatusFailed, ExitCode: 1, Message: "1 new finding.", explainCodes: []string{"policy.lan_exposure_forbidden"}},
+	})
+
+	got := ProjectRun(run, "id-1", fixedTime())
+
+	if got.ID != "id-1" {
+		t.Errorf("ID = %q", got.ID)
+	}
+	if got.CreatedAt != "2026-06-14T10:15:30Z" {
+		t.Errorf("CreatedAt = %q", got.CreatedAt)
+	}
+	if got.Workflow != "demo" || got.Result != runResultFailed {
+		t.Errorf("Workflow/Result = %q/%q", got.Workflow, got.Result)
+	}
+	wantSummary := WorkflowRunSummary{Total: 2, Passed: 1, Failed: 1, Skipped: 0}
+	if got.Summary != wantSummary {
+		t.Errorf("Summary = %+v, want %+v", got.Summary, wantSummary)
+	}
+	wantSteps := []HistoryStep{
+		{ID: "check", Type: "policy.check", Status: runStatusPassed, ExitCode: 0},
+		{ID: "compare", Type: "policy.baseline.compare", Status: runStatusFailed, ExitCode: 1},
+	}
+	if !reflect.DeepEqual(got.Steps, wantSteps) {
+		t.Errorf("Steps = %+v, want %+v", got.Steps, wantSteps)
+	}
+	if !reflect.DeepEqual(got.Codes, []string{"policy.lan_exposure_forbidden"}) {
+		t.Errorf("Codes = %v", got.Codes)
+	}
+}
+
+func TestProjectRun_NoSensitiveDataInJSON(t *testing.T) {
+	// A step's embedded report and message must never appear in the projected JSON.
+	run := makeRun("secrets-wf", []WorkflowRunStep{
+		{
+			ID:       "check",
+			Type:     "policy.check",
+			Status:   runStatusFailed,
+			ExitCode: 1,
+			Message:  "0.0.0.0 listen host SUPERSECRETHOST:65000 target",
+			Report:   map[string]any{"rule": "TOPSECRET", "listenHost": "0.0.0.0", "targetHost": "internal.example.com"},
+		},
+	})
+	got := ProjectRun(run, "id", fixedTime())
+	data, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	for _, banned := range []string{"TOPSECRET", "SUPERSECRETHOST", "internal.example.com", "report", "message", "listenHost", "targetHost"} {
+		if strings.Contains(string(data), banned) {
+			t.Errorf("projected history JSON contains %q (must be excluded): %s", banned, data)
+		}
+	}
+}
+
+func TestProjectRun_CodesDedupedAndSorted(t *testing.T) {
+	run := makeRun("wf", []WorkflowRunStep{
+		{ID: "a", Type: "policy.check", Status: runStatusFailed, ExitCode: 1, explainCodes: []string{"policy.privileged_port_forbidden", "policy.lan_exposure_forbidden"}},
+		{ID: "b", Type: "policy.check", Status: runStatusFailed, ExitCode: 1, explainCodes: []string{"policy.lan_exposure_forbidden"}},
+		{ID: "c", Type: "policy.check", Status: runStatusPassed, ExitCode: 0, explainCodes: []string{"ignored.passed.code"}},
+	})
+	got := ProjectRun(run, "id", fixedTime())
+	want := []string{"policy.lan_exposure_forbidden", "policy.privileged_port_forbidden"}
+	if !reflect.DeepEqual(got.Codes, want) {
+		t.Errorf("Codes = %v, want %v (deduped, sorted, passed steps excluded)", got.Codes, want)
+	}
+}
+
+func TestProjectRun_NoCodesOmitted(t *testing.T) {
+	run := makeRun("wf", []WorkflowRunStep{{ID: "a", Type: "policy.check", Status: runStatusPassed}})
+	got := ProjectRun(run, "id", fixedTime())
+	if got.Codes != nil {
+		t.Errorf("Codes = %v, want nil", got.Codes)
+	}
+	data, _ := json.Marshal(got)
+	if strings.Contains(string(data), "codes") {
+		t.Errorf("expected codes omitted from JSON: %s", data)
+	}
+}
+
+func TestHistoryStore_LoadMissingFile(t *testing.T) {
+	store := NewHistoryStore(filepath.Join(t.TempDir(), "nope.json"))
+	h, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil for missing file", err)
+	}
+	if h.SchemaVersion != HistorySchemaVersion || len(h.Runs) != 0 {
+		t.Errorf("Load() = %+v, want empty history with schema version", h)
+	}
+}
+
+func TestHistoryStore_LoadEmptyFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "h.json")
+	if err := os.WriteFile(path, []byte("   \n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := NewHistoryStore(path).Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil for empty file", err)
+	}
+	if h.SchemaVersion != HistorySchemaVersion || len(h.Runs) != 0 {
+		t.Errorf("Load() = %+v", h)
+	}
+}
+
+func TestHistoryStore_LoadMalformedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "h.json")
+	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewHistoryStore(path).Load(); err == nil {
+		t.Fatal("Load() error = nil, want error for malformed file")
+	}
+}
+
+func TestHistoryStore_AppendCreatesAndOrdersNewestFirst(t *testing.T) {
+	// The parent directory does not exist yet — Append must create it.
+	path := filepath.Join(t.TempDir(), "sub", "dir", "h.json")
+	store := NewHistoryStore(path)
+
+	if err := store.Append(HistoryRun{ID: "first"}); err != nil {
+		t.Fatalf("Append first: %v", err)
+	}
+	if err := store.Append(HistoryRun{ID: "second"}); err != nil {
+		t.Fatalf("Append second: %v", err)
+	}
+
+	h, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(h.Runs) != 2 || h.Runs[0].ID != "second" || h.Runs[1].ID != "first" {
+		t.Errorf("runs = %+v, want newest-first [second, first]", h.Runs)
+	}
+	if h.SchemaVersion != HistorySchemaVersion {
+		t.Errorf("schemaVersion = %d", h.SchemaVersion)
+	}
+}
+
+func TestHistoryStore_RetentionKeepsLatest100(t *testing.T) {
+	store := NewHistoryStore(filepath.Join(t.TempDir(), "h.json"))
+	for i := 0; i < historyMaxRuns+25; i++ {
+		if err := store.Append(HistoryRun{ID: runIDForIndex(i)}); err != nil {
+			t.Fatalf("Append %d: %v", i, err)
+		}
+	}
+	h, err := store.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(h.Runs) != historyMaxRuns {
+		t.Fatalf("len(runs) = %d, want %d", len(h.Runs), historyMaxRuns)
+	}
+	// Newest first: the most recently appended id is index historyMaxRuns+24.
+	if h.Runs[0].ID != runIDForIndex(historyMaxRuns+24) {
+		t.Errorf("newest = %q, want %q", h.Runs[0].ID, runIDForIndex(historyMaxRuns+24))
+	}
+	// The oldest 25 must have been dropped; the oldest kept is index 25.
+	if h.Runs[historyMaxRuns-1].ID != runIDForIndex(25) {
+		t.Errorf("oldest kept = %q, want %q", h.Runs[historyMaxRuns-1].ID, runIDForIndex(25))
+	}
+}
+
+func runIDForIndex(i int) string { return "run-" + itoa(i) }
+
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	var b []byte
+	for i > 0 {
+		b = append([]byte{byte('0' + i%10)}, b...)
+		i /= 10
+	}
+	return string(b)
+}
+
+func TestHistoryStore_LoadDefaultsSchemaVersion(t *testing.T) {
+	// A valid history JSON without a schemaVersion gets the current version.
+	path := filepath.Join(t.TempDir(), "h.json")
+	if err := os.WriteFile(path, []byte(`{"runs":[{"id":"a"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := NewHistoryStore(path).Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if h.SchemaVersion != HistorySchemaVersion || len(h.Runs) != 1 {
+		t.Errorf("Load() = %+v", h)
+	}
+}
+
+func TestHistoryStore_ClearError(t *testing.T) {
+	// Removing a path that is a non-empty directory fails with a non-not-exist
+	// error, which Clear must surface.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "child"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewHistoryStore(dir).Clear(); err == nil {
+		t.Fatal("Clear() error = nil, want error removing a non-empty directory")
+	}
+}
+
+func TestHistoryStore_AppendOnMalformedFileReturnsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "h.json")
+	if err := os.WriteFile(path, []byte("{broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewHistoryStore(path).Append(HistoryRun{ID: "x"}); err == nil {
+		t.Fatal("Append() error = nil, want error when existing file is malformed")
+	}
+}
+
+func TestHistoryStore_Clear(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "h.json")
+	store := NewHistoryStore(path)
+	if err := store.Append(HistoryRun{ID: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Clear(); err != nil {
+		t.Fatalf("Clear: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("file still exists after Clear: stat err = %v", err)
+	}
+	// Clearing again (already missing) is a success.
+	if err := store.Clear(); err != nil {
+		t.Errorf("Clear on missing file = %v, want nil", err)
+	}
+}
