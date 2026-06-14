@@ -364,3 +364,19 @@ func TestBundleFacts_WrongManifest(t *testing.T) {
 		t.Fatal("expected error for non-workflow-report manifest")
 	}
 }
+
+func TestBundleFacts_MalformedReportTolerated(t *testing.T) {
+	// A malformed report.json is tolerated: the manifest alone yields facts (no
+	// codes/steps), never an error — matching analyze/timeline bundle behavior.
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "manifest.json"),
+		`{"schemaVersion":1,"type":"workflow-report","source":"workflow-run","workflow":"w","result":"failed"}`)
+	writeFile(t, filepath.Join(dir, "report.json"), `{ not valid json`)
+	f, err := extractFacts(dir)
+	if err != nil {
+		t.Fatalf("extractFacts: %v", err)
+	}
+	if f.Source != SourceWorkflowReportBundle || len(f.Codes) != 0 || f.Steps.Total != 0 {
+		t.Errorf("malformed report should yield manifest-only facts, got %+v", f)
+	}
+}

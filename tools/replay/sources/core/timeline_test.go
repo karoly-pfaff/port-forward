@@ -278,6 +278,22 @@ func TestTimeline_BundleDirWrongManifest(t *testing.T) {
 	}
 }
 
+func TestTimeline_BundleMalformedReportTolerated(t *testing.T) {
+	// A malformed report.json is tolerated: the manifest alone yields a minimal
+	// start/result timeline (no step events), never an error.
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "manifest.json"),
+		`{"schemaVersion":1,"type":"workflow-report","source":"workflow-run","workflow":"w","result":"failed"}`)
+	writeFile(t, filepath.Join(dir, "report.json"), `{ not valid json`)
+	tl, err := TimelineInput(dir)
+	if err != nil {
+		t.Fatalf("TimelineInput: %v", err)
+	}
+	if tl.Summary.Total != 2 || tl.Summary.Synthetic != 2 {
+		t.Errorf("malformed report should yield only synthetic events, got %+v", tl.Summary)
+	}
+}
+
 func TestTimeline_OrderIsSequential(t *testing.T) {
 	data := []byte(`{"workflow":"w","result":"passed","steps":[
 		{"id":"a","type":"t","status":"passed"},{"id":"b","type":"t","status":"passed"}]}`)

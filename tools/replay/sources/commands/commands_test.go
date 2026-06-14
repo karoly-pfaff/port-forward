@@ -57,6 +57,12 @@ func TestRun_NoArgs_PrintsHelp(t *testing.T) {
 	if strings.Contains(out, "portier-replay") {
 		t.Errorf("help should use the 'replay' binary name, not 'portier-replay': %q", out)
 	}
+	// Help must list every command and document the exit codes.
+	for _, want := range []string{"plan", "analyze", "timeline", "compare", "explain", "Exit codes:", "no exit 3"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help missing %q:\n%s", want, out)
+		}
+	}
 }
 
 func TestRun_Help(t *testing.T) {

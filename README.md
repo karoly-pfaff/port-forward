@@ -542,10 +542,14 @@ See [tools/cli/readme.md](tools/cli/readme.md) for full usage, exit codes, and p
 
 ### Replay tool (`replay`)
 
-`replay` is a **separate, offline analysis tool beside the CLI** (under `tools/replay/`, its own Go module) — not a `portier` subcommand. It reads existing Portier workflow artifacts (run/plan reports, history exports, support-report bundles) and reports what offline analysis each saved artifact can support. It is strictly offline and read-only: it never executes workflows, contacts the runtime, reads referenced config/policy/baseline/report files, mutates inputs, or uploads anything.
+`replay` is a **separate, offline analysis tool beside the CLI** (under `tools/replay/`, its own Go module) — not a `portier` subcommand. It reads existing Portier workflow artifacts (run/plan reports, history exports, support-report bundles) and analyzes them offline. It is strictly offline and read-only: it never executes workflows, contacts the runtime, reads referenced config/policy/baseline/report files, mutates inputs, or uploads anything.
 
 ```powershell
-replay [--json] plan --from <file-or-dir> [--out <file>]
+replay [--json] plan     --from <file-or-dir> [--out <file>]   # what analysis the artifact supports
+replay [--json] analyze  --from <file-or-dir> [--out <file>]   # deterministic findings/insights
+replay [--json] timeline --from <file-or-dir> [--out <file>]   # ordered reconstructed timeline
+replay [--json] compare  --left <a> --right <b> [--out <file>] # diff two saved artifacts
+replay [--json] explain  --from <file-or-dir> [--out <file>]   # explain emitted codes
 
 npm run build:replay      # builds tools/replay/build/replay
 npm run test:replay       # go test ./... inside tools/replay

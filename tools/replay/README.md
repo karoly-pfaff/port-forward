@@ -1,11 +1,13 @@
 # replay
 
 `replay` is a **separate, offline analysis tool beside the Portier CLI** —
-not a `portier` subcommand. It reads existing Portier workflow artifacts and reports
-what offline replay/analysis each saved artifact can support.
+not a `portier` subcommand. It reads existing Portier workflow artifacts and analyzes
+them offline, without ever running a workflow or contacting the runtime.
 
-It is part of the v1.13 *Local Replay & Offline Analysis* work. This first slice is
-a scaffold: input detection plus a deterministic **replay plan**.
+It is part of the v1.13 *Local Replay & Offline Analysis* work and provides five
+commands: `plan`, `analyze`, `timeline`, `compare`, and `explain`. The Portier CLI
+creates/runs/exports/packages operational artifacts; `replay` analyzes those saved
+artifacts after the fact.
 
 ## Safety boundary
 
@@ -23,7 +25,9 @@ The replay tool is strictly **offline and read-only**. It never:
 - collects logs, environment, or process data
 
 It analyzes **saved artifacts only**. For a support-report bundle directory it reads
-**only** the bundle's own `manifest.json`.
+**only** the bundle's own `manifest.json`, `report.json`, and `explanations.json` —
+never any file referenced from inside an artifact. A missing or malformed bundle
+`report.json` is tolerated (the manifest alone still yields a result).
 
 ## Supported inputs
 
@@ -261,9 +265,14 @@ REST/API contract and is independent of the workflow artifact schemas it analyze
 
 ## Exit codes
 
-- `0` — a replay plan was produced.
+Every `replay` command uses the same exit codes:
+
+- `0` — the requested output was produced (including when an artifact has no codes
+  to explain, or two artifacts have no differences).
 - `1` — an output-write or JSON-encode failure.
 - `2` — a usage error, or an unreadable / malformed / unsupported input artifact.
+
+There is no exit `3` — `replay` never contacts a runtime.
 
 ## Build & test
 
@@ -282,7 +291,8 @@ standard library. It does not import `tools/cli` or any runtime client packages.
 tools/replay/sources/
   main.go        # thin entry point: os.Exit(commands.Run(...))
   commands/      # CLI dispatch, argument parsing, command runners
-  core/          # artifact detection + replay plan/analysis models, builders, renderers
+  core/          # artifact detection + plan/analysis/timeline/compare/explain
+                 #   models, builders, and renderers
 ```
 
 `commands` depends on `core`; `core` never depends on `commands` (domain logic

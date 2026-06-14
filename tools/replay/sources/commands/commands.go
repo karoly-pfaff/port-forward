@@ -191,6 +191,12 @@ Flags:
   --list            List every known code (explain)
   --out <file>      Write the JSON output to a file
 
+Exit codes:
+  0  Output produced (including no codes / no differences)
+  1  Output-write or JSON-encode failure
+  2  Usage error, or unreadable / malformed / unsupported input
+     (there is no exit 3 — replay never contacts a runtime)
+
 This tool is offline and read-only. It never executes workflows, contacts the
 runtime, reads referenced config/policy/baseline/report files, mutates inputs, or
 uploads anything.
