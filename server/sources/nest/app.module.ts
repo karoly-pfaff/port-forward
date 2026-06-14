@@ -8,6 +8,7 @@ import { StatusModule } from "./api/status/status.module.js";
 import { ForwardsModule } from "./api/forwards/forwards.module.js";
 import { RuntimeModule } from "./api/runtime/runtime.module.js";
 import { ConfigModule } from "./api/config/config.module.js";
+import { ConnectionsModule } from "./api/connections/connections.module.js";
 import { ApiErrorEnvelopeFilter } from "./common/api-error-envelope.filter.js";
 
 /**
@@ -17,14 +18,23 @@ import { ApiErrorEnvelopeFilter } from "./common/api-error-envelope.filter.js";
  * an incremental, reversible migration foundation. It exposes a minimal,
  * contract-safe surface: a `/health` liveness probe, the migrated read-only API
  * routes (`GET /api/ports/advisory`, `GET /api/activity`, `GET /api/status`,
- * `GET /api/forwards`, `GET /api/runtime`, `GET /api/config/export`) plus
- * `DELETE /api/activity`, and a contract-shaped `/api/*` error envelope for
- * everything not yet migrated. The
+ * `GET /api/forwards`, `GET /api/runtime`, `GET /api/config/export`,
+ * `GET /api/connections`) plus `DELETE /api/activity`, and a contract-shaped
+ * `/api/*` error envelope for everything not yet migrated. The
  * global `ApiErrorEnvelopeFilter` is registered here (rather than in `main.ts`)
  * so it is active in test applications too.
  */
 @Module({
-  imports: [HealthModule, PortsModule, ActivityModule, StatusModule, ForwardsModule, RuntimeModule, ConfigModule],
+  imports: [
+    HealthModule,
+    PortsModule,
+    ActivityModule,
+    StatusModule,
+    ForwardsModule,
+    RuntimeModule,
+    ConfigModule,
+    ConnectionsModule,
+  ],
   providers: [{ provide: APP_FILTER, useClass: ApiErrorEnvelopeFilter }],
 })
 export class AppModule {}

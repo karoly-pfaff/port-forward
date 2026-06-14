@@ -73,6 +73,15 @@ slices, each guarded by `npm run validate:contract`.
   same fixed clock + the same seeded manager (`exportedAt` and rules deterministic,
   **no field normalized/stripped**). Shadow-only; config import/write stays with
   Express.
+- `GET /api/connections` (v1.14 Slice 11) — the last volatile read endpoint
+  (`generatedAt`). Both the Express route and the Nest `ConnectionsService` build
+  the snapshot via the shared pure builder `buildLiveConnections` (in
+  `sources/connections-snapshot.ts` — the route's former inline per-rule
+  aggregation), with `generatedAt` from the shared `ClockReader`. Read-only over a
+  narrow `ConnectionsReader`/`CONNECTIONS_READER`. Byte-for-byte parity-tested with
+  **seeded fixed `TcpConnectionInfo`/`UdpSessionInfo` records (no sockets/registries)**
+  and a pinned clock, so every field is deterministic (**no normalization/stripping**).
+  Shadow-only; no connection lifecycle/mutation.
 - All `/api/*` errors → the Portier `{ "errors": ["..."] }` envelope via the
   global `ApiErrorEnvelopeFilter` (v1.14 Slice 3): unmatched routes →
   `404 ["API route was not found."]`, controller-raised `400`s carry their
@@ -97,6 +106,7 @@ sources/nest/
     forwards/                   # GET /api/forwards (injected FORWARDS_READER; response: *.response.dto + mapper)
     runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; response: *.response.dto + mapper)
     config/                     # GET /api/config/export (volatile exportedAt: CONFIG_EXPORT_READER + shared CLOCK_READER; shared buildExportedConfig; response: *.response.dto + mapper)
+    connections/                # GET /api/connections (volatile generatedAt: CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; response: *.response.dto + mapper)
   common/
     clock.reader.ts              # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider for volatile-timestamp endpoints
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
