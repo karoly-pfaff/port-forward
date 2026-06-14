@@ -5,13 +5,16 @@ import { PortsAdvisoryQueryDto } from "./ports-advisory.query.dto.js";
 import type { PortsService } from "./ports.service.js";
 
 describe("PortsController.getAdvisory", () => {
-  it("delegates the validated query to the service and returns its advisories", () => {
+  it("delegates the validated query to the service and maps the result to the response DTO", () => {
     const advisories: PortAdvisory[] = [{ code: "LAN_EXPOSURE", severity: "warning", message: "x" }];
     const getAdvisories = vi.fn(() => advisories);
     const controller = new PortsController({ getAdvisories } as unknown as PortsService);
 
     const query = Object.assign(new PortsAdvisoryQueryDto(), { port: 48001, purpose: "forward" as const });
-    expect(controller.getAdvisory(query)).toBe(advisories);
+    const result = controller.getAdvisory(query);
+
     expect(getAdvisories).toHaveBeenCalledWith(query);
+    expect(result).toEqual(advisories); // byte-for-byte
+    expect(result).not.toBe(advisories); // mapped copy, not the raw service result
   });
 });

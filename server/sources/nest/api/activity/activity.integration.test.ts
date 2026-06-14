@@ -107,3 +107,58 @@ describe("GET /api/activity (Nest)", () => {
     expect(nonApi.body).not.toHaveProperty("errors");
   });
 });
+
+describe("DELETE /api/activity (Nest)", () => {
+  let nestApp: INestApplication;
+  let nest: ParityServer;
+  let express: ParityServer;
+  let store: ActivityStore;
+
+  beforeAll(async () => {
+    nestApp = await createNestApp();
+    // Same instance shared with Express (via app.get) so a clear from either
+    // runtime is observable in both, and DELETE responses compare byte-for-byte.
+    store = nestApp.get<ActivityStore>(ACTIVITY_STORE);
+    nest = await startNestServer(nestApp);
+    const expressApp = createApp(new ForwardManager(new EmptyStore()), { activity: store });
+    express = await startHandlerServer(expressApp as unknown as http.RequestListener);
+  });
+
+  afterAll(async () => {
+    await nest.close();
+    await express.close();
+  });
+
+  it("clears a populated store (204, empty body) and a subsequent GET is empty in both runtimes", async () => {
+    store.clear();
+    seed(store);
+    expect(store.list({ limit: 100 })).toHaveLength(3);
+
+    const response = await fetchApi(nest.baseUrl, BASE, { method: "DELETE" });
+    expect(response).toEqual({ status: 204, body: null });
+
+    expect(await fetchApi(nest.baseUrl, BASE)).toEqual({ status: 200, body: { events: [] } });
+    expect(await fetchApi(express.baseUrl, BASE)).toEqual({ status: 200, body: { events: [] } });
+  });
+
+  it("matches Express byte-for-byte for DELETE on a populated store", async () => {
+    store.clear();
+    seed(store);
+    const expressDelete = await fetchApi(express.baseUrl, BASE, { method: "DELETE" });
+    store.clear();
+    seed(store);
+    const nestDelete = await fetchApi(nest.baseUrl, BASE, { method: "DELETE" });
+
+    expect(diffApiResponses(expressDelete, nestDelete)).toEqual([]);
+    expect(expressDelete).toEqual({ status: 204, body: null });
+  });
+
+  it("matches Express byte-for-byte for DELETE on an empty store", async () => {
+    store.clear();
+    const expressDelete = await fetchApi(express.baseUrl, BASE, { method: "DELETE" });
+    const nestDelete = await fetchApi(nest.baseUrl, BASE, { method: "DELETE" });
+
+    expect(diffApiResponses(expressDelete, nestDelete)).toEqual([]);
+    expect(expressDelete).toEqual({ status: 204, body: null });
+  });
+});

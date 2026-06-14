@@ -1,18 +1,19 @@
 import { Controller, Get, Inject } from "@nestjs/common";
-import type { ForwardStatus } from "@portier/shared";
 import { StatusService } from "./status.service.js";
+import { toStatusListResponseDto, type StatusListResponseDto } from "./status-list.response.dto.js";
 
 /**
- * Transport adapter for `GET /api/status`. Delegates to the service and returns
- * the `ForwardStatus[]` array verbatim (matching the existing Express route).
- * Read-only and always `200`; no status logic lives here.
+ * Transport adapter for `GET /api/status`. No request input (no DTO needed).
+ * Delegates to the service and maps the domain status list to
+ * `StatusListResponseDto` at the HTTP boundary (matching the existing Express
+ * route). Read-only and always `200`; no status logic lives here.
  */
 @Controller("api/status")
 export class StatusController {
   constructor(@Inject(StatusService) private readonly status: StatusService) {}
 
   @Get()
-  list(): ForwardStatus[] {
-    return this.status.list();
+  list(): StatusListResponseDto {
+    return toStatusListResponseDto(this.status.list());
   }
 }

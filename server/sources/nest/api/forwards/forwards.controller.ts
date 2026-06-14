@@ -1,10 +1,11 @@
 import { Controller, Get, Inject } from "@nestjs/common";
-import type { ForwardRuleResponse } from "@portier/shared";
 import { ForwardsService } from "./forwards.service.js";
+import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwards-list.response.dto.js";
 
 /**
- * Transport adapter for `GET /api/forwards`. Delegates to the service and returns
- * the `ForwardRuleResponse[]` array verbatim (matching the existing Express
+ * Transport adapter for `GET /api/forwards`. No request input (no DTO needed).
+ * Delegates to the service and maps the domain rule-response list to
+ * `ForwardsListResponseDto` at the HTTP boundary (matching the existing Express
  * route). Read-only and always `200`; only the list read is migrated — the
  * write/lifecycle routes under `/api/forwards/...` stay with Express.
  */
@@ -13,7 +14,7 @@ export class ForwardsController {
   constructor(@Inject(ForwardsService) private readonly forwards: ForwardsService) {}
 
   @Get()
-  list(): ForwardRuleResponse[] {
-    return this.forwards.list();
+  list(): ForwardsListResponseDto {
+    return toForwardsListResponseDto(this.forwards.list());
   }
 }

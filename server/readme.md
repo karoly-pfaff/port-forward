@@ -36,10 +36,11 @@ slices, each guarded by `npm run validate:contract`.
   route. **Byte-for-byte identical to the existing Express route** (parity-tested)
   and served only under `start:nest`; the Express server still serves the
   default route unchanged.
-- `GET /api/activity` (v1.14 Slice 4) — read-only activity list over an injected
-  `ActivityReader` (`ACTIVITY_STORE` token, default = a fresh domain
-  `ActivityStore`). Byte-for-byte parity-tested; shadow-only under `start:nest`.
-  `DELETE /api/activity` (a mutation) stays with Express, deferred.
+- `GET /api/activity` (v1.14 Slice 4) + `DELETE /api/activity` (v1.14 Slice 8 —
+  first migrated write) over an injected store (`ACTIVITY_STORE` token, default =
+  a fresh domain `ActivityStore`). GET reads via `ActivityReader`; DELETE clears
+  via `ActivityClearer` and returns `204` empty (`@HttpCode(204)`, no DTO — no
+  input). Byte-for-byte parity-tested; shadow-only under `start:nest`.
 - `GET /api/status` (v1.14 Slice 5) — read-only per-rule status over a narrow
   `StatusReader` (`STATUS_READER` token, default = a trivial empty reader; the
   domain `ForwardManager` satisfies it and is bound in tests / when Nest is
@@ -68,10 +69,10 @@ sources/nest/
   app.module.ts                 # root module; imports feature modules; registers the global error filter
   health/                       # GET /health (controller → service → module)
   api/
-    ports/                      # GET /api/ports/advisory (controller → service → module)
-    activity/                   # GET /api/activity (controller → service → module; injected ACTIVITY_STORE)
-    status/                     # GET /api/status (controller → service → reader; injected STATUS_READER)
-    forwards/                   # GET /api/forwards (controller → service → reader; injected FORWARDS_READER)
+    ports/                      # GET /api/ports/advisory — request: *.query.dto + pipe; response: *.response.dto + mapper
+    activity/                   # GET + DELETE /api/activity (injected ACTIVITY_STORE; ActivityReader + ActivityClearer)
+    status/                     # GET /api/status (injected STATUS_READER; response: *.response.dto + mapper)
+    forwards/                   # GET /api/forwards (injected FORWARDS_READER; response: *.response.dto + mapper)
   common/
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
@@ -109,14 +110,22 @@ management server's default `127.0.0.1:47831`.
   features compose as modules. Controllers must **not hand-roll the `{ errors }`
   envelope** — raise `ApiBadRequestException(string[])` (or another API exception)
   and let the shared `ApiErrorEnvelopeFilter` produce the contract shape.
-- Validate/coerce query and body inputs with **DTO classes** (`class-validator` /
-  `class-transformer`) applied via `ApiValidationPipe(Dto)` (`@Query(new
-  ApiValidationPipe(Dto))`), matching the existing Express coercion exactly so
-  parity stays byte-for-byte; the pipe throws `ApiBadRequestException` →
-  `400 { errors }`. The pipe takes the DTO class **explicitly** (esbuild doesn't
-  emit `design:paramtypes`). An endpoint with no validation errors (pure
-  coercion-with-fallback, e.g. `/api/activity`) keeps its coercion in the service
-  rather than adding a transform-only DTO.
+- **Every migrated endpoint has explicit DTOs:** a **request DTO** for any
+  query/route/body input (validated via `ApiValidationPipe(Dto)`, `class-validator`
+  /`class-transformer`, matching Express coercion exactly), and an **explicit
+  response DTO** always — the boundary between domain/runtime data and HTTP JSON.
+  Controllers map the service result through a small pure `to*ResponseDto` mapper
+  (a fresh copy that preserves the Express JSON shape byte-for-byte) rather than
+  returning raw domain objects. The `@portier/shared` types are the REST contract
+  shape, so the mapper is a structural copy (it would become an explicit field
+  pick only to hide a future internal field).
+- Documented exceptions: an endpoint with **no input** needs no request DTO; a
+  `204`-empty response (`DELETE /api/activity`) has **no body → no response DTO**;
+  and a query that is pure silent coercion-with-fallback (always `200`, e.g.
+  `GET /api/activity`) keeps its coercion endpoint-local in the service rather
+  than adding a transform-only DTO. The request validation pipe takes the DTO
+  class **explicitly** (esbuild doesn't emit `design:paramtypes`) and throws
+  `ApiBadRequestException` → `400 { errors }`. Mappers/DTOs are 100% covered.
 - **API contract parity is mandatory** — every migration step keeps
   `npm run validate:contract` green (TS↔Go), and no public API path/DTO is
   renamed for cosmetic reasons. Each migrated endpoint is also checked
@@ -125,6 +134,13 @@ management server's default `127.0.0.1:47831`.
 - The existing Express server **remains the active runtime** until a NestJS
   replacement is explicitly validated (contract + runtime smoke + E2E).
 - No endpoint is migrated without tests and contract validation.
+- A **write/mutation** endpoint adds a narrow write interface (e.g.
+  `ActivityClearer { clear(): void }`) alongside the read one; mutation parity is
+  proven against the **same seeded store instance** shared with Express, and a
+  subsequent read confirms the mutation. Match the Express HTTP status with
+  `@HttpCode(...)` (Nest defaults `DELETE` to `200`; a `204`-empty Express route
+  needs `@HttpCode(204)` + a `void` return). No DTO when the endpoint has no
+  query/body input.
 - An endpoint that needs runtime/domain state is wired through a **narrow
   injection token + interface** (e.g. `ACTIVITY_STORE`/`ActivityReader`,
   `STATUS_READER`/`StatusReader`), with a fake/seeded instance in tests —

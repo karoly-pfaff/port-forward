@@ -4,7 +4,7 @@ import { ForwardsController } from "./forwards.controller.js";
 import type { ForwardsService } from "./forwards.service.js";
 
 describe("ForwardsController.list", () => {
-  it("delegates to the service and returns its rule responses", () => {
+  it("delegates to the service and maps the result to the response DTO", () => {
     const responses: ForwardRuleResponse[] = [
       {
         id: "r1",
@@ -20,6 +20,9 @@ describe("ForwardsController.list", () => {
     ];
     const controller = new ForwardsController({ list: () => responses } as unknown as ForwardsService);
 
-    expect(controller.list()).toBe(responses);
+    const result = controller.list();
+
+    expect(result).toEqual(responses); // byte-for-byte
+    expect(result).not.toBe(responses); // mapped copy
   });
 });
