@@ -36,8 +36,12 @@ slices, each guarded by `npm run validate:contract`.
   route. **Byte-for-byte identical to the existing Express route** (parity-tested)
   and served only under `start:nest`; the Express server still serves the
   default route unchanged.
-- Unmatched `/api/*` routes → `404 { "errors": ["API route was not found."] }`
-  via the global `ApiNotFoundFilter`, matching the existing contract envelope.
+- All `/api/*` errors → the Portier `{ "errors": ["..."] }` envelope via the
+  global `ApiErrorEnvelopeFilter` (v1.14 Slice 3): unmatched routes →
+  `404 ["API route was not found."]`, controller-raised `400`s carry their
+  messages, unknown errors → `500 ["Internal server error."]` (no leak). Non-API
+  routes keep NestJS's default error shape. Controllers raise
+  `ApiBadRequestException(string[])` rather than hand-rolling the envelope.
 
 Layout:
 
@@ -47,12 +51,14 @@ sources/nest/
   bootstrap.ts                  # bootstrap(listen) + reportBootstrapFailure(error) — fully covered
   nest-options.ts               # resolveNestListenOptions(env) — fully covered
   app.factory.ts                # createNestApp() — builds the app without listening (shared by bootstrap + tests)
-  app.module.ts                 # root module; imports feature modules; registers the global 404 filter
+  app.module.ts                 # root module; imports feature modules; registers the global error filter
   health/                       # GET /health (controller → service → module)
   api/
     ports/                      # GET /api/ports/advisory (controller → service → module)
   common/
-    api-not-found.filter.ts      # /api/* → contract 404 envelope
+    api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
+    api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
+    api-errors.ts                # ApiBadRequestException(string[]) — controllers raise this, not a literal
   testing/
     api-parity.ts               # Express↔Nest parity harness (boot, fetch, deterministic compare)
 ```
@@ -82,7 +88,9 @@ management server's default `127.0.0.1:47831`.
 ## Migration rules
 
 - Controllers are **transport adapters only**; behaviour lives in services;
-  features compose as modules.
+  features compose as modules. Controllers must **not hand-roll the `{ errors }`
+  envelope** — raise `ApiBadRequestException(string[])` (or another API exception)
+  and let the shared `ApiErrorEnvelopeFilter` produce the contract shape.
 - **API contract parity is mandatory** — every migration step keeps
   `npm run validate:contract` green (TS↔Go), and no public API path/DTO is
   renamed for cosmetic reasons. Each migrated endpoint is also checked

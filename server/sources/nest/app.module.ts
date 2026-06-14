@@ -3,7 +3,7 @@ import { Module } from "@nestjs/common";
 import { APP_FILTER } from "@nestjs/core";
 import { HealthModule } from "./health/health.module.js";
 import { PortsModule } from "./api/ports/ports.module.js";
-import { ApiNotFoundFilter } from "./common/api-not-found.filter.js";
+import { ApiErrorEnvelopeFilter } from "./common/api-error-envelope.filter.js";
 
 /**
  * Root module of the NestJS server scaffold (v1.14).
@@ -12,12 +12,12 @@ import { ApiNotFoundFilter } from "./common/api-not-found.filter.js";
  * an incremental, reversible migration foundation. It exposes a minimal,
  * contract-safe surface: a `/health` liveness probe, the first migrated
  * read-only API route (`GET /api/ports/advisory` via `PortsModule`), and a
- * contract-shaped `/api/*` 404 for everything not yet migrated. The global
- * `ApiNotFoundFilter` is registered here (rather than in `main.ts`) so it is
- * active in test applications too.
+ * contract-shaped `/api/*` error envelope for everything not yet migrated. The
+ * global `ApiErrorEnvelopeFilter` is registered here (rather than in `main.ts`)
+ * so it is active in test applications too.
  */
 @Module({
   imports: [HealthModule, PortsModule],
-  providers: [{ provide: APP_FILTER, useClass: ApiNotFoundFilter }],
+  providers: [{ provide: APP_FILTER, useClass: ApiErrorEnvelopeFilter }],
 })
 export class AppModule {}

@@ -8,6 +8,17 @@ All notable changes to Portier are documented here.
 
 v1.14 is an **architecture-migration release, not a feature release**: it moves the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. The Go service remains the preferred runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (still **234/234**). The migration is incremental and reversible — the existing Express server stays the active runtime until a NestJS replacement is explicitly validated.
 
+### Added — Slice 3: shared NestJS `/api` error-envelope layer
+
+A reusable error layer so migrated Nest controllers never hand-roll the Portier `{ errors: [...] }` envelope.
+
+- **Shared error-envelope layer** (`server/sources/nest/common/`): `api-error-envelope.ts` holds the pure `toApiError(exception)` mapping (+ `isApiPath`); `api-error-envelope.filter.ts` is a global catch-all `ApiErrorEnvelopeFilter` (registered via `APP_FILTER`) that applies the envelope to `/api/*` routes and leaves non-API routes on NestJS's default error shape; `api-errors.ts` adds `ApiBadRequestException(errors: string[])` so controllers raise a `400` with a plain `string[]` and the envelope shape lives in one place.
+- **Deterministic mapping** (`toApiError`): an `HttpException` whose body is `{ errors: string[] }` keeps those messages; an unmatched-route `NotFoundException` → `404 { errors: ["API route was not found."] }` (preserves prior behavior); any other `HttpException` → its message wrapped as one error; any non-HTTP/unknown value → `500 { errors: ["Internal server error."] }` with **no stack trace or raw exception leaked**.
+- **Controller cleanup:** `GET /api/ports/advisory` now throws `ApiBadRequestException(result.errors)` instead of `BadRequestException({ errors })` — no envelope literal in the controller. The success response and behaviour are unchanged.
+- **Replaced** the Slice-1 `api-not-found.filter.ts` (which only caught `NotFoundException`) with the broader catch-all filter; the `/api/*` 404 envelope and non-API no-leak behaviour are preserved (re-confirmed by the existing integration + parity tests).
+- **Parity unchanged:** the Express↔Nest parity suite still passes byte-for-byte (valid / invalid-port / invalid-purpose / missing-port), `/api/*` 404 still returns the envelope, non-API 404 still does not leak it, `/health` still works. `validate:contract` stays **234/234** (Express untouched).
+- **100% coverage of all new/changed Nest code** (envelope mapping, filter, `ApiBadRequestException`, ports controller); 75 nest tests (every `toApiError` and filter branch, including the non-API string-body and unknown-error 500 branches via a mock `ArgumentsHost`). Server coverage 99.0%/95.0%/100% (gate 95/92/99 PASS, none lowered).
+
 ### Added — Slice 2: API parity harness + first read-only endpoint migration
 
 A contract-safe parity harness and the first `/api` route migrated into Nest, with the Express server still the default runtime.
