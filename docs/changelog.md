@@ -4,9 +4,11 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — Local History & Observability (v1.12)
+## [1.12.0] — 2026-06-14 — Local History & Observability
 
-v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change).
+v1.12 stays **local-first** and adds local observability around safe operations — no telemetry, no background services, no schedulers, no mutation, no enforcement, no uploads. All new tooling lives in the Go CLI as a **pure API client**; `validate:contract` stays **234/234** (no runtime/API/server/service/client contract change). The **CLI coverage gate remains 97%** (actual ~97.8%); no gates were lowered.
+
+The release adds an **opt-in compact local workflow run history** — `portier workflow run --file <workflow.json> --record-history` records one compact entry per completed run (run id, time, workflow name, result, summary counts, compact per-step `id`/`type`/`status`/`exitCode`, and the deduped+sorted emitted codes) in `<user-config-dir>/portier/workflow-history.json`, **bounded to the latest 100 runs**. It is inspected and managed with `workflow history list` / `show <run-id>` / `clear --yes`; archived with `workflow history export --out <file>` (a compact snapshot with an explicit all-false `safety` object and `--json --out` byte parity); navigated with `list`/`stats` **filters** (`--result`, `--workflow`, `--code`, `--limit`, AND-combined); summarized with `workflow history stats` (result/workflow/step-status/step-type/code counts); and trimmed with `workflow history prune` (retention `--keep <n>` or filtered `--result`/`--workflow`/`--code`, requiring `--yes`). A **Slice 6 consistency audit** verified the command surface, JSON schemas, exit codes, safety, and architecture (**PASS**). **Safety boundaries** (held throughout): history is opt-in and recorded only after a completed run; it stores **compact local metadata only** — never raw configs/policies, full reports, file contents, logs, environment variables, process data, secrets, runtime URLs, or tokens; history commands are fully **offline** (no runtime contact, no workflow execution, no referenced-file reads, no raw-report scanning); prune/clear require `--yes`; and there is no telemetry, upload, sync, scheduler, background automation, runtime mutation, policy enforcement, config apply/import, or shell execution.
 
 ### Slice 6: Workflow history toolkit consistency audit — PASS
 
