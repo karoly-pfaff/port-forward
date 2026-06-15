@@ -4,6 +4,7 @@ import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";
 import { ReorderForwardRulesService } from "./reorder-forward-rules.service.js";
+import { StartForwardGroupService } from "./start-forward-group.service.js";
 import { StartForwardRuleService } from "./start-forward-rule.service.js";
 import { StopForwardGroupService } from "./stop-forward-group.service.js";
 import { StopForwardRuleService } from "./stop-forward-rule.service.js";
@@ -13,6 +14,7 @@ import { createDefaultDiagnosticReader, DIAGNOSTIC_READER } from "./forwards-dia
 import { emptyForwardsReader, FORWARDS_READER } from "./forwards.reader.js";
 import { ForwardsService } from "./forwards.service.js";
 import {
+  createDefaultForwardGroupStarter,
   createDefaultForwardGroupStopper,
   createDefaultForwardRuleCreator,
   createDefaultForwardRuleDeleter,
@@ -20,6 +22,7 @@ import {
   createDefaultForwardRuleStarter,
   createDefaultForwardRuleStopper,
   createDefaultForwardRuleUpdater,
+  FORWARD_GROUP_STARTER,
   FORWARD_GROUP_STOPPER,
   FORWARD_RULE_CREATOR,
   FORWARD_RULE_DELETER,
@@ -35,10 +38,10 @@ import {
  * (delete, write), the lifecycle pair `POST /api/forwards/:id/start` and
  * `POST /api/forwards/:id/stop`, `POST /api/forwards/reorder` (reorder, write),
  * `POST /api/forwards/:id/diagnose` (diagnose, read-only), and
- * `POST /api/forwards/groups/:group/stop` (group stop, write — the first migrated
- * group action; group START stays with Express for now). The `FORWARDS_READER`
+ * and the group-action pair `POST /api/forwards/groups/:group/stop` and
+ * `POST /api/forwards/groups/:group/start` (write). The `FORWARDS_READER`
  * token defaults to an empty reader and the write/lifecycle tokens plus the
- * `DIAGNOSTIC_READER`/`FORWARD_GROUP_STOPPER` to fresh isolated in-memory managers
+ * `DIAGNOSTIC_READER`/`FORWARD_GROUP_STOPPER`/`FORWARD_GROUP_STARTER` to fresh isolated in-memory managers
  * (the scaffold has no real runtime wired); when the NestJS server becomes the
  * active runtime they are bound to the shared `ForwardManager`, and tests override
  * them with a seeded manager. The diagnose service also injects the shared
@@ -57,6 +60,7 @@ import {
     ReorderForwardRulesService,
     DiagnoseForwardRuleService,
     StopForwardGroupService,
+    StartForwardGroupService,
     { provide: FORWARDS_READER, useValue: emptyForwardsReader },
     { provide: FORWARD_RULE_CREATOR, useFactory: createDefaultForwardRuleCreator },
     { provide: FORWARD_RULE_UPDATER, useFactory: createDefaultForwardRuleUpdater },
@@ -66,6 +70,7 @@ import {
     { provide: FORWARD_RULES_REORDERER, useFactory: createDefaultForwardRulesReorderer },
     { provide: DIAGNOSTIC_READER, useFactory: createDefaultDiagnosticReader },
     { provide: FORWARD_GROUP_STOPPER, useFactory: createDefaultForwardGroupStopper },
+    { provide: FORWARD_GROUP_STARTER, useFactory: createDefaultForwardGroupStarter },
     { provide: CLOCK_READER, useValue: defaultClockReader },
   ],
 })

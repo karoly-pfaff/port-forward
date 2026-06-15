@@ -1,6 +1,7 @@
 import type { ForwardRule } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import {
+  createDefaultForwardGroupStarter,
   createDefaultForwardGroupStopper,
   createDefaultForwardRuleCreator,
   createDefaultForwardRuleDeleter,
@@ -112,6 +113,13 @@ describe("createDefaultForwardGroupStopper", () => {
     await stopper.addRule({ ...RULE, id: "g1", group: "web" });
     const results = await stopper.stopGroup("web");
     expect(results).toEqual([{ ruleId: "g1", ruleName: "Web", status: "skipped", reason: "not_running" }]);
+  });
+});
+
+describe("createDefaultForwardGroupStarter", () => {
+  it("returns an empty result array for a group with no rules (the route maps that to 404)", async () => {
+    const starter = createDefaultForwardGroupStarter();
+    expect(await starter.startGroup("nope")).toEqual([]);
   });
 });
 

@@ -110,17 +110,19 @@ describe("generateOpenApiDocument", () => {
     expect(doc.components?.schemas?.UpdateForwardRuleBodyDto).toBeDefined();
   });
 
-  it("documents POST /api/forwards/groups/{group}/stop with its path param, 200 summary, and 400/404 errors", () => {
-    const stopGroup = doc.paths["/api/forwards/groups/{group}/stop"]?.post;
-    expect(stopGroup).toBeDefined();
-    const params = (stopGroup?.parameters ?? []) as Array<{ name: string; in: string }>;
-    expect(params.some((p) => p.name === "group" && p.in === "path")).toBe(true);
-    const responses = stopGroup?.responses ?? {};
-    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
-    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("GroupActionResponseDto");
-    for (const status of ["400", "404"]) {
-      const r = responses[status] as { content?: Record<string, { schema?: { $ref?: string } }> };
-      expect(r?.content?.["application/json"]?.schema?.$ref, `status ${status}`).toContain("ApiErrorResponseDto");
+  it("documents the group stop + start pair with their path param, 200 summary, and 400/404 errors", () => {
+    for (const path of ["/api/forwards/groups/{group}/stop", "/api/forwards/groups/{group}/start"]) {
+      const op = doc.paths[path]?.post;
+      expect(op, `${path} migrated`).toBeDefined();
+      const params = (op?.parameters ?? []) as Array<{ name: string; in: string }>;
+      expect(params.some((p) => p.name === "group" && p.in === "path"), `${path} group param`).toBe(true);
+      const responses = op?.responses ?? {};
+      const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+      expect(ok?.content?.["application/json"]?.schema?.$ref, `${path} 200`).toContain("GroupActionResponseDto");
+      for (const status of ["400", "404"]) {
+        const r = responses[status] as { content?: Record<string, { schema?: { $ref?: string } }> };
+        expect(r?.content?.["application/json"]?.schema?.$ref, `${path} ${status}`).toContain("ApiErrorResponseDto");
+      }
     }
     // The summary schema references the per-rule result item schema.
     const schemas = doc.components?.schemas ?? {};

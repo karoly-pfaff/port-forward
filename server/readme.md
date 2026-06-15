@@ -98,9 +98,10 @@ Slice 16) — plus the single-rule lifecycle pair, **start**
 (`POST /api/forwards/:id/start`, Slice 17) and **stop**
 (`POST /api/forwards/:id/stop`, Slice 18), **reorder**
 (`POST /api/forwards/reorder`, Slice 19), **diagnose**
-(`POST /api/forwards/:id/diagnose`, Slice 20), and the first group action, **group
-stop** (`POST /api/forwards/groups/:group/stop`, Slice 21 — group *start* stays with
-Express for now). Every endpoint below is **shadow-only** — served by the
+(`POST /api/forwards/:id/diagnose`, Slice 20), and the **group-action pair** —
+**group stop** (`POST /api/forwards/groups/:group/stop`, Slice 21) and **group
+start** (`POST /api/forwards/groups/:group/start`, Slice 22). The entire
+`/api/forwards` surface is now migrated. Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -121,6 +122,7 @@ unchanged. `validate:contract` is 234/234.
 | `POST /api/forwards/reorder` | `api/forwards/` | `ReorderForwardRulesBodyDto` + pipe⁶ | `ForwardRuleResponseDto[]` (`200`) | `FORWARD_RULES_REORDERER` (`ForwardRulesReorderer`) | — |
 | `POST /api/forwards/:id/diagnose` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `RuleDiagnosticsResultDto` (`200`)⁷ | `DIAGNOSTIC_READER` + `CLOCK_READER` | `diagnoseRule` (`diagnosedAt`) |
 | `POST /api/forwards/groups/:group/stop` | `api/forwards/` | `:group` (`@ApiParam`)⁸ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STOPPER` (`ForwardGroupStopper`) | — |
+| `POST /api/forwards/groups/:group/start` | `api/forwards/` | `:group` (`@ApiParam`)⁸ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STARTER` (`ForwardGroupStarter`) | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
@@ -222,13 +224,23 @@ rules is a deterministic no-op (every result `skipped`/`not_running`, NO socket)
 byte-for-byte parity needs no sockets: it uses **separate seeded `enabled:false`
 managers** (success → all `not_running` skips + GET-unchanged, `404` unknown group,
 `400` empty group, encoded-group normalization). `GroupActionResponse` has no volatile
-field, so no clock seam is needed. **Group *start* (which opens sockets) is deferred.**
+field, so no clock seam is needed. **Group start** (`POST /api/forwards/groups/:group/start`,
+Slice 22) is the lifecycle pair — same validation/normalization/response DTO
+(`ForwardGroupStarter`/`FORWARD_GROUP_STARTER` + `startGroup`), `200` +
+`GroupActionResponse`, `400`/`404` identically. It opens sockets for *stopped* rules,
+but the `GroupActionResponse` carries NO volatile field (results are `started`/
+`skipped`/`failed`, no `startedAt`), so byte-for-byte parity is achievable: the
+`400`/`404`/encoded-normalization cases are socket-free (separate managers), the
+success case uses the **idempotent already-running** path on a **shared** manager
+(open the listener once via Test-A `startRuleStable`, then both runtimes return the
+identical `already_running` skips — 1 socket, `stopAll()` cleanup), and a separate
+single-runtime cold-start test starts a real listener through the Nest endpoint
+(`started` + `GET /api/status` running) and `stopAll()`s afterwards. The group-action
+pair (and the whole `/api/forwards` surface) is now migrated.
 
-**Deferred (Milestone 3+, write/lifecycle/static):** group **start**
-(`POST /api/forwards/groups/:group/start`), `POST /api/config/import`,
+**Deferred (Milestone 3+, config/static):** `POST /api/config/import`,
 `POST /api/config/plan`/`apply`, and static client serving — all stay with Express.
-The next slice migrates group start (the lifecycle pair to group stop) or begins the
-config-API milestone.
+The next slice begins the config-API milestone.
 
 Layout:
 

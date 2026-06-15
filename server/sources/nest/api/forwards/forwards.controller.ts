@@ -25,6 +25,7 @@ import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";
 import { ReorderForwardRulesService } from "./reorder-forward-rules.service.js";
+import { StartForwardGroupService } from "./start-forward-group.service.js";
 import { StartForwardRuleService } from "./start-forward-rule.service.js";
 import { StopForwardGroupService } from "./stop-forward-group.service.js";
 import { StopForwardRuleService } from "./stop-forward-rule.service.js";
@@ -63,7 +64,8 @@ export class ForwardsController {
     @Inject(StopForwardRuleService) private readonly stopService: StopForwardRuleService,
     @Inject(ReorderForwardRulesService) private readonly reorderService: ReorderForwardRulesService,
     @Inject(DiagnoseForwardRuleService) private readonly diagnoseService: DiagnoseForwardRuleService,
-    @Inject(StopForwardGroupService) private readonly stopGroupService: StopForwardGroupService
+    @Inject(StopForwardGroupService) private readonly stopGroupService: StopForwardGroupService,
+    @Inject(StartForwardGroupService) private readonly startGroupService: StartForwardGroupService
   ) {}
 
   @Get()
@@ -211,5 +213,24 @@ export class ForwardsController {
   @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rules belong to that group." })
   async stopGroup(@Param("group") group: string): Promise<GroupActionResponseDto> {
     return toGroupActionResponseDto(await this.stopGroupService.stop(group));
+  }
+
+  @Post("groups/:group/start")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Start a group of forward rules",
+    description:
+      "Starts every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — " +
+      "never mutates rule definitions, order, autostart, or group; autostart/enabled is not a precondition. A rule " +
+      "that is already running is skipped (already_running, no new socket); the response summarizes per-rule " +
+      "results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 " +
+      "(matching Express; NestJS would otherwise default POST to 201).",
+  })
+  @ApiParam({ name: "group", type: String, description: "The group label (URL-encoded)." })
+  @ApiOkResponse({ type: GroupActionResponseDto, description: "Per-rule results + counts for the group start." })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto, description: "The group name is empty or invalid." })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rules belong to that group." })
+  async startGroup(@Param("group") group: string): Promise<GroupActionResponseDto> {
+    return toGroupActionResponseDto(await this.startGroupService.start(group));
   }
 }

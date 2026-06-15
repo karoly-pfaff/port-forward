@@ -636,6 +636,59 @@
         ]
       }
     },
+    "/api/forwards/groups/{group}/start": {
+      "post": {
+        "description": "Starts every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group; autostart/enabled is not a precondition. A rule that is already running is skipped (already_running, no new socket); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "operationId": "ForwardsController_startGroup",
+        "parameters": [
+          {
+            "name": "group",
+            "required": true,
+            "in": "path",
+            "description": "The group label (URL-encoded).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-rule results + counts for the group start.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupActionResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The group name is empty or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No rules belong to that group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Start a group of forward rules",
+        "tags": [
+          "forwards"
+        ]
+      }
+    },
     "/api/runtime": {
       "get": {
         "description": "Returns runtime/version/uptime/process metadata.",

@@ -6,6 +6,7 @@ import type { CreateForwardRuleService } from "./create-forward-rule.service.js"
 import type { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import type { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";
 import type { ReorderForwardRulesService } from "./reorder-forward-rules.service.js";
+import type { StartForwardGroupService } from "./start-forward-group.service.js";
 import type { StartForwardRuleService } from "./start-forward-rule.service.js";
 import type { StopForwardGroupService } from "./stop-forward-group.service.js";
 import type { StopForwardRuleService } from "./stop-forward-rule.service.js";
@@ -62,6 +63,7 @@ function controller(overrides: {
   reorder?: (ids: string[]) => Promise<ForwardRuleResponse[]>;
   diagnose?: (id: string) => Promise<RuleDiagnosticsResult>;
   stopGroup?: (group: string) => Promise<GroupActionResponse>;
+  startGroup?: (group: string) => Promise<GroupActionResponse>;
 }): ForwardsController {
   return new ForwardsController(
     { list: overrides.list ?? (() => []) } as unknown as ForwardsService,
@@ -72,7 +74,8 @@ function controller(overrides: {
     { stop: overrides.stop ?? (async () => STATUS) } as unknown as StopForwardRuleService,
     { reorder: overrides.reorder ?? (async () => [RESPONSE]) } as unknown as ReorderForwardRulesService,
     { diagnose: overrides.diagnose ?? (async () => DIAGNOSTICS) } as unknown as DiagnoseForwardRuleService,
-    { stop: overrides.stopGroup ?? (async () => GROUP_ACTION) } as unknown as StopForwardGroupService
+    { stop: overrides.stopGroup ?? (async () => GROUP_ACTION) } as unknown as StopForwardGroupService,
+    { start: overrides.startGroup ?? (async () => GROUP_ACTION) } as unknown as StartForwardGroupService
   );
 }
 
@@ -215,5 +218,22 @@ describe("ForwardsController.stopGroup", () => {
     expect(receivedGroup).toBe("web"); // path group passed through
     expect(result).toEqual(GROUP_ACTION); // byte-for-byte
     expect(result).not.toBe(GROUP_ACTION); // mapped copy (fresh object)
+  });
+});
+
+describe("ForwardsController.startGroup", () => {
+  it("delegates the group to the start-group service and maps the summary to the response DTO", async () => {
+    let receivedGroup: string | undefined;
+    const started: GroupActionResponse = { ...GROUP_ACTION, action: "start" };
+    const result = await controller({
+      startGroup: async (group) => {
+        receivedGroup = group;
+        return started;
+      },
+    }).startGroup("web");
+
+    expect(receivedGroup).toBe("web"); // path group passed through
+    expect(result).toEqual(started); // byte-for-byte
+    expect(result).not.toBe(started); // mapped copy (fresh object)
   });
 });

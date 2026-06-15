@@ -156,6 +156,30 @@ export function createDefaultForwardGroupStopper(): ForwardGroupStopper {
 }
 
 /**
+ * Narrow lifecycle capability for `POST /api/forwards/groups/:group/start`. The real
+ * domain `ForwardManager` satisfies it via `startGroup`; tests bind a seeded manager.
+ * `startGroup` iterates the rules sharing the group (in rule order) and starts each —
+ * an already-running rule is a `skipped`/`already_running` no-op (NO new socket),
+ * a stopped rule is started (`started`, opens its forwarder), a start error is
+ * `failed`; `enabled`/autostart is NOT a precondition (parity with single-rule
+ * start). It returns one result per rule (an empty array means no rule matched the
+ * group → the route returns `404`) and never mutates rule definitions/order/
+ * `enabled`/`group`. The `GroupActionResponse` carries NO volatile field, so parity
+ * is byte-for-byte even across separate managers on different ports.
+ */
+export interface ForwardGroupStarter {
+  startGroup(group: string): Promise<GroupActionResult[]>;
+}
+
+/** Injection token for the group starter. */
+export const FORWARD_GROUP_STARTER = "FORWARD_GROUP_STARTER";
+
+/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (an empty group → `404`). */
+export function createDefaultForwardGroupStarter(): ForwardGroupStarter {
+  return new ForwardManager(new InMemoryRuleStore());
+}
+
+/**
  * Narrow write capability for `POST /api/forwards/reorder`. The real domain
  * `ForwardManager` satisfies it via `reorderRules` + `listRules`; tests bind a
  * seeded manager shared with Express for parity. `reorderRules` validates that
