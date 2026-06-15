@@ -101,8 +101,9 @@ Slice 16) — plus the single-rule lifecycle pair, **start**
 (`POST /api/forwards/:id/diagnose`, Slice 20), and the **group-action pair** —
 **group stop** (`POST /api/forwards/groups/:group/stop`, Slice 21) and **group
 start** (`POST /api/forwards/groups/:group/start`, Slice 22). The entire
-`/api/forwards` surface is migrated, and the config milestone has begun with the
-**non-mutating** `POST /api/config/plan` dry-run (Slice 23). Every endpoint below is **shadow-only** — served by the
+`/api/forwards` surface is migrated, and the config milestone has advanced with the
+**non-mutating** `POST /api/config/plan` dry-run (Slice 23) and the **mutating**
+`POST /api/config/import` (Slice 24). Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -127,6 +128,7 @@ unchanged. `validate:contract` is 234/234.
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `POST /api/config/plan` | `api/config/` | `ConfigPlanBodyDto`⁹ | `ConfigPlanResponseDto` (`200`) | `CONFIG_PLAN_READER` + `CLOCK_READER` | `buildConfigPlan` (`generatedAt`) |
+| `POST /api/config/import` | `api/config/` | `ConfigImportBodyDto`¹⁰ | `ConfigImportResponseDto` (`200`) / `ConfigImportErrorResponseDto` (`422`)¹⁰ | `CONFIG_IMPORTER` (`ConfigImporter`) | — |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
 
 Every migrated endpoint has a byte-for-byte Express↔Nest parity test
@@ -259,10 +261,34 @@ plan, add/update/unchanged drift (with a before/after manager-`listRules()` asse
 proving non-mutation), invalid-desired-rule → plan error (still `200`), and
 `desired: null` → plan error — all match Express with no field stripped.
 
-**Deferred (config/static):** the **mutating** config endpoints
-`POST /api/config/import` and `POST /api/config/apply`, plus static client serving —
-all stay with Express. The next slice migrates a mutating config endpoint (import or
-apply) with rollback parity, or static serving.
+¹⁰ **Config import** (`POST /api/config/import`, Slice 24 — the first MUTATING config
+endpoint) imports a config (`{mode, config}`) in `replace`/`merge` mode via a narrow
+`ConfigImporter`/`CONFIG_IMPORTER` (`importConfig` + `listRules`; domain
+`ForwardManager`), reusing the SHARED `ForwardManager.importConfig` (same
+replace/merge mutation, duplicate-binding/merge-conflict rejection, **persist
+rollback**, enabled-rule start, and `config.imported`/`config.import.failed` activity).
+The body validation is **delegated** to inline service checks to match Express's
+SHORT-CIRCUIT order exactly (`400 ["mode must be replace or merge."]` first, then
+`400 ["config must be a valid Portier config object with version 1 and a rules
+array."]` — class-validator would accumulate both and diverge), so `ConfigImportBodyDto`
+is documentation/typing only. The **`200 {result, rules}`** (import result + the full
+advisory-decorated rule list) and the **`422 {errors, result}`** (import errors WITH
+the result — NOT the plain `{errors}` envelope) are **RETURNED with their status via
+`@Res({ passthrough: true })`** (matching Express's `response.status(...).json(...)`),
+since the `422` body carries `result` and so must NOT flow through the error-envelope
+filter (`toApiError` strips extra fields); only the two `400`s are thrown as
+`ApiBadRequestException` and DO flow through the filter. The import response has **no
+volatile field**, so no clock seam is needed. All `422` paths reject BEFORE mutating.
+Byte-for-byte parity uses **separate seeded managers** (import mutates) with fixed-id
+`enabled:false` rules (deterministic, socket-free): `400` mode/config, `200` replace
+into empty + over seeded (with `GET /api/forwards` + `GET /api/config/export`
+state-after parity), `422` invalid rule (+ no-mutation assertion), and `422` duplicate
+binding. Rollback on persist failure is inherited from `importConfig` (manager-tested,
+Test-D) and unit-covered via a throwing fake (→ generic `500`).
+
+**Deferred (config/static):** the mutating `POST /api/config/apply` (volatile
+`appliedAt` + dry-run/destructive-gating/rollback) and static client serving — both
+stay with Express. The next slice migrates `apply`, or static serving.
 
 Layout:
 

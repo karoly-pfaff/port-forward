@@ -48,7 +48,29 @@ describe("generateOpenApiDocument", () => {
     expect(doc.paths["/api/runtime"]?.get).toBeDefined();
     expect(doc.paths["/api/config/export"]?.get).toBeDefined();
     expect(doc.paths["/api/config/plan"]?.post).toBeDefined();
+    expect(doc.paths["/api/config/import"]?.post).toBeDefined();
     expect(doc.paths["/api/connections"]?.get).toBeDefined();
+  });
+
+  it("documents POST /api/config/import with its body, 200/422 responses, and 400 error", () => {
+    const imp = doc.paths["/api/config/import"]?.post;
+    expect(imp).toBeDefined();
+    const body = (imp as { requestBody?: { content?: Record<string, { schema?: { $ref?: string } }> } }).requestBody;
+    expect(body?.content?.["application/json"]?.schema?.$ref).toContain("ConfigImportBodyDto");
+    const responses = imp?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("ConfigImportResponseDto");
+    const unprocessable = responses["422"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(unprocessable?.content?.["application/json"]?.schema?.$ref).toContain("ConfigImportErrorResponseDto");
+    const badRequest = responses["400"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(badRequest?.content?.["application/json"]?.schema?.$ref).toContain("ApiErrorResponseDto");
+    const schemas = doc.components?.schemas ?? {};
+    for (const name of ["ConfigImportBodyDto", "ConfigImportResponseDto", "ConfigImportErrorResponseDto", "ImportResultDto"]) {
+      expect(schemas[name], `schema ${name}`).toBeDefined();
+    }
+    // The config export + plan docs remain intact.
+    expect(doc.paths["/api/config/export"]?.get).toBeDefined();
+    expect(doc.paths["/api/config/plan"]?.post).toBeDefined();
   });
 
   it("documents POST /api/config/plan with its body, 200 plan response, and 400 error", () => {

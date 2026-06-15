@@ -778,6 +778,59 @@
         ]
       }
     },
+    "/api/config/import": {
+      "post": {
+        "description": "Imports a Portier config in `replace` (replace all rules) or `merge` (add non-conflicting rules) mode. Returns 200 with the import result + the full rule list on success, or 422 with the errors + result when the import reports validation/duplicate-binding/merge-conflict errors (rejected before any mutation). An invalid mode or config returns 400. Unlike `plan` (a dry-run), import MUTATES the rules; enabled imported rules start their forwarders.",
+        "operationId": "ConfigImportController_import",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigImportBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Import succeeded; the full rule list is returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigImportResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid mode or config.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The import reported errors (no mutation).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigImportErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Import a config",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/connections": {
       "get": {
         "description": "Returns live TCP connections, UDP sessions, and per-rule summaries.",
@@ -1893,6 +1946,104 @@
           "operations",
           "errors",
           "warnings"
+        ]
+      },
+      "ConfigImportBodyDto": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "merge"
+            ],
+            "description": "Import mode: replace all rules, or merge non-conflicting rules."
+          },
+          "config": {
+            "description": "The Portier config to import (version 1 + a rules array).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConfigExportResponseDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "mode",
+          "config"
+        ]
+      },
+      "ImportResultDto": {
+        "type": "object",
+        "properties": {
+          "imported": {
+            "type": "number",
+            "description": "Number of rules imported."
+          },
+          "skipped": {
+            "type": "number",
+            "description": "Number of rules skipped (merge conflicts)."
+          },
+          "errors": {
+            "description": "Import error messages (empty on success).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "imported",
+          "skipped",
+          "errors"
+        ]
+      },
+      "ConfigImportResponseDto": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "description": "The import outcome counts.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImportResultDto"
+              }
+            ]
+          },
+          "rules": {
+            "description": "The full rule list after import (with advisories).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForwardRuleResponseDto"
+            }
+          }
+        },
+        "required": [
+          "result",
+          "rules"
+        ]
+      },
+      "ConfigImportErrorResponseDto": {
+        "type": "object",
+        "properties": {
+          "errors": {
+            "description": "Import error messages.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "result": {
+            "description": "The import outcome (zero imported on error).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ImportResultDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "errors",
+          "result"
         ]
       },
       "TcpConnectionInfoDto": {
