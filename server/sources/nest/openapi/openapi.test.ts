@@ -122,6 +122,18 @@ describe("generateOpenApiDocument", () => {
     expect(notFound?.content?.["application/json"]?.schema?.$ref).toContain("ApiErrorResponseDto");
   });
 
+  it("documents POST /api/forwards/{id}/stop with its path param, 200 status response, and 404 error", () => {
+    const stop = doc.paths["/api/forwards/{id}/stop"]?.post;
+    expect(stop).toBeDefined();
+    const params = (stop?.parameters ?? []) as Array<{ name: string; in: string }>;
+    expect(params.some((p) => p.name === "id" && p.in === "path")).toBe(true);
+    const responses = stop?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("ForwardStatusDto");
+    const notFound = responses["404"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(notFound?.content?.["application/json"]?.schema?.$ref).toContain("ApiErrorResponseDto");
+  });
+
   it("documents DELETE /api/forwards/{id} with its path param, 204 no-body, and 404 error", () => {
     const del = doc.paths["/api/forwards/{id}"]?.delete;
     expect(del).toBeDefined();

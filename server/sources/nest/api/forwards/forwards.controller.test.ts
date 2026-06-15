@@ -5,6 +5,7 @@ import { ForwardsController } from "./forwards.controller.js";
 import type { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import type { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import type { StartForwardRuleService } from "./start-forward-rule.service.js";
+import type { StopForwardRuleService } from "./stop-forward-rule.service.js";
 import type { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import type { ForwardsService } from "./forwards.service.js";
 
@@ -35,13 +36,15 @@ function controller(overrides: {
   update?: (id: string, body: unknown) => Promise<ForwardRuleResponse>;
   remove?: (id: string) => Promise<void>;
   start?: (id: string) => Promise<ForwardStatus>;
+  stop?: (id: string) => Promise<ForwardStatus>;
 }): ForwardsController {
   return new ForwardsController(
     { list: overrides.list ?? (() => []) } as unknown as ForwardsService,
     { create: overrides.create ?? (async () => RESPONSE) } as unknown as CreateForwardRuleService,
     { update: overrides.update ?? (async () => RESPONSE) } as unknown as UpdateForwardRuleService,
     { delete: overrides.remove ?? (async () => undefined) } as unknown as DeleteForwardRuleService,
-    { start: overrides.start ?? (async () => STATUS) } as unknown as StartForwardRuleService
+    { start: overrides.start ?? (async () => STATUS) } as unknown as StartForwardRuleService,
+    { stop: overrides.stop ?? (async () => STATUS) } as unknown as StopForwardRuleService
   );
 }
 
@@ -115,6 +118,22 @@ describe("ForwardsController.start", () => {
         return STATUS;
       },
     }).start("r1");
+
+    expect(receivedId).toBe("r1"); // path id passed through
+    expect(result).toEqual(STATUS); // byte-for-byte
+    expect(result).not.toBe(STATUS); // mapped copy
+  });
+});
+
+describe("ForwardsController.stop", () => {
+  it("delegates to the stop service with the id and maps the status to the response DTO", async () => {
+    let receivedId: string | undefined;
+    const result = await controller({
+      stop: async (id) => {
+        receivedId = id;
+        return STATUS;
+      },
+    }).stop("r1");
 
     expect(receivedId).toBe("r1"); // path id passed through
     expect(result).toEqual(STATUS); // byte-for-byte

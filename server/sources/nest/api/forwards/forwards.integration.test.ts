@@ -23,6 +23,7 @@ import {
   FORWARD_RULE_CREATOR,
   FORWARD_RULE_DELETER,
   FORWARD_RULE_STARTER,
+  FORWARD_RULE_STOPPER,
   FORWARD_RULE_UPDATER,
 } from "./forwards.writer.js";
 
@@ -153,8 +154,8 @@ const CREATE_UDP = { id: "fixed-udp", name: "New DNS", protocol: "udp", listenHo
 
 /**
  * Binds the (seeded) manager to the reader + status reader + creator + updater +
- * deleter + starter so GET reflects POST/PATCH/DELETE and `/start` + `/api/status`
- * read the same manager state.
+ * deleter + starter + stopper so GET reflects POST/PATCH/DELETE and
+ * `/start`/`/stop` + `/api/status` read the same manager state.
  */
 async function nestWithManager(manager: ForwardManager): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -169,6 +170,8 @@ async function nestWithManager(manager: ForwardManager): Promise<INestApplicatio
     .overrideProvider(FORWARD_RULE_DELETER)
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_STARTER)
+    .useValue(manager)
+    .overrideProvider(FORWARD_RULE_STOPPER)
     .useValue(manager)
     .compile();
   return moduleRef.createNestApplication({ logger: false });
@@ -241,6 +244,12 @@ describe("POST /api/forwards (Nest) — scaffold default", () => {
 
   it("returns 404 for START of an unknown id (default empty starter)", async () => {
     const response = await startRuleReq(nest.baseUrl, "nonexistent");
+    expect(response.status).toBe(404);
+    expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
+  });
+
+  it("returns 404 for STOP of an unknown id (default empty stopper)", async () => {
+    const response = await stopRuleReq(nest.baseUrl, "nonexistent");
     expect(response.status).toBe(404);
     expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
   });
@@ -362,6 +371,10 @@ function deleteRule(baseUrl: string, id: string): Promise<ApiResponse> {
 
 function startRuleReq(baseUrl: string, id: string): Promise<ApiResponse> {
   return fetchApi(baseUrl, `/api/forwards/${id}/start`, { method: "POST" });
+}
+
+function stopRuleReq(baseUrl: string, id: string): Promise<ApiResponse> {
+  return fetchApi(baseUrl, `/api/forwards/${id}/stop`, { method: "POST" });
 }
 
 // A stopped TCP + UDP pair so DELETE can be parity-tested per protocol without sockets.
@@ -702,6 +715,111 @@ describe("POST /api/forwards/:id/start (Nest) — real cold start (single runtim
       expect(body.running).toBe(true);
     } finally {
       await manager.stopAll(); // close the real socket
+      await nest.close();
+    }
+  });
+});
+
+// ── POST /api/forwards/:id/stop (lifecycle stop) ──────────────────────────────
+
+describe("POST /api/forwards/:id/stop (Nest) — parity with Express", () => {
+  it("returns the same 404 envelope as Express for an unknown id", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const [e, n] = await Promise.all([
+        stopRuleReq(express.baseUrl, "ghost"),
+        stopRuleReq(nest.baseUrl, "ghost"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(404);
+      expect((n.body as { errors: string[] }).errors[0]).toContain("not found");
+    } finally {
+      await close();
+    }
+  });
+
+  it("stopping an already-stopped rule returns the deterministic stopped status (200), byte-for-byte like Express — NO sockets", async () => {
+    // seed-1 is a stopped TCP rule; never started, so stopRule is a pure no-op that
+    // returns the synthetic stopped status. Deterministic (running:false, no
+    // startedAt), so separate managers give byte-for-byte equality.
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const [e, n] = await Promise.all([
+        stopRuleReq(express.baseUrl, "seed-1"),
+        stopRuleReq(nest.baseUrl, "seed-1"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      const body = n.body as ForwardStatus;
+      expect(body).toMatchObject({ ruleId: "seed-1", running: false });
+      expect(body.startedAt).toBeUndefined();
+    } finally {
+      await close();
+    }
+  });
+
+  it("stops a RUNNING TCP rule (200, running:false) byte-for-byte like Express, and GET /api/status reflects it", async () => {
+    // Separate-but-equivalent managers; each starts the rule on its own free port
+    // (bind-retry helper), then stops it via the endpoint. The stopped status is
+    // deterministic (no volatile field), so byte-for-byte parity holds.
+    const expressManager = new ForwardManager(new MemoryStore());
+    const nestManager = new ForwardManager(new MemoryStore());
+    const seed = async (m: ForwardManager): Promise<void> => {
+      await m.addRule({ id: "stop-tcp", name: "StopTcp", protocol: "tcp", listenHost: "127.0.0.1", listenPort: await getFreeTcpPort(), targetHost: "127.0.0.1", targetPort: 49993, enabled: false });
+    };
+    await seed(expressManager);
+    await seed(nestManager);
+    const nestApp = await nestWithManager(nestManager);
+    const nest = await startNestServer(nestApp);
+    const express = await startHandlerServer(createApp(expressManager) as unknown as http.RequestListener);
+    try {
+      await startRuleStable(expressManager, "stop-tcp", getFreeTcpPort);
+      await startRuleStable(nestManager, "stop-tcp", getFreeTcpPort);
+
+      const [e, n] = await Promise.all([
+        stopRuleReq(express.baseUrl, "stop-tcp"),
+        stopRuleReq(nest.baseUrl, "stop-tcp"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      const body = n.body as ForwardStatus;
+      expect(body).toMatchObject({ ruleId: "stop-tcp", running: false });
+      expect(body.startedAt).toBeUndefined();
+
+      // GET /api/status after stop reflects the stopped rule identically in both runtimes.
+      const [es, ns] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/status"),
+        fetchApi(nest.baseUrl, "/api/status"),
+      ]);
+      expect(diffApiResponses(es, ns)).toEqual([]);
+      expect((ns.body as ForwardStatus[])[0]).toMatchObject({ ruleId: "stop-tcp", running: false });
+    } finally {
+      await expressManager.stopAll();
+      await nestManager.stopAll();
+      await nest.close();
+      await express.close();
+    }
+  });
+});
+
+describe("POST /api/forwards/:id/stop (Nest) — real stop of a running UDP rule (single runtime, socket cleaned up)", () => {
+  it("starts then stops a running UDP rule end-to-end (200, running:false) — UDP first-class", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    await manager.addRule({ id: "stop-udp", name: "StopUdp", protocol: "udp", listenHost: "127.0.0.1", listenPort: await getFreeUdpPort(), targetHost: "127.0.0.1", targetPort: 49994, enabled: false, udpMode: "one-way" });
+    const nestApp = await nestWithManager(manager);
+    const nest = await startNestServer(nestApp);
+    try {
+      const started = await startRuleReq(nest.baseUrl, "stop-udp");
+      expect(started.status).toBe(200);
+      expect((started.body as ForwardStatus).running).toBe(true);
+
+      const stopped = await stopRuleReq(nest.baseUrl, "stop-udp");
+      expect(stopped.status).toBe(200);
+      const body = stopped.body as ForwardStatus;
+      expect(body.ruleId).toBe("stop-udp");
+      expect(body.running).toBe(false);
+    } finally {
+      await manager.stopAll(); // idempotent — ensure no leaked socket
       await nest.close();
     }
   });

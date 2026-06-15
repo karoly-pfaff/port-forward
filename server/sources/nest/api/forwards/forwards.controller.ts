@@ -21,6 +21,7 @@ import {
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import { StartForwardRuleService } from "./start-forward-rule.service.js";
+import { StopForwardRuleService } from "./stop-forward-rule.service.js";
 import { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import { toForwardRuleResponseDto } from "./forward-rule.response.dto.js";
 import { toForwardStatusResponseDto } from "./forward-status.response.dto.js";
@@ -34,9 +35,9 @@ import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwa
  * `POST` body is NOT run through a validation pipe — validation is delegated to
  * the shared `validateForwardRule` inside the manager (a documented parity
  * exception), so `@ApiBody` documents the schema explicitly. List/create/update/
- * delete and the lifecycle **start** (`POST :id/start`) are migrated; the remaining
- * lifecycle routes under `/api/forwards/...` (stop/reorder/group/diagnose) stay
- * with Express.
+ * delete and the lifecycle start + stop (`POST :id/start`, `POST :id/stop`) are
+ * migrated; the remaining lifecycle routes under `/api/forwards/...`
+ * (reorder/group/diagnose) stay with Express.
  */
 @ApiTags("forwards")
 @Controller("api/forwards")
@@ -46,7 +47,8 @@ export class ForwardsController {
     @Inject(CreateForwardRuleService) private readonly createService: CreateForwardRuleService,
     @Inject(UpdateForwardRuleService) private readonly updateService: UpdateForwardRuleService,
     @Inject(DeleteForwardRuleService) private readonly deleteService: DeleteForwardRuleService,
-    @Inject(StartForwardRuleService) private readonly startService: StartForwardRuleService
+    @Inject(StartForwardRuleService) private readonly startService: StartForwardRuleService,
+    @Inject(StopForwardRuleService) private readonly stopService: StopForwardRuleService
   ) {}
 
   @Get()
@@ -121,5 +123,21 @@ export class ForwardsController {
   @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
   async start(@Param("id") id: string): Promise<ForwardStatusDto> {
     return toForwardStatusResponseDto(await this.startService.start(id));
+  }
+
+  @Post(":id/stop")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Stop a forward rule",
+    description:
+      "Stops the rule's forwarder and returns its current status. Idempotent — a rule that is not running " +
+      "returns its status without touching a socket. An unknown id returns 404. Returns 200 (matching Express; " +
+      "NestJS would otherwise default POST to 201).",
+  })
+  @ApiParam({ name: "id", type: String, description: "The rule id." })
+  @ApiOkResponse({ type: ForwardStatusDto, description: "The rule's status after stopping." })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
+  async stop(@Param("id") id: string): Promise<ForwardStatusDto> {
+    return toForwardStatusResponseDto(await this.stopService.stop(id));
   }
 }

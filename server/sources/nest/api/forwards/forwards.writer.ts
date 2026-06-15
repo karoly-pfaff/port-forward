@@ -109,3 +109,26 @@ export const FORWARD_RULE_STARTER = "FORWARD_RULE_STARTER";
 export function createDefaultForwardRuleStarter(): ForwardRuleStarter {
   return new ForwardManager(new InMemoryRuleStore());
 }
+
+/**
+ * Narrow lifecycle capability for `POST /api/forwards/:id/stop`. The real domain
+ * `ForwardManager` satisfies it via `stopRule`; tests bind a seeded manager. The
+ * natural pair of `startRule`: `stopRule` throws `NotFoundError` for an unknown id,
+ * is **idempotent** (a not-running rule returns its current status without touching a
+ * socket), otherwise closes the forwarder's listener, emits `rule.stopped`, and
+ * resolves with the rule's `ForwardStatus`. A stopped status is fully
+ * deterministic (`running: false`, zeroed counters, **no `startedAt`**), so —
+ * unlike start — byte-for-byte parity needs no shared manager and the
+ * already-stopped path needs no socket at all.
+ */
+export interface ForwardRuleStopper {
+  stopRule(ruleId: string): Promise<ForwardStatus>;
+}
+
+/** Injection token for the rule stopper. */
+export const FORWARD_RULE_STOPPER = "FORWARD_RULE_STOPPER";
+
+/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
+export function createDefaultForwardRuleStopper(): ForwardRuleStopper {
+  return new ForwardManager(new InMemoryRuleStore());
+}
