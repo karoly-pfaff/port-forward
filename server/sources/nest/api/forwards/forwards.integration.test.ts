@@ -17,7 +17,7 @@ import {
   type ParityServer,
 } from "../../testing/api-parity.js";
 import { FORWARDS_READER, type ForwardsReader } from "./forwards.reader.js";
-import { FORWARD_RULE_CREATOR } from "./forwards.writer.js";
+import { FORWARD_RULE_CREATOR, FORWARD_RULE_UPDATER } from "./forwards.writer.js";
 
 /** In-memory RuleStore for the seeded manager; save() is exercised by addRule. */
 class MemoryStore implements RuleStore {
@@ -144,12 +144,14 @@ describe("GET /api/forwards (Nest) — parity with Express", () => {
 const CREATE_TCP = { id: "fixed-tcp", name: "New Web", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48020, targetHost: "127.0.0.1", targetPort: 8080, enabled: false } as const;
 const CREATE_UDP = { id: "fixed-udp", name: "New DNS", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48021, targetHost: "127.0.0.1", targetPort: 53, enabled: false, udpMode: "one-way" } as const;
 
-/** Binds the (seeded) manager to BOTH the reader and the creator so GET reflects POST. */
+/** Binds the (seeded) manager to the reader + creator + updater so GET reflects POST/PATCH. */
 async function nestWithManager(manager: ForwardManager): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(FORWARDS_READER)
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_CREATOR)
+    .useValue(manager)
+    .overrideProvider(FORWARD_RULE_UPDATER)
     .useValue(manager)
     .compile();
   return moduleRef.createNestApplication({ logger: false });
@@ -206,6 +208,12 @@ describe("POST /api/forwards (Nest) — scaffold default", () => {
     expect(body.id).toBe("fixed-tcp");
     expect(body.name).toBe("New Web");
     expect(body.advisories.some((a) => a.code === "LAN_EXPOSURE")).toBe(true);
+  });
+
+  it("returns 404 for PATCH of an unknown id (default empty updater)", async () => {
+    const response = await patchRule(nest.baseUrl, "nonexistent", { name: "X" });
+    expect(response.status).toBe(404);
+    expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
   });
 });
 
@@ -303,6 +311,153 @@ describe("POST /api/forwards (Nest) — parity with Express", () => {
       expect(body.id).toBeTypeOf("string");
       expect(body.id.length).toBeGreaterThan(0);
       expect(body.id).not.toBe("fixed-tcp");
+    } finally {
+      await close();
+    }
+  });
+});
+
+// ── PATCH /api/forwards/:id (update) ──────────────────────────────────────────
+
+function patchRule(baseUrl: string, id: string, body: unknown): Promise<ApiResponse> {
+  return fetchApi(baseUrl, `/api/forwards/${id}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// A stopped (enabled:false) rule with a known id, seeded into both managers so PATCH is deterministic.
+const SEED_TCP = { id: "seed-1", name: "Seed", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48030, targetHost: "127.0.0.1", targetPort: 8080, enabled: false } as const;
+
+async function seedOne(manager: ForwardManager): Promise<void> {
+  await manager.addRule(SEED_TCP);
+}
+
+async function seedTwo(manager: ForwardManager): Promise<void> {
+  await manager.addRule(SEED_TCP);
+  await manager.addRule({ id: "seed-2", name: "Second", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48031, targetHost: "127.0.0.1", targetPort: 8081, enabled: false });
+}
+
+describe("PATCH /api/forwards/:id (Nest) — parity with Express", () => {
+  it("applies a metadata-only patch (no restart) and preserves unspecified fields, byte-for-byte like Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const patch = { name: "Renamed", group: "team" };
+      const [e, n] = await Promise.all([
+        patchRule(express.baseUrl, "seed-1", patch),
+        patchRule(nest.baseUrl, "seed-1", patch),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      const body = n.body as ForwardRuleResponse;
+      expect(body).toMatchObject({ id: "seed-1", name: "Renamed", group: "team" });
+      // Unspecified fields are NOT overwritten with undefined.
+      expect(body.listenPort).toBe(48030);
+      expect(body.targetHost).toBe("127.0.0.1");
+      expect(body.protocol).toBe("tcp");
+      // GET after PATCH reflects the update in both runtimes.
+      const [eg, ng] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/forwards"),
+        fetchApi(nest.baseUrl, "/api/forwards"),
+      ]);
+      expect(diffApiResponses(eg, ng)).toEqual([]);
+      expect((ng.body as ForwardRuleResponse[])[0].name).toBe("Renamed");
+    } finally {
+      await close();
+    }
+  });
+
+  it("applies a forwarding-affecting patch on a stopped rule (no socket) byte-for-byte like Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const patch = { targetPort: 9999 };
+      const [e, n] = await Promise.all([
+        patchRule(express.baseUrl, "seed-1", patch),
+        patchRule(nest.baseUrl, "seed-1", patch),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      expect((n.body as ForwardRuleResponse).targetPort).toBe(9999);
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns the same 404 envelope as Express for an unknown id", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const [e, n] = await Promise.all([
+        patchRule(express.baseUrl, "ghost", { name: "X" }),
+        patchRule(nest.baseUrl, "ghost", { name: "X" }),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(404);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects an out-of-range port with the same 400 envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const patch = { listenPort: 70000 };
+      const [e, n] = await Promise.all([
+        patchRule(express.baseUrl, "seed-1", patch),
+        patchRule(nest.baseUrl, "seed-1", patch),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(400);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects an invalid protocol with the same 400 envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const patch = { protocol: "icmp" };
+      const [e, n] = await Promise.all([
+        patchRule(express.baseUrl, "seed-1", patch),
+        patchRule(nest.baseUrl, "seed-1", patch),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(400);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects a patch that duplicates another rule's binding with the same 409 envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedTwo);
+    try {
+      // Move seed-2 onto seed-1's binding (0.0.0.0:48030) → conflict.
+      const patch = { listenPort: 48030 };
+      const [e, n] = await Promise.all([
+        patchRule(express.baseUrl, "seed-2", patch),
+        patchRule(nest.baseUrl, "seed-2", patch),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(409);
+      expect((n.body as { errors: string[] }).errors[0]).toContain("already listening");
+    } finally {
+      await close();
+    }
+  });
+
+  it("ignores an unknown extra field in the patch, byte-for-byte like Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const patch = { name: "WithExtra", bogusField: "ignored" };
+      const [e, n] = await Promise.all([
+        patchRule(express.baseUrl, "seed-1", patch),
+        patchRule(nest.baseUrl, "seed-1", patch),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      const body = n.body as ForwardRuleResponse & { bogusField?: unknown };
+      expect(body.name).toBe("WithExtra");
+      expect(body.bogusField).toBeUndefined(); // unknown field dropped by the validator
     } finally {
       await close();
     }

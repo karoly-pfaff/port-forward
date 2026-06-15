@@ -1,15 +1,23 @@
-import { Body, Controller, Get, Inject, Post } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post } from "@nestjs/common";
 import {
   ApiBadRequestResponse,
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
 } from "@nestjs/swagger";
-import { ApiErrorResponseDto, CreateForwardRuleBodyDto, ForwardRuleResponseDto } from "../../common/api-schemas.js";
+import {
+  ApiErrorResponseDto,
+  CreateForwardRuleBodyDto,
+  ForwardRuleResponseDto,
+  UpdateForwardRuleBodyDto,
+} from "../../common/api-schemas.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
+import { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import { toForwardRuleResponseDto } from "./forward-rule.response.dto.js";
 import { ForwardsService } from "./forwards.service.js";
 import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwards-list.response.dto.js";
@@ -29,7 +37,8 @@ import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwa
 export class ForwardsController {
   constructor(
     @Inject(ForwardsService) private readonly forwards: ForwardsService,
-    @Inject(CreateForwardRuleService) private readonly createService: CreateForwardRuleService
+    @Inject(CreateForwardRuleService) private readonly createService: CreateForwardRuleService,
+    @Inject(UpdateForwardRuleService) private readonly updateService: UpdateForwardRuleService
   ) {}
 
   @Get()
@@ -51,5 +60,26 @@ export class ForwardsController {
   @ApiConflictResponse({ type: ApiErrorResponseDto, description: "A rule already listens on that binding." })
   async create(@Body() body: CreateForwardRuleBodyDto): Promise<ForwardRuleResponseDto> {
     return toForwardRuleResponseDto(await this.createService.create(body));
+  }
+
+  @Patch(":id")
+  @ApiOperation({
+    summary: "Update a forward rule",
+    description:
+      "Partially updates a rule. Unspecified fields are left unchanged. A change to a forwarding field " +
+      "(protocol/listenHost/listenPort/targetHost/targetPort/udpMode) restarts the forwarder only if the rule " +
+      "is running; metadata-only changes (name/group/autostart) do not restart, and a stopped rule is not started.",
+  })
+  @ApiParam({ name: "id", type: String, description: "The rule id." })
+  @ApiBody({ type: UpdateForwardRuleBodyDto })
+  @ApiOkResponse({ type: ForwardRuleResponseDto, description: "The updated rule with its port advisories." })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto, description: "Invalid patch." })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
+  @ApiConflictResponse({ type: ApiErrorResponseDto, description: "The update would duplicate another rule's binding." })
+  async update(
+    @Param("id") id: string,
+    @Body() body: UpdateForwardRuleBodyDto
+  ): Promise<ForwardRuleResponseDto> {
+    return toForwardRuleResponseDto(await this.updateService.update(id, body));
   }
 }

@@ -92,6 +92,24 @@ describe("generateOpenApiDocument", () => {
     expect(doc.components?.schemas?.CreateForwardRuleBodyDto).toBeDefined();
   });
 
+  it("documents PATCH /api/forwards/{id} with its path param, body, 200 response, and 400/404/409 errors", () => {
+    const patch = doc.paths["/api/forwards/{id}"]?.patch;
+    expect(patch).toBeDefined();
+    const params = (patch?.parameters ?? []) as Array<{ name: string; in: string }>;
+    expect(params.some((p) => p.name === "id" && p.in === "path")).toBe(true);
+    const body = (patch as { requestBody?: { content?: Record<string, { schema?: { $ref?: string } }> } })
+      .requestBody;
+    expect(body?.content?.["application/json"]?.schema?.$ref).toContain("UpdateForwardRuleBodyDto");
+    const responses = patch?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("ForwardRuleResponseDto");
+    for (const status of ["400", "404", "409"]) {
+      const r = responses[status] as { content?: Record<string, { schema?: { $ref?: string } }> };
+      expect(r?.content?.["application/json"]?.schema?.$ref, `status ${status}`).toContain("ApiErrorResponseDto");
+    }
+    expect(doc.components?.schemas?.UpdateForwardRuleBodyDto).toBeDefined();
+  });
+
   it("documents DELETE /api/activity as 204 with no body", () => {
     const del = doc.paths["/api/activity"]?.delete;
     expect(del?.responses?.["204"]).toBeDefined();

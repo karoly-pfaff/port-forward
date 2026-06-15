@@ -39,3 +39,25 @@ export class InMemoryRuleStore implements RuleStore {
 export function createDefaultForwardRuleCreator(): ForwardRuleCreator {
   return new ForwardManager(new InMemoryRuleStore());
 }
+
+/**
+ * Narrow write capability for `PATCH /api/forwards/:id` (rule update). The real
+ * domain `ForwardManager` satisfies it via `updateRule`; tests bind a seeded
+ * manager shared with Express for parity. `updateRule` validates the partial
+ * patch (shared `validateForwardRulePatch`, preserving absent fields), merges
+ * over the existing rule, rejects duplicate bindings, throws `NotFoundError` for
+ * an unknown id, persists (with rollback), and restarts the forwarder ONLY when
+ * the rule is running AND a forwarding field changed (tests use `enabled:false`
+ * stopped rules so no restart/socket occurs).
+ */
+export interface ForwardRuleUpdater {
+  updateRule(ruleId: string, input: unknown): Promise<ForwardRule>;
+}
+
+/** Injection token for the rule updater. */
+export const FORWARD_RULE_UPDATER = "FORWARD_RULE_UPDATER";
+
+/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the creator default). */
+export function createDefaultForwardRuleUpdater(): ForwardRuleUpdater {
+  return new ForwardManager(new InMemoryRuleStore());
+}

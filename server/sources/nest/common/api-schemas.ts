@@ -237,6 +237,34 @@ export class CreateForwardRuleBodyDto implements ForwardRuleInput {
   @ApiPropertyOptional({ type: String, description: "Optional grouping label." }) group?: string;
 }
 
+/**
+ * Request body for `PATCH /api/forwards/:id` (rule update) — a partial of the
+ * rule definition (every field optional). Like the create body, this is a
+ * **documentation/typing** DTO: validation is delegated to the shared
+ * `validateForwardRulePatch` (`@portier/shared`) inside `ForwardManager.updateRule`
+ * (the single contract validator, which also preserves the
+ * absent-field-is-not-`undefined` merge semantics), so no class-validator
+ * constraints are attached (a documented Express-parity exception).
+ */
+export class UpdateForwardRuleBodyDto implements Partial<ForwardRuleInput> {
+  @ApiPropertyOptional({ type: String, description: "Operator-facing rule name." }) name?: string;
+  @ApiPropertyOptional({ enum: ["tcp", "udp"], description: "Forwarding protocol (forwarding field — changing it restarts a running rule)." })
+  protocol?: ForwardRule["protocol"];
+  @ApiPropertyOptional({ type: String, description: "Local listen host (forwarding field)." }) listenHost?: string;
+  @ApiPropertyOptional({ type: Number, description: "Local listen port (forwarding field)." }) listenPort?: number;
+  @ApiPropertyOptional({ type: String, description: "Forward target host (forwarding field)." }) targetHost?: string;
+  @ApiPropertyOptional({ type: Number, description: "Forward target port (forwarding field)." }) targetPort?: number;
+  @ApiPropertyOptional({ type: Boolean, description: "Autostart flag (metadata — does not restart a running rule)." })
+  enabled?: boolean;
+  @ApiPropertyOptional({
+    enum: ["one-way", "bidirectional-last-client", "bidirectional-multi-client"],
+    description: "UDP forwarding mode (forwarding field).",
+  })
+  udpMode?: ForwardRule["udpMode"];
+  @ApiPropertyOptional({ type: String, description: "Grouping label (metadata; empty/whitespace clears, null/absent leaves unchanged)." })
+  group?: string;
+}
+
 // ── Per-endpoint response-body wrappers ──────────────────────────────────────
 
 /** The Portier `/api` error envelope (`{ errors: [...] }`) — produced at runtime by `toApiError`. */

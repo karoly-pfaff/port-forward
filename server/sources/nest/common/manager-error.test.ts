@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConflictError, NotFoundError, ValidationError } from "../../forward-manager.js";
-import { ApiBadRequestException, ApiConflictException } from "./api-errors.js";
+import { ApiBadRequestException, ApiConflictException, ApiNotFoundException } from "./api-errors.js";
 import { mapManagerError } from "./manager-error.js";
 
 describe("mapManagerError", () => {
@@ -30,11 +30,21 @@ describe("mapManagerError", () => {
     }
   });
 
+  it("translates a NotFoundError to a 404 ApiNotFoundException carrying its message", () => {
+    try {
+      mapManagerError(new NotFoundError("Forward rule abc was not found."));
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiNotFoundException);
+      expect((error as ApiNotFoundException).getStatus()).toBe(404);
+      expect((error as ApiNotFoundException).getResponse()).toEqual({
+        errors: ["Forward rule abc was not found."],
+      });
+    }
+  });
+
   it("re-throws any other error unchanged (e.g. a persist failure → generic 500 via the filter)", () => {
     const persistError = new Error("disk full");
     expect(() => mapManagerError(persistError)).toThrow(persistError);
-    // A domain NotFoundError is not a create-path error, so it also falls through unchanged.
-    const notFound = new NotFoundError("missing");
-    expect(() => mapManagerError(notFound)).toThrow(notFound);
   });
 });

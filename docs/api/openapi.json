@@ -291,6 +291,79 @@
         ]
       }
     },
+    "/api/forwards/{id}": {
+      "patch": {
+        "description": "Partially updates a rule. Unspecified fields are left unchanged. A change to a forwarding field (protocol/listenHost/listenPort/targetHost/targetPort/udpMode) restarts the forwarder only if the rule is running; metadata-only changes (name/group/autostart) do not restart, and a stopped rule is not started.",
+        "operationId": "ForwardsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "The rule id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateForwardRuleBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated rule with its port advisories.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForwardRuleResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid patch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No rule with that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The update would duplicate another rule's binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Update a forward rule",
+        "tags": [
+          "forwards"
+        ]
+      }
+    },
     "/api/runtime": {
       "get": {
         "description": "Returns runtime/version/uptime/process metadata.",
@@ -731,6 +804,56 @@
           "targetPort",
           "enabled"
         ]
+      },
+      "UpdateForwardRuleBodyDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Operator-facing rule name."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ],
+            "description": "Forwarding protocol (forwarding field — changing it restarts a running rule)."
+          },
+          "listenHost": {
+            "type": "string",
+            "description": "Local listen host (forwarding field)."
+          },
+          "listenPort": {
+            "type": "number",
+            "description": "Local listen port (forwarding field)."
+          },
+          "targetHost": {
+            "type": "string",
+            "description": "Forward target host (forwarding field)."
+          },
+          "targetPort": {
+            "type": "number",
+            "description": "Forward target port (forwarding field)."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Autostart flag (metadata — does not restart a running rule)."
+          },
+          "udpMode": {
+            "type": "string",
+            "enum": [
+              "one-way",
+              "bidirectional-last-client",
+              "bidirectional-multi-client"
+            ],
+            "description": "UDP forwarding mode (forwarding field)."
+          },
+          "group": {
+            "type": "string",
+            "description": "Grouping label (metadata; empty/whitespace clears, null/absent leaves unchanged)."
+          }
+        }
       },
       "RuntimeInfoResponseDto": {
         "type": "object",

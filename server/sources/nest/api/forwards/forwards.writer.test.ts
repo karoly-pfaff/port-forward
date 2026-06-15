@@ -1,6 +1,10 @@
 import type { ForwardRule } from "@portier/shared";
 import { describe, expect, it } from "vitest";
-import { createDefaultForwardRuleCreator, InMemoryRuleStore } from "./forwards.writer.js";
+import {
+  createDefaultForwardRuleCreator,
+  createDefaultForwardRuleUpdater,
+  InMemoryRuleStore,
+} from "./forwards.writer.js";
 
 const RULE: ForwardRule = {
   id: "r1",
@@ -38,5 +42,21 @@ describe("createDefaultForwardRuleCreator", () => {
     // b has not seen a's rule — adding the same binding to b does not conflict.
     const created = await b.addRule({ ...RULE, id: "b-rule" });
     expect(created.id).toBe("b-rule");
+  });
+});
+
+describe("createDefaultForwardRuleUpdater", () => {
+  it("creates an isolated in-memory updater that can update an existing rule", async () => {
+    // The default uses a ForwardManager, which also creates; add then update.
+    const updater = createDefaultForwardRuleUpdater() as unknown as {
+      addRule(input: unknown): Promise<ForwardRule>;
+      updateRule(id: string, patch: unknown): Promise<ForwardRule>;
+    };
+    await updater.addRule({ ...RULE, id: "u1" });
+    const updated = await updater.updateRule("u1", { name: "Renamed" });
+    expect(updated.id).toBe("u1");
+    expect(updated.name).toBe("Renamed");
+    // Unspecified fields are preserved (no undefined overwrite).
+    expect(updated.listenPort).toBe(RULE.listenPort);
   });
 });

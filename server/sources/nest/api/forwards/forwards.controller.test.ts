@@ -2,6 +2,7 @@ import type { ForwardRule, ForwardRuleResponse } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import { ForwardsController } from "./forwards.controller.js";
 import type { CreateForwardRuleService } from "./create-forward-rule.service.js";
+import type { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import type { ForwardsService } from "./forwards.service.js";
 
 const RESPONSE: ForwardRuleResponse = {
@@ -19,10 +20,12 @@ const RESPONSE: ForwardRuleResponse = {
 function controller(overrides: {
   list?: () => ForwardRuleResponse[];
   create?: (body: unknown) => Promise<ForwardRuleResponse>;
+  update?: (id: string, body: unknown) => Promise<ForwardRuleResponse>;
 }): ForwardsController {
   return new ForwardsController(
     { list: overrides.list ?? (() => []) } as unknown as ForwardsService,
-    { create: overrides.create ?? (async () => RESPONSE) } as unknown as CreateForwardRuleService
+    { create: overrides.create ?? (async () => RESPONSE) } as unknown as CreateForwardRuleService,
+    { update: overrides.update ?? (async () => RESPONSE) } as unknown as UpdateForwardRuleService
   );
 }
 
@@ -48,6 +51,26 @@ describe("ForwardsController.create", () => {
     }).create(body);
 
     expect(received).toBe(body); // body passed through unchanged
+    expect(result).toEqual(RESPONSE); // byte-for-byte
+    expect(result).not.toBe(RESPONSE); // mapped copy
+  });
+});
+
+describe("ForwardsController.update", () => {
+  it("delegates to the update service with the id + body and maps the result to the response DTO", async () => {
+    const body = { name: "Renamed" };
+    let receivedId: string | undefined;
+    let receivedBody: unknown;
+    const result = await controller({
+      update: async (id, input) => {
+        receivedId = id;
+        receivedBody = input;
+        return RESPONSE;
+      },
+    }).update("r1", body);
+
+    expect(receivedId).toBe("r1"); // path id passed through
+    expect(receivedBody).toBe(body); // body passed through unchanged
     expect(result).toEqual(RESPONSE); // byte-for-byte
     expect(result).not.toBe(RESPONSE); // mapped copy
   });
