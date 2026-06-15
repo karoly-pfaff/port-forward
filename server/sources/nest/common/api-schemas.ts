@@ -3,6 +3,7 @@ import type {
   ActivityEvent,
   ExportedConfig,
   ForwardRule,
+  ForwardRuleInput,
   ForwardRuleResponse,
   ForwardStatus,
   LiveConnectionsResponse,
@@ -203,6 +204,37 @@ export class RuleLiveSummaryDto implements RuleLiveSummary {
   @ApiProperty({ type: Number }) packetsOut!: number;
   @ApiProperty({ type: String, format: "date-time", nullable: true, description: "Most recent traffic time, or null." })
   lastTrafficAt!: string | null;
+}
+
+// ── Request bodies ───────────────────────────────────────────────────────────
+
+/**
+ * Request body for `POST /api/forwards` (rule creation) — the `ForwardRuleInput`
+ * shape (`Omit<ForwardRule, "id"> & { id?: string }`). This is a
+ * **documentation/typing** DTO: validation is delegated to the shared
+ * `validateForwardRule` (`@portier/shared`) inside `ForwardManager.addRule` — the
+ * single contract validator — so no class-validator constraints are attached here
+ * (re-expressing them would risk error-message/coercion/`id`-handling drift from
+ * Express; a documented Express-parity exception). `implements ForwardRuleInput`
+ * keeps the documented field set aligned with the contract.
+ */
+export class CreateForwardRuleBodyDto implements ForwardRuleInput {
+  @ApiPropertyOptional({ type: String, description: "Optional client-supplied id (server generates a UUID when omitted)." })
+  id?: string;
+  @ApiProperty({ type: String, description: "Operator-facing rule name." }) name!: string;
+  @ApiProperty({ enum: ["tcp", "udp"], description: "Forwarding protocol." }) protocol!: ForwardRule["protocol"];
+  @ApiProperty({ type: String, example: "127.0.0.1", description: "Local listen host." }) listenHost!: string;
+  @ApiProperty({ type: Number, example: 48010, description: "Local listen port." }) listenPort!: number;
+  @ApiProperty({ type: String, description: "Forward target host." }) targetHost!: string;
+  @ApiProperty({ type: Number, description: "Forward target port." }) targetPort!: number;
+  @ApiProperty({ type: Boolean, description: "Whether the rule autostarts (a created enabled rule starts its forwarder)." })
+  enabled!: boolean;
+  @ApiPropertyOptional({
+    enum: ["one-way", "bidirectional-last-client", "bidirectional-multi-client"],
+    description: "UDP forwarding mode (UDP rules only).",
+  })
+  udpMode?: ForwardRule["udpMode"];
+  @ApiPropertyOptional({ type: String, description: "Optional grouping label." }) group?: string;
 }
 
 // ── Per-endpoint response-body wrappers ──────────────────────────────────────

@@ -238,6 +238,57 @@
         "tags": [
           "forwards"
         ]
+      },
+      "post": {
+        "description": "Creates a forward rule. A created rule with autostart enabled starts its forwarder (matching Express).",
+        "operationId": "ForwardsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateForwardRuleBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created rule with its port advisories.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForwardRuleResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid rule definition.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A rule already listens on that binding.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Create a forward rule",
+        "tags": [
+          "forwards"
+        ]
       }
     },
     "/api/runtime": {
@@ -614,6 +665,71 @@
           "targetPort",
           "enabled",
           "advisories"
+        ]
+      },
+      "CreateForwardRuleBodyDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Optional client-supplied id (server generates a UUID when omitted)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Operator-facing rule name."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ],
+            "description": "Forwarding protocol."
+          },
+          "listenHost": {
+            "type": "string",
+            "example": "127.0.0.1",
+            "description": "Local listen host."
+          },
+          "listenPort": {
+            "type": "number",
+            "example": 48010,
+            "description": "Local listen port."
+          },
+          "targetHost": {
+            "type": "string",
+            "description": "Forward target host."
+          },
+          "targetPort": {
+            "type": "number",
+            "description": "Forward target port."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the rule autostarts (a created enabled rule starts its forwarder)."
+          },
+          "udpMode": {
+            "type": "string",
+            "enum": [
+              "one-way",
+              "bidirectional-last-client",
+              "bidirectional-multi-client"
+            ],
+            "description": "UDP forwarding mode (UDP rules only)."
+          },
+          "group": {
+            "type": "string",
+            "description": "Optional grouping label."
+          }
+        },
+        "required": [
+          "name",
+          "protocol",
+          "listenHost",
+          "listenPort",
+          "targetHost",
+          "targetPort",
+          "enabled"
         ]
       },
       "RuntimeInfoResponseDto": {

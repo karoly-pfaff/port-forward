@@ -13,9 +13,11 @@ import {
   fetchApi,
   startHandlerServer,
   startNestServer,
+  type ApiResponse,
   type ParityServer,
 } from "../../testing/api-parity.js";
 import { FORWARDS_READER, type ForwardsReader } from "./forwards.reader.js";
+import { FORWARD_RULE_CREATOR } from "./forwards.writer.js";
 
 /** In-memory RuleStore for the seeded manager; save() is exercised by addRule. */
 class MemoryStore implements RuleStore {
@@ -128,6 +130,179 @@ describe("GET /api/forwards (Nest) — parity with Express", () => {
       const body = nestResponse.body as ForwardRuleResponse[];
       expect(body).toHaveLength(2);
       expect(body[0].advisories.some((a) => a.code === "LAN_EXPOSURE")).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+});
+
+// ── POST /api/forwards (create) ───────────────────────────────────────────────
+
+// Fixed ids make the success responses deterministic for byte-for-byte parity
+// (a created rule without an id gets a random UUID — covered separately). All
+// enabled:false so no forwarder/socket starts.
+const CREATE_TCP = { id: "fixed-tcp", name: "New Web", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48020, targetHost: "127.0.0.1", targetPort: 8080, enabled: false } as const;
+const CREATE_UDP = { id: "fixed-udp", name: "New DNS", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48021, targetHost: "127.0.0.1", targetPort: 53, enabled: false, udpMode: "one-way" } as const;
+
+/** Binds the (seeded) manager to BOTH the reader and the creator so GET reflects POST. */
+async function nestWithManager(manager: ForwardManager): Promise<INestApplication> {
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(FORWARDS_READER)
+    .useValue(manager)
+    .overrideProvider(FORWARD_RULE_CREATOR)
+    .useValue(manager)
+    .compile();
+  return moduleRef.createNestApplication({ logger: false });
+}
+
+/** Express and Nest get SEPARATE but equivalent managers (a shared one would cross-contaminate on create). */
+async function bootCreatePair(
+  seed?: (manager: ForwardManager) => Promise<void>
+): Promise<{ nest: ParityServer; express: ParityServer; close: () => Promise<void> }> {
+  const expressManager = new ForwardManager(new MemoryStore());
+  const nestManager = new ForwardManager(new MemoryStore());
+  if (seed) {
+    await seed(expressManager);
+    await seed(nestManager);
+  }
+  const nestApp = await nestWithManager(nestManager);
+  const nest = await startNestServer(nestApp);
+  const express = await startHandlerServer(createApp(expressManager) as unknown as http.RequestListener);
+  return {
+    nest,
+    express,
+    close: async () => {
+      await nest.close();
+      await express.close();
+    },
+  };
+}
+
+function postRule(baseUrl: string, body: unknown): Promise<ApiResponse> {
+  return fetchApi(baseUrl, "/api/forwards", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("POST /api/forwards (Nest) — scaffold default", () => {
+  let nestApp: INestApplication;
+  let nest: ParityServer;
+
+  beforeAll(async () => {
+    nestApp = await createNestApp();
+    nest = await startNestServer(nestApp);
+  });
+
+  afterAll(async () => {
+    await nest.close();
+  });
+
+  it("creates a rule via the default in-memory creator (201)", async () => {
+    const response = await postRule(nest.baseUrl, CREATE_TCP);
+    expect(response.status).toBe(201);
+    const body = response.body as ForwardRuleResponse;
+    expect(body.id).toBe("fixed-tcp");
+    expect(body.name).toBe("New Web");
+    expect(body.advisories.some((a) => a.code === "LAN_EXPOSURE")).toBe(true);
+  });
+});
+
+describe("POST /api/forwards (Nest) — parity with Express", () => {
+  it("creates a TCP rule byte-for-byte like Express (201 + advisories) and reflects it in GET", async () => {
+    const { nest, express, close } = await bootCreatePair();
+    try {
+      const [e, n] = await Promise.all([postRule(express.baseUrl, CREATE_TCP), postRule(nest.baseUrl, CREATE_TCP)]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(201);
+      const body = n.body as ForwardRuleResponse;
+      expect(body.id).toBe("fixed-tcp");
+      expect(body.advisories.some((a) => a.code === "LAN_EXPOSURE")).toBe(true);
+      // GET after create reflects the new rule in both runtimes.
+      const [eg, ng] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/forwards"),
+        fetchApi(nest.baseUrl, "/api/forwards"),
+      ]);
+      expect(diffApiResponses(eg, ng)).toEqual([]);
+      expect((ng.body as ForwardRuleResponse[]).map((r) => r.id)).toEqual(["fixed-tcp"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("creates a UDP rule byte-for-byte like Express (UDP first-class)", async () => {
+    const { nest, express, close } = await bootCreatePair();
+    try {
+      const [e, n] = await Promise.all([postRule(express.baseUrl, CREATE_UDP), postRule(nest.baseUrl, CREATE_UDP)]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(201);
+      expect((n.body as ForwardRuleResponse).protocol).toBe("udp");
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects a missing required field with the same 400 envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair();
+    try {
+      const [e, n] = await Promise.all([postRule(express.baseUrl, {}), postRule(nest.baseUrl, {})]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(400);
+      expect((n.body as { errors: string[] }).errors.length).toBeGreaterThan(0);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects an out-of-range port with the same 400 envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair();
+    try {
+      const body = { ...CREATE_TCP, listenPort: 70000 };
+      const [e, n] = await Promise.all([postRule(express.baseUrl, body), postRule(nest.baseUrl, body)]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(400);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects an invalid protocol with the same 400 envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair();
+    try {
+      const body = { ...CREATE_TCP, protocol: "icmp" };
+      const [e, n] = await Promise.all([postRule(express.baseUrl, body), postRule(nest.baseUrl, body)]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(400);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects a duplicate listen binding with the same 409 conflict envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair(async (manager) => {
+      await manager.addRule({ name: "Existing", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48020, targetHost: "127.0.0.1", targetPort: 9000, enabled: false });
+    });
+    try {
+      const [e, n] = await Promise.all([postRule(express.baseUrl, CREATE_TCP), postRule(nest.baseUrl, CREATE_TCP)]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(409);
+      expect((n.body as { errors: string[] }).errors[0]).toContain("already listening");
+    } finally {
+      await close();
+    }
+  });
+
+  it("generates a UUID id when the body omits one (no-id create path)", async () => {
+    const { nest, close } = await bootCreatePair();
+    try {
+      const { id: _omit, ...withoutId } = CREATE_TCP;
+      const response = await postRule(nest.baseUrl, withoutId);
+      expect(response.status).toBe(201);
+      const body = response.body as ForwardRuleResponse;
+      expect(body.id).toBeTypeOf("string");
+      expect(body.id.length).toBeGreaterThan(0);
+      expect(body.id).not.toBe("fixed-tcp");
     } finally {
       await close();
     }

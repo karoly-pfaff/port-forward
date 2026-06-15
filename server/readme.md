@@ -91,10 +91,12 @@ slices, each guarded by `npm run validate:contract`.
 
 ### Migration status (endpoint inventory)
 
-The **read-side `/api` migration is complete** (v1.14 Slice 11). Every endpoint
-below is **shadow-only** — served by the Nest app only under `npm run start:nest`;
-the Express server (`sources/index.ts` + `sources/api.ts`) remains the **default
-active runtime** and serves all routes unchanged. `validate:contract` is 234/234.
+The **read-side `/api` migration is complete** (v1.14 Slice 11); the **first rule
+write endpoint** (`POST /api/forwards`) is migrated (v1.14 Slice 14). Every
+endpoint below is **shadow-only** — served by the Nest app only under
+`npm run start:nest`; the Express server (`sources/index.ts` + `sources/api.ts`)
+remains the **default active runtime** and serves all routes unchanged.
+`validate:contract` is 234/234.
 
 | Endpoint | Module | Request DTO | Response DTO | Provider token | Builder / volatile |
 |---|---|---|---|---|---|
@@ -104,6 +106,7 @@ active runtime** and serves all routes unchanged. `validate:contract` is 234/234
 | `DELETE /api/activity` | `api/activity/` | — (no input) | — (`204` no body)³ | `ACTIVITY_STORE` (`ActivityClearer`) | — |
 | `GET /api/status` | `api/status/` | — (no input) | `StatusListResponseDto` | `STATUS_READER` | — |
 | `GET /api/forwards` | `api/forwards/` | — (no input) | `ForwardsListResponseDto` | `FORWARDS_READER` | — |
+| `POST /api/forwards` | `api/forwards/` | `CreateForwardRuleBodyDto`⁴ | `ForwardRuleResponseDto` (`201`) | `FORWARD_RULE_CREATOR` (`ForwardRuleCreator`) | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
@@ -119,12 +122,20 @@ coercion-with-fallback (always `200`) — a transform-only DTO would add ceremon
 and risk parity drift, so the coercion stays endpoint-local in the service
 (documented parity exception); its **response** is still mapped. ³ `204`-empty
 responses have no JSON body, so they have no response DTO (the absent body is the
-response, matching Express).
+response, matching Express). ⁴ `CreateForwardRuleBodyDto` is a **documentation/typing**
+DTO only — body validation is delegated to the shared `validateForwardRule`
+(`@portier/shared`) inside `ForwardManager.addRule` (the single contract validator),
+so **no validation pipe runs on the body** (re-expressing the validator as
+class-validator constraints would risk error-message/coercion/`id` drift — a
+documented parity exception). Manager `ValidationError`/`ConflictError` are
+translated to `400`/`409` via the shared `mapManagerError`. A created **enabled**
+rule starts its forwarder (identical to Express); parity tests create `enabled:false`
+rules (no sockets).
 
-**Deferred (Milestone 3+, write/lifecycle/static):** rule CRUD
-(`POST`/`PATCH`/`DELETE /api/forwards`), start/stop/reorder, group actions,
+**Deferred (Milestone 3+, write/lifecycle/static):** rule update/delete
+(`PATCH`/`DELETE /api/forwards`), start/stop/reorder, group actions,
 diagnose, `POST /api/config/import`, `POST /api/config/plan`/`apply`, and static
-client serving — all stay with Express. The next milestone is **write/lifecycle**,
+client serving — all stay with Express. The next milestone continues **write/lifecycle**,
 not more read endpoints.
 
 Layout:
