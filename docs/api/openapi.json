@@ -398,6 +398,49 @@
         ]
       }
     },
+    "/api/forwards/{id}/start": {
+      "post": {
+        "description": "Starts the rule's forwarder and returns its current status. Idempotent — an already-running rule returns its status without restarting; autostart/enabled is not a precondition. An unknown id returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "operationId": "ForwardsController_start",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "The rule id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The rule's status after starting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForwardStatusDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No rule with that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Start a forward rule",
+        "tags": [
+          "forwards"
+        ]
+      }
+    },
     "/api/runtime": {
       "get": {
         "description": "Returns runtime/version/uptime/process metadata.",

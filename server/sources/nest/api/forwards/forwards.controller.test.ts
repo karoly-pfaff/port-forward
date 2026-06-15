@@ -1,8 +1,10 @@
 import type { ForwardRule, ForwardRuleResponse } from "@portier/shared";
 import { describe, expect, it } from "vitest";
+import type { ForwardStatus } from "@portier/shared";
 import { ForwardsController } from "./forwards.controller.js";
 import type { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import type { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
+import type { StartForwardRuleService } from "./start-forward-rule.service.js";
 import type { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import type { ForwardsService } from "./forwards.service.js";
 
@@ -18,17 +20,28 @@ const RESPONSE: ForwardRuleResponse = {
   advisories: [],
 };
 
+const STATUS: ForwardStatus = {
+  ruleId: "r1",
+  running: true,
+  health: "healthy",
+  bytesIn: 0,
+  bytesOut: 0,
+  startedAt: "2026-06-15T00:00:00.000Z",
+};
+
 function controller(overrides: {
   list?: () => ForwardRuleResponse[];
   create?: (body: unknown) => Promise<ForwardRuleResponse>;
   update?: (id: string, body: unknown) => Promise<ForwardRuleResponse>;
   remove?: (id: string) => Promise<void>;
+  start?: (id: string) => Promise<ForwardStatus>;
 }): ForwardsController {
   return new ForwardsController(
     { list: overrides.list ?? (() => []) } as unknown as ForwardsService,
     { create: overrides.create ?? (async () => RESPONSE) } as unknown as CreateForwardRuleService,
     { update: overrides.update ?? (async () => RESPONSE) } as unknown as UpdateForwardRuleService,
-    { delete: overrides.remove ?? (async () => undefined) } as unknown as DeleteForwardRuleService
+    { delete: overrides.remove ?? (async () => undefined) } as unknown as DeleteForwardRuleService,
+    { start: overrides.start ?? (async () => STATUS) } as unknown as StartForwardRuleService
   );
 }
 
@@ -90,5 +103,21 @@ describe("ForwardsController.remove", () => {
 
     expect(receivedId).toBe("r1"); // path id passed through
     expect(result).toBeUndefined(); // no response body
+  });
+});
+
+describe("ForwardsController.start", () => {
+  it("delegates to the start service with the id and maps the status to the response DTO", async () => {
+    let receivedId: string | undefined;
+    const result = await controller({
+      start: async (id) => {
+        receivedId = id;
+        return STATUS;
+      },
+    }).start("r1");
+
+    expect(receivedId).toBe("r1"); // path id passed through
+    expect(result).toEqual(STATUS); // byte-for-byte
+    expect(result).not.toBe(STATUS); // mapped copy
   });
 });

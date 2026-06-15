@@ -94,7 +94,8 @@ slices, each guarded by `npm run validate:contract`.
 The **read-side `/api` migration is complete** (v1.14 Slice 11); the rule CRUD
 trio is migrated — **create** (`POST /api/forwards`, Slice 14), **update**
 (`PATCH /api/forwards/:id`, Slice 15), and **delete** (`DELETE /api/forwards/:id`,
-Slice 16). Every endpoint below is **shadow-only** — served by the
+Slice 16) — plus the first lifecycle endpoint, **start**
+(`POST /api/forwards/:id/start`, Slice 17). Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -110,6 +111,7 @@ unchanged. `validate:contract` is 234/234.
 | `POST /api/forwards` | `api/forwards/` | `CreateForwardRuleBodyDto`⁴ | `ForwardRuleResponseDto` (`201`) | `FORWARD_RULE_CREATOR` (`ForwardRuleCreator`) | — |
 | `PATCH /api/forwards/:id` | `api/forwards/` | `:id` (`@ApiParam`) + `UpdateForwardRuleBodyDto`⁴ | `ForwardRuleResponseDto` (`200`) | `FORWARD_RULE_UPDATER` (`ForwardRuleUpdater`) | — |
 | `DELETE /api/forwards/:id` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | — (`204` no body)³ | `FORWARD_RULE_DELETER` (`ForwardRuleDeleter`) | — |
+| `POST /api/forwards/:id/start` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STARTER` (`ForwardRuleStarter`) | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
@@ -140,16 +142,30 @@ are translated to `400`/`404`/`409` via the shared `mapManagerError`. A created
 only when a forwarding field (`protocol`/`listenHost`/`listenPort`/`targetHost`/`targetPort`/`udpMode`)
 changes — metadata-only updates (name/group/autostart) do not restart and a stopped
 rule is not started (identical to Express); parity tests use `enabled:false`/stopped
-rules (no sockets). **Delete** (`DELETE /api/forwards/:id`) returns `204` with no
+rules (no sockets). ⁵ The **start** response body is a `ForwardStatus` (not a rule),
+so it reuses the `ForwardStatusDto` schema (shared with `GET /api/status`) via a
+small `toForwardStatusResponseDto` mapper; `@HttpCode(200)` is required because
+NestJS defaults `POST`→`201`. **Delete** (`DELETE /api/forwards/:id`) returns `204` with no
 body, stops a running forwarder first (runtime cleanup), rolls back on a persist
 failure, and returns `404` for an unknown id — all inherited by delegating to
 `ForwardManager.deleteRule`; parity tests delete `enabled:false` stopped rules (no
-sockets) and cover success/404/repeat-delete and GET-after-DELETE.
+sockets) and cover success/404/repeat-delete and GET-after-DELETE. **Start**
+(`POST /api/forwards/:id/start`) ⁵ opens the rule's forwarder and returns `200` +
+its `ForwardStatus` (note: NestJS would default `POST`→`201`, so `@HttpCode(200)`
+matches Express); it is **idempotent** (an already-running rule returns its status
+without restarting), autostart/`enabled` is not a precondition, and an unknown id →
+`404` — all inherited by delegating to `ForwardManager.startRule`. A started
+status carries a volatile `startedAt`, so byte-for-byte parity uses the
+**idempotent already-running** path on a **shared** manager (the listener is opened
+once via the Test-A `startRuleStable` bind-retry helper, then both runtimes return
+the identical pinned status); a separate single-runtime cold-start integration test
+opens a real TCP and a real UDP listener through the Nest endpoint and stops it
+(`manager.stopAll()`) afterwards — no leaked sockets, no fixed ports.
 
-**Deferred (Milestone 3+, write/lifecycle/static):** rule start/stop, reorder,
-group actions, diagnose, `POST /api/config/import`, `POST /api/config/plan`/`apply`,
-and static client serving — all stay with Express. The next milestone continues
-**write/lifecycle**, not more read endpoints.
+**Deferred (Milestone 3+, write/lifecycle/static):** rule stop, reorder, group
+actions, diagnose, `POST /api/config/import`, `POST /api/config/plan`/`apply`, and
+static client serving — all stay with Express. The next slice continues
+**write/lifecycle** with `POST /api/forwards/:id/stop` (the natural pair).
 
 Layout:
 

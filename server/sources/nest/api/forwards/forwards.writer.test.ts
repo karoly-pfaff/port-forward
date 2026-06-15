@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultForwardRuleCreator,
   createDefaultForwardRuleDeleter,
+  createDefaultForwardRuleStarter,
   createDefaultForwardRuleUpdater,
   InMemoryRuleStore,
 } from "./forwards.writer.js";
@@ -73,5 +74,14 @@ describe("createDefaultForwardRuleDeleter", () => {
     await deleter.addRule({ ...RULE, id: "d1" });
     await deleter.deleteRule("d1");
     expect(deleter.listRules()).toEqual([]);
+  });
+});
+
+describe("createDefaultForwardRuleStarter", () => {
+  it("creates an isolated in-memory starter that returns 404-able NotFound for an unknown id (no runtime wired)", async () => {
+    // The scaffold default is an empty ForwardManager — starting an unknown id
+    // rejects with NotFoundError (no rule, no socket opened).
+    const starter = createDefaultForwardRuleStarter();
+    await expect(starter.startRule("missing")).rejects.toThrow(/not found/i);
   });
 });

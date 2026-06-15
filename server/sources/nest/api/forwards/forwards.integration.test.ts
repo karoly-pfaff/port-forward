@@ -2,10 +2,11 @@ import "reflect-metadata";
 import type http from "node:http";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { getPortAdvisories, type ForwardRule, type ForwardRuleResponse } from "@portier/shared";
+import { getPortAdvisories, type ForwardRule, type ForwardRuleResponse, type ForwardStatus } from "@portier/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../../../api.js";
 import { ForwardManager, type RuleStore } from "../../../forward-manager.js";
+import { getFreeTcpPort, getFreeUdpPort, startRuleStable } from "../../../test-helpers.js";
 import { AppModule } from "../../app.module.js";
 import { createNestApp } from "../../app.factory.js";
 import {
@@ -16,8 +17,14 @@ import {
   type ApiResponse,
   type ParityServer,
 } from "../../testing/api-parity.js";
+import { STATUS_READER } from "../status/status.reader.js";
 import { FORWARDS_READER, type ForwardsReader } from "./forwards.reader.js";
-import { FORWARD_RULE_CREATOR, FORWARD_RULE_DELETER, FORWARD_RULE_UPDATER } from "./forwards.writer.js";
+import {
+  FORWARD_RULE_CREATOR,
+  FORWARD_RULE_DELETER,
+  FORWARD_RULE_STARTER,
+  FORWARD_RULE_UPDATER,
+} from "./forwards.writer.js";
 
 /** In-memory RuleStore for the seeded manager; save() is exercised by addRule. */
 class MemoryStore implements RuleStore {
@@ -144,16 +151,24 @@ describe("GET /api/forwards (Nest) — parity with Express", () => {
 const CREATE_TCP = { id: "fixed-tcp", name: "New Web", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48020, targetHost: "127.0.0.1", targetPort: 8080, enabled: false } as const;
 const CREATE_UDP = { id: "fixed-udp", name: "New DNS", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48021, targetHost: "127.0.0.1", targetPort: 53, enabled: false, udpMode: "one-way" } as const;
 
-/** Binds the (seeded) manager to the reader + creator + updater + deleter so GET reflects POST/PATCH/DELETE. */
+/**
+ * Binds the (seeded) manager to the reader + status reader + creator + updater +
+ * deleter + starter so GET reflects POST/PATCH/DELETE and `/start` + `/api/status`
+ * read the same manager state.
+ */
 async function nestWithManager(manager: ForwardManager): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(FORWARDS_READER)
+    .useValue(manager)
+    .overrideProvider(STATUS_READER)
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_CREATOR)
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_UPDATER)
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_DELETER)
+    .useValue(manager)
+    .overrideProvider(FORWARD_RULE_STARTER)
     .useValue(manager)
     .compile();
   return moduleRef.createNestApplication({ logger: false });
@@ -220,6 +235,12 @@ describe("POST /api/forwards (Nest) — scaffold default", () => {
 
   it("returns 404 for DELETE of an unknown id (default empty deleter)", async () => {
     const response = await deleteRule(nest.baseUrl, "nonexistent");
+    expect(response.status).toBe(404);
+    expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
+  });
+
+  it("returns 404 for START of an unknown id (default empty starter)", async () => {
+    const response = await startRuleReq(nest.baseUrl, "nonexistent");
     expect(response.status).toBe(404);
     expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
   });
@@ -337,6 +358,10 @@ function patchRule(baseUrl: string, id: string, body: unknown): Promise<ApiRespo
 
 function deleteRule(baseUrl: string, id: string): Promise<ApiResponse> {
   return fetchApi(baseUrl, `/api/forwards/${id}`, { method: "DELETE" });
+}
+
+function startRuleReq(baseUrl: string, id: string): Promise<ApiResponse> {
+  return fetchApi(baseUrl, `/api/forwards/${id}/start`, { method: "POST" });
 }
 
 // A stopped TCP + UDP pair so DELETE can be parity-tested per protocol without sockets.
@@ -563,6 +588,121 @@ describe("DELETE /api/forwards/:id (Nest) — parity with Express", () => {
       expect(n2.status).toBe(404);
     } finally {
       await close();
+    }
+  });
+});
+
+// ── POST /api/forwards/:id/start (lifecycle start) ────────────────────────────
+
+/**
+ * Boots Express and Nest over the SAME manager instance (start is idempotent, so
+ * sharing is safe and is what makes the started status — incl. the volatile
+ * `startedAt` — deterministically equal across runtimes). Caller owns rule
+ * lifecycle + socket cleanup (`manager.stopAll()`).
+ */
+async function bootSharedStartPair(
+  manager: ForwardManager
+): Promise<{ nest: ParityServer; express: ParityServer; close: () => Promise<void> }> {
+  const nestApp = await nestWithManager(manager);
+  const nest = await startNestServer(nestApp);
+  const express = await startHandlerServer(createApp(manager) as unknown as http.RequestListener);
+  return {
+    nest,
+    express,
+    close: async () => {
+      await nest.close();
+      await express.close();
+    },
+  };
+}
+
+describe("POST /api/forwards/:id/start (Nest) — parity with Express", () => {
+  it("returns the same 404 envelope as Express for an unknown id", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const [e, n] = await Promise.all([
+        startRuleReq(express.baseUrl, "ghost"),
+        startRuleReq(nest.baseUrl, "ghost"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(404);
+      expect((n.body as { errors: string[] }).errors[0]).toContain("not found");
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns the started rule's status (200) byte-for-byte like Express — idempotent already-running, no volatile drift", async () => {
+    // Shared manager: open the listener ONCE (bind-retry helper) so `startedAt` is
+    // pinned, then both runtimes hit the idempotent already-running path and return
+    // the identical status. One real socket, cleaned up in finally.
+    const manager = new ForwardManager(new MemoryStore());
+    const listenPort = await getFreeTcpPort();
+    await manager.addRule({ id: "run-1", name: "Runner", protocol: "tcp", listenHost: "127.0.0.1", listenPort, targetHost: "127.0.0.1", targetPort: 49990, enabled: false });
+    const { nest, express, close } = await bootSharedStartPair(manager);
+    try {
+      await startRuleStable(manager, "run-1", getFreeTcpPort); // opens the listener once
+
+      const [e, n] = await Promise.all([
+        startRuleReq(express.baseUrl, "run-1"),
+        startRuleReq(nest.baseUrl, "run-1"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      const body = n.body as ForwardStatus;
+      expect(body).toMatchObject({ ruleId: "run-1", running: true });
+      expect(typeof body.startedAt).toBe("string");
+
+      // GET /api/status after start reflects the running rule identically in both runtimes.
+      const [es, ns] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/status"),
+        fetchApi(nest.baseUrl, "/api/status"),
+      ]);
+      expect(diffApiResponses(es, ns)).toEqual([]);
+      expect((ns.body as ForwardStatus[])[0]).toMatchObject({ ruleId: "run-1", running: true });
+    } finally {
+      await manager.stopAll();
+      await close();
+    }
+  });
+});
+
+describe("POST /api/forwards/:id/start (Nest) — real cold start (single runtime, socket cleaned up)", () => {
+  it("starts a stopped TCP rule end-to-end (200, running:true, ISO startedAt) and stops it", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    const listenPort = await getFreeTcpPort();
+    await manager.addRule({ id: "cold-tcp", name: "ColdTcp", protocol: "tcp", listenHost: "127.0.0.1", listenPort, targetHost: "127.0.0.1", targetPort: 49991, enabled: false });
+    const nestApp = await nestWithManager(manager);
+    const nest = await startNestServer(nestApp);
+    try {
+      const response = await startRuleReq(nest.baseUrl, "cold-tcp");
+      expect(response.status).toBe(200);
+      const body = response.body as ForwardStatus;
+      expect(body.ruleId).toBe("cold-tcp");
+      expect(body.running).toBe(true);
+      expect(body.startedAt).toBeTypeOf("string");
+      expect(Number.isNaN(Date.parse(body.startedAt as string))).toBe(false);
+    } finally {
+      await manager.stopAll(); // close the real listener
+      await nest.close();
+    }
+  });
+
+  it("starts a stopped UDP rule end-to-end (200, running:true) — UDP first-class — and stops it", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    const listenPort = await getFreeUdpPort();
+    await manager.addRule({ id: "cold-udp", name: "ColdUdp", protocol: "udp", listenHost: "127.0.0.1", listenPort, targetHost: "127.0.0.1", targetPort: 49992, enabled: false, udpMode: "one-way" });
+    const nestApp = await nestWithManager(manager);
+    const nest = await startNestServer(nestApp);
+    try {
+      const response = await startRuleReq(nest.baseUrl, "cold-udp");
+      expect(response.status).toBe(200);
+      const body = response.body as ForwardStatus;
+      expect(body.ruleId).toBe("cold-udp");
+      expect(body.running).toBe(true);
+    } finally {
+      await manager.stopAll(); // close the real socket
+      await nest.close();
     }
   });
 });

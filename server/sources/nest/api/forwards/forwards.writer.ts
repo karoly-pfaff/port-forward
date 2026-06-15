@@ -1,4 +1,4 @@
-import type { ForwardRule } from "@portier/shared";
+import type { ForwardRule, ForwardStatus } from "@portier/shared";
 import { ForwardManager, type RuleStore } from "../../../forward-manager.js";
 
 /**
@@ -81,5 +81,31 @@ export const FORWARD_RULE_DELETER = "FORWARD_RULE_DELETER";
 
 /** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the creator/updater defaults). */
 export function createDefaultForwardRuleDeleter(): ForwardRuleDeleter {
+  return new ForwardManager(new InMemoryRuleStore());
+}
+
+/**
+ * Narrow lifecycle capability for `POST /api/forwards/:id/start`. The real domain
+ * `ForwardManager` satisfies it via `startRule`; tests bind a seeded manager
+ * shared with Express for parity. `startRule` throws `NotFoundError` for an
+ * unknown id, is **idempotent** (an already-running rule returns its current
+ * status without restarting the socket), otherwise opens the forwarder's
+ * listener, emits `rule.started`, and resolves with the rule's `ForwardStatus`
+ * (a started rule's status carries a wall-clock `startedAt`). A start failure
+ * (e.g. the port is in use) rejects with the underlying error. `enabled`/
+ * autostart is NOT a precondition (parity with Express). Socket-opening tests use
+ * free ephemeral ports and stop the rule afterwards; the deterministic byte-for-
+ * byte parity test pre-starts the rule once on a shared manager so both runtimes
+ * hit the idempotent path and return the SAME pinned status (no volatile drift).
+ */
+export interface ForwardRuleStarter {
+  startRule(ruleId: string): Promise<ForwardStatus>;
+}
+
+/** Injection token for the rule starter. */
+export const FORWARD_RULE_STARTER = "FORWARD_RULE_STARTER";
+
+/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
+export function createDefaultForwardRuleStarter(): ForwardRuleStarter {
   return new ForwardManager(new InMemoryRuleStore());
 }

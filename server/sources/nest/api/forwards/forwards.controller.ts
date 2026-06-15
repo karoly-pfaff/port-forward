@@ -15,12 +15,15 @@ import {
   ApiErrorResponseDto,
   CreateForwardRuleBodyDto,
   ForwardRuleResponseDto,
+  ForwardStatusDto,
   UpdateForwardRuleBodyDto,
 } from "../../common/api-schemas.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
+import { StartForwardRuleService } from "./start-forward-rule.service.js";
 import { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import { toForwardRuleResponseDto } from "./forward-rule.response.dto.js";
+import { toForwardStatusResponseDto } from "./forward-status.response.dto.js";
 import { ForwardsService } from "./forwards.service.js";
 import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwards-list.response.dto.js";
 
@@ -31,8 +34,9 @@ import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwa
  * `POST` body is NOT run through a validation pipe — validation is delegated to
  * the shared `validateForwardRule` inside the manager (a documented parity
  * exception), so `@ApiBody` documents the schema explicitly. List/create/update/
- * delete are migrated; the lifecycle routes under `/api/forwards/...` (start/stop/
- * reorder/group/diagnose) stay with Express.
+ * delete and the lifecycle **start** (`POST :id/start`) are migrated; the remaining
+ * lifecycle routes under `/api/forwards/...` (stop/reorder/group/diagnose) stay
+ * with Express.
  */
 @ApiTags("forwards")
 @Controller("api/forwards")
@@ -41,7 +45,8 @@ export class ForwardsController {
     @Inject(ForwardsService) private readonly forwards: ForwardsService,
     @Inject(CreateForwardRuleService) private readonly createService: CreateForwardRuleService,
     @Inject(UpdateForwardRuleService) private readonly updateService: UpdateForwardRuleService,
-    @Inject(DeleteForwardRuleService) private readonly deleteService: DeleteForwardRuleService
+    @Inject(DeleteForwardRuleService) private readonly deleteService: DeleteForwardRuleService,
+    @Inject(StartForwardRuleService) private readonly startService: StartForwardRuleService
   ) {}
 
   @Get()
@@ -100,5 +105,21 @@ export class ForwardsController {
   @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
   async remove(@Param("id") id: string): Promise<void> {
     await this.deleteService.delete(id);
+  }
+
+  @Post(":id/start")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Start a forward rule",
+    description:
+      "Starts the rule's forwarder and returns its current status. Idempotent — an already-running rule " +
+      "returns its status without restarting; autostart/enabled is not a precondition. An unknown id returns 404. " +
+      "Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+  })
+  @ApiParam({ name: "id", type: String, description: "The rule id." })
+  @ApiOkResponse({ type: ForwardStatusDto, description: "The rule's status after starting." })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
+  async start(@Param("id") id: string): Promise<ForwardStatusDto> {
+    return toForwardStatusResponseDto(await this.startService.start(id));
   }
 }
