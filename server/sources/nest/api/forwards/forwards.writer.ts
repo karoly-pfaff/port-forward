@@ -61,3 +61,25 @@ export const FORWARD_RULE_UPDATER = "FORWARD_RULE_UPDATER";
 export function createDefaultForwardRuleUpdater(): ForwardRuleUpdater {
   return new ForwardManager(new InMemoryRuleStore());
 }
+
+/**
+ * Narrow write capability for `DELETE /api/forwards/:id` (rule delete). The real
+ * domain `ForwardManager` satisfies it via `deleteRule`; tests bind a seeded
+ * manager shared with Express for parity. `deleteRule` throws `NotFoundError` for
+ * an unknown id, stops a running forwarder (runtime cleanup), removes the rule,
+ * persists (with rollback — a failed persist restores the rule and restarts it if
+ * it was running), and emits `rule.deleted`. It resolves with no value; the route
+ * returns `204` with an empty body. Tests delete `enabled:false` stopped rules so
+ * no socket/forwarder is involved.
+ */
+export interface ForwardRuleDeleter {
+  deleteRule(ruleId: string): Promise<void>;
+}
+
+/** Injection token for the rule deleter. */
+export const FORWARD_RULE_DELETER = "FORWARD_RULE_DELETER";
+
+/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the creator/updater defaults). */
+export function createDefaultForwardRuleDeleter(): ForwardRuleDeleter {
+  return new ForwardManager(new InMemoryRuleStore());
+}

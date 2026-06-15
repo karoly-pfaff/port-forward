@@ -2,6 +2,7 @@ import type { ForwardRule, ForwardRuleResponse } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import { ForwardsController } from "./forwards.controller.js";
 import type { CreateForwardRuleService } from "./create-forward-rule.service.js";
+import type { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import type { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import type { ForwardsService } from "./forwards.service.js";
 
@@ -21,11 +22,13 @@ function controller(overrides: {
   list?: () => ForwardRuleResponse[];
   create?: (body: unknown) => Promise<ForwardRuleResponse>;
   update?: (id: string, body: unknown) => Promise<ForwardRuleResponse>;
+  remove?: (id: string) => Promise<void>;
 }): ForwardsController {
   return new ForwardsController(
     { list: overrides.list ?? (() => []) } as unknown as ForwardsService,
     { create: overrides.create ?? (async () => RESPONSE) } as unknown as CreateForwardRuleService,
-    { update: overrides.update ?? (async () => RESPONSE) } as unknown as UpdateForwardRuleService
+    { update: overrides.update ?? (async () => RESPONSE) } as unknown as UpdateForwardRuleService,
+    { delete: overrides.remove ?? (async () => undefined) } as unknown as DeleteForwardRuleService
   );
 }
 
@@ -73,5 +76,19 @@ describe("ForwardsController.update", () => {
     expect(receivedBody).toBe(body); // body passed through unchanged
     expect(result).toEqual(RESPONSE); // byte-for-byte
     expect(result).not.toBe(RESPONSE); // mapped copy
+  });
+});
+
+describe("ForwardsController.remove", () => {
+  it("delegates to the delete service with the id and returns no body (204)", async () => {
+    let receivedId: string | undefined;
+    const result = await controller({
+      remove: async (id) => {
+        receivedId = id;
+      },
+    }).remove("r1");
+
+    expect(receivedId).toBe("r1"); // path id passed through
+    expect(result).toBeUndefined(); // no response body
   });
 });

@@ -17,7 +17,7 @@ import {
   type ParityServer,
 } from "../../testing/api-parity.js";
 import { FORWARDS_READER, type ForwardsReader } from "./forwards.reader.js";
-import { FORWARD_RULE_CREATOR, FORWARD_RULE_UPDATER } from "./forwards.writer.js";
+import { FORWARD_RULE_CREATOR, FORWARD_RULE_DELETER, FORWARD_RULE_UPDATER } from "./forwards.writer.js";
 
 /** In-memory RuleStore for the seeded manager; save() is exercised by addRule. */
 class MemoryStore implements RuleStore {
@@ -144,7 +144,7 @@ describe("GET /api/forwards (Nest) — parity with Express", () => {
 const CREATE_TCP = { id: "fixed-tcp", name: "New Web", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48020, targetHost: "127.0.0.1", targetPort: 8080, enabled: false } as const;
 const CREATE_UDP = { id: "fixed-udp", name: "New DNS", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48021, targetHost: "127.0.0.1", targetPort: 53, enabled: false, udpMode: "one-way" } as const;
 
-/** Binds the (seeded) manager to the reader + creator + updater so GET reflects POST/PATCH. */
+/** Binds the (seeded) manager to the reader + creator + updater + deleter so GET reflects POST/PATCH/DELETE. */
 async function nestWithManager(manager: ForwardManager): Promise<INestApplication> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(FORWARDS_READER)
@@ -152,6 +152,8 @@ async function nestWithManager(manager: ForwardManager): Promise<INestApplicatio
     .overrideProvider(FORWARD_RULE_CREATOR)
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_UPDATER)
+    .useValue(manager)
+    .overrideProvider(FORWARD_RULE_DELETER)
     .useValue(manager)
     .compile();
   return moduleRef.createNestApplication({ logger: false });
@@ -212,6 +214,12 @@ describe("POST /api/forwards (Nest) — scaffold default", () => {
 
   it("returns 404 for PATCH of an unknown id (default empty updater)", async () => {
     const response = await patchRule(nest.baseUrl, "nonexistent", { name: "X" });
+    expect(response.status).toBe(404);
+    expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
+  });
+
+  it("returns 404 for DELETE of an unknown id (default empty deleter)", async () => {
+    const response = await deleteRule(nest.baseUrl, "nonexistent");
     expect(response.status).toBe(404);
     expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
   });
@@ -325,6 +333,18 @@ function patchRule(baseUrl: string, id: string, body: unknown): Promise<ApiRespo
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function deleteRule(baseUrl: string, id: string): Promise<ApiResponse> {
+  return fetchApi(baseUrl, `/api/forwards/${id}`, { method: "DELETE" });
+}
+
+// A stopped TCP + UDP pair so DELETE can be parity-tested per protocol without sockets.
+const SEED_UDP = { id: "seed-udp", name: "SeedUdp", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48032, targetHost: "127.0.0.1", targetPort: 53, enabled: false, udpMode: "one-way" } as const;
+
+async function seedTcpUdp(manager: ForwardManager): Promise<void> {
+  await manager.addRule(SEED_TCP);
+  await manager.addRule(SEED_UDP);
 }
 
 // A stopped (enabled:false) rule with a known id, seeded into both managers so PATCH is deterministic.
@@ -458,6 +478,89 @@ describe("PATCH /api/forwards/:id (Nest) — parity with Express", () => {
       const body = n.body as ForwardRuleResponse & { bogusField?: unknown };
       expect(body.name).toBe("WithExtra");
       expect(body.bogusField).toBeUndefined(); // unknown field dropped by the validator
+    } finally {
+      await close();
+    }
+  });
+});
+
+// ── DELETE /api/forwards/:id (delete) ─────────────────────────────────────────
+
+describe("DELETE /api/forwards/:id (Nest) — parity with Express", () => {
+  it("deletes an existing stopped TCP rule (204, no body) and removes it from GET, byte-for-byte like Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedTcpUdp);
+    try {
+      const [e, n] = await Promise.all([
+        deleteRule(express.baseUrl, "seed-1"),
+        deleteRule(nest.baseUrl, "seed-1"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(204);
+      expect(n.body).toBeNull(); // 204, no response body
+      // GET after DELETE reflects the removal in both runtimes.
+      const [eg, ng] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/forwards"),
+        fetchApi(nest.baseUrl, "/api/forwards"),
+      ]);
+      expect(diffApiResponses(eg, ng)).toEqual([]);
+      expect((ng.body as ForwardRuleResponse[]).map((r) => r.id)).toEqual(["seed-udp"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("deletes an existing stopped UDP rule (204, no body) byte-for-byte like Express (UDP first-class)", async () => {
+    const { nest, express, close } = await bootCreatePair(seedTcpUdp);
+    try {
+      const [e, n] = await Promise.all([
+        deleteRule(express.baseUrl, "seed-udp"),
+        deleteRule(nest.baseUrl, "seed-udp"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(204);
+      const [eg, ng] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/forwards"),
+        fetchApi(nest.baseUrl, "/api/forwards"),
+      ]);
+      expect(diffApiResponses(eg, ng)).toEqual([]);
+      expect((ng.body as ForwardRuleResponse[]).map((r) => r.id)).toEqual(["seed-1"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns the same 404 envelope as Express for an unknown id", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const [e, n] = await Promise.all([
+        deleteRule(express.baseUrl, "ghost"),
+        deleteRule(nest.baseUrl, "ghost"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(404);
+      expect((n.body as { errors: string[] }).errors[0]).toContain("not found");
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns the same 404 for a repeated delete (Express has no idempotent no-op), byte-for-byte", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      // First delete succeeds in both runtimes.
+      const [e1, n1] = await Promise.all([
+        deleteRule(express.baseUrl, "seed-1"),
+        deleteRule(nest.baseUrl, "seed-1"),
+      ]);
+      expect(diffApiResponses(e1, n1)).toEqual([]);
+      expect(n1.status).toBe(204);
+      // Second delete of the now-removed id → 404 in both runtimes.
+      const [e2, n2] = await Promise.all([
+        deleteRule(express.baseUrl, "seed-1"),
+        deleteRule(nest.baseUrl, "seed-1"),
+      ]);
+      expect(diffApiResponses(e2, n2)).toEqual([]);
+      expect(n2.status).toBe(404);
     } finally {
       await close();
     }

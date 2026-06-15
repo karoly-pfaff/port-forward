@@ -110,6 +110,18 @@ describe("generateOpenApiDocument", () => {
     expect(doc.components?.schemas?.UpdateForwardRuleBodyDto).toBeDefined();
   });
 
+  it("documents DELETE /api/forwards/{id} with its path param, 204 no-body, and 404 error", () => {
+    const del = doc.paths["/api/forwards/{id}"]?.delete;
+    expect(del).toBeDefined();
+    const params = (del?.parameters ?? []) as Array<{ name: string; in: string }>;
+    expect(params.some((p) => p.name === "id" && p.in === "path")).toBe(true);
+    const responses = del?.responses ?? {};
+    expect(responses["204"]).toBeDefined();
+    expect((responses["204"] as { content?: unknown }).content).toBeUndefined(); // no body
+    const notFound = responses["404"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(notFound?.content?.["application/json"]?.schema?.$ref).toContain("ApiErrorResponseDto");
+  });
+
   it("documents DELETE /api/activity as 204 with no body", () => {
     const del = doc.paths["/api/activity"]?.delete;
     expect(del?.responses?.["204"]).toBeDefined();

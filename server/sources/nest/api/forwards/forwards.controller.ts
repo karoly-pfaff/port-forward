@@ -1,9 +1,10 @@
-import { Body, Controller, Get, Inject, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post } from "@nestjs/common";
 import {
   ApiBadRequestResponse,
   ApiBody,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -17,6 +18,7 @@ import {
   UpdateForwardRuleBodyDto,
 } from "../../common/api-schemas.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
+import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import { toForwardRuleResponseDto } from "./forward-rule.response.dto.js";
 import { ForwardsService } from "./forwards.service.js";
@@ -28,9 +30,9 @@ import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwa
  * their response DTO at the HTTP boundary (matching the Express routes). The
  * `POST` body is NOT run through a validation pipe — validation is delegated to
  * the shared `validateForwardRule` inside the manager (a documented parity
- * exception), so `@ApiBody` documents the schema explicitly. Only list + create
- * are migrated; the other write/lifecycle routes under `/api/forwards/...` stay
- * with Express.
+ * exception), so `@ApiBody` documents the schema explicitly. List/create/update/
+ * delete are migrated; the lifecycle routes under `/api/forwards/...` (start/stop/
+ * reorder/group/diagnose) stay with Express.
  */
 @ApiTags("forwards")
 @Controller("api/forwards")
@@ -38,7 +40,8 @@ export class ForwardsController {
   constructor(
     @Inject(ForwardsService) private readonly forwards: ForwardsService,
     @Inject(CreateForwardRuleService) private readonly createService: CreateForwardRuleService,
-    @Inject(UpdateForwardRuleService) private readonly updateService: UpdateForwardRuleService
+    @Inject(UpdateForwardRuleService) private readonly updateService: UpdateForwardRuleService,
+    @Inject(DeleteForwardRuleService) private readonly deleteService: DeleteForwardRuleService
   ) {}
 
   @Get()
@@ -81,5 +84,21 @@ export class ForwardsController {
     @Body() body: UpdateForwardRuleBodyDto
   ): Promise<ForwardRuleResponseDto> {
     return toForwardRuleResponseDto(await this.updateService.update(id, body));
+  }
+
+  @Delete(":id")
+  @HttpCode(204)
+  @ApiOperation({
+    summary: "Delete a forward rule",
+    description:
+      "Deletes a rule. A running rule's forwarder is stopped first; an unknown id returns 404. Returns 204 " +
+      "with no body (matching Express). The `:id` path param has no validation pipe (Express does none) — an " +
+      "unknown id surfaces as the manager's NotFoundError → 404.",
+  })
+  @ApiParam({ name: "id", type: String, description: "The rule id." })
+  @ApiNoContentResponse({ description: "Rule deleted. No response body." })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
+  async remove(@Param("id") id: string): Promise<void> {
+    await this.deleteService.delete(id);
   }
 }

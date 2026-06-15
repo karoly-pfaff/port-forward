@@ -2,6 +2,7 @@ import type { ForwardRule } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import {
   createDefaultForwardRuleCreator,
+  createDefaultForwardRuleDeleter,
   createDefaultForwardRuleUpdater,
   InMemoryRuleStore,
 } from "./forwards.writer.js";
@@ -58,5 +59,19 @@ describe("createDefaultForwardRuleUpdater", () => {
     expect(updated.name).toBe("Renamed");
     // Unspecified fields are preserved (no undefined overwrite).
     expect(updated.listenPort).toBe(RULE.listenPort);
+  });
+});
+
+describe("createDefaultForwardRuleDeleter", () => {
+  it("creates an isolated in-memory deleter that can delete an existing rule", async () => {
+    // The default uses a ForwardManager, which also creates; add then delete.
+    const deleter = createDefaultForwardRuleDeleter() as unknown as {
+      addRule(input: unknown): Promise<ForwardRule>;
+      deleteRule(id: string): Promise<void>;
+      listRules(): ForwardRule[];
+    };
+    await deleter.addRule({ ...RULE, id: "d1" });
+    await deleter.deleteRule("d1");
+    expect(deleter.listRules()).toEqual([]);
   });
 });
