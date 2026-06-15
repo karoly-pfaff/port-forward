@@ -47,7 +47,36 @@ describe("generateOpenApiDocument", () => {
     expect(doc.paths["/api/forwards"]?.get).toBeDefined();
     expect(doc.paths["/api/runtime"]?.get).toBeDefined();
     expect(doc.paths["/api/config/export"]?.get).toBeDefined();
+    expect(doc.paths["/api/config/plan"]?.post).toBeDefined();
     expect(doc.paths["/api/connections"]?.get).toBeDefined();
+  });
+
+  it("documents POST /api/config/plan with its body, 200 plan response, and 400 error", () => {
+    const plan = doc.paths["/api/config/plan"]?.post;
+    expect(plan).toBeDefined();
+    const body = (plan as { requestBody?: { content?: Record<string, { schema?: { $ref?: string } }> } }).requestBody;
+    expect(body?.content?.["application/json"]?.schema?.$ref).toContain("ConfigPlanBodyDto");
+    const responses = plan?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("ConfigPlanResponseDto");
+    const badRequest = responses["400"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(badRequest?.content?.["application/json"]?.schema?.$ref).toContain("ApiErrorResponseDto");
+    // The plan response schema + its nested item schemas are present.
+    const schemas = doc.components?.schemas ?? {};
+    for (const name of [
+      "ConfigPlanResponseDto",
+      "ConfigPlanSummaryDto",
+      "ConfigPlanOperationDto",
+      "ConfigPlanRuleSnapshotDto",
+      "ConfigPlanChangeDto",
+      "ConfigPlanErrorDto",
+      "ConfigPlanWarningDto",
+      "ConfigPlanBodyDto",
+    ]) {
+      expect(schemas[name], `schema ${name}`).toBeDefined();
+    }
+    // The config export docs remain intact.
+    expect(doc.paths["/api/config/export"]?.get).toBeDefined();
   });
 
   it("documents the error envelope schema (ApiErrorResponseDto = { errors: string[] })", () => {

@@ -735,6 +735,49 @@
         ]
       }
     },
+    "/api/config/plan": {
+      "post": {
+        "description": "Diffs the desired config against the current rules and returns the plan (operations, summary, errors, warnings) without mutating anything. A missing `desired` key returns 400; invalid desired rules surface as plan errors (still 200). Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "operationId": "ConfigPlanController_plan",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigPlanBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The config plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigPlanResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`desired` is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Plan a config change",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/connections": {
       "get": {
         "description": "Returns live TCP connections, UDP sessions, and per-rule summaries.",
@@ -1558,6 +1601,298 @@
           "version",
           "exportedAt",
           "rules"
+        ]
+      },
+      "ConfigPlanRuleSnapshotDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Rule id (absent for an added rule)."
+          },
+          "name": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          },
+          "listenHost": {
+            "type": "string"
+          },
+          "listenPort": {
+            "type": "number"
+          },
+          "targetHost": {
+            "type": "string"
+          },
+          "targetPort": {
+            "type": "number"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "udpMode": {
+            "type": "string",
+            "enum": [
+              "one-way",
+              "bidirectional-last-client",
+              "bidirectional-multi-client"
+            ]
+          },
+          "group": {
+            "type": "string",
+            "description": "Optional group label."
+          }
+        },
+        "required": [
+          "name",
+          "protocol",
+          "listenHost",
+          "listenPort",
+          "targetHost",
+          "targetPort",
+          "enabled"
+        ]
+      },
+      "DesiredConfigDto": {
+        "type": "object",
+        "properties": {
+          "rules": {
+            "description": "Desired rule snapshots.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigPlanRuleSnapshotDto"
+            }
+          }
+        },
+        "required": [
+          "rules"
+        ]
+      },
+      "ConfigPlanBodyDto": {
+        "type": "object",
+        "properties": {
+          "desired": {
+            "description": "The desired config (object with a rules array). Required.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DesiredConfigDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "desired"
+        ]
+      },
+      "ConfigPlanSummaryDto": {
+        "type": "object",
+        "properties": {
+          "add": {
+            "type": "number"
+          },
+          "update": {
+            "type": "number"
+          },
+          "remove": {
+            "type": "number"
+          },
+          "unchanged": {
+            "type": "number"
+          },
+          "destructive": {
+            "type": "number",
+            "description": "Number of destructive operations."
+          },
+          "hasDrift": {
+            "type": "boolean",
+            "description": "Whether the desired config differs from current."
+          },
+          "hasErrors": {
+            "type": "boolean",
+            "description": "Whether the plan has validation errors."
+          }
+        },
+        "required": [
+          "add",
+          "update",
+          "remove",
+          "unchanged",
+          "destructive",
+          "hasDrift",
+          "hasErrors"
+        ]
+      },
+      "ConfigPlanChangeDto": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "The changed material field."
+          },
+          "before": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Value before the change (a JSON scalar)."
+          },
+          "after": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Value after the change (a JSON scalar)."
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after"
+        ]
+      },
+      "ConfigPlanOperationDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "add",
+              "update",
+              "remove",
+              "unchanged"
+            ],
+            "description": "Operation type."
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "Affected rule id, if known."
+          },
+          "ruleName": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          },
+          "current": {
+            "description": "Current rule snapshot.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConfigPlanRuleSnapshotDto"
+              }
+            ]
+          },
+          "desired": {
+            "description": "Desired rule snapshot.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConfigPlanRuleSnapshotDto"
+              }
+            ]
+          },
+          "changes": {
+            "description": "Field-level changes (update only).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigPlanChangeDto"
+            }
+          },
+          "destructive": {
+            "type": "boolean",
+            "description": "Whether the operation restarts/removes a forwarder."
+          }
+        },
+        "required": [
+          "type",
+          "ruleName",
+          "protocol",
+          "destructive"
+        ]
+      },
+      "ConfigPlanErrorDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "ConfigPlanWarningDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      },
+      "ConfigPlanResponseDto": {
+        "type": "object",
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the plan was generated (ISO 8601)."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "plan"
+            ],
+            "description": "Discriminator."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ConfigPlanSummaryDto"
+          },
+          "operations": {
+            "description": "Per-rule operations.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigPlanOperationDto"
+            }
+          },
+          "errors": {
+            "description": "Plan validation errors.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigPlanErrorDto"
+            }
+          },
+          "warnings": {
+            "description": "Plan advisory warnings.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConfigPlanWarningDto"
+            }
+          }
+        },
+        "required": [
+          "generatedAt",
+          "mode",
+          "summary",
+          "operations",
+          "errors",
+          "warnings"
         ]
       },
       "TcpConnectionInfoDto": {

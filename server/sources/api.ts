@@ -240,7 +240,11 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
       response.status(400).json({ errors: ["desired is required."] });
       return;
     }
-    const plan = buildConfigPlan({ currentRules: manager.listRules(), desiredRaw: body.desired });
+    const plan = buildConfigPlan({
+      currentRules: manager.listRules(),
+      desiredRaw: body.desired,
+      now: (options.now ?? (() => new Date()))(),
+    });
     response.json(plan);
   });
 

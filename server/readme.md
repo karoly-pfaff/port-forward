@@ -101,7 +101,8 @@ Slice 16) — plus the single-rule lifecycle pair, **start**
 (`POST /api/forwards/:id/diagnose`, Slice 20), and the **group-action pair** —
 **group stop** (`POST /api/forwards/groups/:group/stop`, Slice 21) and **group
 start** (`POST /api/forwards/groups/:group/start`, Slice 22). The entire
-`/api/forwards` surface is now migrated. Every endpoint below is **shadow-only** — served by the
+`/api/forwards` surface is migrated, and the config milestone has begun with the
+**non-mutating** `POST /api/config/plan` dry-run (Slice 23). Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -125,6 +126,7 @@ unchanged. `validate:contract` is 234/234.
 | `POST /api/forwards/groups/:group/start` | `api/forwards/` | `:group` (`@ApiParam`)⁸ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STARTER` (`ForwardGroupStarter`) | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
+| `POST /api/config/plan` | `api/config/` | `ConfigPlanBodyDto`⁹ | `ConfigPlanResponseDto` (`200`) | `CONFIG_PLAN_READER` + `CLOCK_READER` | `buildConfigPlan` (`generatedAt`) |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
 
 Every migrated endpoint has a byte-for-byte Express↔Nest parity test
@@ -238,9 +240,29 @@ single-runtime cold-start test starts a real listener through the Nest endpoint
 (`started` + `GET /api/status` running) and `stopAll()`s afterwards. The group-action
 pair (and the whole `/api/forwards` surface) is now migrated.
 
-**Deferred (Milestone 3+, config/static):** `POST /api/config/import`,
-`POST /api/config/plan`/`apply`, and static client serving — all stay with Express.
-The next slice begins the config-API milestone.
+⁹ **Config plan** (`POST /api/config/plan`, Slice 23 — the first config-milestone
+endpoint) is a **NON-MUTATING dry-run**: it diffs the desired config against the
+current rules via the shared `buildConfigPlan` and returns the plan (operations,
+summary, errors, warnings) — it never mutates rules, opens sockets, or emits
+activity. The body validation is **delegated** to the service to match Express's
+`"desired" in body` key-presence check exactly (`400 ["desired is required."]` only
+when the `desired` key is absent; `desired: null` is allowed and surfaces as a plan
+error, NOT a `400`, so the `ConfigPlanBodyDto` is documentation/typing only — no
+validation pipe, since class-validator `@IsDefined` would reject `null` and diverge).
+Its volatile `generatedAt` is pinned via the **shared `CLOCK_READER`** (Nest) and the
+existing `AppOptions.now` seam (Express — `buildConfigPlan` already accepted a `now`
+arg; the Express route now threads `options.now`, behavior-preserving). The response
+is mapped through `toConfigPlanResponseDto` (a `structuredClone` deep copy — the plan
+is deeply nested). Byte-for-byte parity uses a **shared** manager (plan is
+non-mutating, so sharing is safe) + the pinned clock — `400`-missing-desired, empty
+plan, add/update/unchanged drift (with a before/after manager-`listRules()` assertion
+proving non-mutation), invalid-desired-rule → plan error (still `200`), and
+`desired: null` → plan error — all match Express with no field stripped.
+
+**Deferred (config/static):** the **mutating** config endpoints
+`POST /api/config/import` and `POST /api/config/apply`, plus static client serving —
+all stay with Express. The next slice migrates a mutating config endpoint (import or
+apply) with rollback parity, or static serving.
 
 Layout:
 
