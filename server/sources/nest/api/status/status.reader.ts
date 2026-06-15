@@ -14,7 +14,7 @@ export interface StatusReader {
 export const STATUS_READER = "STATUS_READER";
 
 /**
- * Scaffold default: no forwarding runtime is wired into the NestJS app yet, so
+ * Default: no forwarding runtime is wired into the NestJS app yet, so
  * the status list is empty. When the NestJS server becomes the active runtime
  * this token is bound to the shared `ForwardManager`; tests override it with a
  * seeded manager.

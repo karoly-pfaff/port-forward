@@ -17,7 +17,7 @@ export interface ForwardRuleCreator {
 export const FORWARD_RULE_CREATOR = "FORWARD_RULE_CREATOR";
 
 /**
- * Minimal in-memory rule store (no disk) for the scaffold default creator. The
+ * Minimal in-memory rule store (no disk) for the default creator. The
  * NestJS app is shadow-only and has no real runtime wired; this keeps creates
  * isolated and disk-free until the manager is bound for real.
  */
@@ -32,7 +32,7 @@ export class InMemoryRuleStore implements RuleStore {
 }
 
 /**
- * Scaffold default: a fresh, isolated in-memory `ForwardManager` (no disk, no
+ * Default: a fresh, isolated in-memory `ForwardManager` (no disk, no
  * shared state). When the NestJS server becomes the active runtime this token is
  * bound to the shared `ForwardManager`; tests override it with a seeded manager.
  */
@@ -57,7 +57,7 @@ export interface ForwardRuleUpdater {
 /** Injection token for the rule updater. */
 export const FORWARD_RULE_UPDATER = "FORWARD_RULE_UPDATER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the creator default). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (mirrors the creator default). */
 export function createDefaultForwardRuleUpdater(): ForwardRuleUpdater {
   return new ForwardManager(new InMemoryRuleStore());
 }
@@ -79,7 +79,7 @@ export interface ForwardRuleDeleter {
 /** Injection token for the rule deleter. */
 export const FORWARD_RULE_DELETER = "FORWARD_RULE_DELETER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the creator/updater defaults). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (mirrors the creator/updater defaults). */
 export function createDefaultForwardRuleDeleter(): ForwardRuleDeleter {
   return new ForwardManager(new InMemoryRuleStore());
 }
@@ -105,7 +105,7 @@ export interface ForwardRuleStarter {
 /** Injection token for the rule starter. */
 export const FORWARD_RULE_STARTER = "FORWARD_RULE_STARTER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
 export function createDefaultForwardRuleStarter(): ForwardRuleStarter {
   return new ForwardManager(new InMemoryRuleStore());
 }
@@ -128,7 +128,7 @@ export interface ForwardRuleStopper {
 /** Injection token for the rule stopper. */
 export const FORWARD_RULE_STOPPER = "FORWARD_RULE_STOPPER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
 export function createDefaultForwardRuleStopper(): ForwardRuleStopper {
   return new ForwardManager(new InMemoryRuleStore());
 }
@@ -150,7 +150,7 @@ export interface ForwardGroupStopper {
 /** Injection token for the group stopper. */
 export const FORWARD_GROUP_STOPPER = "FORWARD_GROUP_STOPPER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (an empty group → `404`). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (an empty group → `404`). */
 export function createDefaultForwardGroupStopper(): ForwardGroupStopper {
   return new ForwardManager(new InMemoryRuleStore());
 }
@@ -174,7 +174,7 @@ export interface ForwardGroupStarter {
 /** Injection token for the group starter. */
 export const FORWARD_GROUP_STARTER = "FORWARD_GROUP_STARTER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (an empty group → `404`). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (an empty group → `404`). */
 export function createDefaultForwardGroupStarter(): ForwardGroupStarter {
   return new ForwardManager(new InMemoryRuleStore());
 }
@@ -199,7 +199,7 @@ export interface ForwardRulesReorderer {
 /** Injection token for the rule reorderer. */
 export const FORWARD_RULES_REORDERER = "FORWARD_RULES_REORDERER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
 export function createDefaultForwardRulesReorderer(): ForwardRulesReorderer {
   return new ForwardManager(new InMemoryRuleStore());
 }

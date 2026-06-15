@@ -1,14 +1,14 @@
 import type { RuleDiagnosticsResult } from "@portier/shared";
-import { RuleDiagnosticsResultDto } from "../../common/api-schemas.js";
+import { RuleDiagnosticsResultDto } from "./rule-diagnostics.schema.js";
 
-export { RuleDiagnosticsResultDto } from "../../common/api-schemas.js";
+export { RuleDiagnosticsResultDto } from "./rule-diagnostics.schema.js";
 
 /**
  * Maps a `RuleDiagnosticsResult` to the `RuleDiagnosticsResultDto` shape at the
  * HTTP boundary — a fresh object with a fresh `summary`, a fresh `checks` array of
  * fresh check objects (and fresh `details` where present), so the controller never
  * returns the domain result object and the mapper cannot mutate it. The DTO class
- * is the OpenAPI schema (in `common/api-schemas.ts`); this mapper is the covered
+ * is the OpenAPI schema (in `rule-diagnostics.schema.ts`); this mapper is the covered
  * logic. Byte-for-byte equal to the Express diagnose response.
  */
 export function toRuleDiagnosticsResponseDto(result: RuleDiagnosticsResult): RuleDiagnosticsResultDto {

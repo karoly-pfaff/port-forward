@@ -5,7 +5,7 @@ import { FORWARD_GROUP_STARTER, type ForwardGroupStarter } from "./forwards.writ
 
 /**
  * Behaviour for `POST /api/forwards/groups/:group/start`: mirrors Express's
- * `handleGroupAction("start")` exactly (the start counterpart to the Slice-21 stop
+ * `handleGroupAction("start")` exactly (the start counterpart to the stop
  * service). It normalizes the path group the same way (`decodeURIComponent(...).trim()`),
  * validates it with the SHARED `validateGroupName` (a `400 { errors }` on failure —
  * delegated to the shared validator, not re-expressed in class-validator, so the

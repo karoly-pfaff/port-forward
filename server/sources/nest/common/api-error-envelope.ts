@@ -1,7 +1,7 @@
 import { HttpException, NotFoundException } from "@nestjs/common";
 
 /**
- * Shared `/api` error-envelope mapping for the NestJS migration.
+ * Shared `/api` error-envelope mapping for the NestJS server.
  *
  * Portier's REST contract reports errors as `{ "errors": ["..."] }`. This module
  * is the single, pure place that converts a thrown exception into that envelope

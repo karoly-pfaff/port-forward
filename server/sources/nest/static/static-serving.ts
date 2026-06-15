@@ -4,7 +4,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { Request, Response } from "express";
 
 /**
- * Static client serving for the NestJS shadow runtime (v1.14 Slice 26).
+ * Static client serving for the NestJS shadow runtime.
  *
  * Mirrors the Express server's static behavior (`server/sources/api.ts`): a static
  * directory is served only when it actually contains an `index.html`; real assets
@@ -64,7 +64,7 @@ export interface StaticFallback {
   handle(request: Request, response: Response): boolean;
 }
 
-/** The scaffold default: static serving disabled — the filter keeps its default 404. */
+/** The default: static serving disabled — the filter keeps its default 404. */
 export const disabledStaticFallback: StaticFallback = { handle: () => false };
 
 /** Builds a SPA fallback that serves `<dir>/index.html` for non-API GET/HEAD not-founds. */

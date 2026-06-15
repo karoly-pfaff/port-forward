@@ -1,16 +1,21 @@
 import "reflect-metadata";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createNestApp } from "../app.factory.js";
 import {
   buildOpenApiConfig,
+  canonicalizeOpenApiDocument,
+  copyOpenApiToRelease,
   generateOpenApiDocument,
   OPENAPI_DOC_VERSION,
-  OPENAPI_OUTPUT_PATH,
+  OPENAPI_DOCS_PATH,
+  OPENAPI_RELATIVE_PATH,
+  resolveOpenApiPaths,
   serializeOpenApiDocument,
+  writeOpenApiArtifacts,
   writeOpenApiDocument,
 } from "./openapi.js";
 
@@ -387,9 +392,79 @@ describe("writeOpenApiDocument", () => {
   });
 });
 
+describe("resolveOpenApiPaths", () => {
+  it("resolves the primary (server build) and docs-copy paths under api/openapi.json", () => {
+    const paths = resolveOpenApiPaths();
+    expect(paths.primary.replace(/\\/g, "/")).toMatch(/\/server\/build\/api\/openapi\.json$/);
+    expect(paths.docs.replace(/\\/g, "/")).toMatch(/\/docs\/api\/openapi\.json$/);
+    expect(paths.docs).toBe(OPENAPI_DOCS_PATH);
+    expect(OPENAPI_RELATIVE_PATH.replace(/\\/g, "/")).toBe("api/openapi.json");
+  });
+});
+
+describe("writeOpenApiArtifacts", () => {
+  let dir: string;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("writes the primary artifact and a byte-for-byte docs copy", async () => {
+    dir = mkdtempSync(join(tmpdir(), "portier-openapi-art-"));
+    const paths = { primary: join(dir, "build", "api", "openapi.json"), docs: join(dir, "docs", "api", "openapi.json") };
+    const doc = await generateOpenApiDocument();
+
+    const returned = writeOpenApiArtifacts(doc, paths);
+
+    expect(returned).toEqual(paths);
+    expect(existsSync(paths.primary)).toBe(true);
+    expect(readFileSync(paths.primary, "utf8")).toBe(serializeOpenApiDocument(doc));
+    // The docs copy matches the primary artifact byte-for-byte.
+    expect(readFileSync(paths.docs, "utf8")).toBe(readFileSync(paths.primary, "utf8"));
+  });
+});
+
+describe("canonicalizeOpenApiDocument", () => {
+  it("sorts components.schemas by name", () => {
+    const doc = { openapi: "3.0.0", components: { schemas: { Zeta: {}, Alpha: {}, Mu: {} } } } as unknown as OpenAPIObject;
+    const out = canonicalizeOpenApiDocument(doc);
+    expect(Object.keys(out.components?.schemas ?? {})).toEqual(["Alpha", "Mu", "Zeta"]);
+  });
+
+  it("returns the document unchanged when there are no schemas", () => {
+    const doc = { openapi: "3.0.0", components: {} } as unknown as OpenAPIObject;
+    expect(canonicalizeOpenApiDocument(doc)).toBe(doc);
+    const noComponents = { openapi: "3.0.0" } as unknown as OpenAPIObject;
+    expect(canonicalizeOpenApiDocument(noComponents)).toBe(noComponents);
+  });
+});
+
+describe("copyOpenApiToRelease", () => {
+  let primaryDir: string;
+  let releaseDir: string;
+
+  afterEach(() => {
+    if (primaryDir) rmSync(primaryDir, { recursive: true, force: true });
+    if (releaseDir) rmSync(releaseDir, { recursive: true, force: true });
+  });
+
+  it("copies the primary artifact into <releaseDir>/api/openapi.json (creating dirs, no regeneration)", async () => {
+    primaryDir = mkdtempSync(join(tmpdir(), "portier-openapi-src-"));
+    releaseDir = mkdtempSync(join(tmpdir(), "portier-openapi-rel-"));
+    const source = join(primaryDir, "openapi.json");
+    const doc = await generateOpenApiDocument();
+    writeOpenApiDocument(source, doc);
+
+    const written = copyOpenApiToRelease(releaseDir, source);
+
+    expect(written).toBe(join(releaseDir, "api", "openapi.json"));
+    expect(readFileSync(written, "utf8")).toBe(serializeOpenApiDocument(doc));
+  });
+});
+
 describe("tracked docs/api/openapi.json", () => {
   it("is up to date with generation (run `npm run generate:apidoc` if this fails)", async () => {
-    const tracked = readFileSync(OPENAPI_OUTPUT_PATH, "utf8");
+    const tracked = readFileSync(OPENAPI_DOCS_PATH, "utf8");
     const fresh = serializeOpenApiDocument(await generateOpenApiDocument());
     expect(tracked).toBe(fresh);
   });

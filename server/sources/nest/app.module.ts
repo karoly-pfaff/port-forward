@@ -13,20 +13,18 @@ import { ApiErrorEnvelopeFilter } from "./common/api-error-envelope.filter.js";
 import { STATIC_FALLBACK, disabledStaticFallback } from "./static/static-serving.js";
 
 /**
- * Root module of the NestJS server scaffold (v1.14).
+ * Root module of the NestJS server.
  *
- * This app does NOT replace the existing Express TypeScript server yet — it is
- * an incremental, reversible migration foundation. It exposes a minimal,
- * contract-safe surface: a `/health` liveness probe, the migrated read-only API
- * routes (`GET /api/ports/advisory`, `GET /api/activity`, `GET /api/status`,
- * `GET /api/forwards`, `GET /api/runtime`, `GET /api/config/export`,
- * `GET /api/connections`) plus `DELETE /api/activity`, and a contract-shaped
- * `/api/*` error envelope for everything not yet migrated. The
- * global `ApiErrorEnvelopeFilter` is registered here (rather than in `main.ts`)
- * so it is active in test applications too. The `STATIC_FALLBACK` token (consumed
- * by that filter for the non-API SPA fallback) defaults to `disabledStaticFallback`
- * — the scaffold wires no static dir, so static serving is off until a test (or a
- * future runtime switch) supplies a directory; the API stays fully usable either way.
+ * The Express TypeScript server (`sources/index.ts` + `sources/api.ts`) is the
+ * default active runtime; this NestJS app serves the same `/api` surface in shadow
+ * mode under `npm run start:nest`. It composes the feature modules — a `/health`
+ * liveness probe, the `/api` read and write/lifecycle/config routes, and a
+ * contract-shaped `/api/*` error envelope — and registers the global
+ * `ApiErrorEnvelopeFilter` here (rather than in `main.ts`) so it is active in test
+ * applications too. The `STATIC_FALLBACK` token (consumed by that filter for the
+ * non-API SPA fallback) defaults to `disabledStaticFallback`: no static dir is wired
+ * by default, so static serving is off until a directory is supplied; the API stays
+ * fully usable either way.
  */
 @Module({
   imports: [

@@ -5,7 +5,7 @@ import { StatusService } from "./status.service.js";
 
 /**
  * `GET /api/status`. The `STATUS_READER` token defaults to an empty reader (the
- * scaffold has no runtime wired); when the NestJS server becomes the active
+ * no live runtime is wired by default); when the NestJS server becomes the active
  * runtime it is bound to the shared `ForwardManager`, and tests override it with
  * a seeded manager. Production status code holds no manager/store dependency.
  */

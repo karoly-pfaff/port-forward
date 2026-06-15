@@ -6,24 +6,28 @@ service (`service/`) remains the preferred runtime; this server is the Node
 fallback and the reference TypeScript implementation that `validate:contract`
 checks for parity against Go.
 
-## Two implementations during the v1.14 migration
+## Two coexisting implementations
 
-v1.14 migrates this server from a single Express app to a NestJS
-modules/controllers/services structure. The migration is **incremental and
-reversible** — both implementations currently coexist:
+This server has two implementations of the same REST API: the **Express** app
+(the default active runtime) and a **NestJS** app (served only under
+`npm run start:nest`). Both serve the same `/api` surface; the migration to NestJS
+is incremental and reversible, and both currently coexist:
 
-| | Active runtime | Migration scaffold |
+| | Active runtime | Shadow runtime (NestJS) |
 |---|---|---|
 | Entry point | `sources/index.ts` | `sources/nest/main.ts` |
 | Composition | `sources/api.ts` (`createApp`) | `sources/nest/app.module.ts` |
 | Framework | Express 5 | NestJS 11 (Express 5 platform) |
-| Status | **Active** — serves the real API, CLI, and web UI | **Scaffold only** — not wired into the runtime |
+| Status | **Active** — serves the real API, CLI, and web UI | **Shadow** — served only under `start:nest` |
 | Scripts | `dev`, `build`, `start` (via root) | `start:nest`, `build:nest`, `test:nest` |
 
-The **existing Express server is the active server.** The NestJS scaffold under
+The **Express server is the default active server.** The NestJS app under
 `sources/nest/` does not replace it, is not started by the normal runtime, and
-does not change any REST/API behavior. Endpoint migration happens in later v1.14
-slices, each guarded by `npm run validate:contract`.
+does not change any REST/API behavior. Every NestJS endpoint is checked
+byte-for-byte against its Express counterpart and guarded by
+`npm run validate:contract` (234/234). The eventual runtime switch (making NestJS
+the default) is a deliberate, separately-validated step that preserves a rollback
+path — see *Legacy Express server (future work)* below.
 
 ### NestJS scaffold surface
 
@@ -348,8 +352,58 @@ semantics (`server/sources/nest/static/static-serving.ts`):
   and a generator test asserts the doc contains only `/health` + `/api/*` paths.
 
 With static serving migrated, **v1.14 is ready for the final migration audit /
-switch-readiness review**; the live runtime switch (making Nest the default) is a
+switch-readiness review**; the live runtime switch (making NestJS the default) is a
 deliberate, separately-validated later step.
+
+## DTO / OpenAPI schema ownership
+
+Each feature owns its OpenAPI schema classes. Metadata-only decorated
+`@ApiProperty` classes live in feature-local `*.schema.ts` files inside the feature
+folder (e.g. `api/forwards/forward-rule.schema.ts`, `api/config/config-plan.schema.ts`,
+`api/ports/port-advisory.schema.ts`); the response **mappers** (`to*ResponseDto`) stay
+in the sibling `*.response.dto.ts` (which re-exports the schema class), and validated
+request bodies (class-validator, instantiated by the pipe) stay in `*.body.dto.ts`.
+
+`common/` holds **only genuinely cross-feature** schemas — currently just
+`api-error.schema.ts` (`ApiErrorResponseDto`, the shared `{ errors }` envelope). Do
+**not** reintroduce a single large centralized schema bucket; a feature-owned schema
+belongs in its feature folder, even when another feature imports it (e.g.
+`ForwardRuleDto` is forwards-owned and imported by config-export). The `*.schema.ts`
+files are metadata-only (never instantiated) and are coverage-excluded by the
+`sources/nest/**/*.schema.ts` glob; their generated schemas are asserted through the
+OpenAPI generator tests, and the mappers they pair with are 100% covered.
+
+## OpenAPI artifact placement
+
+`npm run generate:apidoc` generates the OpenAPI document from the NestJS
+controller/DTO metadata (offline — no listener) and writes two artifacts:
+
+- **Primary (server-owned, generated):** `server/build/api/openapi.json` — under the
+  gitignored `build/` output; this is the generator's primary target.
+- **Docs copy (tracked, reviewed):** `docs/api/openapi.json` — synced byte-for-byte
+  from the primary artifact. A generator test (`openapi.test.ts`) is the drift guard:
+  it fails if the tracked copy is stale (run `npm run generate:apidoc` and commit).
+
+The serialized document is deterministic — `components.schemas` is sorted by name in
+`serializeOpenApiDocument` so output is stable regardless of module-evaluation order
+(the schema map order is cosmetic; `$ref`s resolve by name).
+
+For packaging, `copyOpenApiToRelease(releaseDir, sourcePath)`
+(`sources/nest/openapi/openapi.ts`) copies the already-generated primary artifact to
+`<releaseDir>/api/openapi.json` without regenerating. A packaging step should call it
+with `resolveOpenApiPaths().primary` as the source after generation has run; the
+OpenAPI generator never depends on a release directory existing.
+
+## Legacy Express server (future work)
+
+When NestJS eventually becomes the default runtime, the existing Express
+implementation (`sources/index.ts` + `sources/api.ts` and its supporting modules)
+will be **preserved under a `legacy/` directory**, not deleted — so the runtime
+switch keeps a clear rollback path. That move is **future work**: this codebase has
+not moved any Express code yet, and the Express server remains the active runtime.
+Until then, do not delete the Express server, and keep the reusable domain modules
+(`forward-manager.ts`, `config-plan.ts`, `connections-snapshot.ts`, `diagnose.ts`,
+the activity store, etc.) shared by both runtimes.
 
 Layout:
 
@@ -361,26 +415,27 @@ sources/nest/
   app.factory.ts                # createNestApp() — builds the app without listening (shared by bootstrap + tests)
   app.module.ts                 # root module; imports feature modules; registers the global error filter
   health/                       # GET /health (controller → service → module)
-  api/
-    ports/                      # GET /api/ports/advisory — request: *.query.dto + pipe; response: *.response.dto + mapper
-    activity/                   # GET + DELETE /api/activity (ACTIVITY_STORE + ActivityReader/ActivityClearer in activity.reader.ts; response: *.response.dto + mapper)
-    status/                     # GET /api/status (injected STATUS_READER; response: *.response.dto + mapper)
-    forwards/                   # GET /api/forwards (injected FORWARDS_READER; response: *.response.dto + mapper)
-    runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; response: *.response.dto + mapper)
-    config/                     # GET /api/config/export, POST /api/config/{plan,import,apply} (CONFIG_EXPORT/PLAN_READER, CONFIG_IMPORTER/APPLIER + shared CLOCK_READER; shared buildExportedConfig/buildConfigPlan/importConfig; volatile exportedAt/generatedAt/appliedAt; response: *.response.dto + mappers)
-    connections/                # GET /api/connections (volatile generatedAt: CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; response: *.response.dto + mapper)
+  api/                          # each feature: controller → service → reader/writer; *.schema.ts (OpenAPI classes, coverage-excluded);
+                                #   *.response.dto.ts (mappers, covered); *.body.dto.ts (validated request DTOs)
+    ports/                      # GET /api/ports/advisory — request: *.query.dto + pipe; port-advisory.schema.ts; response: *.response.dto + mapper
+    activity/                   # GET + DELETE /api/activity (ACTIVITY_STORE + ActivityReader/ActivityClearer in activity.reader.ts; activity.schema.ts)
+    status/                     # GET /api/status (injected STATUS_READER; uses forwards/forward-status.schema.ts)
+    forwards/                   # forwards CRUD/lifecycle/group/diagnose; forward-rule(.body).schema.ts, forward-status.schema.ts, group-action.schema.ts, rule-diagnostics.schema.ts
+    runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; runtime.schema.ts)
+    config/                     # GET /api/config/export, POST /api/config/{plan,import,apply} (CONFIG_EXPORT/PLAN_READER, CONFIG_IMPORTER/APPLIER + shared CLOCK_READER; config-{export,plan,import,apply}.schema.ts)
+    connections/                # GET /api/connections (volatile generatedAt: CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; connections.schema.ts)
   static/
-    static-serving.ts           # resolveStaticOptions/hasStaticClient/configureStaticAssets (useStaticAssets) + StaticFallback/STATIC_FALLBACK (SPA index fallback) — Slice 26
+    static-serving.ts           # resolveStaticOptions/hasStaticClient/configureStaticAssets (useStaticAssets) + StaticFallback/STATIC_FALLBACK (SPA index fallback)
   common/
     clock.reader.ts              # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider for volatile-timestamp endpoints
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
     api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK) else NestJS default
     api-errors.ts                # ApiBadRequestException(string[]) — controllers raise this, not a literal
     api-validation.pipe.ts       # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
-    api-schemas.ts               # @ApiProperty OpenAPI schema classes (ApiErrorResponseDto + response DTOs + item shapes) — metadata-only, coverage-excluded
+    api-error.schema.ts          # ApiErrorResponseDto — the ONLY common (cross-feature) OpenAPI schema; metadata-only, coverage-excluded
   openapi/
-    openapi.ts                  # generateOpenApiDocument()/serialize/write helpers + OPENAPI_OUTPUT_PATH — fully covered
-    generate.ts                 # logic-free `npm run generate:apidoc` entry — coverage-excluded
+    openapi.ts                  # generate/serialize(sorted schemas)/resolveOpenApiPaths/writeOpenApiArtifacts/copyOpenApiToRelease — fully covered
+    generate.ts                 # logic-free `npm run generate:apidoc` entry (writes server/build/api/openapi.json + docs copy) — coverage-excluded
   testing/
     api-parity.ts               # Express↔Nest parity harness (boot, fetch, deterministic compare)
 ```
@@ -396,22 +451,23 @@ npm run generate:apidoc          # from the repo root (delegates to -w server)
 npm run generate:apidoc -w server
 ```
 
-- **Output: `docs/api/openapi.json`** — an OpenAPI 3 document, **tracked in git**
-  so it can be reviewed/versioned. Regenerate it whenever a migrated endpoint or
-  its DTOs change; an `openapi.test.ts` drift guard fails CI if the tracked file
-  is stale (the message tells you to run `generate:apidoc`).
+- **Output** — see *OpenAPI artifact placement* above: the primary artifact is the
+  server-owned `server/build/api/openapi.json`, synced byte-for-byte to the tracked,
+  reviewable `docs/api/openapi.json`. Regenerate whenever a migrated endpoint or its
+  DTOs change; an `openapi.test.ts` drift guard fails CI if the tracked copy is stale
+  (the message tells you to run `generate:apidoc`).
 - Generation is **offline** — it inspects the Nest app's metadata via
   `SwaggerModule.createDocument` without listening on a socket, **always closes
   the app cleanly** afterwards (no leaked listener — covered by a test), and
   **does not change Express** (the default runtime) or switch the active runtime.
   No Swagger UI / `/docs` route is exposed.
-- The document is **deterministic** (stable JSON + trailing newline), so
-  regeneration is idempotent.
-- **Response DTOs are the OpenAPI schema source.** The decorated schema classes
-  live in `common/api-schemas.ts` (`@ApiProperty`, each `implements` its
-  `@portier/shared` type so a contract drift is a compile error); the response
-  **mappers** stay in each feature's `*.response.dto.ts` (the covered logic). The
-  error envelope is `ApiErrorResponseDto` (`{ errors: string[] }`).
+- The document is **deterministic** (schemas sorted by name, stable JSON + trailing
+  newline), so regeneration is idempotent regardless of module-evaluation order.
+- **DTOs are the OpenAPI schema source.** The decorated schema classes live in
+  feature-local `*.schema.ts` files (see *DTO / OpenAPI schema ownership* above),
+  each `implements` its `@portier/shared` type so a contract drift is a compile
+  error; the response **mappers** stay in each feature's `*.response.dto.ts` (the
+  covered logic). The only common schema is `ApiErrorResponseDto` (`{ errors: string[] }`).
 
 Every `sources/nest/` file with executable logic is covered at **100%**
 (statements/branches/functions). The only coverage-excluded nest files are the

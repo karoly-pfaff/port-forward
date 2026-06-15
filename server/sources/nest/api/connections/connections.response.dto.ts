@@ -1,12 +1,12 @@
 import type { LiveConnectionsResponse } from "@portier/shared";
-import { ConnectionsResponseDto } from "../../common/api-schemas.js";
+import { ConnectionsResponseDto } from "./connections.schema.js";
 
-export { ConnectionsResponseDto } from "../../common/api-schemas.js";
+export { ConnectionsResponseDto } from "./connections.schema.js";
 
 /**
  * Maps the domain live-connections snapshot to the `ConnectionsResponseDto` shape
  * at the HTTP boundary — a fresh object + fresh arrays of fresh records (the DTO
- * class is the OpenAPI schema, defined in `common/api-schemas.ts`; this mapper is
+ * class is the OpenAPI schema, defined in `connections.schema.ts`; this mapper is
  * the covered logic).
  */
 export function toConnectionsResponseDto(

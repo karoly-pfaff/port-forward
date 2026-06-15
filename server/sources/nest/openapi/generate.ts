@@ -1,15 +1,17 @@
-import { generateOpenApiDocument, OPENAPI_OUTPUT_PATH, writeOpenApiDocument } from "./openapi.js";
+import { generateOpenApiDocument, resolveOpenApiPaths, writeOpenApiArtifacts } from "./openapi.js";
 
 /**
- * Logic-free process entry for `npm run generate:apidoc` — generates the OpenAPI
- * document from the Nest scaffold metadata and writes it to the tracked file.
- * All logic lives in the unit-covered `openapi.ts`; this entry is coverage-
- * excluded (mirroring `main.ts`).
+ * Process entry for `npm run generate:apidoc` — generates the OpenAPI document
+ * from the Nest controller/DTO metadata, writes the primary server-owned artifact
+ * (`server/build/api/openapi.json`), and syncs the tracked docs copy
+ * (`docs/api/openapi.json`) from it. All logic lives in the unit-covered
+ * `openapi.ts`; this entry is coverage-excluded (mirroring `main.ts`).
  */
 void generateOpenApiDocument()
   .then((doc) => {
-    writeOpenApiDocument(OPENAPI_OUTPUT_PATH, doc);
-    console.log(`Wrote OpenAPI document to ${OPENAPI_OUTPUT_PATH}`);
+    const paths = writeOpenApiArtifacts(doc, resolveOpenApiPaths());
+    console.log(`Wrote OpenAPI document to ${paths.primary}`);
+    console.log(`Synced docs copy to ${paths.docs}`);
   })
   .catch((error: unknown) => {
     console.error(error);

@@ -13,7 +13,7 @@ import {
  * shared `buildExportedConfig` builder (the same builder the Express manager
  * uses, so the two cannot drift). Read-only and pure — it does NOT emit the
  * `config.exported` activity event (that write side-effect stays with the
- * Express manager, deferred with the config-write migration); never throws.
+ * Express manager — the Nest read is a pure snapshot); never throws.
  */
 @Injectable()
 export class ConfigExportService {

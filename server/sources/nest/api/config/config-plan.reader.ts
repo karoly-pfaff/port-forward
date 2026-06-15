@@ -16,7 +16,7 @@ export interface ConfigPlanReader {
 export const CONFIG_PLAN_READER = "CONFIG_PLAN_READER";
 
 /**
- * Scaffold default: no forwarding runtime is wired into the NestJS app yet, so the
+ * Default: no forwarding runtime is wired into the NestJS app yet, so the
  * current rule list is empty (a plan against an empty current config). When the
  * NestJS server becomes the active runtime this token is bound to the shared
  * `ForwardManager`; tests override it with a seeded manager.

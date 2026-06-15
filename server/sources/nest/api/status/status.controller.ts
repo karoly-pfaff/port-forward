@@ -1,6 +1,6 @@
 import { Controller, Get, Inject } from "@nestjs/common";
 import { ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { ForwardStatusDto } from "../../common/api-schemas.js";
+import { ForwardStatusDto } from "../forwards/forward-status.schema.js";
 import { StatusService } from "./status.service.js";
 import { toStatusListResponseDto, type StatusListResponseDto } from "./status-list.response.dto.js";
 

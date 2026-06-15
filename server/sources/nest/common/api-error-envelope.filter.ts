@@ -19,7 +19,7 @@ import { STATIC_FALLBACK, disabledStaticFallback, type StaticFallback } from "..
  * the **non-API SPA fallback**: when static serving is enabled, an unmatched non-API
  * GET/HEAD route serves the SPA `index.html` (mirroring the Express catch-all index
  * route). The static decision is delegated to the injected `StaticFallback`
- * (`disabledStaticFallback` by default — the scaffold wires no static dir, so the
+ * (`disabledStaticFallback` by default — no static dir, so the
  * default 404 behavior is unchanged). The `/api/*` branch runs first and is never
  * affected by static serving.
  */

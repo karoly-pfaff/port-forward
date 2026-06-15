@@ -42,7 +42,7 @@ import {
  * `POST /api/forwards/groups/:group/start` (write). The `FORWARDS_READER`
  * token defaults to an empty reader and the write/lifecycle tokens plus the
  * `DIAGNOSTIC_READER`/`FORWARD_GROUP_STOPPER`/`FORWARD_GROUP_STARTER` to fresh isolated in-memory managers
- * (the scaffold has no real runtime wired); when the NestJS server becomes the
+ * (no live runtime is wired); when the NestJS server becomes the
  * active runtime they are bound to the shared `ForwardManager`, and tests override
  * them with a seeded manager. The diagnose service also injects the shared
  * `CLOCK_READER` (registered here) so its volatile `diagnosedAt` can be pinned in

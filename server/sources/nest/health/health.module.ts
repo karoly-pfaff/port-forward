@@ -3,9 +3,9 @@ import { HealthController } from "./health.controller.js";
 import { HealthService } from "./health.service.js";
 
 /**
- * Composes the scaffold health feature: its controller (HTTP surface) and its
- * service (behaviour). Feature modules keep the migration incremental — new
- * endpoints arrive as their own modules rather than one growing controller.
+ * Composes the NestJS server health feature: its controller (HTTP surface) and its
+ * service (behaviour). Feature modules keep concerns isolated — new endpoints arrive as their own
+ * modules rather than one growing controller.
  */
 @Module({
   controllers: [HealthController],

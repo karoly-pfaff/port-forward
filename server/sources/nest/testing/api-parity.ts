@@ -3,7 +3,7 @@ import type { AddressInfo } from "node:net";
 import type { INestApplication } from "@nestjs/common";
 
 /**
- * Small, local API parity harness for the NestJS migration.
+ * Small, local API parity harness comparing the Express and NestJS runtimes.
  *
  * It boots an HTTP handler (the Express app) or a NestJS app on an ephemeral
  * loopback port, captures `{ status, body }` for a request, and deterministically

@@ -5,9 +5,9 @@ import { ConnectionsService } from "./connections.service.js";
 import { CONNECTIONS_READER, emptyConnectionsReader } from "./connections.reader.js";
 
 /**
- * `GET /api/connections` (v1.14 Slice 11) — the last volatile read endpoint
+ * `GET /api/connections` — the last volatile read endpoint
  * (`generatedAt`). The `CONNECTIONS_READER` token defaults to an empty reader
- * (the scaffold has no runtime wired); the `CLOCK_READER` defaults to the real
+ * (no live runtime is wired); the `CLOCK_READER` defaults to the real
  * wall clock. Both are overridden in tests for byte-for-byte parity (`generatedAt`
  * pinned by a fixed clock, rules/connections supplied by a seeded fake — no
  * sockets). Read-only; no connection lifecycle/mutation.

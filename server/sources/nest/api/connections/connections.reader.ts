@@ -17,7 +17,7 @@ export interface ConnectionsReader {
 export const CONNECTIONS_READER = "CONNECTIONS_READER";
 
 /**
- * Scaffold default: no forwarding runtime is wired into the NestJS app yet, so
+ * Default: no forwarding runtime is wired into the NestJS app yet, so
  * there are no rules and no live connections. When the NestJS server becomes the
  * active runtime this token is bound to the shared `ForwardManager`; tests
  * override it with a seeded fake.

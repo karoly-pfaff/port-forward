@@ -4,7 +4,7 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
 
 /**
- * Builds the NestJS scaffold application without starting an HTTP listener.
+ * Builds the NestJS server application without starting an HTTP listener.
  *
  * Shared by `main.ts` (the executable bootstrap) and the integration tests so
  * both exercise the same composition. The caller owns `listen()`/`close()`.

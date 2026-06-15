@@ -38,7 +38,7 @@ describe("reportBootstrapFailure", () => {
 
       expect(process.exitCode).toBe(1);
       expect(error).toHaveBeenCalledWith(
-        "Portier NestJS scaffold failed to start.",
+        "Portier NestJS server failed to start.",
         expect.any(Error)
       );
     } finally {

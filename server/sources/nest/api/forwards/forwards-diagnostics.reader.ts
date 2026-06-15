@@ -19,7 +19,7 @@ export interface DiagnosticReader {
 /** Injection token for the diagnostic reader. */
 export const DIAGNOSTIC_READER = "DIAGNOSTIC_READER";
 
-/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (an unknown id → `404`). */
+/** Default: a fresh, isolated in-memory `ForwardManager` (an unknown id → `404`). */
 export function createDefaultDiagnosticReader(): DiagnosticReader {
   return new ForwardManager(new InMemoryRuleStore());
 }

@@ -3,7 +3,7 @@ import { PortsController } from "./ports.controller.js";
 import { PortsService } from "./ports.service.js";
 
 /**
- * The first migrated read-only API feature: `GET /api/ports/advisory`.
+ * The ports API feature: `GET /api/ports/advisory`.
  * Composes its controller (transport) and service (behaviour).
  */
 @Module({

@@ -10,7 +10,7 @@ import { ApiBadRequestException, ApiConflictException, ApiNotFoundException } fr
  * - `ConflictError`   → `409 { errors: [message] }` (e.g. duplicate binding).
  * - `NotFoundError`   → `404 { errors: [message] }` (e.g. unknown rule id).
  * - anything else (e.g. a persist failure) is re-thrown unchanged → the filter
- *   maps it to `500` (generic, no leak — the established Slice-3 behavior; the
+ *   maps it to `500` (generic, no leak — the established generic-500 behavior; the
  *   only documented divergence from Express's 500, which echoes the raw message).
  *
  * Always throws (return type `never`). The manager is domain logic (reusable,

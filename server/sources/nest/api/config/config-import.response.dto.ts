@@ -1,7 +1,7 @@
-import { ConfigImportErrorResponseDto, ConfigImportResponseDto } from "../../common/api-schemas.js";
+import { ConfigImportErrorResponseDto, ConfigImportResponseDto } from "./config-import.schema.js";
 import type { ConfigImportErrorBody, ConfigImportSuccessBody } from "./config-import.service.js";
 
-export { ConfigImportErrorResponseDto, ConfigImportResponseDto } from "../../common/api-schemas.js";
+export { ConfigImportErrorResponseDto, ConfigImportResponseDto } from "./config-import.schema.js";
 
 /**
  * Maps the import success body (`200 {result, rules}`) to its response DTO at the

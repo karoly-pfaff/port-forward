@@ -3,10 +3,11 @@ import { bootstrap, reportBootstrapFailure } from "./bootstrap.js";
 import { resolveNestListenOptions } from "./nest-options.js";
 
 /**
- * Executable entry point for the NestJS scaffold (v1.14, Slice 1).
+ * Executable entry point for the NestJS server (`npm run start:nest`).
  *
- * This is a migration foundation, NOT the active Portier server — running it
- * does not replace the Express runtime started by `sources/index.ts`.
+ * This is NOT the default active Portier server — running it does not replace the
+ * Express runtime started by `sources/index.ts`; it serves the `/api` surface in
+ * shadow mode.
  *
  * This file is intentionally logic-free wiring: it only resolves listen options
  * from the environment and starts the app. All of its constituents

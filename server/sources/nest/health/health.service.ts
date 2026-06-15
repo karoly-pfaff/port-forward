@@ -1,11 +1,11 @@
 import { Injectable } from "@nestjs/common";
 
 /**
- * Shape of the NestJS scaffold liveness probe.
+ * Shape of the NestJS server liveness probe.
  *
  * `server: "node"` mirrors the documented Go `GET /api/health` shape
- * (`{ ok, server, name }`) so a future migration can align them deliberately.
- * The scaffold serves this at `GET /health` (outside the frozen `/api`
+ * (`{ ok, server, name }`) so a future change can align them deliberately.
+ * The NestJS server serves this at `GET /health` (outside the frozen `/api`
  * contract) — see the durable rules in CLAUDE.md.
  */
 export interface HealthStatus {

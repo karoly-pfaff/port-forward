@@ -24,7 +24,7 @@ export interface ConfigImporter {
 export const CONFIG_IMPORTER = "CONFIG_IMPORTER";
 
 /**
- * Scaffold default: a fresh, isolated in-memory `ForwardManager` (no disk, no
+ * Default: a fresh, isolated in-memory `ForwardManager` (no disk, no
  * shared state). When the NestJS server becomes the active runtime this token is
  * bound to the shared `ForwardManager`; tests override it with a seeded manager.
  */
