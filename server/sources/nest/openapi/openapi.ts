@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { INestApplication } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule, type OpenAPIObject } from "@nestjs/swagger";
 import { createNestApp } from "../app.factory.js";
 
@@ -48,10 +49,14 @@ export function buildOpenApiConfig(): Omit<OpenAPIObject, "paths"> {
 
 /**
  * Builds the OpenAPI document by inspecting the Nest app's metadata. Creates the
- * app without listening and closes it afterwards (no sockets, no lifecycle).
+ * app without listening and **always closes it** afterwards (no sockets, no
+ * lifecycle). `createApp` is injectable so a test can observe the clean close;
+ * production calls it with the default `createNestApp`.
  */
-export async function generateOpenApiDocument(): Promise<OpenAPIObject> {
-  const app = await createNestApp();
+export async function generateOpenApiDocument(
+  createApp: () => Promise<INestApplication> = createNestApp
+): Promise<OpenAPIObject> {
+  const app = await createApp();
   try {
     return SwaggerModule.createDocument(app, buildOpenApiConfig());
   } finally {

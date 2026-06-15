@@ -3,7 +3,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { OpenAPIObject } from "@nestjs/swagger";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { createNestApp } from "../app.factory.js";
 import {
   buildOpenApiConfig,
   generateOpenApiDocument,
@@ -82,6 +83,33 @@ describe("generateOpenApiDocument", () => {
     expect((del?.responses?.["204"] as { content?: unknown }).content).toBeUndefined();
   });
 
+  it("documents GET /api/activity query parameters (despite endpoint-local coercion)", () => {
+    const get = doc.paths["/api/activity"]?.get;
+    const params = (get?.parameters ?? []) as Array<{ name: string; in: string; required?: boolean }>;
+    const byName = Object.fromEntries(params.map((p) => [p.name, p]));
+    // The query has no validation DTO (silent coercion), so the params are documented
+    // explicitly via @ApiQuery — all optional, never rejected.
+    for (const name of ["limit", "ruleId", "type", "severity"]) {
+      expect(byName[name]?.in, `param ${name}`).toBe("query");
+      expect(byName[name]?.required, `param ${name} optional`).toBeFalsy();
+    }
+    // Response is the activity-list envelope.
+    const ok = get?.responses?.["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("ActivityListResponseDto");
+  });
+
+  it("documents the volatile read endpoints with their response schemas", () => {
+    const refOf = (path: string): string | undefined =>
+      (
+        doc.paths[path]?.get?.responses?.["200"] as
+          | { content?: Record<string, { schema?: { $ref?: string } }> }
+          | undefined
+      )?.content?.["application/json"]?.schema?.$ref;
+    expect(refOf("/api/runtime")).toContain("RuntimeInfoResponseDto");
+    expect(refOf("/api/config/export")).toContain("ConfigExportResponseDto");
+    expect(refOf("/api/connections")).toContain("ConnectionsResponseDto");
+  });
+
   it("documents GET /api/ports/advisory query parameters and the 400 error response", () => {
     const get = doc.paths["/api/ports/advisory"]?.get;
     const params = (get?.parameters ?? []) as Array<{ name: string; in: string; required?: boolean }>;
@@ -101,6 +129,22 @@ describe("generateOpenApiDocument", () => {
     const schema = ok?.content?.["application/json"]?.schema;
     expect(schema?.type).toBe("array");
     expect(schema?.items?.$ref).toContain("PortAdvisoryDto");
+  });
+});
+
+describe("generateOpenApiDocument — lifecycle", () => {
+  it("closes the Nest app cleanly after generating (no leaked listener)", async () => {
+    let closeSpy: ReturnType<typeof vi.spyOn> | undefined;
+    const factory = async () => {
+      const app = await createNestApp();
+      closeSpy = vi.spyOn(app, "close");
+      return app;
+    };
+
+    const doc = await generateOpenApiDocument(factory);
+
+    expect(doc.openapi).toMatch(/^3\./);
+    expect(closeSpy).toHaveBeenCalledOnce();
   });
 });
 

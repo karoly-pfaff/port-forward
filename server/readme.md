@@ -175,9 +175,10 @@ npm run generate:apidoc -w server
   its DTOs change; an `openapi.test.ts` drift guard fails CI if the tracked file
   is stale (the message tells you to run `generate:apidoc`).
 - Generation is **offline** — it inspects the Nest app's metadata via
-  `SwaggerModule.createDocument` without listening on a socket, and **does not
-  change Express** (the default runtime) or switch the active runtime. No Swagger
-  UI / `/docs` route is exposed.
+  `SwaggerModule.createDocument` without listening on a socket, **always closes
+  the app cleanly** afterwards (no leaked listener — covered by a test), and
+  **does not change Express** (the default runtime) or switch the active runtime.
+  No Swagger UI / `/docs` route is exposed.
 - The document is **deterministic** (stable JSON + trailing newline), so
   regeneration is idempotent.
 - **Response DTOs are the OpenAPI schema source.** The decorated schema classes
