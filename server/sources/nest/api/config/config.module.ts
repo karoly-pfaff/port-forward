@@ -1,5 +1,8 @@
 import { Module } from "@nestjs/common";
 import { CLOCK_READER, defaultClockReader } from "../../common/clock.reader.js";
+import { ConfigApplyController } from "./config-apply.controller.js";
+import { ConfigApplyService } from "./config-apply.service.js";
+import { CONFIG_APPLIER, createDefaultConfigApplier } from "./config-apply.writer.js";
 import { ConfigExportController } from "./config-export.controller.js";
 import { ConfigExportService } from "./config-export.service.js";
 import { CONFIG_EXPORT_READER, emptyConfigExportReader } from "./config-export.reader.js";
@@ -12,24 +15,27 @@ import { CONFIG_PLAN_READER, emptyConfigPlanReader } from "./config-plan.reader.
 
 /**
  * Config API feature. Exposes the read-only `GET /api/config/export` (Slice 10), the
- * NON-MUTATING `POST /api/config/plan` dry-run (Slice 23), and the MUTATING
- * `POST /api/config/import` (Slice 24) — the mutating `POST /api/config/apply`
- * stays with Express, deferred. The `CONFIG_EXPORT_READER`/`CONFIG_PLAN_READER`
- * tokens default to empty readers and `CONFIG_IMPORTER` to a fresh isolated
- * in-memory manager (the scaffold has no runtime wired); the `CLOCK_READER` defaults
- * to the real wall clock (it stamps both the export `exportedAt` and the plan
- * `generatedAt`). All are overridden in tests for byte-for-byte parity (the
- * timestamp pinned by a fixed clock, rules supplied/imported by a seeded manager).
+ * NON-MUTATING `POST /api/config/plan` dry-run (Slice 23), the MUTATING
+ * `POST /api/config/import` (Slice 24), and the MUTATING `POST /api/config/apply`
+ * (Slice 25 — the final config endpoint). The `CONFIG_EXPORT_READER`/
+ * `CONFIG_PLAN_READER` tokens default to empty readers and `CONFIG_IMPORTER`/
+ * `CONFIG_APPLIER` to fresh isolated in-memory managers (the scaffold has no runtime
+ * wired); the `CLOCK_READER` defaults to the real wall clock (it stamps the export
+ * `exportedAt`, the plan `generatedAt`, and the apply `appliedAt`). All are overridden
+ * in tests for byte-for-byte parity (the timestamp pinned by a fixed clock, rules
+ * supplied/imported/applied by a seeded manager).
  */
 @Module({
-  controllers: [ConfigExportController, ConfigPlanController, ConfigImportController],
+  controllers: [ConfigExportController, ConfigPlanController, ConfigImportController, ConfigApplyController],
   providers: [
     ConfigExportService,
     ConfigPlanService,
     ConfigImportService,
+    ConfigApplyService,
     { provide: CONFIG_EXPORT_READER, useValue: emptyConfigExportReader },
     { provide: CONFIG_PLAN_READER, useValue: emptyConfigPlanReader },
     { provide: CONFIG_IMPORTER, useFactory: createDefaultConfigImporter },
+    { provide: CONFIG_APPLIER, useFactory: createDefaultConfigApplier },
     { provide: CLOCK_READER, useValue: defaultClockReader },
   ],
 })

@@ -831,6 +831,49 @@
         ]
       }
     },
+    "/api/config/apply": {
+      "post": {
+        "description": "Diffs the desired config against the current rules and applies it. A missing `desired` key returns 400; a plan with errors returns 200 `ok:false` (no mutation). `dryRun:true` returns the plan + applied counts without mutating (and is allowed even for destructive plans). A non-dry-run plan with destructive operations requires `yes:true` (else 400). When the plan has drift, the rules are replaced (MUTATING; enabled rules start). Unlike `plan` (always a dry-run) and `import` (a raw replace/merge), apply gates on drift/destructive/confirmation and returns the plan with an `appliedAt` timestamp.",
+        "operationId": "ConfigApplyController_apply",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigApplyBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The apply result (ok:true applied / ok:true dry-run / ok:false on plan errors), with the plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfigApplyResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`desired` is required, or destructive operations require `yes:true`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Apply a config change",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/connections": {
       "get": {
         "description": "Returns live TCP connections, UDP sessions, and per-rule summaries.",
@@ -2044,6 +2087,98 @@
         "required": [
           "errors",
           "result"
+        ]
+      },
+      "ConfigApplyBodyDto": {
+        "type": "object",
+        "properties": {
+          "desired": {
+            "description": "The desired config (object with a rules array). Required.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DesiredConfigDto"
+              }
+            ]
+          },
+          "yes": {
+            "type": "boolean",
+            "description": "Confirm destructive operations. Required (true) when the plan is destructive."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Preview only — return the plan + applied counts without mutating."
+          }
+        },
+        "required": [
+          "desired"
+        ]
+      },
+      "ConfigAppliedCountsDto": {
+        "type": "object",
+        "properties": {
+          "add": {
+            "type": "number",
+            "description": "Rules added."
+          },
+          "update": {
+            "type": "number",
+            "description": "Rules updated."
+          },
+          "remove": {
+            "type": "number",
+            "description": "Rules removed."
+          },
+          "unchanged": {
+            "type": "number",
+            "description": "Rules unchanged."
+          }
+        },
+        "required": [
+          "add",
+          "update",
+          "remove",
+          "unchanged"
+        ]
+      },
+      "ConfigApplyResponseDto": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "Whether the apply succeeded (false when the plan has errors)."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "description": "Whether this was a dry-run (no mutation)."
+          },
+          "appliedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the apply ran (ISO 8601)."
+          },
+          "plan": {
+            "description": "The plan that was applied (or would be).",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConfigPlanResponseDto"
+              }
+            ]
+          },
+          "applied": {
+            "description": "The applied operation counts.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ConfigAppliedCountsDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "ok",
+          "dryRun",
+          "appliedAt",
+          "plan",
+          "applied"
         ]
       },
       "TcpConnectionInfoDto": {

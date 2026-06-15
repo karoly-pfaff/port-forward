@@ -49,6 +49,7 @@ describe("generateOpenApiDocument", () => {
     expect(doc.paths["/api/config/export"]?.get).toBeDefined();
     expect(doc.paths["/api/config/plan"]?.post).toBeDefined();
     expect(doc.paths["/api/config/import"]?.post).toBeDefined();
+    expect(doc.paths["/api/config/apply"]?.post).toBeDefined();
     expect(doc.paths["/api/connections"]?.get).toBeDefined();
   });
 
@@ -71,6 +72,26 @@ describe("generateOpenApiDocument", () => {
     // The config export + plan docs remain intact.
     expect(doc.paths["/api/config/export"]?.get).toBeDefined();
     expect(doc.paths["/api/config/plan"]?.post).toBeDefined();
+  });
+
+  it("documents POST /api/config/apply with its body, 200 apply response, and 400 error", () => {
+    const apply = doc.paths["/api/config/apply"]?.post;
+    expect(apply).toBeDefined();
+    const body = (apply as { requestBody?: { content?: Record<string, { schema?: { $ref?: string } }> } }).requestBody;
+    expect(body?.content?.["application/json"]?.schema?.$ref).toContain("ConfigApplyBodyDto");
+    const responses = apply?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("ConfigApplyResponseDto");
+    const badRequest = responses["400"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(badRequest?.content?.["application/json"]?.schema?.$ref).toContain("ApiErrorResponseDto");
+    const schemas = doc.components?.schemas ?? {};
+    for (const name of ["ConfigApplyBodyDto", "ConfigApplyResponseDto", "ConfigAppliedCountsDto"]) {
+      expect(schemas[name], `schema ${name}`).toBeDefined();
+    }
+    // The config export + plan + import docs remain intact.
+    expect(doc.paths["/api/config/export"]?.get).toBeDefined();
+    expect(doc.paths["/api/config/plan"]?.post).toBeDefined();
+    expect(doc.paths["/api/config/import"]?.post).toBeDefined();
   });
 
   it("documents POST /api/config/plan with its body, 200 plan response, and 400 error", () => {

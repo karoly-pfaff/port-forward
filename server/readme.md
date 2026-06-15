@@ -101,9 +101,10 @@ Slice 16) — plus the single-rule lifecycle pair, **start**
 (`POST /api/forwards/:id/diagnose`, Slice 20), and the **group-action pair** —
 **group stop** (`POST /api/forwards/groups/:group/stop`, Slice 21) and **group
 start** (`POST /api/forwards/groups/:group/start`, Slice 22). The entire
-`/api/forwards` surface is migrated, and the config milestone has advanced with the
-**non-mutating** `POST /api/config/plan` dry-run (Slice 23) and the **mutating**
-`POST /api/config/import` (Slice 24). Every endpoint below is **shadow-only** — served by the
+`/api/forwards` surface is migrated, and the config milestone is **complete** — the
+**non-mutating** `POST /api/config/plan` dry-run (Slice 23), the **mutating**
+`POST /api/config/import` (Slice 24), and the **mutating** `POST /api/config/apply`
+(Slice 25). Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -129,6 +130,7 @@ unchanged. `validate:contract` is 234/234.
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `POST /api/config/plan` | `api/config/` | `ConfigPlanBodyDto`⁹ | `ConfigPlanResponseDto` (`200`) | `CONFIG_PLAN_READER` + `CLOCK_READER` | `buildConfigPlan` (`generatedAt`) |
 | `POST /api/config/import` | `api/config/` | `ConfigImportBodyDto`¹⁰ | `ConfigImportResponseDto` (`200`) / `ConfigImportErrorResponseDto` (`422`)¹⁰ | `CONFIG_IMPORTER` (`ConfigImporter`) | — |
+| `POST /api/config/apply` | `api/config/` | `ConfigApplyBodyDto`¹¹ | `ConfigApplyResponseDto` (`200`)¹¹ | `CONFIG_APPLIER` (`ConfigApplier`) + `CLOCK_READER` | `appliedAt` + `plan.generatedAt` |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
 
 Every migrated endpoint has a byte-for-byte Express↔Nest parity test
@@ -286,9 +288,38 @@ state-after parity), `422` invalid rule (+ no-mutation assertion), and `422` dup
 binding. Rollback on persist failure is inherited from `importConfig` (manager-tested,
 Test-D) and unit-covered via a throwing fake (→ generic `500`).
 
-**Deferred (config/static):** the mutating `POST /api/config/apply` (volatile
-`appliedAt` + dry-run/destructive-gating/rollback) and static client serving — both
-stay with Express. The next slice migrates `apply`, or static serving.
+¹¹ **Config apply** (`POST /api/config/apply`, Slice 25 — the FINAL config endpoint)
+applies a desired config (`{desired, yes?, dryRun?}`) via a narrow
+`ConfigApplier`/`CONFIG_APPLIER` (`listRules` + `importConfig`; domain `ForwardManager`;
+a separate token from `CONFIG_IMPORTER` so each config endpoint is independently
+overridable), running the SHARED `buildConfigPlan` + `buildApplyImportFromPlan` and, on
+the non-dry-run drift path, the SHARED `ForwardManager.importConfig` (`replace`). It
+mirrors Express's exact ordering: missing `desired` key → `400`; `plan.summary.hasErrors`
+→ `200 ok:false`; `dryRun` → `200 ok:true` (BEFORE the destructive gate); `destructive
+&& !yes` → `400`; `hasDrift` → replace import (+ a belt-and-suspenders import-error
+guard → `200 ok:false` via `plan.errors`); else → `200 ok:true`. **All success/`ok:false`
+outcomes are status `200`** (only the two gating errors are `400`), so the controller is
+`@HttpCode(200)` and the service THROWS `ApiBadRequestException` for the `400`s (through
+the shared `{errors}` filter) and RETURNS the `ConfigApplyResponse` for everything else —
+**no `@Res`** is needed (unlike import's `422`). Body validation is **delegated** to inline
+service checks (the `"desired" in body` key-presence check — `desired: null` → plan error,
+not `400` — plus the destructive gate), so `ConfigApplyBodyDto` is documentation/typing
+only. The response carries **two** volatile timestamps — the top-level `appliedAt` and the
+embedded `plan.generatedAt` — both stamped from **one** clock instant: the Express route
+threads `options.now` into both `appliedAt` and `buildConfigPlan`'s `now` (a
+production-invisible refinement; production uses the real wall clock), and the Nest service
+injects `CLOCK_READER`; parity pins the same clock in both runtimes (no field
+stripped/normalized). Byte-for-byte parity uses **separate seeded managers** (apply
+mutates) with fixed-id `enabled:false` rules (deterministic, socket-free) + the pinned
+clock: `400` missing desired, dry-run (pinned `appliedAt`+`generatedAt`, no mutation),
+apply-add (with `GET /api/forwards` + `GET /api/config/export` state-after parity),
+destructive blocked without `yes` (state unchanged), destructive applied with `yes:true`
+(rule removed), invalid desired rule → `ok:false` (no mutation), and no-drift → `ok:true`.
+The import-error guard branch and a persist-failure re-throw (→ generic `500`) are
+service unit-covered via a fake applier.
+
+**Deferred (static):** static client serving (`express.static` / the SPA fallback) stays
+with Express. The config milestone is complete; the next slice migrates static serving.
 
 Layout:
 
@@ -306,7 +337,7 @@ sources/nest/
     status/                     # GET /api/status (injected STATUS_READER; response: *.response.dto + mapper)
     forwards/                   # GET /api/forwards (injected FORWARDS_READER; response: *.response.dto + mapper)
     runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; response: *.response.dto + mapper)
-    config/                     # GET /api/config/export (volatile exportedAt: CONFIG_EXPORT_READER + shared CLOCK_READER; shared buildExportedConfig; response: *.response.dto + mapper)
+    config/                     # GET /api/config/export, POST /api/config/{plan,import,apply} (CONFIG_EXPORT/PLAN_READER, CONFIG_IMPORTER/APPLIER + shared CLOCK_READER; shared buildExportedConfig/buildConfigPlan/importConfig; volatile exportedAt/generatedAt/appliedAt; response: *.response.dto + mappers)
     connections/                # GET /api/connections (volatile generatedAt: CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; response: *.response.dto + mapper)
   common/
     clock.reader.ts              # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider for volatile-timestamp endpoints
@@ -435,7 +466,9 @@ management server's default `127.0.0.1:47831`.
   seam on Express `AppOptions` — like the existing `runtimeInfo.startedAt`) so the
   otherwise-volatile field is deterministic. Never strip a field before comparing,
   and never use fake timers / mutate global process state. `ClockReader` is generic
-  (reused by `/api/connections` `generatedAt`, `/api/config/export` `exportedAt`).
+  (reused by `/api/connections` `generatedAt`, `/api/config/export` `exportedAt`,
+  `/api/config/plan` `generatedAt`, `/api/forwards/:id/diagnose` `diagnosedAt`, and
+  `/api/config/apply`'s `appliedAt` + embedded `plan.generatedAt` — one instant pins both).
 - An endpoint that needs runtime/domain state is wired through a **narrow
   injection token + interface** (e.g. `ACTIVITY_STORE`/`ActivityReader`,
   `STATUS_READER`/`StatusReader`), with a fake/seeded instance in tests —

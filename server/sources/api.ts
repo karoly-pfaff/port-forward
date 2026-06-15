@@ -30,8 +30,10 @@ export interface AppOptions {
   runtimeInfo?: RuntimeInfoOptions;
   /**
    * Optional clock for the volatile-timestamp endpoints — `GET /api/runtime`'s
-   * `uptimeSeconds`, `GET /api/config/export`'s `exportedAt`, and
-   * `GET /api/connections`'s `generatedAt`. Defaults to the real wall clock;
+   * `uptimeSeconds`, `GET /api/config/export`'s `exportedAt`,
+   * `GET /api/connections`'s `generatedAt`, `POST /api/config/plan`'s
+   * `generatedAt`, `POST /api/forwards/:id/diagnose`'s `diagnosedAt`, and
+   * `POST /api/config/apply`'s `appliedAt`. Defaults to the real wall clock;
    * production never overrides it. A minimal, test-only seam (like
    * `runtimeInfo.startedAt`) so these endpoints can be parity-tested
    * deterministically against the NestJS implementation.
@@ -260,8 +262,12 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
 
       const yes = body.yes === true;
       const dryRun = body.dryRun === true;
-      const appliedAt = new Date().toISOString();
-      const plan = buildConfigPlan({ currentRules: manager.listRules(), desiredRaw: body.desired });
+      // One clock instant stamps both volatile fields: the top-level `appliedAt`
+      // and the embedded `plan.generatedAt` (so a parity test can pin both via the
+      // single `options.now` seam). Production passes no seam → the real wall clock.
+      const now = (options.now ?? (() => new Date()))();
+      const appliedAt = now.toISOString();
+      const plan = buildConfigPlan({ currentRules: manager.listRules(), desiredRaw: body.desired, now });
 
       if (plan.summary.hasErrors) {
         response.json({
