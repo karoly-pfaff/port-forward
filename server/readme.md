@@ -97,8 +97,10 @@ trio is migrated — **create** (`POST /api/forwards`, Slice 14), **update**
 Slice 16) — plus the single-rule lifecycle pair, **start**
 (`POST /api/forwards/:id/start`, Slice 17) and **stop**
 (`POST /api/forwards/:id/stop`, Slice 18), **reorder**
-(`POST /api/forwards/reorder`, Slice 19), and **diagnose**
-(`POST /api/forwards/:id/diagnose`, Slice 20). Every endpoint below is **shadow-only** — served by the
+(`POST /api/forwards/reorder`, Slice 19), **diagnose**
+(`POST /api/forwards/:id/diagnose`, Slice 20), and the first group action, **group
+stop** (`POST /api/forwards/groups/:group/stop`, Slice 21 — group *start* stays with
+Express for now). Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -118,6 +120,7 @@ unchanged. `validate:contract` is 234/234.
 | `POST /api/forwards/:id/stop` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STOPPER` (`ForwardRuleStopper`) | — |
 | `POST /api/forwards/reorder` | `api/forwards/` | `ReorderForwardRulesBodyDto` + pipe⁶ | `ForwardRuleResponseDto[]` (`200`) | `FORWARD_RULES_REORDERER` (`ForwardRulesReorderer`) | — |
 | `POST /api/forwards/:id/diagnose` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `RuleDiagnosticsResultDto` (`200`)⁷ | `DIAGNOSTIC_READER` + `CLOCK_READER` | `diagnoseRule` (`diagnosedAt`) |
+| `POST /api/forwards/groups/:group/stop` | `api/forwards/` | `:group` (`@ApiParam`)⁸ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STOPPER` (`ForwardGroupStopper`) | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
@@ -205,13 +208,27 @@ network, byte-for-byte parity uses a **UDP** rule (its `target-connect` is alway
 `skip` — no TCP probe; `127.0.0.1` resolves instantly; only a transient UDP
 listen-bind), a **shared** manager, **sequential** calls (so the listen-bind probes
 never overlap), and the pinned clock — no field is stripped/normalized. The 404 path
-(no probes, no `diagnosedAt`) is parity-tested with separate managers.
+(no probes, no `diagnosedAt`) is parity-tested with separate managers. ⁸ **Group
+stop** (`POST /api/forwards/groups/:group/stop`) is the FIRST migrated group action —
+it stops every rule sharing a `group` label (in rule order) via `stopGroup` and
+returns `200` + a `GroupActionResponse` summary (`@HttpCode(200)`). The `:group` path
+param is normalized exactly like Express (`decodeURIComponent(...).trim()`) and
+validated by the SHARED `validateGroupName` (a `400` on empty/invalid — delegated, not
+re-expressed in class-validator), and an empty match set → `404`; the service throws
+the shared `ApiBadRequestException`/`ApiNotFoundException` directly (matching Express's
+inline `400`/`404`). Group stop is **behaviour over rule metadata** — it never mutates
+rule definitions/order/`enabled`/`group`. Because stopping a group of already-stopped
+rules is a deterministic no-op (every result `skipped`/`not_running`, NO socket),
+byte-for-byte parity needs no sockets: it uses **separate seeded `enabled:false`
+managers** (success → all `not_running` skips + GET-unchanged, `404` unknown group,
+`400` empty group, encoded-group normalization). `GroupActionResponse` has no volatile
+field, so no clock seam is needed. **Group *start* (which opens sockets) is deferred.**
 
-**Deferred (Milestone 3+, write/lifecycle/static):** group actions
-(`POST /api/forwards/groups/:group/{start,stop}`), `POST /api/config/import`,
+**Deferred (Milestone 3+, write/lifecycle/static):** group **start**
+(`POST /api/forwards/groups/:group/start`), `POST /api/config/import`,
 `POST /api/config/plan`/`apply`, and static client serving — all stay with Express.
-The next slice continues **write** with group actions, completing the forwards
-feature before the config-API milestone.
+The next slice migrates group start (the lifecycle pair to group stop) or begins the
+config-API milestone.
 
 Layout:
 

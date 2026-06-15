@@ -110,6 +110,24 @@ describe("generateOpenApiDocument", () => {
     expect(doc.components?.schemas?.UpdateForwardRuleBodyDto).toBeDefined();
   });
 
+  it("documents POST /api/forwards/groups/{group}/stop with its path param, 200 summary, and 400/404 errors", () => {
+    const stopGroup = doc.paths["/api/forwards/groups/{group}/stop"]?.post;
+    expect(stopGroup).toBeDefined();
+    const params = (stopGroup?.parameters ?? []) as Array<{ name: string; in: string }>;
+    expect(params.some((p) => p.name === "group" && p.in === "path")).toBe(true);
+    const responses = stopGroup?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("GroupActionResponseDto");
+    for (const status of ["400", "404"]) {
+      const r = responses[status] as { content?: Record<string, { schema?: { $ref?: string } }> };
+      expect(r?.content?.["application/json"]?.schema?.$ref, `status ${status}`).toContain("ApiErrorResponseDto");
+    }
+    // The summary schema references the per-rule result item schema.
+    const schemas = doc.components?.schemas ?? {};
+    expect(schemas.GroupActionResponseDto).toBeDefined();
+    expect(schemas.GroupActionResultDto).toBeDefined();
+  });
+
   it("documents POST /api/forwards/{id}/diagnose with its path param, 200 result response, and 404 error", () => {
     const diagnose = doc.paths["/api/forwards/{id}/diagnose"]?.post;
     expect(diagnose).toBeDefined();

@@ -1,6 +1,7 @@
 import type { ForwardRule } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import {
+  createDefaultForwardGroupStopper,
   createDefaultForwardRuleCreator,
   createDefaultForwardRuleDeleter,
   createDefaultForwardRulesReorderer,
@@ -94,6 +95,23 @@ describe("createDefaultForwardRuleStopper", () => {
     // rejects with NotFoundError (no rule, no socket touched).
     const stopper = createDefaultForwardRuleStopper();
     await expect(stopper.stopRule("missing")).rejects.toThrow(/not found/i);
+  });
+});
+
+describe("createDefaultForwardGroupStopper", () => {
+  it("returns an empty result array for a group with no rules (the route maps that to 404)", async () => {
+    const stopper = createDefaultForwardGroupStopper();
+    expect(await stopper.stopGroup("nope")).toEqual([]);
+  });
+
+  it("stops a seeded group's stopped rules as not_running skips (no sockets)", async () => {
+    const stopper = createDefaultForwardGroupStopper() as unknown as {
+      addRule(input: unknown): Promise<ForwardRule>;
+      stopGroup(group: string): Promise<Array<{ ruleId: string; status: string; reason?: string }>>;
+    };
+    await stopper.addRule({ ...RULE, id: "g1", group: "web" });
+    const results = await stopper.stopGroup("web");
+    expect(results).toEqual([{ ruleId: "g1", ruleName: "Web", status: "skipped", reason: "not_running" }]);
   });
 });
 

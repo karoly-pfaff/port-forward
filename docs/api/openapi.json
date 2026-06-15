@@ -583,6 +583,59 @@
         ]
       }
     },
+    "/api/forwards/groups/{group}/stop": {
+      "post": {
+        "description": "Stops every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group. A rule that is not running is skipped (not_running, no socket touched); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "operationId": "ForwardsController_stopGroup",
+        "parameters": [
+          {
+            "name": "group",
+            "required": true,
+            "in": "path",
+            "description": "The group label (URL-encoded).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-rule results + counts for the group stop.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupActionResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The group name is empty or invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No rules belong to that group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Stop a group of forward rules",
+        "tags": [
+          "forwards"
+        ]
+      }
+    },
     "/api/runtime": {
       "get": {
         "description": "Returns runtime/version/uptime/process metadata.",
@@ -1196,6 +1249,87 @@
           "summary",
           "checks",
           "diagnosedAt"
+        ]
+      },
+      "GroupActionResultDto": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "description": "Id of the affected rule."
+          },
+          "ruleName": {
+            "type": "string",
+            "description": "Name of the affected rule."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "started",
+              "stopped",
+              "skipped",
+              "failed"
+            ],
+            "description": "Per-rule outcome."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Skip token (already_running / not_running) or, for failed, the error message."
+          }
+        },
+        "required": [
+          "ruleId",
+          "ruleName",
+          "status"
+        ]
+      },
+      "GroupActionResponseDto": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "The group label the action targeted."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "stop"
+            ],
+            "description": "The action that ran."
+          },
+          "total": {
+            "type": "number",
+            "description": "Total rules in the group."
+          },
+          "succeeded": {
+            "type": "number",
+            "description": "Rules started/stopped."
+          },
+          "skipped": {
+            "type": "number",
+            "description": "Rules skipped (already in the target state)."
+          },
+          "failed": {
+            "type": "number",
+            "description": "Rules that failed."
+          },
+          "results": {
+            "description": "Per-rule results, in rule order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupActionResultDto"
+            }
+          }
+        },
+        "required": [
+          "group",
+          "action",
+          "total",
+          "succeeded",
+          "skipped",
+          "failed",
+          "results"
         ]
       },
       "RuntimeInfoResponseDto": {

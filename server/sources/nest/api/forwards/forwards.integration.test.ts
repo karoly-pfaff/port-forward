@@ -22,6 +22,7 @@ import { STATUS_READER } from "../status/status.reader.js";
 import { DIAGNOSTIC_READER } from "./forwards-diagnostics.reader.js";
 import { FORWARDS_READER, type ForwardsReader } from "./forwards.reader.js";
 import {
+  FORWARD_GROUP_STOPPER,
   FORWARD_RULE_CREATOR,
   FORWARD_RULE_DELETER,
   FORWARD_RULES_REORDERER,
@@ -181,6 +182,8 @@ async function nestWithManager(manager: ForwardManager, clock?: ClockReader): Pr
     .overrideProvider(FORWARD_RULE_STOPPER)
     .useValue(manager)
     .overrideProvider(FORWARD_RULES_REORDERER)
+    .useValue(manager)
+    .overrideProvider(FORWARD_GROUP_STOPPER)
     .useValue(manager);
   if (clock) {
     builder.overrideProvider(CLOCK_READER).useValue(clock);
@@ -287,6 +290,17 @@ describe("POST /api/forwards (Nest) — scaffold default", () => {
     const response = await diagnoseReq(nest.baseUrl, "nonexistent");
     expect(response.status).toBe(404);
     expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
+  });
+
+  it("returns 404 for a group stop with no matching rules (default empty group stopper)", async () => {
+    const response = await stopGroupReq(nest.baseUrl, "nonexistent");
+    expect(response.status).toBe(404);
+    expect((response.body as { errors: string[] }).errors[0]).toContain('No rules found in group "nonexistent"');
+  });
+
+  it("returns 400 for an empty/whitespace group name", async () => {
+    const response = await stopGroupReq(nest.baseUrl, "%20%20");
+    expect(response).toEqual({ status: 400, body: { errors: ["group is required."] } });
   });
 });
 
@@ -422,6 +436,10 @@ function reorderReq(baseUrl: string, body: unknown): Promise<ApiResponse> {
 
 function diagnoseReq(baseUrl: string, id: string): Promise<ApiResponse> {
   return fetchApi(baseUrl, `/api/forwards/${id}/diagnose`, { method: "POST" });
+}
+
+function stopGroupReq(baseUrl: string, group: string): Promise<ApiResponse> {
+  return fetchApi(baseUrl, `/api/forwards/groups/${group}/stop`, { method: "POST" });
 }
 
 // A stopped TCP + UDP pair so DELETE can be parity-tested per protocol without sockets.
@@ -1042,6 +1060,100 @@ describe("POST /api/forwards/:id/diagnose (Nest) — parity with Express", () =>
     } finally {
       await nest.close();
       await express.close();
+    }
+  });
+});
+
+// ── POST /api/forwards/groups/:group/stop (group stop) ────────────────────────
+
+// Two stopped rules sharing group "web" + one ungrouped rule. enabled:false → no
+// sockets; stopping the group is a deterministic no-op (all not_running skips).
+async function seedGroup(manager: ForwardManager): Promise<void> {
+  await manager.addRule({ id: "g1", name: "Web One", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48050, targetHost: "127.0.0.1", targetPort: 8080, enabled: false, group: "web" });
+  await manager.addRule({ id: "g2", name: "Web Two", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48051, targetHost: "127.0.0.1", targetPort: 8081, enabled: false, group: "web" });
+  await manager.addRule({ id: "g3", name: "Other", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48052, targetHost: "127.0.0.1", targetPort: 8082, enabled: false });
+}
+
+describe("POST /api/forwards/groups/:group/stop (Nest) — parity with Express", () => {
+  it("stops a group of stopped rules byte-for-byte like Express (all not_running skips, NO sockets) and leaves rules unchanged", async () => {
+    const { nest, express, close } = await bootCreatePair(seedGroup);
+    try {
+      const [e, n] = await Promise.all([
+        stopGroupReq(express.baseUrl, "web"),
+        stopGroupReq(nest.baseUrl, "web"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      expect(n.body).toEqual({
+        group: "web",
+        action: "stop",
+        total: 2,
+        succeeded: 0,
+        skipped: 2,
+        failed: 0,
+        results: [
+          { ruleId: "g1", ruleName: "Web One", status: "skipped", reason: "not_running" },
+          { ruleId: "g2", ruleName: "Web Two", status: "skipped", reason: "not_running" },
+        ],
+      });
+      // The group action does not mutate rule definitions/order — GET is unchanged in both runtimes.
+      const [eg, ng] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/forwards"),
+        fetchApi(nest.baseUrl, "/api/forwards"),
+      ]);
+      expect(diffApiResponses(eg, ng)).toEqual([]);
+      expect((ng.body as ForwardRuleResponse[]).map((r) => r.id)).toEqual(["g1", "g2", "g3"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns the same 404 envelope as Express for a group with no rules", async () => {
+    const { nest, express, close } = await bootCreatePair(seedGroup);
+    try {
+      const [e, n] = await Promise.all([
+        stopGroupReq(express.baseUrl, "ghost"),
+        stopGroupReq(nest.baseUrl, "ghost"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(404);
+      expect((n.body as { errors: string[] }).errors[0]).toContain('No rules found in group "ghost"');
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns the same 400 envelope as Express for an empty/whitespace group name", async () => {
+    const { nest, express, close } = await bootCreatePair(seedGroup);
+    try {
+      const [e, n] = await Promise.all([
+        stopGroupReq(express.baseUrl, "%20%20"),
+        stopGroupReq(nest.baseUrl, "%20%20"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n).toEqual({ status: 400, body: { errors: ["group is required."] } });
+    } finally {
+      await close();
+    }
+  });
+
+  it("normalizes an encoded group name (spaces) the same way as Express", async () => {
+    // Seed a group literally named "team space"; request it URL-encoded.
+    const seed = async (manager: ForwardManager): Promise<void> => {
+      await manager.addRule({ id: "s1", name: "Spaced", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48055, targetHost: "127.0.0.1", targetPort: 8080, enabled: false, group: "team space" });
+    };
+    const { nest, express, close } = await bootCreatePair(seed);
+    try {
+      const [e, n] = await Promise.all([
+        stopGroupReq(express.baseUrl, "team%20space"),
+        stopGroupReq(nest.baseUrl, "team%20space"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      expect((n.body as { group: string; total: number }).group).toBe("team space");
+      expect((n.body as { total: number }).total).toBe(1);
+    } finally {
+      await close();
     }
   });
 });

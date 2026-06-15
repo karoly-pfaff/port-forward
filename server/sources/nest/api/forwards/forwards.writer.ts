@@ -1,4 +1,4 @@
-import type { ForwardRule, ForwardStatus } from "@portier/shared";
+import type { ForwardRule, ForwardStatus, GroupActionResult } from "@portier/shared";
 import { ForwardManager, type RuleStore } from "../../../forward-manager.js";
 
 /**
@@ -130,6 +130,28 @@ export const FORWARD_RULE_STOPPER = "FORWARD_RULE_STOPPER";
 
 /** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
 export function createDefaultForwardRuleStopper(): ForwardRuleStopper {
+  return new ForwardManager(new InMemoryRuleStore());
+}
+
+/**
+ * Narrow lifecycle capability for `POST /api/forwards/groups/:group/stop`. The real
+ * domain `ForwardManager` satisfies it via `stopGroup`; tests bind a seeded manager.
+ * `stopGroup` iterates the rules sharing the group (in rule order) and stops each —
+ * a not-running rule is a `skipped`/`not_running` no-op (NO socket), a running rule
+ * is stopped (`stopped`), a stop error is `failed`; it returns one result per rule
+ * (an empty array means no rule matched the group → the route returns `404`). It
+ * never mutates rule definitions/order/`enabled`/`group`. Because stopping a group
+ * of already-stopped rules touches no socket, byte-for-byte parity needs none.
+ */
+export interface ForwardGroupStopper {
+  stopGroup(group: string): Promise<GroupActionResult[]>;
+}
+
+/** Injection token for the group stopper. */
+export const FORWARD_GROUP_STOPPER = "FORWARD_GROUP_STOPPER";
+
+/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (an empty group → `404`). */
+export function createDefaultForwardGroupStopper(): ForwardGroupStopper {
   return new ForwardManager(new InMemoryRuleStore());
 }
 
