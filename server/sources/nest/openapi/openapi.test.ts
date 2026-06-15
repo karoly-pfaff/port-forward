@@ -110,6 +110,29 @@ describe("generateOpenApiDocument", () => {
     expect(doc.components?.schemas?.UpdateForwardRuleBodyDto).toBeDefined();
   });
 
+  it("documents POST /api/forwards/reorder with its body, 200 list response, and 400/404 errors", () => {
+    const reorder = doc.paths["/api/forwards/reorder"]?.post;
+    expect(reorder).toBeDefined();
+    const body = (reorder as { requestBody?: { content?: Record<string, { schema?: { $ref?: string } }> } })
+      .requestBody;
+    expect(body?.content?.["application/json"]?.schema?.$ref).toContain("ReorderForwardRulesBodyDto");
+    const responses = reorder?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { type?: string; items?: { $ref?: string } } }> };
+    const okSchema = ok?.content?.["application/json"]?.schema;
+    expect(okSchema?.type).toBe("array");
+    expect(okSchema?.items?.$ref).toContain("ForwardRuleResponseDto");
+    for (const status of ["400", "404"]) {
+      const r = responses[status] as { content?: Record<string, { schema?: { $ref?: string } }> };
+      expect(r?.content?.["application/json"]?.schema?.$ref, `status ${status}`).toContain("ApiErrorResponseDto");
+    }
+    // The reorder body DTO is a real validated schema (ids: string[]).
+    const schema = doc.components?.schemas?.ReorderForwardRulesBodyDto as
+      | { properties?: Record<string, { type?: string; items?: { type?: string } }> }
+      | undefined;
+    expect(schema?.properties?.ids?.type).toBe("array");
+    expect(schema?.properties?.ids?.items?.type).toBe("string");
+  });
+
   it("documents POST /api/forwards/{id}/start with its path param, 200 status response, and 404 error", () => {
     const start = doc.paths["/api/forwards/{id}/start"]?.post;
     expect(start).toBeDefined();

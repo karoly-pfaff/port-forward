@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createDefaultForwardRuleCreator,
   createDefaultForwardRuleDeleter,
+  createDefaultForwardRulesReorderer,
   createDefaultForwardRuleStarter,
   createDefaultForwardRuleStopper,
   createDefaultForwardRuleUpdater,
@@ -93,5 +94,18 @@ describe("createDefaultForwardRuleStopper", () => {
     // rejects with NotFoundError (no rule, no socket touched).
     const stopper = createDefaultForwardRuleStopper();
     await expect(stopper.stopRule("missing")).rejects.toThrow(/not found/i);
+  });
+});
+
+describe("createDefaultForwardRulesReorderer", () => {
+  it("creates an isolated in-memory reorderer that no-ops on an empty list and lists rules", async () => {
+    const reorderer = createDefaultForwardRulesReorderer();
+    await reorderer.reorderRules([]); // empty list is a no-op (no rules yet)
+    expect(reorderer.listRules()).toEqual([]);
+  });
+
+  it("rejects an unknown id with NotFound (no rule wired)", async () => {
+    const reorderer = createDefaultForwardRulesReorderer();
+    await expect(reorderer.reorderRules(["missing"])).rejects.toThrow(/not found/i);
   });
 });

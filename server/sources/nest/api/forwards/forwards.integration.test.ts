@@ -22,6 +22,7 @@ import { FORWARDS_READER, type ForwardsReader } from "./forwards.reader.js";
 import {
   FORWARD_RULE_CREATOR,
   FORWARD_RULE_DELETER,
+  FORWARD_RULES_REORDERER,
   FORWARD_RULE_STARTER,
   FORWARD_RULE_STOPPER,
   FORWARD_RULE_UPDATER,
@@ -173,6 +174,8 @@ async function nestWithManager(manager: ForwardManager): Promise<INestApplicatio
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_STOPPER)
     .useValue(manager)
+    .overrideProvider(FORWARD_RULES_REORDERER)
+    .useValue(manager)
     .compile();
   return moduleRef.createNestApplication({ logger: false });
 }
@@ -252,6 +255,23 @@ describe("POST /api/forwards (Nest) — scaffold default", () => {
     const response = await stopRuleReq(nest.baseUrl, "nonexistent");
     expect(response.status).toBe(404);
     expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
+  });
+
+  it("returns 200 + [] for an empty reorder (default empty reorderer, no-op)", async () => {
+    const response = await reorderReq(nest.baseUrl, { ids: [] });
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it("returns 404 for a reorder naming an unknown id (default empty reorderer)", async () => {
+    const response = await reorderReq(nest.baseUrl, { ids: ["nonexistent"] });
+    expect(response.status).toBe(404);
+    expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
+  });
+
+  it("returns 400 with the exact envelope for an invalid reorder body", async () => {
+    const response = await reorderReq(nest.baseUrl, { ids: "notarray" });
+    expect(response).toEqual({ status: 400, body: { errors: ["ids must be an array of strings."] } });
   });
 });
 
@@ -377,6 +397,14 @@ function stopRuleReq(baseUrl: string, id: string): Promise<ApiResponse> {
   return fetchApi(baseUrl, `/api/forwards/${id}/stop`, { method: "POST" });
 }
 
+function reorderReq(baseUrl: string, body: unknown): Promise<ApiResponse> {
+  return fetchApi(baseUrl, "/api/forwards/reorder", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 // A stopped TCP + UDP pair so DELETE can be parity-tested per protocol without sockets.
 const SEED_UDP = { id: "seed-udp", name: "SeedUdp", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48032, targetHost: "127.0.0.1", targetPort: 53, enabled: false, udpMode: "one-way" } as const;
 
@@ -395,6 +423,13 @@ async function seedOne(manager: ForwardManager): Promise<void> {
 async function seedTwo(manager: ForwardManager): Promise<void> {
   await manager.addRule(SEED_TCP);
   await manager.addRule({ id: "seed-2", name: "Second", protocol: "tcp", listenHost: "0.0.0.0", listenPort: 48031, targetHost: "127.0.0.1", targetPort: 8081, enabled: false });
+}
+
+// Three stopped rules (distinct bindings) for reorder parity. enabled:false → no sockets.
+async function seedThree(manager: ForwardManager): Promise<void> {
+  await manager.addRule({ id: "r1", name: "One", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48040, targetHost: "127.0.0.1", targetPort: 8080, enabled: false });
+  await manager.addRule({ id: "r2", name: "Two", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48041, targetHost: "127.0.0.1", targetPort: 8081, enabled: false });
+  await manager.addRule({ id: "r3", name: "Three", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48042, targetHost: "127.0.0.1", targetPort: 8082, enabled: false, udpMode: "one-way" });
 }
 
 describe("PATCH /api/forwards/:id (Nest) — parity with Express", () => {
@@ -821,6 +856,117 @@ describe("POST /api/forwards/:id/stop (Nest) — real stop of a running UDP rule
     } finally {
       await manager.stopAll(); // idempotent — ensure no leaked socket
       await nest.close();
+    }
+  });
+});
+
+// ── POST /api/forwards/reorder (reorder) ──────────────────────────────────────
+
+describe("POST /api/forwards/reorder (Nest) — parity with Express", () => {
+  const ids = (body: unknown): string[] => (body as ForwardRuleResponse[]).map((r) => r.id);
+
+  it("reorders all rules (full set, 200), byte-for-byte like Express, and GET reflects the new order", async () => {
+    const { nest, express, close } = await bootCreatePair(seedThree);
+    try {
+      const [e, n] = await Promise.all([
+        reorderReq(express.baseUrl, { ids: ["r3", "r1", "r2"] }),
+        reorderReq(nest.baseUrl, { ids: ["r3", "r1", "r2"] }),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      expect(ids(n.body)).toEqual(["r3", "r1", "r2"]);
+      // GET after reorder reflects the new order in both runtimes.
+      const [eg, ng] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/forwards"),
+        fetchApi(nest.baseUrl, "/api/forwards"),
+      ]);
+      expect(diffApiResponses(eg, ng)).toEqual([]);
+      expect(ids(ng.body)).toEqual(["r3", "r1", "r2"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("reorders a partial set — listed ids first, the rest keep their order at the end — byte-for-byte like Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedThree);
+    try {
+      const [e, n] = await Promise.all([
+        reorderReq(express.baseUrl, { ids: ["r2"] }),
+        reorderReq(nest.baseUrl, { ids: ["r2"] }),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      expect(ids(n.body)).toEqual(["r2", "r1", "r3"]); // r2 first, then r1, r3 in prior order
+    } finally {
+      await close();
+    }
+  });
+
+  it("tolerates a duplicate id (deduped, no error), byte-for-byte like Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedThree);
+    try {
+      const [e, n] = await Promise.all([
+        reorderReq(express.baseUrl, { ids: ["r2", "r2", "r1"] }),
+        reorderReq(nest.baseUrl, { ids: ["r2", "r2", "r1"] }),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      expect(ids(n.body)).toEqual(["r2", "r1", "r3"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("treats an empty ids list as a no-op (200, unchanged order), byte-for-byte like Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedThree);
+    try {
+      const [e, n] = await Promise.all([
+        reorderReq(express.baseUrl, { ids: [] }),
+        reorderReq(nest.baseUrl, { ids: [] }),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      expect(ids(n.body)).toEqual(["r1", "r2", "r3"]); // unchanged
+    } finally {
+      await close();
+    }
+  });
+
+  it("returns the same 404 envelope as Express for an unknown id (no reorder persisted)", async () => {
+    const { nest, express, close } = await bootCreatePair(seedThree);
+    try {
+      const [e, n] = await Promise.all([
+        reorderReq(express.baseUrl, { ids: ["r2", "ghost"] }),
+        reorderReq(nest.baseUrl, { ids: ["r2", "ghost"] }),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(404);
+      expect((n.body as { errors: string[] }).errors[0]).toContain("not found");
+      // Order is unchanged in both runtimes (the unknown id aborts before persist).
+      const [eg, ng] = await Promise.all([
+        fetchApi(express.baseUrl, "/api/forwards"),
+        fetchApi(nest.baseUrl, "/api/forwards"),
+      ]);
+      expect(diffApiResponses(eg, ng)).toEqual([]);
+      expect(ids(ng.body)).toEqual(["r1", "r2", "r3"]);
+    } finally {
+      await close();
+    }
+  });
+
+  it("rejects an invalid body shape with the same 400 envelope as Express", async () => {
+    const { nest, express, close } = await bootCreatePair(seedThree);
+    try {
+      for (const bad of [{ ids: "notarray" }, { ids: ["ok", 1] }, {}]) {
+        const [e, n] = await Promise.all([
+          reorderReq(express.baseUrl, bad),
+          reorderReq(nest.baseUrl, bad),
+        ]);
+        expect(diffApiResponses(e, n)).toEqual([]);
+        expect(n).toEqual({ status: 400, body: { errors: ["ids must be an array of strings."] } });
+      }
+    } finally {
+      await close();
     }
   });
 });

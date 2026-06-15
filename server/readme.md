@@ -96,7 +96,8 @@ trio is migrated — **create** (`POST /api/forwards`, Slice 14), **update**
 (`PATCH /api/forwards/:id`, Slice 15), and **delete** (`DELETE /api/forwards/:id`,
 Slice 16) — plus the single-rule lifecycle pair, **start**
 (`POST /api/forwards/:id/start`, Slice 17) and **stop**
-(`POST /api/forwards/:id/stop`, Slice 18). Every endpoint below is **shadow-only** — served by the
+(`POST /api/forwards/:id/stop`, Slice 18), and **reorder**
+(`POST /api/forwards/reorder`, Slice 19). Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -114,6 +115,7 @@ unchanged. `validate:contract` is 234/234.
 | `DELETE /api/forwards/:id` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | — (`204` no body)³ | `FORWARD_RULE_DELETER` (`ForwardRuleDeleter`) | — |
 | `POST /api/forwards/:id/start` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STARTER` (`ForwardRuleStarter`) | — |
 | `POST /api/forwards/:id/stop` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STOPPER` (`ForwardRuleStopper`) | — |
+| `POST /api/forwards/reorder` | `api/forwards/` | `ReorderForwardRulesBodyDto` + pipe⁶ | `ForwardRuleResponseDto[]` (`200`) | `FORWARD_RULES_REORDERER` (`ForwardRulesReorderer`) | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
@@ -172,12 +174,25 @@ byte-for-byte parity needs no shared manager: the already-stopped path is
 parity-tested with **zero sockets** (separate managers), and the running-rule stop
 is parity-tested by starting each manager on its own free port (`startRuleStable`)
 and stopping via the endpoint, with `GET /api/status`-after-stop parity and
-`stopAll()` cleanup in `finally`.
+`stopAll()` cleanup in `finally`. ⁶ **Reorder** (`POST /api/forwards/reorder`) is
+the FIRST migrated endpoint with a **real validated body DTO** — its `{ ids:
+string[] }` check is simple enough to re-express exactly in class-validator, so
+`ReorderForwardRulesBodyDto` (`@IsArray` + `@IsString({ each: true })`, both
+carrying the exact Express message `"ids must be an array of strings."`) runs
+through `ApiValidationPipe` (not delegated to the manager). Returns `200` + the
+full reordered `ForwardRuleResponse[]` (same shape/mapper as `GET /api/forwards`),
+`@HttpCode(200)`. Reorder is **metadata only** (opens/closes no socket): the listed
+ids go first, any unlisted rule keeps its relative order at the end (partial sets
+allowed, duplicate ids tolerated, empty list is a no-op); an unknown id → `404`
+(via `ForwardManager.reorderRules` → `mapManagerError`) and no reorder is persisted;
+a persist failure rolls back the order. Parity-tested with **separate seeded
+managers** (no sockets) for full/partial/duplicate/empty reorder + GET-after-reorder
++ unknown-id 404 + invalid-body 400.
 
-**Deferred (Milestone 3+, write/lifecycle/static):** rule reorder, group actions,
-diagnose, `POST /api/config/import`, `POST /api/config/plan`/`apply`, and static
-client serving — all stay with Express. The next slice continues **lifecycle/write**
-(reorder or group actions, then diagnose).
+**Deferred (Milestone 3+, write/lifecycle/static):** group actions, diagnose,
+`POST /api/config/import`, `POST /api/config/plan`/`apply`, and static client
+serving — all stay with Express. The next slice continues **write** with group
+actions, then diagnose.
 
 Layout:
 

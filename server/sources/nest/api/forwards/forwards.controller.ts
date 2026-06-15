@@ -18,11 +18,14 @@ import {
   ForwardStatusDto,
   UpdateForwardRuleBodyDto,
 } from "../../common/api-schemas.js";
+import { ApiValidationPipe } from "../../common/api-validation.pipe.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
+import { ReorderForwardRulesService } from "./reorder-forward-rules.service.js";
 import { StartForwardRuleService } from "./start-forward-rule.service.js";
 import { StopForwardRuleService } from "./stop-forward-rule.service.js";
 import { UpdateForwardRuleService } from "./update-forward-rule.service.js";
+import { ReorderForwardRulesBodyDto } from "./reorder-forward-rules.body.dto.js";
 import { toForwardRuleResponseDto } from "./forward-rule.response.dto.js";
 import { toForwardStatusResponseDto } from "./forward-status.response.dto.js";
 import { ForwardsService } from "./forwards.service.js";
@@ -34,10 +37,13 @@ import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwa
  * their response DTO at the HTTP boundary (matching the Express routes). The
  * `POST` body is NOT run through a validation pipe — validation is delegated to
  * the shared `validateForwardRule` inside the manager (a documented parity
- * exception), so `@ApiBody` documents the schema explicitly. List/create/update/
- * delete and the lifecycle start + stop (`POST :id/start`, `POST :id/stop`) are
- * migrated; the remaining lifecycle routes under `/api/forwards/...`
- * (reorder/group/diagnose) stay with Express.
+ * exception), so `@ApiBody` documents the schema explicitly. The reorder body
+ * (`ReorderForwardRulesBodyDto`) IS a real validated DTO (its `ids: string[]`
+ * check is simple enough to re-express exactly in class-validator), run through
+ * `ApiValidationPipe`. List/create/update/delete, the lifecycle start + stop
+ * (`POST :id/start`, `POST :id/stop`), and reorder (`POST reorder`) are migrated;
+ * the remaining routes under `/api/forwards/...` (group/diagnose) stay with
+ * Express.
  */
 @ApiTags("forwards")
 @Controller("api/forwards")
@@ -48,7 +54,8 @@ export class ForwardsController {
     @Inject(UpdateForwardRuleService) private readonly updateService: UpdateForwardRuleService,
     @Inject(DeleteForwardRuleService) private readonly deleteService: DeleteForwardRuleService,
     @Inject(StartForwardRuleService) private readonly startService: StartForwardRuleService,
-    @Inject(StopForwardRuleService) private readonly stopService: StopForwardRuleService
+    @Inject(StopForwardRuleService) private readonly stopService: StopForwardRuleService,
+    @Inject(ReorderForwardRulesService) private readonly reorderService: ReorderForwardRulesService
   ) {}
 
   @Get()
@@ -70,6 +77,26 @@ export class ForwardsController {
   @ApiConflictResponse({ type: ApiErrorResponseDto, description: "A rule already listens on that binding." })
   async create(@Body() body: CreateForwardRuleBodyDto): Promise<ForwardRuleResponseDto> {
     return toForwardRuleResponseDto(await this.createService.create(body));
+  }
+
+  @Post("reorder")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Reorder forward rules",
+    description:
+      "Reorders the rules to the given id order; any rule id not listed keeps its relative order at the end " +
+      "(a partial set is allowed, a duplicate id is tolerated, an empty list is a no-op). An unknown id returns " +
+      "404 and no reorder is persisted. Returns 200 with the full reordered rule list (matching Express; NestJS " +
+      "would otherwise default POST to 201). Reorder is metadata only — running forwarders are not affected.",
+  })
+  @ApiBody({ type: ReorderForwardRulesBodyDto })
+  @ApiOkResponse({ type: ForwardRuleResponseDto, isArray: true, description: "The full reordered rule list." })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto, description: "`ids` is not an array of strings." })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "An id in the list does not match any rule." })
+  async reorder(
+    @Body(new ApiValidationPipe(ReorderForwardRulesBodyDto)) body: ReorderForwardRulesBodyDto
+  ): Promise<ForwardsListResponseDto> {
+    return toForwardsListResponseDto(await this.reorderService.reorder(body.ids));
   }
 
   @Patch(":id")

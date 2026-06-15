@@ -4,6 +4,7 @@ import type { ForwardStatus } from "@portier/shared";
 import { ForwardsController } from "./forwards.controller.js";
 import type { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import type { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
+import type { ReorderForwardRulesService } from "./reorder-forward-rules.service.js";
 import type { StartForwardRuleService } from "./start-forward-rule.service.js";
 import type { StopForwardRuleService } from "./stop-forward-rule.service.js";
 import type { UpdateForwardRuleService } from "./update-forward-rule.service.js";
@@ -37,6 +38,7 @@ function controller(overrides: {
   remove?: (id: string) => Promise<void>;
   start?: (id: string) => Promise<ForwardStatus>;
   stop?: (id: string) => Promise<ForwardStatus>;
+  reorder?: (ids: string[]) => Promise<ForwardRuleResponse[]>;
 }): ForwardsController {
   return new ForwardsController(
     { list: overrides.list ?? (() => []) } as unknown as ForwardsService,
@@ -44,7 +46,8 @@ function controller(overrides: {
     { update: overrides.update ?? (async () => RESPONSE) } as unknown as UpdateForwardRuleService,
     { delete: overrides.remove ?? (async () => undefined) } as unknown as DeleteForwardRuleService,
     { start: overrides.start ?? (async () => STATUS) } as unknown as StartForwardRuleService,
-    { stop: overrides.stop ?? (async () => STATUS) } as unknown as StopForwardRuleService
+    { stop: overrides.stop ?? (async () => STATUS) } as unknown as StopForwardRuleService,
+    { reorder: overrides.reorder ?? (async () => [RESPONSE]) } as unknown as ReorderForwardRulesService
   );
 }
 
@@ -138,5 +141,22 @@ describe("ForwardsController.stop", () => {
     expect(receivedId).toBe("r1"); // path id passed through
     expect(result).toEqual(STATUS); // byte-for-byte
     expect(result).not.toBe(STATUS); // mapped copy
+  });
+});
+
+describe("ForwardsController.reorder", () => {
+  it("delegates the ids to the reorder service and maps the list to the response DTO", async () => {
+    const list = [RESPONSE, { ...RESPONSE, id: "r2" }];
+    let receivedIds: string[] | undefined;
+    const result = await controller({
+      reorder: async (ids) => {
+        receivedIds = ids;
+        return list;
+      },
+    }).reorder({ ids: ["r2", "r1"] });
+
+    expect(receivedIds).toEqual(["r2", "r1"]); // body.ids passed through
+    expect(result).toEqual(list); // byte-for-byte
+    expect(result).not.toBe(list); // mapped copy (fresh array)
   });
 });

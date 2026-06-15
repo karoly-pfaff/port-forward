@@ -132,3 +132,28 @@ export const FORWARD_RULE_STOPPER = "FORWARD_RULE_STOPPER";
 export function createDefaultForwardRuleStopper(): ForwardRuleStopper {
   return new ForwardManager(new InMemoryRuleStore());
 }
+
+/**
+ * Narrow write capability for `POST /api/forwards/reorder`. The real domain
+ * `ForwardManager` satisfies it via `reorderRules` + `listRules`; tests bind a
+ * seeded manager shared with Express for parity. `reorderRules` validates that
+ * every id exists (an unknown id throws `NotFoundError` → 404), rebuilds the rule
+ * order with the listed ids first and any unlisted rules appended in their prior
+ * order (so a partial set is allowed and a duplicate id is tolerated), persists
+ * (with rollback to the previous order on a persist failure), and touches no
+ * socket (reorder is metadata only — running rules keep running). An empty `ids`
+ * is a no-op. The route then returns the full reordered rule list, so the
+ * reorderer also exposes `listRules` (the SAME method the list read uses).
+ */
+export interface ForwardRulesReorderer {
+  reorderRules(ids: string[]): Promise<void>;
+  listRules(): ForwardRule[];
+}
+
+/** Injection token for the rule reorderer. */
+export const FORWARD_RULES_REORDERER = "FORWARD_RULES_REORDERER";
+
+/** Scaffold default: a fresh, isolated in-memory `ForwardManager` (mirrors the other write defaults). */
+export function createDefaultForwardRulesReorderer(): ForwardRulesReorderer {
+  return new ForwardManager(new InMemoryRuleStore());
+}
