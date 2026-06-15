@@ -145,7 +145,7 @@ export function createApp(manager: ForwardManager, options: AppOptions = {}): ex
         return;
       }
       const isRunning = manager.getStatus(rule.id).running;
-      response.json(await diagnoseRule(rule, isRunning));
+      response.json(await diagnoseRule(rule, isRunning, (options.now ?? (() => new Date()))()));
     } catch (error) {
       next(error);
     }

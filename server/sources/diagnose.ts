@@ -6,7 +6,15 @@ import { COMMON_PORTS } from "@portier/shared";
 
 const TIMEOUT_MS = 2000;
 
-export async function diagnoseRule(rule: ForwardRule, isRunning: boolean): Promise<RuleDiagnosticsResult> {
+// `now` is an injectable seam (default = real clock) so the volatile `diagnosedAt`
+// timestamp can be pinned in byte-for-byte Express↔Nest parity tests, exactly like
+// the runtime/config-export/connections `now` seams. Production passes the real
+// clock, so behaviour is unchanged.
+export async function diagnoseRule(
+  rule: ForwardRule,
+  isRunning: boolean,
+  now: Date = new Date()
+): Promise<RuleDiagnosticsResult> {
   // Each phase appends exactly one check; order here is the response check order.
   const checks: DiagnosticCheck[] = [];
 
@@ -33,7 +41,7 @@ export async function diagnoseRule(rule: ForwardRule, isRunning: boolean): Promi
     protocol: rule.protocol,
     summary,
     checks,
-    diagnosedAt: new Date().toISOString()
+    diagnosedAt: now.toISOString()
   };
 }
 

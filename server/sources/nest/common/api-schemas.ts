@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import type {
   ActivityEvent,
+  DiagnosticCheck,
+  DiagnosticSummary,
   ExportedConfig,
   ForwardRule,
   ForwardRuleInput,
@@ -8,6 +10,7 @@ import type {
   ForwardStatus,
   LiveConnectionsResponse,
   PortAdvisory,
+  RuleDiagnosticsResult,
   RuleLiveSummary,
   RuntimeInfo,
   TcpConnectionInfo,
@@ -319,4 +322,37 @@ export class ConnectionsResponseDto implements LiveConnectionsResponse {
   udpSessions!: UdpSessionInfo[];
   @ApiProperty({ type: [RuleLiveSummaryDto], description: "Per-rule live traffic summary." })
   ruleSummaries!: RuleLiveSummary[];
+}
+
+/** One diagnostic check in a rule-diagnose result. */
+export class DiagnosticCheckDto implements DiagnosticCheck {
+  @ApiProperty({ type: String, description: "Stable check id (e.g. listen-host, target-connect)." }) id!: string;
+  @ApiProperty({ type: String, description: "Human-readable check label." }) label!: string;
+  @ApiProperty({ enum: ["pass", "warn", "fail", "skip"], description: "Check outcome." })
+  status!: DiagnosticCheck["status"];
+  @ApiProperty({ type: String, description: "Human-readable check message." }) message!: string;
+  @ApiPropertyOptional({
+    type: "object",
+    additionalProperties: true,
+    description: "Optional structured details (string/number/boolean/null values).",
+  })
+  details?: Record<string, string | number | boolean | null>;
+}
+
+/** The overall summary of a rule-diagnose result. */
+export class DiagnosticSummaryDto implements DiagnosticSummary {
+  @ApiProperty({ enum: ["pass", "warn", "fail"], description: "Overall diagnose outcome." })
+  status!: DiagnosticSummary["status"];
+  @ApiProperty({ type: String, description: "Human-readable summary message." }) message!: string;
+}
+
+/** Response body for `POST /api/forwards/:id/diagnose`. */
+export class RuleDiagnosticsResultDto implements RuleDiagnosticsResult {
+  @ApiProperty({ type: String, description: "Id of the diagnosed rule." }) ruleId!: string;
+  @ApiProperty({ type: String, description: "Name of the diagnosed rule." }) ruleName!: string;
+  @ApiProperty({ enum: ["tcp", "udp"], description: "Rule protocol." }) protocol!: RuleDiagnosticsResult["protocol"];
+  @ApiProperty({ type: DiagnosticSummaryDto, description: "Overall summary." }) summary!: DiagnosticSummary;
+  @ApiProperty({ type: [DiagnosticCheckDto], description: "Ordered diagnostic checks." }) checks!: DiagnosticCheck[];
+  @ApiProperty({ type: String, format: "date-time", description: "When the diagnose ran (ISO 8601)." })
+  diagnosedAt!: string;
 }

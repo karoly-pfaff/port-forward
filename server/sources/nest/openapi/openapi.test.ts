@@ -110,6 +110,23 @@ describe("generateOpenApiDocument", () => {
     expect(doc.components?.schemas?.UpdateForwardRuleBodyDto).toBeDefined();
   });
 
+  it("documents POST /api/forwards/{id}/diagnose with its path param, 200 result response, and 404 error", () => {
+    const diagnose = doc.paths["/api/forwards/{id}/diagnose"]?.post;
+    expect(diagnose).toBeDefined();
+    const params = (diagnose?.parameters ?? []) as Array<{ name: string; in: string }>;
+    expect(params.some((p) => p.name === "id" && p.in === "path")).toBe(true);
+    const responses = diagnose?.responses ?? {};
+    const ok = responses["200"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(ok?.content?.["application/json"]?.schema?.$ref).toContain("RuleDiagnosticsResultDto");
+    const notFound = responses["404"] as { content?: Record<string, { schema?: { $ref?: string } }> };
+    expect(notFound?.content?.["application/json"]?.schema?.$ref).toContain("ApiErrorResponseDto");
+    // The result schema references the check + summary item schemas.
+    const schemas = doc.components?.schemas ?? {};
+    expect(schemas.RuleDiagnosticsResultDto).toBeDefined();
+    expect(schemas.DiagnosticCheckDto).toBeDefined();
+    expect(schemas.DiagnosticSummaryDto).toBeDefined();
+  });
+
   it("documents POST /api/forwards/reorder with its body, 200 list response, and 400/404 errors", () => {
     const reorder = doc.paths["/api/forwards/reorder"]?.post;
     expect(reorder).toBeDefined();

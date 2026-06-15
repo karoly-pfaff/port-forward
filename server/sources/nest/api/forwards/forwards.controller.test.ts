@@ -1,9 +1,10 @@
-import type { ForwardRule, ForwardRuleResponse } from "@portier/shared";
+import type { ForwardRule, ForwardRuleResponse, RuleDiagnosticsResult } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import type { ForwardStatus } from "@portier/shared";
 import { ForwardsController } from "./forwards.controller.js";
 import type { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import type { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
+import type { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";
 import type { ReorderForwardRulesService } from "./reorder-forward-rules.service.js";
 import type { StartForwardRuleService } from "./start-forward-rule.service.js";
 import type { StopForwardRuleService } from "./stop-forward-rule.service.js";
@@ -31,6 +32,15 @@ const STATUS: ForwardStatus = {
   startedAt: "2026-06-15T00:00:00.000Z",
 };
 
+const DIAGNOSTICS: RuleDiagnosticsResult = {
+  ruleId: "r1",
+  ruleName: "Web",
+  protocol: "tcp",
+  summary: { status: "pass", message: "All checks passed." },
+  checks: [{ id: "listen-host", label: "Listen address", status: "pass", message: "ok" }],
+  diagnosedAt: "2026-06-15T00:00:00.000Z",
+};
+
 function controller(overrides: {
   list?: () => ForwardRuleResponse[];
   create?: (body: unknown) => Promise<ForwardRuleResponse>;
@@ -39,6 +49,7 @@ function controller(overrides: {
   start?: (id: string) => Promise<ForwardStatus>;
   stop?: (id: string) => Promise<ForwardStatus>;
   reorder?: (ids: string[]) => Promise<ForwardRuleResponse[]>;
+  diagnose?: (id: string) => Promise<RuleDiagnosticsResult>;
 }): ForwardsController {
   return new ForwardsController(
     { list: overrides.list ?? (() => []) } as unknown as ForwardsService,
@@ -47,7 +58,8 @@ function controller(overrides: {
     { delete: overrides.remove ?? (async () => undefined) } as unknown as DeleteForwardRuleService,
     { start: overrides.start ?? (async () => STATUS) } as unknown as StartForwardRuleService,
     { stop: overrides.stop ?? (async () => STATUS) } as unknown as StopForwardRuleService,
-    { reorder: overrides.reorder ?? (async () => [RESPONSE]) } as unknown as ReorderForwardRulesService
+    { reorder: overrides.reorder ?? (async () => [RESPONSE]) } as unknown as ReorderForwardRulesService,
+    { diagnose: overrides.diagnose ?? (async () => DIAGNOSTICS) } as unknown as DiagnoseForwardRuleService
   );
 }
 
@@ -158,5 +170,21 @@ describe("ForwardsController.reorder", () => {
     expect(receivedIds).toEqual(["r2", "r1"]); // body.ids passed through
     expect(result).toEqual(list); // byte-for-byte
     expect(result).not.toBe(list); // mapped copy (fresh array)
+  });
+});
+
+describe("ForwardsController.diagnose", () => {
+  it("delegates the id to the diagnose service and maps the result to the response DTO", async () => {
+    let receivedId: string | undefined;
+    const result = await controller({
+      diagnose: async (id) => {
+        receivedId = id;
+        return DIAGNOSTICS;
+      },
+    }).diagnose("r1");
+
+    expect(receivedId).toBe("r1"); // path id passed through
+    expect(result).toEqual(DIAGNOSTICS); // byte-for-byte
+    expect(result).not.toBe(DIAGNOSTICS); // mapped copy (fresh object)
   });
 });

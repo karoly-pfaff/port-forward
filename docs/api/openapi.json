@@ -540,6 +540,49 @@
         ]
       }
     },
+    "/api/forwards/{id}/diagnose": {
+      "post": {
+        "description": "Runs read-only diagnostics for the rule — listen-host/LAN-exposure/privileged-port/common-port advisories, a listen-bind probe (skipped while the rule is running, since Portier already owns the port), target-host DNS resolution, a TCP target-connect probe (skipped for UDP / unresolved targets), and the UDP mode (UDP only) — and returns the ordered checks plus an overall summary. Does not mutate the rule. An unknown id returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "operationId": "ForwardsController_diagnose",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "The rule id.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The diagnostic checks and summary for the rule.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDiagnosticsResultDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No rule with that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Diagnose a forward rule",
+        "tags": [
+          "forwards"
+        ]
+      }
+    },
     "/api/runtime": {
       "get": {
         "description": "Returns runtime/version/uptime/process metadata.",
@@ -1045,6 +1088,115 @@
             "description": "Grouping label (metadata; empty/whitespace clears, null/absent leaves unchanged)."
           }
         }
+      },
+      "DiagnosticSummaryDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "description": "Overall diagnose outcome."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable summary message."
+          }
+        },
+        "required": [
+          "status",
+          "message"
+        ]
+      },
+      "DiagnosticCheckDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable check id (e.g. listen-host, target-connect)."
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable check label."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "warn",
+              "fail",
+              "skip"
+            ],
+            "description": "Check outcome."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable check message."
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional structured details (string/number/boolean/null values)."
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "status",
+          "message"
+        ]
+      },
+      "RuleDiagnosticsResultDto": {
+        "type": "object",
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "description": "Id of the diagnosed rule."
+          },
+          "ruleName": {
+            "type": "string",
+            "description": "Name of the diagnosed rule."
+          },
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "tcp",
+              "udp"
+            ],
+            "description": "Rule protocol."
+          },
+          "summary": {
+            "description": "Overall summary.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DiagnosticSummaryDto"
+              }
+            ]
+          },
+          "checks": {
+            "description": "Ordered diagnostic checks.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DiagnosticCheckDto"
+            }
+          },
+          "diagnosedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the diagnose ran (ISO 8601)."
+          }
+        },
+        "required": [
+          "ruleId",
+          "ruleName",
+          "protocol",
+          "summary",
+          "checks",
+          "diagnosedAt"
+        ]
       },
       "RuntimeInfoResponseDto": {
         "type": "object",

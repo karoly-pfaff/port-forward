@@ -16,11 +16,13 @@ import {
   CreateForwardRuleBodyDto,
   ForwardRuleResponseDto,
   ForwardStatusDto,
+  RuleDiagnosticsResultDto,
   UpdateForwardRuleBodyDto,
 } from "../../common/api-schemas.js";
 import { ApiValidationPipe } from "../../common/api-validation.pipe.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
+import { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";
 import { ReorderForwardRulesService } from "./reorder-forward-rules.service.js";
 import { StartForwardRuleService } from "./start-forward-rule.service.js";
 import { StopForwardRuleService } from "./stop-forward-rule.service.js";
@@ -28,6 +30,7 @@ import { UpdateForwardRuleService } from "./update-forward-rule.service.js";
 import { ReorderForwardRulesBodyDto } from "./reorder-forward-rules.body.dto.js";
 import { toForwardRuleResponseDto } from "./forward-rule.response.dto.js";
 import { toForwardStatusResponseDto } from "./forward-status.response.dto.js";
+import { toRuleDiagnosticsResponseDto } from "./rule-diagnostics.response.dto.js";
 import { ForwardsService } from "./forwards.service.js";
 import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwards-list.response.dto.js";
 
@@ -55,7 +58,8 @@ export class ForwardsController {
     @Inject(DeleteForwardRuleService) private readonly deleteService: DeleteForwardRuleService,
     @Inject(StartForwardRuleService) private readonly startService: StartForwardRuleService,
     @Inject(StopForwardRuleService) private readonly stopService: StopForwardRuleService,
-    @Inject(ReorderForwardRulesService) private readonly reorderService: ReorderForwardRulesService
+    @Inject(ReorderForwardRulesService) private readonly reorderService: ReorderForwardRulesService,
+    @Inject(DiagnoseForwardRuleService) private readonly diagnoseService: DiagnoseForwardRuleService
   ) {}
 
   @Get()
@@ -166,5 +170,23 @@ export class ForwardsController {
   @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
   async stop(@Param("id") id: string): Promise<ForwardStatusDto> {
     return toForwardStatusResponseDto(await this.stopService.stop(id));
+  }
+
+  @Post(":id/diagnose")
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Diagnose a forward rule",
+    description:
+      "Runs read-only diagnostics for the rule — listen-host/LAN-exposure/privileged-port/common-port advisories, " +
+      "a listen-bind probe (skipped while the rule is running, since Portier already owns the port), target-host " +
+      "DNS resolution, a TCP target-connect probe (skipped for UDP / unresolved targets), and the UDP mode (UDP " +
+      "only) — and returns the ordered checks plus an overall summary. Does not mutate the rule. An unknown id " +
+      "returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+  })
+  @ApiParam({ name: "id", type: String, description: "The rule id." })
+  @ApiOkResponse({ type: RuleDiagnosticsResultDto, description: "The diagnostic checks and summary for the rule." })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto, description: "No rule with that id." })
+  async diagnose(@Param("id") id: string): Promise<RuleDiagnosticsResultDto> {
+    return toRuleDiagnosticsResponseDto(await this.diagnoseService.diagnose(id));
   }
 }

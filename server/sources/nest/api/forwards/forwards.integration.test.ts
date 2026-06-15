@@ -17,7 +17,9 @@ import {
   type ApiResponse,
   type ParityServer,
 } from "../../testing/api-parity.js";
+import { CLOCK_READER, type ClockReader } from "../../common/clock.reader.js";
 import { STATUS_READER } from "../status/status.reader.js";
+import { DIAGNOSTIC_READER } from "./forwards-diagnostics.reader.js";
 import { FORWARDS_READER, type ForwardsReader } from "./forwards.reader.js";
 import {
   FORWARD_RULE_CREATOR,
@@ -154,15 +156,19 @@ const CREATE_TCP = { id: "fixed-tcp", name: "New Web", protocol: "tcp", listenHo
 const CREATE_UDP = { id: "fixed-udp", name: "New DNS", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48021, targetHost: "127.0.0.1", targetPort: 53, enabled: false, udpMode: "one-way" } as const;
 
 /**
- * Binds the (seeded) manager to the reader + status reader + creator + updater +
- * deleter + starter + stopper so GET reflects POST/PATCH/DELETE and
- * `/start`/`/stop` + `/api/status` read the same manager state.
+ * Binds the (seeded) manager to the reader + status reader + diagnostic reader +
+ * creator + updater + deleter + starter + stopper + reorderer so GET reflects
+ * POST/PATCH/DELETE and `/start`/`/stop`/`/diagnose` + `/api/status` read the same
+ * manager state. An optional fixed clock pins the diagnose `diagnosedAt` for
+ * byte-for-byte parity.
  */
-async function nestWithManager(manager: ForwardManager): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+async function nestWithManager(manager: ForwardManager, clock?: ClockReader): Promise<INestApplication> {
+  const builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(FORWARDS_READER)
     .useValue(manager)
     .overrideProvider(STATUS_READER)
+    .useValue(manager)
+    .overrideProvider(DIAGNOSTIC_READER)
     .useValue(manager)
     .overrideProvider(FORWARD_RULE_CREATOR)
     .useValue(manager)
@@ -175,8 +181,11 @@ async function nestWithManager(manager: ForwardManager): Promise<INestApplicatio
     .overrideProvider(FORWARD_RULE_STOPPER)
     .useValue(manager)
     .overrideProvider(FORWARD_RULES_REORDERER)
-    .useValue(manager)
-    .compile();
+    .useValue(manager);
+  if (clock) {
+    builder.overrideProvider(CLOCK_READER).useValue(clock);
+  }
+  const moduleRef = await builder.compile();
   return moduleRef.createNestApplication({ logger: false });
 }
 
@@ -272,6 +281,12 @@ describe("POST /api/forwards (Nest) — scaffold default", () => {
   it("returns 400 with the exact envelope for an invalid reorder body", async () => {
     const response = await reorderReq(nest.baseUrl, { ids: "notarray" });
     expect(response).toEqual({ status: 400, body: { errors: ["ids must be an array of strings."] } });
+  });
+
+  it("returns 404 for diagnose of an unknown id (default empty diagnostic reader)", async () => {
+    const response = await diagnoseReq(nest.baseUrl, "nonexistent");
+    expect(response.status).toBe(404);
+    expect((response.body as { errors: string[] }).errors[0]).toContain("not found");
   });
 });
 
@@ -403,6 +418,10 @@ function reorderReq(baseUrl: string, body: unknown): Promise<ApiResponse> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function diagnoseReq(baseUrl: string, id: string): Promise<ApiResponse> {
+  return fetchApi(baseUrl, `/api/forwards/${id}/diagnose`, { method: "POST" });
 }
 
 // A stopped TCP + UDP pair so DELETE can be parity-tested per protocol without sockets.
@@ -967,6 +986,62 @@ describe("POST /api/forwards/reorder (Nest) — parity with Express", () => {
       }
     } finally {
       await close();
+    }
+  });
+});
+
+// ── POST /api/forwards/:id/diagnose (diagnose) ────────────────────────────────
+
+describe("POST /api/forwards/:id/diagnose (Nest) — parity with Express", () => {
+  it("returns the same 404 envelope as Express for an unknown id", async () => {
+    const { nest, express, close } = await bootCreatePair(seedOne);
+    try {
+      const [e, n] = await Promise.all([
+        diagnoseReq(express.baseUrl, "ghost"),
+        diagnoseReq(nest.baseUrl, "ghost"),
+      ]);
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(404);
+      expect((n.body as { errors: string[] }).errors[0]).toContain("not found");
+    } finally {
+      await close();
+    }
+  });
+
+  it("diagnoses a stopped UDP rule byte-for-byte like Express (pinned diagnosedAt, deterministic checks)", async () => {
+    // A UDP rule makes diagnose deterministic: target-connect is always "skip" (no
+    // TCP probe), 127.0.0.1 resolves instantly, and the only socket is a transient
+    // UDP listen-bind. A SHARED manager + a pinned clock (both runtimes) make the
+    // whole body — incl. the volatile diagnosedAt — byte-for-byte equal. Sequential
+    // calls so the listen-bind probe never collides.
+    const FIXED = new Date("2026-06-15T12:00:00.000Z");
+    const fixedClock: ClockReader = { now: () => FIXED };
+    const manager = new ForwardManager(new MemoryStore());
+    await manager.addRule({ id: "diag-udp", name: "DiagUdp", protocol: "udp", listenHost: "127.0.0.1", listenPort: await getFreeUdpPort(), targetHost: "127.0.0.1", targetPort: await getFreeUdpPort(), enabled: false, udpMode: "one-way" });
+
+    const nestApp = await nestWithManager(manager, fixedClock);
+    const nest = await startNestServer(nestApp);
+    const express = await startHandlerServer(createApp(manager, { now: () => FIXED }) as unknown as http.RequestListener);
+    try {
+      // Sequential (not Promise.all) so the two listen-bind probes never overlap.
+      const e = await diagnoseReq(express.baseUrl, "diag-udp");
+      const n = await diagnoseReq(nest.baseUrl, "diag-udp");
+      expect(diffApiResponses(e, n)).toEqual([]);
+      expect(n.status).toBe(200);
+      const body = n.body as {
+        ruleId: string;
+        protocol: string;
+        diagnosedAt: string;
+        checks: Array<{ id: string; status: string }>;
+      };
+      expect(body.ruleId).toBe("diag-udp");
+      expect(body.protocol).toBe("udp");
+      expect(body.diagnosedAt).toBe(FIXED.toISOString()); // pinned, not stripped
+      expect(body.checks.find((c) => c.id === "target-connect")?.status).toBe("skip");
+      expect(body.checks.find((c) => c.id === "udp-mode")?.status).toBe("pass");
+    } finally {
+      await nest.close();
+      await express.close();
     }
   });
 });

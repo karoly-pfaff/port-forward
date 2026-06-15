@@ -96,8 +96,9 @@ trio is migrated — **create** (`POST /api/forwards`, Slice 14), **update**
 (`PATCH /api/forwards/:id`, Slice 15), and **delete** (`DELETE /api/forwards/:id`,
 Slice 16) — plus the single-rule lifecycle pair, **start**
 (`POST /api/forwards/:id/start`, Slice 17) and **stop**
-(`POST /api/forwards/:id/stop`, Slice 18), and **reorder**
-(`POST /api/forwards/reorder`, Slice 19). Every endpoint below is **shadow-only** — served by the
+(`POST /api/forwards/:id/stop`, Slice 18), **reorder**
+(`POST /api/forwards/reorder`, Slice 19), and **diagnose**
+(`POST /api/forwards/:id/diagnose`, Slice 20). Every endpoint below is **shadow-only** — served by the
 Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
 `sources/api.ts`) remains the **default active runtime** and serves all routes
 unchanged. `validate:contract` is 234/234.
@@ -116,6 +117,7 @@ unchanged. `validate:contract` is 234/234.
 | `POST /api/forwards/:id/start` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STARTER` (`ForwardRuleStarter`) | — |
 | `POST /api/forwards/:id/stop` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STOPPER` (`ForwardRuleStopper`) | — |
 | `POST /api/forwards/reorder` | `api/forwards/` | `ReorderForwardRulesBodyDto` + pipe⁶ | `ForwardRuleResponseDto[]` (`200`) | `FORWARD_RULES_REORDERER` (`ForwardRulesReorderer`) | — |
+| `POST /api/forwards/:id/diagnose` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `RuleDiagnosticsResultDto` (`200`)⁷ | `DIAGNOSTIC_READER` + `CLOCK_READER` | `diagnoseRule` (`diagnosedAt`) |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
@@ -187,12 +189,29 @@ allowed, duplicate ids tolerated, empty list is a no-op); an unknown id → `404
 (via `ForwardManager.reorderRules` → `mapManagerError`) and no reorder is persisted;
 a persist failure rolls back the order. Parity-tested with **separate seeded
 managers** (no sockets) for full/partial/duplicate/empty reorder + GET-after-reorder
-+ unknown-id 404 + invalid-body 400.
++ unknown-id 404 + invalid-body 400. ⁷ **Diagnose** (`POST /api/forwards/:id/diagnose`)
+is READ-ONLY — it inspects the rule + its running state (the narrow
+`DIAGNOSTIC_READER` = `getRule` + `getStatus`), runs the shared `diagnoseRule` probes
+(listen-bind / target-host DNS / target-connect + listen-host/LAN/privileged/common
+advisories + UDP mode), and returns `200` + a `RuleDiagnosticsResultDto`
+(`@HttpCode(200)`); an unknown id → `404` (the service throws `ApiNotFoundException`
+directly, matching Express's INLINE 404 — `getRule` returns `undefined`, it does not
+throw, so this is not a `mapManagerError` path). Its volatile `diagnosedAt` is pinned
+for parity via the **shared `CLOCK_READER`** on the Nest side and the existing
+`AppOptions.now` seam on the Express side — to enable that, `diagnoseRule` gained an
+optional `now: Date = new Date()` param (behavior-preserving, mirroring the
+`exportConfig(now)` seam; production output unchanged). Because diagnose probes the
+network, byte-for-byte parity uses a **UDP** rule (its `target-connect` is always
+`skip` — no TCP probe; `127.0.0.1` resolves instantly; only a transient UDP
+listen-bind), a **shared** manager, **sequential** calls (so the listen-bind probes
+never overlap), and the pinned clock — no field is stripped/normalized. The 404 path
+(no probes, no `diagnosedAt`) is parity-tested with separate managers.
 
-**Deferred (Milestone 3+, write/lifecycle/static):** group actions, diagnose,
-`POST /api/config/import`, `POST /api/config/plan`/`apply`, and static client
-serving — all stay with Express. The next slice continues **write** with group
-actions, then diagnose.
+**Deferred (Milestone 3+, write/lifecycle/static):** group actions
+(`POST /api/forwards/groups/:group/{start,stop}`), `POST /api/config/import`,
+`POST /api/config/plan`/`apply`, and static client serving — all stay with Express.
+The next slice continues **write** with group actions, completing the forwards
+feature before the config-API milestone.
 
 Layout:
 
