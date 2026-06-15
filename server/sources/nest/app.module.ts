@@ -10,6 +10,7 @@ import { RuntimeModule } from "./api/runtime/runtime.module.js";
 import { ConfigModule } from "./api/config/config.module.js";
 import { ConnectionsModule } from "./api/connections/connections.module.js";
 import { ApiErrorEnvelopeFilter } from "./common/api-error-envelope.filter.js";
+import { STATIC_FALLBACK, disabledStaticFallback } from "./static/static-serving.js";
 
 /**
  * Root module of the NestJS server scaffold (v1.14).
@@ -22,7 +23,10 @@ import { ApiErrorEnvelopeFilter } from "./common/api-error-envelope.filter.js";
  * `GET /api/connections`) plus `DELETE /api/activity`, and a contract-shaped
  * `/api/*` error envelope for everything not yet migrated. The
  * global `ApiErrorEnvelopeFilter` is registered here (rather than in `main.ts`)
- * so it is active in test applications too.
+ * so it is active in test applications too. The `STATIC_FALLBACK` token (consumed
+ * by that filter for the non-API SPA fallback) defaults to `disabledStaticFallback`
+ * — the scaffold wires no static dir, so static serving is off until a test (or a
+ * future runtime switch) supplies a directory; the API stays fully usable either way.
  */
 @Module({
   imports: [
@@ -35,6 +39,9 @@ import { ApiErrorEnvelopeFilter } from "./common/api-error-envelope.filter.js";
     ConfigModule,
     ConnectionsModule,
   ],
-  providers: [{ provide: APP_FILTER, useClass: ApiErrorEnvelopeFilter }],
+  providers: [
+    { provide: STATIC_FALLBACK, useValue: disabledStaticFallback },
+    { provide: APP_FILTER, useClass: ApiErrorEnvelopeFilter },
+  ],
 })
 export class AppModule {}

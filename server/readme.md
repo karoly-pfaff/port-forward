@@ -104,10 +104,11 @@ start** (`POST /api/forwards/groups/:group/start`, Slice 22). The entire
 `/api/forwards` surface is migrated, and the config milestone is **complete** — the
 **non-mutating** `POST /api/config/plan` dry-run (Slice 23), the **mutating**
 `POST /api/config/import` (Slice 24), and the **mutating** `POST /api/config/apply`
-(Slice 25). Every endpoint below is **shadow-only** — served by the
-Nest app only under `npm run start:nest`; the Express server (`sources/index.ts` +
-`sources/api.ts`) remains the **default active runtime** and serves all routes
-unchanged. `validate:contract` is 234/234.
+(Slice 25). **Static client serving** (Slice 26) is migrated too — see the
+*Static client serving* section below. Every endpoint below is **shadow-only** —
+served by the Nest app only under `npm run start:nest`; the Express server
+(`sources/index.ts` + `sources/api.ts`) remains the **default active runtime** and
+serves all routes unchanged. `validate:contract` is 234/234.
 
 | Endpoint | Module | Request DTO | Response DTO | Provider token | Builder / volatile |
 |---|---|---|---|---|---|
@@ -318,8 +319,37 @@ destructive blocked without `yes` (state unchanged), destructive applied with `y
 The import-error guard branch and a persist-failure re-throw (→ generic `500`) are
 service unit-covered via a fake applier.
 
-**Deferred (static):** static client serving (`express.static` / the SPA fallback) stays
-with Express. The config milestone is complete; the next slice migrates static serving.
+## Static client serving (Slice 26)
+
+The Nest shadow runtime can serve the packaged web client with Express-equivalent
+semantics (`server/sources/nest/static/static-serving.ts`):
+
+- **Enable rule** mirrors Express: a static dir is usable only when it contains an
+  `index.html` (`hasStaticClient`/`resolveStaticOptions`). A missing/absent dir is
+  allowed — the API (and the `/api/*` JSON-404 envelope) stays fully usable.
+- **Assets:** `configureStaticAssets(app, dir)` registers `app.useStaticAssets(dir)`
+  (the `express.static` equivalent, pre-router) when enabled.
+- **SPA fallback:** an unmatched **non-API** GET/HEAD route serves `index.html`. Nest
+  surfaces unmatched routes as `NotFoundException` → the global
+  `ApiErrorEnvelopeFilter`, so that filter (the single unmatched-route handler) owns
+  the fallback, delegating the static decision to an injected `StaticFallback`
+  (`STATIC_FALLBACK` token). The `/api/*` envelope branch runs first and is untouched.
+- **Shadow-only & default-off:** `STATIC_FALLBACK` defaults to `disabledStaticFallback`
+  (the scaffold wires no static dir), so the live scaffold serves no static assets and
+  the API works with no client build. Static serving is proven via tests + the reusable
+  `configureStaticAssets` helper; live wiring into `npm run start:nest` is deferred to
+  the runtime-switch slice (no `main.ts`/`bootstrap.ts` change).
+- **Parity:** Express↔Nest raw status+body parity for `/`, SPA routes, a real asset, a
+  missing asset (→ index.html, matching Express), and an unmatched `/api/*` route (→ the
+  JSON envelope). When static is disabled, both keep the API usable and serve no SPA
+  index — the non-API 404 *body shape* still differs (Express HTML vs NestJS JSON), the
+  documented pre-existing scaffold boundary.
+- **OpenAPI:** static serving adds **no** routes; `docs/api/openapi.json` is unchanged
+  and a generator test asserts the doc contains only `/health` + `/api/*` paths.
+
+With static serving migrated, **v1.14 is ready for the final migration audit /
+switch-readiness review**; the live runtime switch (making Nest the default) is a
+deliberate, separately-validated later step.
 
 Layout:
 
@@ -339,10 +369,12 @@ sources/nest/
     runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; response: *.response.dto + mapper)
     config/                     # GET /api/config/export, POST /api/config/{plan,import,apply} (CONFIG_EXPORT/PLAN_READER, CONFIG_IMPORTER/APPLIER + shared CLOCK_READER; shared buildExportedConfig/buildConfigPlan/importConfig; volatile exportedAt/generatedAt/appliedAt; response: *.response.dto + mappers)
     connections/                # GET /api/connections (volatile generatedAt: CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; response: *.response.dto + mapper)
+  static/
+    static-serving.ts           # resolveStaticOptions/hasStaticClient/configureStaticAssets (useStaticAssets) + StaticFallback/STATIC_FALLBACK (SPA index fallback) — Slice 26
   common/
     clock.reader.ts              # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider for volatile-timestamp endpoints
     api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
-    api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → NestJS default
+    api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK) else NestJS default
     api-errors.ts                # ApiBadRequestException(string[]) — controllers raise this, not a literal
     api-validation.pipe.ts       # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
     api-schemas.ts               # @ApiProperty OpenAPI schema classes (ApiErrorResponseDto + response DTOs + item shapes) — metadata-only, coverage-excluded

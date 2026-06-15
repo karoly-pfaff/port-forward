@@ -122,6 +122,18 @@ describe("generateOpenApiDocument", () => {
     expect(doc.paths["/api/config/export"]?.get).toBeDefined();
   });
 
+  it("does not document any static-serving route (only /health and /api/* are paths)", () => {
+    const paths = Object.keys(doc.paths ?? {});
+    expect(paths.length).toBeGreaterThan(0);
+    for (const path of paths) {
+      expect(path === "/health" || path.startsWith("/api/"), `unexpected non-API path ${path}`).toBe(true);
+    }
+    // No catch-all/SPA/root/index entries leak in from static serving.
+    for (const leaked of ["/", "/index.html", "/(.*)", "/*", "{*path}"]) {
+      expect(paths).not.toContain(leaked);
+    }
+  });
+
   it("documents the error envelope schema (ApiErrorResponseDto = { errors: string[] })", () => {
     const schema = doc.components?.schemas?.ApiErrorResponseDto as Record<string, unknown> | undefined;
     expect(schema).toBeDefined();
