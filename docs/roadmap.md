@@ -2381,6 +2381,8 @@ Portier v1.14 is ready when:
 
 This is the Go counterpart to v1.14 — an **architecture/migration release, not a feature release**. The Go service remains the preferred/native runtime; the TypeScript NestJS server remains the Node fallback. Public REST API behavior must stay compatible, the CLI and web UI must keep working unchanged, and `validate:contract` remains the source of truth for TS↔Go parity. The migration must not be used as an excuse to redesign the API.
 
+**Status:** Slices 1–2 complete. Slice 1 (router structure audit & modular target layout) recorded the as-built inventory, endpoint inventory, coupling audit, target layout, route-registration pattern, error/response ownership plan, 8-slice plan, and a router-dispatch characterization test (`service/sources/api/router_contract_test.go`) in `audits/v1.15-go-router-audit-1.md`. Slice 2 introduced the explicit dependency container `app.App` (`service/sources/app/`) + `app.New(...)`, made `api.NewHandler(app)` the construction path (removed `api.Options`), added the `modularRoute`/`dispatchModular` route-registration skeleton (`api/routes.go` + per-feature `health_routes.go`/`runtime_routes.go`), and migrated `GET /api/health` + `GET /api/runtime` into it — everything else still flows through the unchanged ordered `serveAPI` dispatch. No API/contract/packaging/runtime change; `validate:contract` 234/234. Next: Slice 3 (extract the shared response/error helpers — `writeJSON`/`decodeRequest`/`readBody`/`writeManagerError` — into `api/respond.go`).
+
 ### Preferred Technical Direction
 
 - Use `chi` (or a similarly lightweight `net/http`-compatible router) **only if** it clearly improves route grouping and middleware; otherwise keep standard `net/http`.

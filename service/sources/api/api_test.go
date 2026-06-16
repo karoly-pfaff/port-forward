@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"portier/service/sources/activity"
+	"portier/service/sources/app"
 	"portier/service/sources/configplan"
 	"portier/service/sources/manager"
 	"portier/service/sources/options"
@@ -946,18 +947,12 @@ func newTestHandler(t *testing.T, staticDir string, configPath string) *Handler 
 		t.Fatalf("create manager: %v", err)
 	}
 	testManager.SetActivityStore(&activity.Store{})
-	return NewHandler(Options{
-		StaticDir: staticDir,
-		Manager:   testManager,
-		StartedAt: time.Now(),
-		ServiceOptions: options.Options{
-			Host:       "127.0.0.1",
-			Port:       47831,
-			ConfigPath: configPath,
-			StaticDir:  staticDir,
-		},
-		Version: "test",
-	})
+	return NewHandler(app.New(testManager, options.Options{
+		Host:       "127.0.0.1",
+		Port:       47831,
+		ConfigPath: configPath,
+		StaticDir:  staticDir,
+	}, time.Now(), "test"))
 }
 
 func TestRuntimeEndpoint(t *testing.T) {

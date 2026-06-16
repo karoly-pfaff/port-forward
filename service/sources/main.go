@@ -15,6 +15,7 @@ import (
 
 	"portier/service/sources/activity"
 	"portier/service/sources/api"
+	"portier/service/sources/app"
 	"portier/service/sources/logger"
 	"portier/service/sources/manager"
 	"portier/service/sources/options"
@@ -87,15 +88,10 @@ func runPortier(ctx context.Context, opts options.Options, log *slog.Logger) err
 	}
 	log.Info("Loaded forwarding rules", "count", len(forwardManager.ListRules()), "started", startedCount)
 
+	application := app.New(forwardManager, opts, startedAt, version.Version)
 	server := &http.Server{
-		Addr: net.JoinHostPort(opts.Host, strconv.Itoa(opts.Port)),
-		Handler: api.NewHandler(api.Options{
-			StaticDir:      opts.StaticDir,
-			Manager:        forwardManager,
-			StartedAt:      startedAt,
-			ServiceOptions: opts,
-			Version:        version.Version,
-		}),
+		Addr:              net.JoinHostPort(opts.Host, strconv.Itoa(opts.Port)),
+		Handler:           api.NewHandler(application),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

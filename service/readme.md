@@ -74,21 +74,64 @@ Start command:
 .\service.exe --service --config "C:\ProgramData\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\web"
 ```
 
+## HTTP / Router Architecture
+
+The HTTP layer is built from an explicit dependency container, `app.App`
+(`sources/app/`), which bundles the resolved dependencies the handler needs
+(`Manager`, `Options`, `StartedAt`, `Version`). `main.go` wires it up
+(`options.Resolve` → `manager.NewFromConfig` → `app.New(...)` →
+`api.NewHandler(app)`) and serves it via `http.Server` with graceful shutdown.
+`api.NewHandler(app *app.App)` is the construction path.
+
+`ServeHTTP` routes API paths (`/api` or `/api/*`) into `serveAPI` and otherwise
+serves the static client (or a plain 404 when no client is built). `serveAPI`
+first consults the **modular route table** (`dispatchModular`, exact method +
+exact path — see `sources/api/routes.go`) for endpoints migrated into feature
+route modules, then falls through to the legacy ordered method+path dispatch
+(exact matches plus the `/api/forwards/groups/` and `/api/forwards/` prefixes),
+falling through to a JSON `404 {"errors":["API route was not found."]}`. A method
+mismatch on a known path returns that same JSON 404 (never a 405): the modular
+table matches only on an exact method, so a wrong method falls through to the
+legacy dispatch and its generic envelope. Shared response/error helpers
+(`writeJSON`, `decodeRequest`, `readBody`, `writeManagerError`) live alongside the
+handlers; diagnose check helpers live in `sources/api/diagnose.go`.
+
+**v1.15 — Go Service Modular Router (in progress):** the monolithic `api.go`
+dispatcher is being reorganized into focused, `net/http`-compatible per-feature
+route modules (`sources/api/<feature>_routes.go`) behind the `app.App` dependency
+struct, preserving the REST contract, error envelopes, static serving, and
+startup/shutdown semantics exactly (standard `net/http`, no router library).
+**Migrated so far:** `GET /api/health` (`health_routes.go`) and `GET /api/runtime`
+(`runtime_routes.go`). Everything else still flows through the ordered `serveAPI`
+dispatch and will migrate feature-by-feature behind `validate:contract`; the shared
+response/error helpers move into a small `api/respond.go` next. See
+`audits/v1.15-go-router-audit-1.md` for the endpoint inventory, target layout,
+route-registration pattern, and slice plan, and `docs/roadmap.md` (v1.15) for the
+goals/non-goals.
+
 ## Implemented Endpoints
 
 - `GET /api/health`
+- `GET /api/runtime`
 - `GET /api/forwards`
 - `POST /api/forwards`
 - `PATCH /api/forwards/:id`
 - `DELETE /api/forwards/:id`
 - `POST /api/forwards/:id/start`
 - `POST /api/forwards/:id/stop`
+- `POST /api/forwards/:id/diagnose`
 - `POST /api/forwards/reorder`
+- `POST /api/forwards/groups/:group/start`
+- `POST /api/forwards/groups/:group/stop`
 - `GET /api/status`
 - `GET /api/ports/advisory`
+- `GET /api/connections`
 - `GET /api/config/export`
 - `POST /api/config/import`
+- `POST /api/config/plan`
+- `POST /api/config/apply`
 - `GET /api/activity`
+- `DELETE /api/activity`
 
 Response:
 

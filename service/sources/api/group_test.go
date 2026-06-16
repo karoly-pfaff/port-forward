@@ -7,9 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"portier/service/sources/app"
 	"portier/service/sources/domain"
 	"portier/service/sources/manager"
+	"portier/service/sources/options"
 )
 
 func freePort(t *testing.T) int {
@@ -42,7 +45,7 @@ func newGroupServer(t *testing.T, rules []domain.ForwardRule) *httptest.Server {
 	if err != nil {
 		t.Fatalf("manager.New: %v", err)
 	}
-	h := NewHandler(Options{Manager: m, Version: "test"})
+	h := NewHandler(app.New(m, options.Options{}, time.Time{}, "test"))
 	srv := httptest.NewServer(h)
 	t.Cleanup(func() {
 		srv.Close()

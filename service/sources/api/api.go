@@ -7,65 +7,49 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"portier/service/sources/activity"
 	"portier/service/sources/advisory"
+	"portier/service/sources/app"
 	"portier/service/sources/configplan"
 	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 	"portier/service/sources/manager"
-	"portier/service/sources/options"
 	"portier/service/sources/static"
 	"portier/service/sources/validation"
-	"portier/service/sources/version"
 )
 
 const notFoundMessage = "API route was not found."
 
-type Options struct {
-	StaticDir      string
-	Manager        *manager.Manager
-	StartedAt      time.Time
-	ServiceOptions options.Options
-	Version        string
-}
-
+// Handler is the service HTTP entry point. It holds the explicit dependency
+// container (app.App) and the modular route table (v1.15). Routes migrated into
+// feature modules are matched first via the route table; everything else still
+// flows through the ordered serveAPI dispatch.
 type Handler struct {
-	staticDir       string
+	app             *app.App
 	staticAvailable bool
-	manager         *manager.Manager
-	startedAt       time.Time
-	serviceOpts     options.Options
-	version         string
+	routes          []modularRoute
+
+	// manager is a temporary bridge for the not-yet-migrated ordered serveAPI
+	// dispatch (v1.15 Slice 2). It mirrors app.Manager; later slices migrate each
+	// feature handler to read app.Manager directly and remove this field.
+	manager *manager.Manager
 }
 
-func NewHandler(opts Options) *Handler {
-	requestManager := opts.Manager
-	if requestManager == nil {
-		requestManager, _ = manager.New(nil)
+// NewHandler builds the HTTP handler from the explicit app dependency container.
+// This is the preferred construction path (v1.15); main.go and tests build an
+// app.App via app.New and pass it here.
+func NewHandler(application *app.App) *Handler {
+	h := &Handler{
+		app:             application,
+		staticAvailable: static.HasClient(application.Options.StaticDir),
+		manager:         application.Manager,
 	}
-	startedAt := opts.StartedAt
-	if startedAt.IsZero() {
-		startedAt = time.Now()
-	}
-	ver := opts.Version
-	if ver == "" {
-		ver = version.Version
-	}
-
-	return &Handler{
-		staticDir:       opts.StaticDir,
-		staticAvailable: static.HasClient(opts.StaticDir),
-		manager:         requestManager,
-		startedAt:       startedAt,
-		serviceOpts:     opts.ServiceOptions,
-		version:         ver,
-	}
+	h.routes = h.modularRoutes()
+	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +59,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.staticAvailable {
-		static.ServeClient(w, r, h.staticDir)
+		static.ServeClient(w, r, h.app.Options.StaticDir)
 		return
 	}
 
@@ -87,17 +71,10 @@ func isAPIPath(route string) bool {
 }
 
 func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet && r.URL.Path == "/api/health" {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"ok":     true,
-			"server": "go",
-			"name":   "Portier",
-		})
-		return
-	}
-
-	if r.Method == http.MethodGet && r.URL.Path == "/api/runtime" {
-		h.serveRuntimeInfo(w)
+	// Migrated feature routes are matched first (exact method+path). Everything
+	// else still flows through the ordered dispatch below. See routes.go for why
+	// this preserves the 404-not-405 method-mismatch behavior.
+	if h.dispatchModular(w, r) {
 		return
 	}
 
@@ -620,57 +597,6 @@ func toRuleResponse(rule domain.ForwardRule) domain.ForwardRuleResponse {
 			ListenHost: rule.ListenHost,
 			Purpose:    advisory.PurposeForward,
 		}),
-	}
-}
-
-func (h *Handler) serveRuntimeInfo(w http.ResponseWriter) {
-	uptimeSeconds := int64(time.Since(h.startedAt).Seconds())
-	writeJSON(w, http.StatusOK, map[string]any{
-		"name":           "Portier",
-		"version":        h.version,
-		"runtime":        "go",
-		"platform":       normalizePlatform(),
-		"arch":           normalizeArch(),
-		"uptimeSeconds":  uptimeSeconds,
-		"startedAt":      h.startedAt.UTC().Format(time.RFC3339),
-		"managementHost": h.serviceOpts.Host,
-		"managementPort": h.serviceOpts.Port,
-		"configPath":     h.serviceOpts.ConfigPath,
-		"staticDir":      h.serviceOpts.StaticDir,
-		"serviceMode":    h.serviceOpts.Service,
-		"pid":            os.Getpid(),
-	})
-}
-
-func normalizePlatform() string {
-	return internalNormalizePlatform(runtime.GOOS)
-}
-
-func internalNormalizePlatform(goos string) string {
-	switch goos {
-	case "windows":
-		return "windows"
-	case "darwin":
-		return "macos"
-	case "linux":
-		return "linux"
-	default:
-		return "unknown"
-	}
-}
-
-func normalizeArch() string {
-	return internalNormalizeArch(runtime.GOARCH)
-}
-
-func internalNormalizeArch(goarch string) string {
-	switch goarch {
-	case "amd64":
-		return "x64"
-	case "arm64":
-		return "arm64"
-	default:
-		return "unknown"
 	}
 }
 

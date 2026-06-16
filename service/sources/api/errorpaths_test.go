@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"portier/service/sources/activity"
+	"portier/service/sources/app"
 	"portier/service/sources/config"
 	"portier/service/sources/manager"
 	"portier/service/sources/options"
@@ -47,12 +48,7 @@ func persistFailingHandler(t *testing.T) *Handler {
 		t.Fatalf("NewWithStore: %v", err)
 	}
 	m.SetActivityStore(&activity.Store{})
-	return NewHandler(Options{
-		Manager:        m,
-		StartedAt:      time.Now(),
-		Version:        "test",
-		ServiceOptions: options.Options{Host: "127.0.0.1", Port: 47831},
-	})
+	return NewHandler(app.New(m, options.Options{Host: "127.0.0.1", Port: 47831}, time.Now(), "test"))
 }
 
 const validRuleBody = `{"name":"R1","protocol":"tcp","listenHost":"127.0.0.1","listenPort":48088,"targetHost":"127.0.0.1","targetPort":9000,"enabled":false}`
@@ -187,14 +183,19 @@ func TestImportConfig_MalformedBody_Returns400(t *testing.T) {
 // --- NewHandler option defaults ---
 
 func TestNewHandler_AppliesDefaults(t *testing.T) {
-	h := NewHandler(Options{}) // nil Manager, zero StartedAt, empty Version
+	// app.New applies the defaults (nil Manager, zero StartedAt, empty Version);
+	// NewHandler then exposes them through the app container + manager bridge.
+	h := NewHandler(app.New(nil, options.Options{}, time.Time{}, ""))
 	if h.manager == nil {
 		t.Fatal("nil Manager should default to a fresh manager")
 	}
-	if h.version == "" {
+	if h.app.Manager == nil {
+		t.Fatal("app.Manager should be populated")
+	}
+	if h.app.Version == "" {
 		t.Fatal("empty Version should default to the build version")
 	}
-	if h.startedAt.IsZero() {
+	if h.app.StartedAt.IsZero() {
 		t.Fatal("zero StartedAt should default to time.Now()")
 	}
 }
