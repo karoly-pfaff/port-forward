@@ -99,11 +99,6 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodGet && r.URL.Path == "/api/status" {
-		writeJSON(w, http.StatusOK, h.manager.ListStatus())
-		return
-	}
-
 	if r.Method == http.MethodGet && r.URL.Path == "/api/connections" {
 		h.serveConnections(w)
 		return

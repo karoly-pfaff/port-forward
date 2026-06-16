@@ -6,6 +6,16 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.15 Go Service Modular Router (in progress)
 
+### Changed — Slice 7: migrate `GET /api/status` into a feature route module
+
+Moved `GET /api/status` out of the monolithic ordered `serveAPI` dispatch into a feature route module. **Behavior-preserving** — no API/route/response/contract/packaging/runtime change; `validate:contract` stays **234/234** and `validate:openapi:go` stays green.
+
+- New `service/sources/api/status_routes.go` — `statusRoutes()` registrar + `handleStatus` (a `*Handler` method), preserving the inline handler exactly: `writeJSON(w, http.StatusOK, h.manager.ListStatus())` (a `200` `ForwardStatus` array — not an envelope — with `application/json` content-type). Read-only, no request input, no side effects; reads rule state via the existing `h.manager` bridge (no manager-ownership change).
+- Registered in `routes.go` `modularRoutes()` (appends `h.statusRoutes()`), so `dispatchModular` matches `GET /api/status` (exact method + exact path) **before** the legacy dispatch; the old `serveAPI` `/api/status` branch was removed. A wrong method (e.g. `POST /api/status`) falls through to the generic `/api` 404 envelope (**never 405**); `/api/status/...` subpaths and all other-route precedence are unchanged. No import change in `api.go` (`h.manager.ListStatus()` is still used by `diagnoseForward`); no new package cycle.
+- No other feature handler migrated (forwards/lifecycle/group/diagnose/config/connections/static stay on the legacy dispatch).
+
+OpenAPI inventory: `GET /api/status` stays canonical-covered with statuses `[200]` — no inventory change; `validate:openapi:go` green. Tests: `routes_test.go` updated (modular table includes `GET /api/status`; `dispatchModular` claims it, falls through on wrong method and on the `/api/status/extra` subpath; the now-stale Slice 2 "status not migrated" example was replaced with a still-unmigrated `/api/connections` case). The existing `TestStatusReturnsStatusesForLoadedRules`/`TestStatusReturnsEmptyListWhenConfigMissing`/`TestStatusShowsRunningUDPRuleWithStats` full-handler httptest tests pass unchanged through the migrated route; Slice 1 router dispatch contract + static/API boundary green. Validation: `go build`/`go vet` clean; full Go service suite green; `npm run generate:apidoc` → `validate:openapi:go` green; `validate:contract` **234/234**; `validate:runtime:smoke` **24/24**; lint/typecheck clean. **Replay validation skipped** (no replay/`@portier/shared` files touched). Next: Slice 8 — `GET /api/connections` (the remaining small read-only manager-backed endpoint).
+
 ### Changed — Slice 6: migrate activity routes into a feature route module
 
 Moved `GET /api/activity` and `DELETE /api/activity` out of the monolithic ordered `serveAPI` dispatch into a feature route module — introducing the skeleton's first **multi-method same-path** registration and its first **204/no-body** modular response. **Behavior-preserving** — no API/route/error/contract/packaging/runtime change; `validate:contract` stays **234/234** and `validate:openapi:go` stays green.
