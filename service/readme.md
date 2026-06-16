@@ -109,6 +109,36 @@ See `audits/v1.15-go-router-audit-1.md` for the endpoint inventory, target layou
 route-registration pattern, and slice plan, and `docs/roadmap.md` (v1.15) for the
 goals/non-goals.
 
+## API Inventory Validation
+
+The Go service declares its HTTP API surface in a table-driven inventory
+(`sources/api/route_inventory_test.go`) that is validated against the **canonical**
+server-generated OpenAPI artifact at `server/build/api/openapi.json`. The
+NestJS/server OpenAPI build artifact is the single source of truth; this Go gate
+is read-only and only verifies that the preferred packaged Go runtime still
+exposes the documented route/method/status surface (`docs/api/openapi.json` is the
+tracked copy, **not** the comparison target). It catches route/method/status drift
+as the v1.15 modularization moves handlers — complementing `validate:contract`
+(live TS↔Go parity), not replacing it.
+
+Two intentional cross-runtime differences are explicitly whitelisted: `GET
+/api/health` is Go-only (outside the canonical `/api` OpenAPI surface), and `GET
+/health` is documented by NestJS but not served by the Go runtime (which uses
+`/api/health`). The generic-500 no-leak path is not enumerated (OpenAPI does not
+model it).
+
+Run it after generating the OpenAPI artifact:
+
+```powershell
+npm run generate:apidoc
+npm run validate:openapi:go
+```
+
+The cross-artifact check is behind the `openapi_inventory` build tag so ordinary
+`go test ./...` never requires the OpenAPI artifact; if the artifact is missing the
+gate fails with a message pointing to `npm run generate:apidoc` (it never falls
+back to the docs copy).
+
 ## Implemented Endpoints
 
 - `GET /api/health`

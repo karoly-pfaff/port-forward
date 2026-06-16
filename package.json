@@ -67,6 +67,7 @@
     "validate:service:current": "node scripts/validate-service.js",
     "validate:config": "node scripts/validate-config.js",
     "validate:contract": "node scripts/validate-contract.js",
+    "validate:openapi:go": "go -C service test -count=1 -tags openapi_inventory -run TestGoAPIInventoryMatchesOpenAPI ./sources/api/",
     "validate:binary": "node scripts/validate-binary.js",
     "validate:scripts": "node scripts/validate-scripts.js",
     "validate:cli": "npm run test:cli && npm run build:cli",

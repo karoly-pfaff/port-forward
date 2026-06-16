@@ -6,6 +6,18 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.15 Go Service Modular Router (in progress)
 
+### Added — Slice 4: Go API inventory validation against the canonical OpenAPI artifact
+
+A standalone, read-only drift gate that compares the Go service's declared HTTP API surface against the **canonical** server-generated OpenAPI artifact at `server/build/api/openapi.json`. This does **not** introduce a second API source of truth — the NestJS/server OpenAPI build artifact stays canonical; the Go gate only reads it and verifies the preferred packaged Go runtime still exposes the documented surface. **No API behavior/contract/packaging/runtime change**; `validate:contract` stays **234/234**.
+
+- **Go route inventory** (`service/sources/api/route_inventory_test.go`, test-only — zero new code in the production service binary): a boring, table-driven `routeInventory()` listing every Go `/api` route as `routeInventoryEntry{Method, Path, Statuses, Canonical, Additive, AdditiveWhy}` (canonical paths use the OpenAPI `{id}`/`{group}` placeholder form). Statuses are the documented contract status codes; the universal generic-500 no-leak path is intentionally not enumerated (OpenAPI does not model it).
+- **Two explicit whitelists:** `GET /api/health` is the **Go-only additive** entry (Go-native liveness, outside the canonical `/api` OpenAPI surface), and `GET /health` is the **OpenAPI-only exclusion** (the NestJS liveness probe the Go runtime intentionally does not mirror — it serves `/api/health` instead).
+- **Comparison** (pure, order-independent, uppercase-normalized methods): every documented OpenAPI path/method/status must exist in the Go inventory; extra Go canonical routes fail; Go-only routes are allowed only if whitelisted additive; mislabeled additive and stale exclusions are reported. Status comparison is implemented (both directions) against the documented contract statuses.
+- **Canonical artifact only:** the validator reads `server/build/api/openapi.json` by walking up from the test working directory; if it is missing it fails with `run \`npm run generate:apidoc\` first` and **never** falls back to `docs/api/openapi.json`.
+- **Dedicated gate:** the cross-artifact assertion (`TestGoAPIInventoryMatchesOpenAPI`) is behind the `openapi_inventory` build tag so ordinary `go test ./...` never requires the artifact; it runs via the new `npm run validate:openapi:go`. Recommended sequence: `npm run generate:apidoc` then `npm run validate:openapi:go`. This **complements** `validate:contract` (live TS↔Go parity), it does not replace it.
+
+Tests: the pure comparison/parse/locate logic is unit-tested under ordinary `go test` (match, missing/extra route, method mismatch, whitelisted vs unwhitelisted Go-only, status mismatch, OpenAPI-only exclusion + stale exclusion, inventory consistency, artifact-locate found/missing-message). Validation: `npm run generate:apidoc` (deterministic, no diff) → `npm run validate:openapi:go` passes; `go build`/`go vet` (default + `-tags openapi_inventory`) clean; full Go service suite green; `validate:contract` **234/234**; `validate:runtime:smoke` **24/24**; lint/typecheck clean. **Replay validation skipped** (no replay/`@portier/shared` files touched). Next: Slice 5 — migrate a small read-only feature handler group (likely `GET /api/ports/advisory`) into a feature route module, now guarded by both `validate:contract` and `validate:openapi:go`.
+
 ### Changed — Slice 3: extract shared response/error helpers into `api/respond.go`
 
 Behavior-preserving extraction of the shared HTTP request/response/error plumbing out of the `api.go` monolith into a small focused file. **No API behavior/route/contract/packaging/runtime change**; `validate:contract` stays **234/234**.
