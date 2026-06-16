@@ -105,11 +105,16 @@ startup/shutdown semantics exactly (standard `net/http`, no router library).
 (`runtime_routes.go`), `GET /api/ports/advisory` (`ports_routes.go`), the activity
 endpoints `GET`/`DELETE /api/activity` (`activity_routes.go` — the first
 multi-method same-path module and the first 204/no-body modular response),
-`GET /api/status` (`status_routes.go`), and `GET /api/connections`
-(`connections_routes.go`, with its `buildRuleLiveSummary` helper); the shared
-response/request/error plumbing has been extracted into `respond.go`.
-Everything else still flows through the ordered `serveAPI` dispatch and will
-migrate feature-by-feature behind `validate:contract` + `validate:openapi:go`.
+`GET /api/status` (`status_routes.go`), `GET /api/connections`
+(`connections_routes.go`, with its `buildRuleLiveSummary` helper), and the
+forward-rule read/list `GET /api/forwards` (`forwards_routes.go`); the shared
+response/request/error plumbing has been extracted into `respond.go`. The
+forwards write/lifecycle/group routes (`POST`/`PATCH`/`DELETE`, reorder,
+start/stop/diagnose, group actions) still flow through the ordered `serveAPI`
+dispatch, so the shared `rulesToResponses`/`toRuleResponse` mappers stay in
+`api.go` until that write group migrates. Everything else still flows through
+the ordered `serveAPI` dispatch and will migrate feature-by-feature behind
+`validate:contract` + `validate:openapi:go`.
 See `audits/v1.15-go-router-audit-1.md` for the endpoint inventory, target layout,
 route-registration pattern, and slice plan, and `docs/roadmap.md` (v1.15) for the
 goals/non-goals.

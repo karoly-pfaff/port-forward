@@ -26,6 +26,7 @@ func TestModularRoutesRegistered(t *testing.T) {
 		"DELETE /api/activity":    true,
 		"GET /api/status":         true,
 		"GET /api/connections":    true,
+		"GET /api/forwards":       true,
 	}
 	got := map[string]bool{}
 	for _, route := range h.routes {
@@ -58,6 +59,7 @@ func TestDispatchModular(t *testing.T) {
 		{"activity DELETE matched", http.MethodDelete, "/api/activity", true},
 		{"status matched", http.MethodGet, "/api/status", true},
 		{"connections matched", http.MethodGet, "/api/connections", true},
+		{"forwards list matched", http.MethodGet, "/api/forwards", true},
 		// Wrong method must NOT be handled here — it falls through to the legacy
 		// dispatch and its generic 404 envelope (404-not-405).
 		{"health wrong method falls through", http.MethodPost, "/api/health", false},
@@ -69,8 +71,13 @@ func TestDispatchModular(t *testing.T) {
 		{"status subpath falls through", http.MethodGet, "/api/status/extra", false},
 		{"connections wrong method falls through", http.MethodPost, "/api/connections", false},
 		{"connections subpath falls through", http.MethodGet, "/api/connections/extra", false},
+		// Only the exact GET /api/forwards read route is migrated. The write
+		// (POST) verb and the /api/forwards/... prefix routes still fall through
+		// to the legacy ordered dispatch.
+		{"forwards POST falls through", http.MethodPost, "/api/forwards", false},
+		{"forwards id subpath falls through", http.MethodPatch, "/api/forwards/abc", false},
+		{"forwards reorder falls through", http.MethodPost, "/api/forwards/reorder", false},
 		// A non-migrated path is never claimed by the modular table.
-		{"forwards not migrated", http.MethodGet, "/api/forwards", false},
 		{"config export not migrated", http.MethodGet, "/api/config/export", false},
 	}
 

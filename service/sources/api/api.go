@@ -73,11 +73,6 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodGet && r.URL.Path == "/api/forwards" {
-		writeJSON(w, http.StatusOK, rulesToResponses(h.manager.ListRules()))
-		return
-	}
-
 	if r.Method == http.MethodPost && r.URL.Path == "/api/forwards" {
 		h.createForward(w, r)
 		return
