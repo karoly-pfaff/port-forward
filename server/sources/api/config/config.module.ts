@@ -7,6 +7,12 @@ import { CONFIG_APPLIER, createDefaultConfigApplier, type ConfigApplier } from "
 import { ConfigExportController } from "./config-export.controller.js";
 import { ConfigExportService } from "./config-export.service.js";
 import { CONFIG_EXPORT_READER, emptyConfigExportReader, type ConfigExportReader } from "./config-export.reader.js";
+import {
+  CONFIG_EXPORT_RECORDER,
+  createConfigExportRecorder,
+  noopConfigExportRecorder,
+  type ConfigExportRecorder,
+} from "./config-export.recorder.js";
 import { ConfigImportController } from "./config-import.controller.js";
 import { ConfigImportService } from "./config-import.service.js";
 import { CONFIG_IMPORTER, createDefaultConfigImporter, type ConfigImporter } from "./config-import.writer.js";
@@ -20,9 +26,11 @@ import { CONFIG_PLAN_READER, emptyConfigPlanReader, type ConfigPlanReader } from
  * `POST /api/config/import` and `POST /api/config/apply`. The
  * `CONFIG_EXPORT_READER`/`CONFIG_PLAN_READER` tokens default to empty readers and
  * `CONFIG_IMPORTER`/`CONFIG_APPLIER` to fresh isolated in-memory managers (no live
- * forwarding runtime is wired into the NestJS server); the `CLOCK_READER` defaults
- * to the real wall clock (it stamps the export `exportedAt`, the plan `generatedAt`,
- * and the apply `appliedAt`). All are overridden in tests for byte-for-byte parity
+ * forwarding runtime is wired into the NestJS server); `CONFIG_EXPORT_RECORDER`
+ * defaults to a no-op (the live runtime binds it to the activity store so a real
+ * export emits `config.exported`); the `CLOCK_READER` defaults to the real wall
+ * clock (it stamps the export `exportedAt`, the plan `generatedAt`, and the apply
+ * `appliedAt`). All are overridden in tests for byte-for-byte parity
  * (the timestamp pinned by a fixed clock, rules supplied/imported/applied by a
  * seeded manager).
  */
@@ -36,6 +44,12 @@ import { CONFIG_PLAN_READER, emptyConfigPlanReader, type ConfigPlanReader } from
     {
       provide: CONFIG_EXPORT_READER,
       useFactory: (rt: AppRuntime | null): ConfigExportReader => rt?.manager ?? emptyConfigExportReader,
+      inject: [APP_RUNTIME],
+    },
+    {
+      provide: CONFIG_EXPORT_RECORDER,
+      useFactory: (rt: AppRuntime | null): ConfigExportRecorder =>
+        rt ? createConfigExportRecorder(rt.activity) : noopConfigExportRecorder,
       inject: [APP_RUNTIME],
     },
     {

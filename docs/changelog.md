@@ -4,6 +4,20 @@ All notable changes to Portier are documented here.
 
 ---
 
+## [1.14.1] — 2026-06-16 — Restore `config.exported` live activity emission
+
+### Fixed — restore `config.exported` live activity emission
+
+Restored the one documented deferred item from the v1.14 NestJS migration: a live `GET /api/config/export` now emits the `config.exported` activity event again. During the migration the live export read was routed through the pure `ConfigExportService` → `buildExportedConfig` path (instead of the old `ForwardManager.exportConfig`), which dropped the activity emission; this restores it without touching the response contract.
+
+- **Ownership:** a new narrow `ConfigExportRecorder` provider (token `CONFIG_EXPORT_RECORDER`, `server/sources/api/config/config-export.recorder.ts`) owns the single export side-effect. The live runtime binds `createConfigExportRecorder(rt.activity)` (emits into the live `ActivityStore`); the static `AppModule` (OpenAPI generation + tests) binds `noopConfigExportRecorder` (records nothing). `ConfigExportService` injects the recorder and calls `recordExport(config.rules.length)` after building, so **exactly one** event is emitted per successful live export and **no event** is emitted during OpenAPI generation or through no-op/default test providers. The reader (`listRules`) and the `buildExportedConfig` builder stay pure; the controller stays transport-only.
+- **No drift:** the canonical event payload (`type: "config.exported"`, `severity: "info"`, `message: "Config exported: N rule(s)."`, `details: { ruleCount: N }`) is now a single shared factory `configExportedActivityEvent(ruleCount)` in `server/sources/config/config-export.ts`, used by both the recorder and `ForwardManager.exportConfig` so the two call sites cannot diverge.
+- **Unchanged:** the `GET /api/config/export` response body, `exportedAt`/clock semantics, OpenAPI **shape** (the recorder is a provider, not a DTO — the regenerated `docs/api/openapi.json` differs only in the runtime schema's example version `1.14.0` → `1.14.1`), and `validate:contract` (**234/234**). No API/contract change, no new endpoint, no functional Go/CLI/replay change — the unified product version strings were bumped to **1.14.1** for the release (root/server/client/shared `package.json` + `package-lock.json`, `PORTIER_APP_VERSION`, and the `service`/`cli`/`replay` `version.go`).
+
+Validation: lint/typecheck/build clean; full server suite green (618 server tests, +4); `validate:coverage:server` **100/100/100** (the new recorder + shared factory + service path fully covered, no gate lowered, no exclusion); `validate:contract` **234/234**; OpenAPI regenerated (only the runtime example version moved `1.14.0` → `1.14.1`; no shape change); packaged runtime layout + smoke 24/24 (the only `build:runtime` hiccup was the unrelated, pre-existing `TestTCPForwarderEmitsConnectionClosedEvent` Go socket-timing flake — no Go logic was touched, and it passes in isolation). Replay validation skipped (no replay/`@portier/shared` files touched). **This was the last documented migration-deferred item — none remain.**
+
+---
+
 ## [1.14.0] — 2026-06-16 — TypeScript Server Migration to NestJS
 
 v1.14 is an **architecture-migration release, not a feature release**: it moved the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. **NestJS is now the single TypeScript server runtime** (the Express implementation was removed); the Go service remains the preferred packaged runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (**234/234**). The packaged Node fallback (`server.js`) bundles NestJS and boots; the server source tree is homed by concern (root `sources/` = `index.ts`; API + `api/common/` under `api/`); runtime logging uses the NestJS `Logger`; and the server coverage gate is **100/100/100**.

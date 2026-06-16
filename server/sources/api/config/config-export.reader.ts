@@ -4,9 +4,9 @@ import type { ForwardRule } from "@portier/shared";
  * Narrow read-only view of the forward manager that `GET /api/config/export`
  * needs — just the current rule list to snapshot. The real domain
  * `ForwardManager` satisfies it; tests inject a seeded manager. Mirrors the
- * `StatusReader`/`ForwardsReader` seams. It reads only; the
- * `config.exported` activity emission stays with the `ForwardManager` (a write
- * side-effect that stays with the `ForwardManager` — the read is pure).
+ * `StatusReader`/`ForwardsReader` seams. It reads only; the `config.exported`
+ * activity emission is owned by the separate `ConfigExportRecorder`, so this
+ * read stays a pure snapshot.
  */
 export interface ConfigExportReader {
   listRules(): ForwardRule[];

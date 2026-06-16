@@ -67,7 +67,7 @@ runtime) exercise both branches of every feature provider.
 | `POST /api/forwards/groups/:group/stop` | `api/forwards/` | `:group`⁷ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STOPPER` | — |
 | `POST /api/forwards/groups/:group/start` | `api/forwards/` | `:group`⁷ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STARTER` | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
-| `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
+| `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` + `CONFIG_EXPORT_RECORDER`¹¹ | `buildExportedConfig` (`exportedAt`) |
 | `POST /api/config/plan` | `api/config/` | `ConfigPlanBodyDto`⁸ | `ConfigPlanResponseDto` (`200`) | `CONFIG_PLAN_READER` + `CLOCK_READER` | `buildConfigPlan` (`generatedAt`) |
 | `POST /api/config/import` | `api/config/` | `ConfigImportBodyDto`⁸ | `ConfigImportResponseDto` (`200`) / `ConfigImportErrorResponseDto` (`422`)⁹ | `CONFIG_IMPORTER` | — |
 | `POST /api/config/apply` | `api/config/` | `ConfigApplyBodyDto`⁸ | `ConfigApplyResponseDto` (`200`)¹⁰ | `CONFIG_APPLIER` + `CLOCK_READER` | `appliedAt` + `plan.generatedAt` |
@@ -107,7 +107,13 @@ exact gate order (missing `desired` → `400`; `hasErrors` → `200 ok:false`; `
 → `200 ok:true` before the destructive gate; `destructive && !yes` → `400`; drift →
 `replace` import; else `200 ok:true`) — all non-error outcomes are `200`, so the
 controller is `@HttpCode(200)` (no `@Res`). Its two volatile timestamps (`appliedAt`
-+ embedded `plan.generatedAt`) are stamped from **one** clock instant.
++ embedded `plan.generatedAt`) are stamped from **one** clock instant. ¹¹ `GET
+/api/config/export` records exactly one `config.exported` activity event per
+successful export via the narrow `CONFIG_EXPORT_RECORDER` (the live runtime binds an
+activity-store-backed recorder; the static `AppModule`/OpenAPI/tests bind a no-op).
+The reader (`listRules`) and the `buildExportedConfig` builder stay pure — the side
+effect lives only in the recorder, sharing the canonical `configExportedActivityEvent`
+payload with `ForwardManager.exportConfig` so they cannot drift.
 
 **Volatile fields** (`uptimeSeconds`, `exportedAt`, `generatedAt`, `diagnosedAt`,
 `appliedAt`) come from narrow injected readers — `CLOCK_READER` (generic, reused
@@ -228,7 +234,7 @@ sources/
     copy-release.ts             # logic-free `npm run copy:apidoc:release` entry — coverage-excluded
   # framework-free domain / runtime / persistence concern folders:
   forwarders/                   # forward-manager.ts (rule lifecycle/manager) + tcp/udp forwarders + types
-  config/                       # config-export.ts (buildExportedConfig) + config-plan.ts (buildConfigPlan/buildApplyImportFromPlan)
+  config/                       # config-export.ts (buildExportedConfig + configExportedActivityEvent) + config-plan.ts (buildConfigPlan/buildApplyImportFromPlan)
   persistence/                  # config-store.ts (atomic rules.json store)
   connections/                  # connections-snapshot.ts (buildLiveConnections) + tcp/udp connection registries
   runtime/                      # runtime-info.ts (buildRuntimeInfo)

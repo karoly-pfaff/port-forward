@@ -137,6 +137,23 @@ describe("NestJS default runtime — live dependency wiring", () => {
     expect(events.some((e) => e.message === "live wiring probe" && e.ruleId === "live-1")).toBe(true);
   });
 
+  it("GET /api/config/export emits exactly one config.exported activity event", async () => {
+    // Delta-based so it stays robust to other tests that also export: a single
+    // export call must add exactly one config.exported event (no duplicate, and
+    // the no-op default path — used elsewhere — never contributes here).
+    const countExported = async (): Promise<number> => {
+      const { events } = await getJson<{ events: ActivityEvent[] }>("/api/activity?type=config.exported");
+      return events.length;
+    };
+
+    const before = await countExported();
+    const res = await get("/api/config/export");
+    expect(res.status).toBe(200);
+    const after = await countExported();
+
+    expect(after - before).toBe(1);
+  });
+
   it("a write (POST /api/forwards) mutates the live manager", async () => {
     const res = await fetch(`${baseUrl}/api/forwards`, {
       method: "POST",
