@@ -97,23 +97,38 @@ legacy dispatch and its generic envelope. Shared response/request/error helpers
 `sources/api/respond.go`; diagnose check helpers live in `sources/api/diagnose.go`.
 
 **v1.15 — Go Service Modular Router (in progress):** the monolithic `api.go`
-dispatcher is being reorganized into focused, `net/http`-compatible per-feature
-route modules (`sources/api/<feature>_routes.go`) behind the `app.App` dependency
-struct, preserving the REST contract, error envelopes, static serving, and
-startup/shutdown semantics exactly (standard `net/http`, no router library).
-**Migrated so far:** `GET /api/health` (`health_routes.go`), `GET /api/runtime`
+dispatcher is being reorganized into focused per-feature route modules
+(`sources/api/<feature>_routes.go`) behind the `app.App` dependency struct,
+preserving the REST contract, error envelopes, static serving, and
+startup/shutdown semantics exactly. **The Go API router foundation is `chi`**
+(`github.com/go-chi/chi/v5`, Slice 10): each migrated route is mounted on a
+chi router built in `buildAPIRouter` (`routes.go`); anything chi cannot match —
+an unknown path (`NotFound`) or a wrong method on a known path
+(`MethodNotAllowed`) — is delegated to the legacy ordered `serveLegacyAPI`
+dispatch, which serves the still-unmigrated routes and ends in the generic
+`/api` 404 envelope. **The top-level API/static boundary stays owned by Portier
+(`Handler.ServeHTTP`), not chi** — chi only ever serves requests under `/api`;
+non-API paths still go to static serving (or a plain 404 with no client build).
+**The 404-not-405 behavior is intentional and preserved:** a wrong method on an
+existing API path returns the generic `/api` 404 JSON envelope, never a 405
+(chi's `MethodNotAllowed` is routed through `serveLegacyAPI`). **Migrated so
+far:** `GET /api/health` (`health_routes.go`), `GET /api/runtime`
 (`runtime_routes.go`), `GET /api/ports/advisory` (`ports_routes.go`), the activity
 endpoints `GET`/`DELETE /api/activity` (`activity_routes.go` — the first
 multi-method same-path module and the first 204/no-body modular response),
 `GET /api/status` (`status_routes.go`), `GET /api/connections`
 (`connections_routes.go`, with its `buildRuleLiveSummary` helper), and the
 forward-rule read/list `GET /api/forwards` (`forwards_routes.go`); the shared
-response/request/error plumbing has been extracted into `respond.go`. The
-forwards write/lifecycle/group routes (`POST`/`PATCH`/`DELETE`, reorder,
-start/stop/diagnose, group actions) still flow through the ordered `serveAPI`
-dispatch, so the shared `rulesToResponses`/`toRuleResponse` mappers stay in
-`api.go` until that write group migrates. Everything else still flows through
-the ordered `serveAPI` dispatch and will migrate feature-by-feature behind
+response/request/error plumbing lives in `respond.go`. The forwards
+write/lifecycle/group routes (`POST`/`PATCH`/`DELETE`, reorder,
+start/stop/diagnose, group actions) and config export/import/plan/apply still
+flow through `serveLegacyAPI`, so the shared `rulesToResponses`/`toRuleResponse`
+mappers stay in `api.go` until that write group migrates. Parameterized routes
+are **not** migrated yet: group/id routes still read `r.URL.EscapedPath()`
+(preserving encoded `/` in a group name); when they move onto chi `{param}`
+patterns, `chi.URLParam` URL-DECODES the segment, so that encoded-slash behavior
+must be re-established (a hard acceptance criterion for that slice, guarded by
+`TestGroupActionEncodedSpace`). Everything migrates feature-by-feature behind
 `validate:contract` + `validate:openapi:go`.
 See `audits/v1.15-go-router-audit-1.md` for the endpoint inventory, target layout,
 route-registration pattern, and slice plan, and `docs/roadmap.md` (v1.15) for the

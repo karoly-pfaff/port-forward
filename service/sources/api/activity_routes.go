@@ -9,8 +9,9 @@ import (
 
 // activityRoutes registers the activity log endpoints. Both share the exact path
 // /api/activity on different methods — the first modular registration to expose
-// two methods on one path; dispatchModular matches each (method, path) pair, so a
-// third method (e.g. POST) still falls through to the generic /api 404 envelope.
+// two methods on one path; chi matches each (method, path) pair, so a third
+// method (e.g. POST) falls through (MethodNotAllowed → legacy) to the generic
+// /api 404 envelope.
 func (h *Handler) activityRoutes() []modularRoute {
 	return []modularRoute{
 		{method: http.MethodGet, path: "/api/activity", handler: h.handleListActivity},

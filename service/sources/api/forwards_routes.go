@@ -5,7 +5,7 @@ import "net/http"
 // forwardsRoutes registers the forward-rule read/list endpoint. Only the
 // read/list route is migrated here; the forwards write/lifecycle/group routes
 // (POST/PATCH/DELETE, reorder, start/stop/diagnose, group actions) still flow
-// through the legacy ordered serveAPI dispatch.
+// through the legacy ordered serveLegacyAPI dispatch.
 func (h *Handler) forwardsRoutes() []modularRoute {
 	return []modularRoute{
 		{method: http.MethodGet, path: "/api/forwards", handler: h.handleListForwards},

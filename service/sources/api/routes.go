@@ -1,18 +1,25 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+)
 
 // modularRoute is one explicit method+path → handler registration for an
 // endpoint that has been migrated into a feature route module (v1.15). The
-// route table is consulted (exact method + exact path) BEFORE the legacy
-// ordered serveAPI dispatch.
+// per-feature registrars return these and buildAPIRouter mounts them onto the
+// chi API router (v1.15 Slice 10).
 //
-// Matching requires an exact method, which is what preserves the established
-// 404-not-405 behavior: a request to a migrated path with the wrong method does
-// not match here, falls through to the legacy ordered dispatch, and ends at the
-// generic /api 404 envelope — exactly as before. Migrated paths are exact
-// matches with no prefix routes overlapping them, so checking them first does
-// not change exact-vs-prefix precedence for any other route.
+// Migrated routes are registered as exact static patterns. A request whose path
+// is not a registered pattern (chi NotFound) OR whose method is not registered
+// for an existing pattern (chi MethodNotAllowed) falls through to the legacy
+// ordered serveLegacyAPI dispatch — which serves the still-unmigrated routes and
+// ends in the generic /api 404 envelope. Routing a method mismatch through that
+// fallback is what preserves the established 404-not-405 behavior (chi's default
+// MethodNotAllowed would emit a 405). Migrated paths are exact patterns with no
+// overlapping prefix route, so they cannot shadow the legacy /api/forwards/...
+// id/group prefix routes.
 type modularRoute struct {
 	method  string
 	path    string
@@ -20,8 +27,8 @@ type modularRoute struct {
 }
 
 // modularRoutes composes the per-feature route registrars. As later v1.15 slices
-// migrate features out of the ordered serveAPI dispatch, add their registrar
-// here.
+// migrate features out of the ordered serveLegacyAPI dispatch, add their
+// registrar here.
 func (h *Handler) modularRoutes() []modularRoute {
 	var routes []modularRoute
 	routes = append(routes, h.healthRoutes()...)
@@ -34,15 +41,19 @@ func (h *Handler) modularRoutes() []modularRoute {
 	return routes
 }
 
-// dispatchModular runs the first migrated route whose method and path match the
-// request and reports whether it handled it. A false result means the request
-// is left to the legacy ordered serveAPI dispatch.
-func (h *Handler) dispatchModular(w http.ResponseWriter, r *http.Request) bool {
-	for _, route := range h.routes {
-		if r.Method == route.method && r.URL.Path == route.path {
-			route.handler(w, r)
-			return true
-		}
+// buildAPIRouter constructs the chi router that owns the migrated API routes.
+// Each modular route is mounted as an exact method+pattern; anything chi cannot
+// match (unknown path → NotFound, or a wrong method on a known path →
+// MethodNotAllowed) is delegated to the legacy ordered dispatch so unmigrated
+// routes keep working and the generic /api 404 envelope (404-not-405) is
+// preserved. The chi router only ever serves requests under /api — the
+// top-level ServeHTTP keeps owning the API/static boundary.
+func (h *Handler) buildAPIRouter() http.Handler {
+	router := chi.NewRouter()
+	for _, route := range h.modularRoutes() {
+		router.Method(route.method, route.path, route.handler)
 	}
-	return false
+	router.NotFound(h.serveLegacyAPI)
+	router.MethodNotAllowed(h.serveLegacyAPI)
+	return router
 }

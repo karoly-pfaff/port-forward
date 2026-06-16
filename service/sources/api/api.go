@@ -20,17 +20,22 @@ import (
 const notFoundMessage = "API route was not found."
 
 // Handler is the service HTTP entry point. It holds the explicit dependency
-// container (app.App) and the modular route table (v1.15). Routes migrated into
-// feature modules are matched first via the route table; everything else still
-// flows through the ordered serveAPI dispatch.
+// container (app.App) and the chi API router (v1.15). Routes migrated into
+// feature modules are served by the chi router; everything else falls through
+// to the ordered serveLegacyAPI dispatch.
 type Handler struct {
 	app             *app.App
 	staticAvailable bool
-	routes          []modularRoute
 
-	// manager is a temporary bridge for the not-yet-migrated ordered serveAPI
-	// dispatch (v1.15 Slice 2). It mirrors app.Manager; later slices migrate each
-	// feature handler to read app.Manager directly and remove this field.
+	// apiRouter is the chi router owning the migrated API routes (v1.15 Slice
+	// 10). It only ever serves requests under /api; its NotFound/MethodNotAllowed
+	// handlers delegate to serveLegacyAPI so unmigrated routes keep working.
+	apiRouter http.Handler
+
+	// manager is a temporary bridge for the not-yet-migrated ordered
+	// serveLegacyAPI dispatch (v1.15 Slice 2). It mirrors app.Manager; later
+	// slices migrate each feature handler to read app.Manager directly and remove
+	// this field.
 	manager *manager.Manager
 }
 
@@ -43,13 +48,16 @@ func NewHandler(application *app.App) *Handler {
 		staticAvailable: static.HasClient(application.Options.StaticDir),
 		manager:         application.Manager,
 	}
-	h.routes = h.modularRoutes()
+	h.apiRouter = h.buildAPIRouter()
 	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// The top-level API/static boundary stays owned by Portier (not chi): /api
+	// and /api/* go to the chi-backed API router, everything else to static
+	// serving (or a plain 404 when there is no client build).
 	if isAPIPath(r.URL.Path) {
-		h.serveAPI(w, r)
+		h.apiRouter.ServeHTTP(w, r)
 		return
 	}
 
@@ -65,14 +73,11 @@ func isAPIPath(route string) bool {
 	return route == "/api" || strings.HasPrefix(route, "/api/")
 }
 
-func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
-	// Migrated feature routes are matched first (exact method+path). Everything
-	// else still flows through the ordered dispatch below. See routes.go for why
-	// this preserves the 404-not-405 method-mismatch behavior.
-	if h.dispatchModular(w, r) {
-		return
-	}
-
+// serveLegacyAPI is the ordered dispatch for API routes not yet migrated onto
+// the chi router. It is reached via the chi router's NotFound/MethodNotAllowed
+// fallback, so the migrated routes have already been tried; an unmatched request
+// ends in the generic /api 404 envelope (preserving 404-not-405).
+func (h *Handler) serveLegacyAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && r.URL.Path == "/api/forwards" {
 		h.createForward(w, r)
 		return
@@ -202,6 +207,17 @@ func (h *Handler) deleteForward(w http.ResponseWriter, ruleID string) {
 // The :group segment is parsed from the escaped path so an encoded "/" inside a
 // group name stays a single segment. Behaviour over existing rule metadata —
 // never mutates rule definitions, order, or metadata.
+//
+// v1.15 Slice 10 note (hard acceptance criterion for the future parameterized
+// migration): this handler is still reached through the chi router's NotFound
+// fallback (group routes are not chi-registered), so r.URL.EscapedPath() is
+// untouched and encoded group names are preserved (see TestGroupActionEncodedSpace).
+// When the group/id routes migrate onto chi {param} patterns, chi.URLParam
+// URL-DECODES the segment — that would collapse an encoded "/" — so the
+// migration must NOT rely on chi.URLParam for the group/id segment without
+// re-establishing the encoded-slash behavior (keep reading EscapedPath, or use
+// a chi route that preserves the raw segment), and must keep
+// TestGroupActionEncodedSpace green.
 func (h *Handler) serveGroupAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusNotFound, map[string][]string{"errors": {notFoundMessage}})
