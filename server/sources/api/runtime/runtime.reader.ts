@@ -36,7 +36,7 @@ export const defaultProcessReader: ProcessReader = {
 /**
  * Static runtime metadata provider. No live runtime is wired, so the
  * default returns no options (defaults are applied by the builder) and a start
- * time captured once at construction — mirroring Express, where
+ * time captured once at construction — mirroring the historical behavior, where
  * `runtimeStartedAt` is resolved a single time at app creation. When the NestJS
  * server is the active runtime this is bound to the real launch metadata.
  */

@@ -8,7 +8,7 @@ import { ConfigPlanResponseDto, toConfigPlanResponseDto } from "./config-plan.re
 /**
  * Transport adapter for `POST /api/config/plan` — a NON-MUTATING dry-run that diffs
  * the desired config against the current rules. The body validation (`desired` must
- * be present) is delegated to the service to match Express's `"desired" in body`
+ * be present) is delegated to the service to match the documented `"desired" in body`
  * key-presence check exactly (`desired: null` is allowed and surfaces as a plan
  * error, NOT a `400` — so the `ConfigPlanBodyDto` is documentation/typing only, no
  * validation pipe). `@HttpCode(200)` because NestJS defaults `POST` to `201`.
@@ -25,7 +25,7 @@ export class ConfigPlanController {
     description:
       "Diffs the desired config against the current rules and returns the plan (operations, summary, errors, " +
       "warnings) without mutating anything. A missing `desired` key returns 400; invalid desired rules surface " +
-      "as plan errors (still 200). Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+      "as plan errors (still 200). Returns 200 (NestJS would otherwise default POST to 201).",
   })
   @ApiBody({ type: ConfigPlanBodyDto })
   @ApiOkResponse({ type: ConfigPlanResponseDto, description: "The config plan." })

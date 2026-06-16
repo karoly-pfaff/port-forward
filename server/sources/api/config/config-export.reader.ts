@@ -5,8 +5,8 @@ import type { ForwardRule } from "@portier/shared";
  * needs — just the current rule list to snapshot. The real domain
  * `ForwardManager` satisfies it; tests inject a seeded manager. Mirrors the
  * `StatusReader`/`ForwardsReader` seams. It reads only; the
- * `config.exported` activity emission stays with the Express manager (a write
- * side-effect that stays with the Express manager — the Nest read is pure).
+ * `config.exported` activity emission stays with the `ForwardManager` (a write
+ * side-effect that stays with the `ForwardManager` — the read is pure).
  */
 export interface ConfigExportReader {
   listRules(): ForwardRule[];

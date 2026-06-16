@@ -26,7 +26,7 @@ function service(rules: ForwardRule[]): ConfigPlanService {
   return new ConfigPlanService(reader, fixedClock);
 }
 
-describe("ConfigPlanService.plan — request validation (mirrors Express's `desired` key check)", () => {
+describe("ConfigPlanService.plan — request validation (`desired` key-presence check)", () => {
   it.each([
     ["undefined body", undefined],
     ["null body", null],

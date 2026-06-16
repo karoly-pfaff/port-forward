@@ -6,11 +6,11 @@ import { FORWARD_RULES_REORDERER, type ForwardRulesReorderer } from "./forwards.
 
 /**
  * Behaviour for `POST /api/forwards/reorder`: reorders the rules via the injected
- * reorderer (`ForwardManager.reorderRules` — the SAME path Express uses, so the
+ * reorderer (`ForwardManager.reorderRules` — the shared domain path, so the
  * id-existence check (unknown → 404), partial-set/duplicate tolerance, no-op empty
  * list, and persistence rollback are identical), then returns the full reordered
  * rule list decorated with port advisories (the same `toForwardRuleResponse` the
- * list/create/update use), exactly as the Express route does
+ * list/create/update use), as the documented `/api` contract requires
  * (`manager.listRules().map(toRuleResponse)`). A domain `NotFoundError` (unknown
  * id) is translated to a `404` via `mapManagerError`; any other error (e.g. a
  * persist failure) is re-thrown → the filter's generic `500`.

@@ -23,9 +23,9 @@ export function flattenValidationErrors(errors: ValidationError[]): string[] {
  * behaviour identical between `tsc` builds and tests, and confines the pipe to
  * the routes that opt in (no global pipe, so non-API routes are unaffected).
  *
- * `whitelist` strips unknown query keys without rejecting them (Express ignores
+ * `whitelist` strips unknown query keys without rejecting them (the route ignores
  * extra params); `stopAtFirstError` yields one message per field, matching the
- * existing Express routes.
+ * the documented `/api` routes.
  */
 export class ApiValidationPipe<T extends object> implements PipeTransform<unknown, Promise<T>> {
   constructor(private readonly dtoClass: new () => T) {}

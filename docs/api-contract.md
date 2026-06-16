@@ -1,6 +1,6 @@
 # API Contract
 
-This document covers the REST API currently used by the Portier client. The TypeScript server source in `server/sources/api.ts` remains the reference implementation; shared shapes live in `shared/sources/index.ts`. The native Go service under `service/` implements the same contract and is the preferred production runtime.
+This document covers the REST API currently used by the Portier client. The TypeScript server (NestJS, under `server/sources/api/`) is the reference implementation; shared shapes live in `shared/sources/index.ts`. The native Go service under `service/` implements the same contract and is the preferred production runtime. `validate:contract` guards parity between the two.
 
 Errors are returned as JSON with an `errors: string[]` property for validation, conflict, not found, unknown API route, and unexpected server errors.
 

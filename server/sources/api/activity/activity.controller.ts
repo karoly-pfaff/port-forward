@@ -13,7 +13,7 @@ import { ActivityListResponseDto, toActivityListResponseDto } from "./activity-l
  *   `ActivityListResponseDto` at the HTTP boundary.
  * - `DELETE`: no request input (no request DTO) and a `204` with an empty body —
  *   there is no JSON body, so there is no response DTO (the absent body IS the
- *   response, matching the existing Express route exactly). `@HttpCode(204)` is
+ *   response, matching the documented `/api` contract). `@HttpCode(204)` is
  *   required because NestJS defaults `DELETE` to `200`.
  */
 @ApiTags("activity")

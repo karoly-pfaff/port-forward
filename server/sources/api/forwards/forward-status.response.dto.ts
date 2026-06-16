@@ -8,7 +8,7 @@ export { ForwardStatusDto } from "./forward-status.schema.js";
  * the HTTP boundary — a fresh object (the DTO class is the OpenAPI schema, reused
  * in `forward-status.schema.ts`; this mapper is the covered
  * logic). Used by the `POST /api/forwards/:id/start` 200 response. Byte-for-byte
- * equal to the Express start response.
+ * equal to the documented start response shape.
  */
 export function toForwardStatusResponseDto(status: ForwardStatus): ForwardStatusDto {
   return { ...status };

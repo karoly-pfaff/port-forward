@@ -18,7 +18,7 @@ import {
  * values come from narrow injected readers (clock, process, runtime-info) that
  * default to the real clock/process and a fixed-at-construction start time;
  * tests override them with fixed values for exact parity. The endpoint shares
- * the `buildRuntimeInfo` builder with the Express route, so the two cannot drift.
+ * the `buildRuntimeInfo` builder, the single source of the runtime-info shape.
  */
 @Module({
   controllers: [RuntimeController],

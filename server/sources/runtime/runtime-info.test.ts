@@ -67,7 +67,7 @@ describe("buildRuntimeInfo", () => {
     });
   });
 
-  it("applies historical Express defaults when no runtime info is provided", () => {
+  it("applies the historical defaults when no runtime info is provided", () => {
     expect(
       buildRuntimeInfo({
         runtimeInfo: undefined,

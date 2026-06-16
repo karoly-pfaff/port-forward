@@ -7,10 +7,10 @@ import { CONFIG_APPLIER, type ConfigApplier } from "./config-apply.writer.js";
 
 /**
  * Behaviour for `POST /api/config/apply` — the MUTATING desired-state apply.
- * Mirrors the Express route exactly, in the SAME order:
+ * Implements the documented `/api` contract, in the SAME order:
  *
  *   1. A missing `desired` key → `400 ["desired is required."]` (a key-presence
- *      check exactly like Express's `"desired" in body`; `desired: null` passes and
+ *      check exactly like the documented `"desired" in body`; `desired: null` passes and
  *      surfaces as a plan error → `ok:false`, NOT a `400`).
  *   2. `plan.summary.hasErrors` → `200 {ok:false, dryRun, appliedAt, plan, applied:0s}`
  *      (errors-first; the `unchanged` count is still surfaced).
@@ -31,7 +31,7 @@ import { CONFIG_APPLIER, type ConfigApplier } from "./config-apply.writer.js";
  * filter); every other outcome is RETURNED with status `200`, so the controller
  * needs only `@HttpCode(200)` and no `@Res` (unlike import, which had a `422`).
  * Mutation happens ONLY on the non-dry-run drift path, via the SAME `importConfig`
- * Express uses (so rollback/start/activity semantics are identical).
+ * the manager uses (so rollback/start/activity semantics are identical).
  */
 @Injectable()
 export class ConfigApplyService {

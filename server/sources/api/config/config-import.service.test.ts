@@ -17,7 +17,7 @@ function importer(overrides: Partial<ConfigImporter> = {}): ConfigImporter {
 
 const VALID_BODY = { mode: "replace", config: { version: "1", rules: [] } };
 
-describe("ConfigImportService.import — request validation (mirrors Express's short-circuit order)", () => {
+describe("ConfigImportService.import — request validation (short-circuit order)", () => {
   it.each([
     ["a missing mode", { config: { version: "1", rules: [] } }],
     ["an unknown mode", { mode: "wipe", config: { version: "1", rules: [] } }],

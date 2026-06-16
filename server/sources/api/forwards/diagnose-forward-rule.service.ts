@@ -7,15 +7,13 @@ import { DIAGNOSTIC_READER, type DiagnosticReader } from "./forwards-diagnostics
 
 /**
  * Behaviour for `POST /api/forwards/:id/diagnose`: looks up the rule (an unknown
- * id → `404 { errors }`, matching Express's inline check), reads its running state,
- * and runs the shared `diagnoseRule` (the SAME function Express calls, so the
+ * id → `404 { errors }`, matching the documented inline check), reads its running state,
+ * and runs the shared `diagnoseRule` (the single diagnostics function, so the
  * checks, ordering, messages, and summary are identical). The volatile
  * `diagnosedAt` timestamp comes from the injected `ClockReader` (the shared
- * `CLOCK_READER`) so it can be pinned in parity tests — exactly as Express threads
- * its `AppOptions.now` seam into `diagnoseRule`. `diagnoseRule` catches all probe
+ * `CLOCK_READER`) so it can be pinned in parity tests — via the optional `now` argument of `diagnoseRule`. `diagnoseRule` catches all probe
  * errors internally (each check resolves), so it does not reject; an unexpected
- * throw would propagate to the filter's generic `500`, matching Express's
- * `next(error)`.
+ * throw would propagate to the filter's generic `500` (no leak).
  */
 @Injectable()
 export class DiagnoseForwardRuleService {

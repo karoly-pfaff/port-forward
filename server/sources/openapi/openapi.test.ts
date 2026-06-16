@@ -46,7 +46,7 @@ describe("generateOpenApiDocument", () => {
   // The canonical migrated-endpoint inventory: every `/api` endpoint (and `/health`)
   // with its method(s). This is the single regression guard — adding, removing, or
   // re-pathing an endpoint must update this map (and a stray/missing path trips the
-  // exact-path-set assertion below). Mirrors the Express routes in `sources/api.ts`.
+  // exact-path-set assertion below). Mirrors the documented `/api` route set.
   const EXPECTED_ROUTES: Record<string, string[]> = {
     "/health": ["get"],
     "/api/ports/advisory": ["get"],

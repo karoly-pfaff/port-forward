@@ -6,12 +6,12 @@ import { FORWARD_RULE_CREATOR, type ForwardRuleCreator } from "./forwards.writer
 
 /**
  * Behaviour for `POST /api/forwards`: creates a rule via the injected creator
- * (`ForwardManager.addRule` — the SAME path Express uses, so validation /
+ * (`ForwardManager.addRule` — the shared domain path, so validation /
  * duplicate-binding / persistence / autostart semantics are identical), then
  * decorates the created rule with its port advisories (the same `toForwardRuleResponse`
  * the list read uses). Domain errors are translated to the matching Nest API
  * exception via `mapManagerError` so the shared error envelope produces the same
- * status + body as Express (`400`/`409`).
+ * status + body (`400`/`409`).
  */
 @Injectable()
 export class CreateForwardRuleService {

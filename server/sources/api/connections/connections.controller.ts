@@ -9,8 +9,7 @@ import {
 /**
  * Transport adapter for `GET /api/connections`. No request input (no request DTO
  * needed). Delegates to the service and maps the domain snapshot to
- * `ConnectionsResponseDto` at the HTTP boundary (matching the existing Express
- * route). Read-only and always `200`; no connection logic lives here.
+ * `ConnectionsResponseDto` at the HTTP boundary (matching the documented `/api` contract). Read-only and always `200`; no connection logic lives here.
  */
 @ApiTags("connections")
 @Controller("api/connections")

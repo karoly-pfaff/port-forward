@@ -38,16 +38,14 @@ import { toForwardsListResponseDto, type ForwardsListResponseDto } from "./forwa
 /**
  * Transport adapter for `/api/forwards`. `GET` lists rules (read); `POST` creates
  * a rule (write — the first migrated rule mutation). Both map service results to
- * their response DTO at the HTTP boundary (matching the Express routes). The
+ * their response DTO at the HTTP boundary (matching the documented `/api` contract). The
  * `POST` body is NOT run through a validation pipe — validation is delegated to
  * the shared `validateForwardRule` inside the manager (a documented parity
  * exception), so `@ApiBody` documents the schema explicitly. The reorder body
  * (`ReorderForwardRulesBodyDto`) IS a real validated DTO (its `ids: string[]`
  * check is simple enough to re-express exactly in class-validator), run through
  * `ApiValidationPipe`. List/create/update/delete, the lifecycle start + stop
- * (`POST :id/start`, `POST :id/stop`), and reorder (`POST reorder`) are migrated;
- * the remaining routes under `/api/forwards/...` (group/diagnose) stay with
- * Express.
+ * (`POST :id/start`, `POST :id/stop`), reorder (`POST reorder`), the group actions, and diagnose.
  */
 @ApiTags("forwards")
 @Controller("api/forwards")
@@ -76,7 +74,7 @@ export class ForwardsController {
   @ApiOperation({
     summary: "Create a forward rule",
     description:
-      "Creates a forward rule. A created rule with autostart enabled starts its forwarder (matching Express).",
+      "Creates a forward rule. A created rule with autostart enabled starts its forwarder.",
   })
   @ApiBody({ type: CreateForwardRuleBodyDto })
   @ApiCreatedResponse({ type: ForwardRuleResponseDto, description: "The created rule with its port advisories." })
@@ -93,7 +91,7 @@ export class ForwardsController {
     description:
       "Reorders the rules to the given id order; any rule id not listed keeps its relative order at the end " +
       "(a partial set is allowed, a duplicate id is tolerated, an empty list is a no-op). An unknown id returns " +
-      "404 and no reorder is persisted. Returns 200 with the full reordered rule list (matching Express; NestJS " +
+      "404 and no reorder is persisted. Returns 200 with the full reordered rule list (NestJS " +
       "would otherwise default POST to 201). Reorder is metadata only — running forwarders are not affected.",
   })
   @ApiBody({ type: ReorderForwardRulesBodyDto })
@@ -133,7 +131,7 @@ export class ForwardsController {
     summary: "Delete a forward rule",
     description:
       "Deletes a rule. A running rule's forwarder is stopped first; an unknown id returns 404. Returns 204 " +
-      "with no body (matching Express). The `:id` path param has no validation pipe (Express does none) — an " +
+      "with no body. The `:id` path param has no validation — an " +
       "unknown id surfaces as the manager's NotFoundError → 404.",
   })
   @ApiParam({ name: "id", type: String, description: "The rule id." })
@@ -150,7 +148,7 @@ export class ForwardsController {
     description:
       "Starts the rule's forwarder and returns its current status. Idempotent — an already-running rule " +
       "returns its status without restarting; autostart/enabled is not a precondition. An unknown id returns 404. " +
-      "Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+      "Returns 200 (NestJS would otherwise default POST to 201).",
   })
   @ApiParam({ name: "id", type: String, description: "The rule id." })
   @ApiOkResponse({ type: ForwardStatusDto, description: "The rule's status after starting." })
@@ -165,7 +163,7 @@ export class ForwardsController {
     summary: "Stop a forward rule",
     description:
       "Stops the rule's forwarder and returns its current status. Idempotent — a rule that is not running " +
-      "returns its status without touching a socket. An unknown id returns 404. Returns 200 (matching Express; " +
+      "returns its status without touching a socket. An unknown id returns 404. Returns 200 (" +
       "NestJS would otherwise default POST to 201).",
   })
   @ApiParam({ name: "id", type: String, description: "The rule id." })
@@ -184,7 +182,7 @@ export class ForwardsController {
       "a listen-bind probe (skipped while the rule is running, since Portier already owns the port), target-host " +
       "DNS resolution, a TCP target-connect probe (skipped for UDP / unresolved targets), and the UDP mode (UDP " +
       "only) — and returns the ordered checks plus an overall summary. Does not mutate the rule. An unknown id " +
-      "returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+      "returns 404. Returns 200 (NestJS would otherwise default POST to 201).",
   })
   @ApiParam({ name: "id", type: String, description: "The rule id." })
   @ApiOkResponse({ type: RuleDiagnosticsResultDto, description: "The diagnostic checks and summary for the rule." })
@@ -201,7 +199,7 @@ export class ForwardsController {
       "Stops every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — " +
       "never mutates rule definitions, order, autostart, or group. A rule that is not running is skipped " +
       "(not_running, no socket touched); the response summarizes per-rule results. An empty/invalid group name " +
-      "returns 400; a group with no matching rules returns 404. Returns 200 (matching Express; NestJS would " +
+      "returns 400; a group with no matching rules returns 404. Returns 200 (NestJS would " +
       "otherwise default POST to 201).",
   })
   @ApiParam({ name: "group", type: String, description: "The group label (URL-encoded)." })
@@ -221,7 +219,7 @@ export class ForwardsController {
       "never mutates rule definitions, order, autostart, or group; autostart/enabled is not a precondition. A rule " +
       "that is already running is skipped (already_running, no new socket); the response summarizes per-rule " +
       "results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 " +
-      "(matching Express; NestJS would otherwise default POST to 201).",
+      "(NestJS would otherwise default POST to 201).",
   })
   @ApiParam({ name: "group", type: String, description: "The group label (URL-encoded)." })
   @ApiOkResponse({ type: GroupActionResponseDto, description: "Per-rule results + counts for the group start." })

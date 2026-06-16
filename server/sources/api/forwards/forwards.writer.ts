@@ -4,9 +4,9 @@ import { ForwardManager, type RuleStore } from "../../forwarders/forward-manager
 /**
  * Narrow write capability for `POST /api/forwards` (rule creation). The real
  * domain `ForwardManager` satisfies it via `addRule`; tests bind a seeded manager
- * shared with Express for parity. `addRule` validates (shared `validateForwardRule`),
+ * (domain logic; tests seed a manager). `addRule` validates (shared `validateForwardRule`),
  * rejects duplicate listen bindings, persists, and — only for an `enabled` rule —
- * starts the forwarder (identical to Express; tests create `enabled: false` rules
+ * starts the forwarder (tests create `enabled: false` rules
  * so no sockets/listeners start).
  */
 export interface ForwardRuleCreator {
@@ -43,7 +43,7 @@ export function createDefaultForwardRuleCreator(): ForwardRuleCreator {
 /**
  * Narrow write capability for `PATCH /api/forwards/:id` (rule update). The real
  * domain `ForwardManager` satisfies it via `updateRule`; tests bind a seeded
- * manager shared with Express for parity. `updateRule` validates the partial
+ * manager (domain logic; tests seed a manager). `updateRule` validates the partial
  * patch (shared `validateForwardRulePatch`, preserving absent fields), merges
  * over the existing rule, rejects duplicate bindings, throws `NotFoundError` for
  * an unknown id, persists (with rollback), and restarts the forwarder ONLY when
@@ -65,7 +65,7 @@ export function createDefaultForwardRuleUpdater(): ForwardRuleUpdater {
 /**
  * Narrow write capability for `DELETE /api/forwards/:id` (rule delete). The real
  * domain `ForwardManager` satisfies it via `deleteRule`; tests bind a seeded
- * manager shared with Express for parity. `deleteRule` throws `NotFoundError` for
+ * manager (domain logic; tests seed a manager). `deleteRule` throws `NotFoundError` for
  * an unknown id, stops a running forwarder (runtime cleanup), removes the rule,
  * persists (with rollback — a failed persist restores the rule and restarts it if
  * it was running), and emits `rule.deleted`. It resolves with no value; the route
@@ -87,13 +87,13 @@ export function createDefaultForwardRuleDeleter(): ForwardRuleDeleter {
 /**
  * Narrow lifecycle capability for `POST /api/forwards/:id/start`. The real domain
  * `ForwardManager` satisfies it via `startRule`; tests bind a seeded manager
- * shared with Express for parity. `startRule` throws `NotFoundError` for an
+ * (domain logic; tests seed a manager). `startRule` throws `NotFoundError` for an
  * unknown id, is **idempotent** (an already-running rule returns its current
  * status without restarting the socket), otherwise opens the forwarder's
  * listener, emits `rule.started`, and resolves with the rule's `ForwardStatus`
  * (a started rule's status carries a wall-clock `startedAt`). A start failure
  * (e.g. the port is in use) rejects with the underlying error. `enabled`/
- * autostart is NOT a precondition (parity with Express). Socket-opening tests use
+ * autostart is NOT a precondition. Socket-opening tests use
  * free ephemeral ports and stop the rule afterwards; the deterministic byte-for-
  * byte parity test pre-starts the rule once on a shared manager so both runtimes
  * hit the idempotent path and return the SAME pinned status (no volatile drift).
@@ -182,7 +182,7 @@ export function createDefaultForwardGroupStarter(): ForwardGroupStarter {
 /**
  * Narrow write capability for `POST /api/forwards/reorder`. The real domain
  * `ForwardManager` satisfies it via `reorderRules` + `listRules`; tests bind a
- * seeded manager shared with Express for parity. `reorderRules` validates that
+ * seeded manager (domain logic; tests seed a manager). `reorderRules` validates that
  * every id exists (an unknown id throws `NotFoundError` → 404), rebuilds the rule
  * order with the listed ids first and any unlisted rules appended in their prior
  * order (so a partial set is allowed and a duplicate id is tolerated), persists

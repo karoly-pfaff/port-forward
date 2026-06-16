@@ -9,7 +9,7 @@ export { RuleDiagnosticsResultDto } from "./rule-diagnostics.schema.js";
  * fresh check objects (and fresh `details` where present), so the controller never
  * returns the domain result object and the mapper cannot mutate it. The DTO class
  * is the OpenAPI schema (in `rule-diagnostics.schema.ts`); this mapper is the covered
- * logic. Byte-for-byte equal to the Express diagnose response.
+ * logic. Matches the documented diagnose response shape.
  */
 export function toRuleDiagnosticsResponseDto(result: RuleDiagnosticsResult): RuleDiagnosticsResultDto {
   return {

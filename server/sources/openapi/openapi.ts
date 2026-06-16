@@ -11,7 +11,7 @@ import { createNestApp } from "../app/app.factory.js";
  * The document is generated from Nest controller/DTO metadata (`@ApiTags`,
  * `@ApiOperation`, `@Api*Response`, `@ApiProperty`) — not hand-written — so the
  * `/api` surface is the source of truth. Generation never listens on a socket and
- * never changes the Express runtime; it only inspects the Nest app's metadata.
+ * never starts a listener or mutates runtime state; it only inspects the Nest app's metadata.
  *
  * Artifact placement: the **primary** artifact is server-owned generated output
  * (`server/build/api/openapi.json`), and `docs/api/openapi.json` is a tracked,

@@ -36,7 +36,7 @@ describe("ApiValidationPipe (with PortsAdvisoryQueryDto)", () => {
     expect(dto.listenHost).toBeUndefined();
   });
 
-  it("coerces a non-string listenHost to undefined (Express parity, no error)", async () => {
+  it("coerces a non-string listenHost to undefined (coerced, no error)", async () => {
     const dto = await pipe.transform({ port: "48001", purpose: "forward", listenHost: ["a", "b"] });
 
     expect(dto.listenHost).toBeUndefined();

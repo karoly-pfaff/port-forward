@@ -109,7 +109,7 @@ export class DesiredConfigDto implements DesiredConfig {
 
 /**
  * Request body for `POST /api/config/plan` (documentation/typing only — validation
- * is the inline `desired`-key-presence check in the service, matching Express's
+ * is the inline `desired`-key-presence check in the service, matching the documented
  * `"desired" in body`; a bare `rules` array is also accepted at runtime).
  */
 export class ConfigPlanBodyDto implements ConfigPlanRequest {

@@ -17,7 +17,7 @@ export class ConfigAppliedCountsDto implements ConfigAppliedCounts {
 
 /**
  * Request body for `POST /api/config/apply` (documentation/typing only — validation
- * is the inline `desired`-key-presence check in the service, matching Express's
+ * is the inline `desired`-key-presence check in the service, matching the documented
  * `"desired" in body`; `yes`/`dryRun` are read as strict `=== true`).
  */
 export class ConfigApplyBodyDto {

@@ -7,7 +7,7 @@ import { COMMON_PORTS } from "@portier/shared";
 const TIMEOUT_MS = 2000;
 
 // `now` is an injectable seam (default = real clock) so the volatile `diagnosedAt`
-// timestamp can be pinned in byte-for-byte Express↔Nest parity tests, exactly like
+// timestamp can be pinned in byte-for-byte parity tests, exactly like
 // the runtime/config-export/connections `now` seams. Production passes the real
 // clock, so behaviour is unchanged.
 export async function diagnoseRule(

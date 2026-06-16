@@ -8,7 +8,7 @@ export { GroupActionResponseDto } from "./group-action.schema.js";
  * boundary — a fresh object with a fresh `results` array of fresh result objects,
  * so the controller never returns the domain summary and the mapper cannot mutate
  * it. The DTO class is the OpenAPI schema (in `group-action.schema.ts`); this mapper
- * is the covered logic. Byte-for-byte equal to the Express group-action response.
+ * is the covered logic. Matches the documented group-action response shape.
  */
 export function toGroupActionResponseDto(response: GroupActionResponse): GroupActionResponseDto {
   return {

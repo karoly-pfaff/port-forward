@@ -9,8 +9,7 @@ import {
 /**
  * Transport adapter for `GET /api/runtime`. No request input (no request DTO
  * needed). Delegates to the service and maps the domain runtime info to
- * `RuntimeInfoResponseDto` at the HTTP boundary (matching the existing Express
- * route). Read-only and always `200`; no runtime logic lives here.
+ * `RuntimeInfoResponseDto` at the HTTP boundary (matching the documented `/api` contract). Read-only and always `200`; no runtime logic lives here.
  */
 @ApiTags("runtime")
 @Controller("api/runtime")

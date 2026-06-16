@@ -6,7 +6,7 @@ import { ACTIVITY_STORE, type ActivityClearer, type ActivityReader } from "./act
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
-/** Coerces the raw `limit` query value with the SAME rule as the Express route. */
+/** Coerces the raw `limit` query value with the documented coercion rule. */
 export function parseActivityLimit(rawLimit: string | undefined): number {
   const limit = Number(rawLimit);
   return Number.isInteger(limit) && limit > 0 ? Math.min(limit, MAX_LIMIT) : DEFAULT_LIMIT;
@@ -14,7 +14,7 @@ export function parseActivityLimit(rawLimit: string | undefined): number {
 
 /**
  * Behaviour for `GET /api/activity` (maps the raw query params to the store's
- * `ActivityListParams` with the same coercion as the Express route and returns
+ * `ActivityListParams` with the documented coercion and returns
  * the matching domain events; the controller maps them to the response DTO) and
  * `DELETE /api/activity` (clears the in-memory log). The list path never throws;
  * the clear path has no input and always succeeds.

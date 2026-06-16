@@ -21,7 +21,7 @@ export interface ConfigImportErrorBody {
  * `ApiBadRequestException` (the pure error envelope, via the shared filter). The
  * `200`/`422` are RETURNED with their status because the `422` body is `{errors,
  * result}` — NOT the plain `{errors}` envelope — so it must NOT go through the
- * error-envelope filter (which would strip `result`); this mirrors Express, which
+ * error-envelope filter (which would strip `result`); this matches the contract, where the route
  * returns the `422` via `response.status(422).json(...)`, not error middleware.
  */
 export type ConfigImportOutcome =
@@ -29,11 +29,11 @@ export type ConfigImportOutcome =
   | { status: 422; body: ConfigImportErrorBody };
 
 /**
- * Behaviour for `POST /api/config/import`: mirrors the Express route exactly. It
+ * Behaviour for `POST /api/config/import`: implements the documented `/api` contract. It
  * short-circuit-validates the body (mode first, then config — `400` in that order,
- * delegated to inline checks so the messages + order cannot drift from Express;
+ * delegated to inline checks so the messages + order cannot drift;
  * class-validator would accumulate both errors and diverge), imports via the
- * injected importer (`ForwardManager.importConfig` — the SAME path Express uses, so
+ * injected importer (`ForwardManager.importConfig` — the shared domain path, so
  * the replace/merge mutation, duplicate-binding/merge-conflict rejection, persist
  * rollback, enabled-rule start, and activity emission are identical), and returns
  * `422 {errors, result}` when the import reports errors or `200 {result, rules}`

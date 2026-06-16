@@ -20,7 +20,7 @@ export interface RuntimeInfoOptions {
  * All inputs `buildRuntimeInfo` needs. The volatile/process-dependent values
  * (`now`, `pid`, `platform`, `arch`) are passed in explicitly so the builder
  * stays pure and deterministic — the caller owns the live clock and process. The
- * Express server and the NestJS service both feed this builder, so the runtime
+ * the NestJS service feeds this builder, so the runtime
  * info shape cannot drift between the two implementations.
  */
 export interface RuntimeInfoInput {
@@ -56,7 +56,7 @@ export function normalizeArch(arch: string): RuntimeInfo["arch"] {
  * inputs always produce identical output (including field order, which JSON
  * serialization preserves), so it can be parity-tested deterministically. The
  * defaults (`"unknown"` version, the management host/port, empty paths) mirror
- * the historical Express behavior exactly.
+ * the historical behavior exactly.
  */
 export function buildRuntimeInfo(input: RuntimeInfoInput): RuntimeInfo {
   const info = input.runtimeInfo;

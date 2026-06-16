@@ -1,7 +1,7 @@
 import type { ForwardStatus } from "@portier/shared";
 
 /**
- * Response DTO for `GET /api/status` — the `ForwardStatus[]` array Express
+ * Response DTO for `GET /api/status` — the `ForwardStatus[]` array the contract
  * returns (the shared REST-contract shape). The mapper is a structural copy at
  * the HTTP boundary.
  */

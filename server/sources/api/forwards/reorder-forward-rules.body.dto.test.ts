@@ -21,18 +21,18 @@ describe("ReorderForwardRulesBodyDto via ApiValidationPipe", () => {
     expect(result.ids).toEqual(["a", "b", "c"]);
   });
 
-  it("accepts an empty array (Express treats it as a no-op reorder)", async () => {
+  it("accepts an empty array (a no-op reorder)", async () => {
     const result = await pipe.transform({ ids: [] });
     expect(result.ids).toEqual([]);
   });
 
-  it("strips unknown extra fields (whitelist), matching Express ignoring them", async () => {
+  it("strips unknown extra fields (whitelist), ignoring them", async () => {
     const result = (await pipe.transform({ ids: ["a"], bogus: 1 })) as unknown as Record<string, unknown>;
     expect(result.ids).toEqual(["a"]);
     expect(result).not.toHaveProperty("bogus");
   });
 
-  it("rejects a missing ids with the exact Express message", async () => {
+  it("rejects a missing ids with the exact contract message", async () => {
     await expectRejected({});
   });
 

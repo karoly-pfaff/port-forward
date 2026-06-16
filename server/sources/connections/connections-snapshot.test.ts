@@ -70,7 +70,7 @@ describe("buildLiveConnections", () => {
     });
   });
 
-  it("passes the tcp/udp arrays straight through (historical Express behavior)", () => {
+  it("passes the tcp/udp arrays straight through (historical pass-through behavior)", () => {
     const tcpConnections = [tcp("r1")];
     const udpSessions = [udp("r1")];
     const result = buildLiveConnections({ rules: [], tcpConnections, udpSessions, now: NOW });

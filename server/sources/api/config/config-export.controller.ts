@@ -9,8 +9,7 @@ import {
 /**
  * Transport adapter for `GET /api/config/export`. No request input (no request
  * DTO needed). Delegates to the service and maps the domain exported config to
- * `ConfigExportResponseDto` at the HTTP boundary (matching the existing Express
- * route). Read-only and always `200`; no export logic lives here.
+ * `ConfigExportResponseDto` at the HTTP boundary (matching the documented `/api` contract). Read-only and always `200`; no export logic lives here.
  */
 @ApiTags("config")
 @Controller("api/config/export")

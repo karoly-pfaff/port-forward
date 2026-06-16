@@ -6,13 +6,13 @@ import type { Request, Response } from "express";
 /**
  * Static client serving for the NestJS server.
  *
- * Mirrors the Express server's static behavior (`server/sources/api.ts`): a static
+ * Serves the web client with SPA-fallback semantics: a static
  * directory is served only when it actually contains an `index.html`; real assets
  * are served by the platform's static middleware (`express.static` under the hood);
  * any unmatched **non-API** GET/HEAD route falls back to `index.html` (SPA routing);
  * and a missing/absent static directory is allowed — the API stays fully usable.
  *
- * The split mirrors Express exactly: `configureStaticAssets` registers asset serving
+ * The split: `configureStaticAssets` registers asset serving
  * (pre-router, like `express.static`), and the SPA fallback runs at the unmatched-route
  * stage via the shared error filter (Nest surfaces unmatched routes as
  * `NotFoundException`, so the filter is the single place that already decides what an
@@ -26,7 +26,7 @@ export const STATIC_INDEX_FILE = "index.html";
 /** Injection token for the SPA static-fallback strategy consumed by the error filter. */
 export const STATIC_FALLBACK = "STATIC_FALLBACK";
 
-/** Mirrors Express `hasStaticClient`: a static dir is usable only if it has an index.html. */
+/** A static dir is usable only if it has an index.html. */
 export function hasStaticClient(staticDir: string): boolean {
   return existsSync(join(staticDir, STATIC_INDEX_FILE));
 }
@@ -87,7 +87,7 @@ export function createStaticFallback(staticDir: string): StaticFallback {
 
 /**
  * Registers real asset serving on a Nest (express-platform) app — the equivalent of
- * Express's `express.static(dir)`. Call before `app.init()/listen()`. Returns the
+ * the platform's `express.static(dir)`. Call before `app.init()/listen()`. Returns the
  * resolved static state (for logging / wiring the fallback). When disabled (no dir or
  * no `index.html`) the app serves no static assets and the API stays fully usable.
  */

@@ -33,7 +33,7 @@ describe("buildExportedConfig", () => {
     });
   });
 
-  it("passes the rules array through without copying (historical Express behavior)", () => {
+  it("passes the rules array through without copying (historical pass-through behavior)", () => {
     const rules = [RULE];
     expect(buildExportedConfig({ rules, now: NOW }).rules).toBe(rules);
   });

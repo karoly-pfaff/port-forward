@@ -11,7 +11,7 @@ import {
  * Behaviour for `GET /api/connections`: snapshots the current rules + live TCP/UDP
  * records from the injected reader and stamps `generatedAt` from the injected
  * clock, via the shared `buildLiveConnections` builder (the same builder the
- * Express route uses, so the two cannot drift). Read-only and pure; never throws.
+ * shared builder owns, so the response shape lives in one place). Read-only and pure; never throws.
  */
 @Injectable()
 export class ConnectionsService {

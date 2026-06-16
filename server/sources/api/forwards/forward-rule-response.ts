@@ -2,7 +2,7 @@ import { getPortAdvisories, type ForwardRule, type ForwardRuleResponse } from "@
 
 /**
  * Decorates a forward rule with its forward-purpose port advisories — the SAME
- * mapping the Express route's private `toRuleResponse` performs, via the shared
+ * rule→response mapping performs, via the shared
  * `getPortAdvisories` so the runtimes cannot drift. Used by both the list read
  * (`GET /api/forwards`) and the create write (`POST /api/forwards`) so a single
  * rule and a listed rule are decorated identically.

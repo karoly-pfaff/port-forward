@@ -34,7 +34,7 @@ describe("StartForwardGroupService.start", () => {
     });
   });
 
-  it("normalizes the group via decodeURIComponent + trim (matching Express)", async () => {
+  it("normalizes the group via decodeURIComponent + trim", async () => {
     let receivedGroup: string | undefined;
     await service({
       startGroup: async (group) => {

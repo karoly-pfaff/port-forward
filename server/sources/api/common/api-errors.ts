@@ -14,7 +14,7 @@ export class ApiBadRequestException extends BadRequestException {
 
 /**
  * A `409` carrying Portier API envelope messages — the Nest equivalent of the
- * Express manager `ConflictError` (e.g. a duplicate listen binding on rule
+ * `ForwardManager` `ConflictError` (e.g. a duplicate listen binding on rule
  * create). Same `{ errors: [...] }` envelope, status `409`.
  */
 export class ApiConflictException extends ConflictException {
@@ -25,7 +25,7 @@ export class ApiConflictException extends ConflictException {
 
 /**
  * A `404` carrying Portier API envelope messages — the Nest equivalent of the
- * Express manager `NotFoundError` (e.g. an unknown rule id on update/delete).
+ * `ForwardManager` `NotFoundError` (e.g. an unknown rule id on update/delete).
  * Same `{ errors: [...] }` envelope, status `404`. (Because it carries the
  * envelope body, `toApiError` returns its messages rather than the unmatched-route
  * "API route was not found." default.)

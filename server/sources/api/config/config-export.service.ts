@@ -10,10 +10,10 @@ import {
 /**
  * Behaviour for `GET /api/config/export`: snapshots the current rules from the
  * injected reader and stamps `exportedAt` from the injected clock, via the
- * shared `buildExportedConfig` builder (the same builder the Express manager
+ * shared `buildExportedConfig` builder (the same builder the `ForwardManager`
  * uses, so the two cannot drift). Read-only and pure — it does NOT emit the
  * `config.exported` activity event (that write side-effect stays with the
- * Express manager — the Nest read is a pure snapshot); never throws.
+ * `ForwardManager` — the read is a pure snapshot); never throws.
  */
 @Injectable()
 export class ConfigExportService {

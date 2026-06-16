@@ -17,7 +17,7 @@ import { STATIC_FALLBACK, disabledStaticFallback, type StaticFallback } from "..
  * Because Nest surfaces an unmatched route as `NotFoundException`, this filter is
  * also the single place that decides what an unmatched route returns — so it owns
  * the **non-API SPA fallback**: when static serving is enabled, an unmatched non-API
- * GET/HEAD route serves the SPA `index.html` (mirroring the Express catch-all index
+ * GET/HEAD route serves the SPA `index.html` (the SPA catch-all index
  * route). The static decision is delegated to the injected `StaticFallback`
  * (`disabledStaticFallback` by default — no static dir, so the
  * default 404 behavior is unchanged). The `/api/*` branch runs first and is never
@@ -41,7 +41,7 @@ export class ApiErrorEnvelopeFilter implements ExceptionFilter {
     }
 
     // Non-API SPA fallback: an unmatched non-API GET/HEAD route serves the SPA
-    // index when static serving is enabled (mirrors Express's catch-all index route).
+    // index when static serving is enabled (the SPA catch-all index route).
     if (exception instanceof NotFoundException && this.staticFallback.handle(request, response)) {
       return;
     }

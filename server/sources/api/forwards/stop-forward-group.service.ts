@@ -4,17 +4,17 @@ import { ApiBadRequestException, ApiNotFoundException } from "../common/api-erro
 import { FORWARD_GROUP_STOPPER, type ForwardGroupStopper } from "./forwards.writer.js";
 
 /**
- * Behaviour for `POST /api/forwards/groups/:group/stop`: mirrors Express's
+ * Behaviour for `POST /api/forwards/groups/:group/stop`: implements the documented
  * `handleGroupAction("stop")` exactly. It normalizes the path group the same way
  * (`decodeURIComponent(...).trim()`), validates it with the SHARED
  * `validateGroupName` (a `400 { errors }` on failure — delegated to the shared
  * validator, not re-expressed in class-validator, so the messages cannot drift),
  * stops every rule sharing the group via the injected stopper
- * (`ForwardManager.stopGroup` — the SAME path Express uses, so the per-rule
+ * (`ForwardManager.stopGroup` — the shared domain path, so the per-rule
  * skip/stop/fail outcomes are identical), maps an empty result set to a `404`, and
  * otherwise summarizes the results with the SHARED `summarizeGroupAction`. The
  * `Api*Exception`s carry the contract envelope (owned by the shared error filter),
- * matching Express's inline `400`/`404`.
+ * the documented `400`/`404`.
  */
 @Injectable()
 export class StopForwardGroupService {

@@ -20,11 +20,11 @@ import {
 
 /**
  * Transport adapter for `POST /api/config/import` — the MUTATING config import.
- * Validation (mode/config) is delegated to the service to match Express's
+ * Validation (mode/config) is delegated to the service to match the documented
  * short-circuit `400` order exactly (so `ConfigImportBodyDto` is documentation/
  * typing only — no validation pipe). The success (`200 {result, rules}`) and the
  * import-error (`422 {errors, result}`) responses are RETURNED with their status
- * via `@Res({ passthrough: true })` (matching Express's `response.status(...).json`)
+ * via `@Res({ passthrough: true })` (writing the status + body directly)
  * — the `422` body carries `result` alongside `errors`, so it is NOT the plain
  * `{errors}` envelope and must not flow through the error filter. The two `400`s
  * are thrown as `ApiBadRequestException` and DO flow through the shared filter.

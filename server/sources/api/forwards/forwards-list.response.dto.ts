@@ -2,7 +2,7 @@ import type { ForwardRuleResponse } from "@portier/shared";
 
 /**
  * Response DTO for `GET /api/forwards` — the `ForwardRuleResponse[]` array
- * Express returns (each rule plus its port advisories — the shared REST-contract
+ * the contract returns (each rule plus its port advisories — the shared REST-contract
  * shape). The mapper is a structural copy at the HTTP boundary.
  */
 export type ForwardsListResponseDto = ForwardRuleResponse[];

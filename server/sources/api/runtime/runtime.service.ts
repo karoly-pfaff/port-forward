@@ -13,7 +13,7 @@ import {
 /**
  * Behaviour for `GET /api/runtime`: composes the injected volatile/process/info
  * readers and delegates to the shared `buildRuntimeInfo` builder — the exact
- * same builder the Express route uses, so the two runtimes cannot drift. Read-
+ * shared `buildRuntimeInfo` builder, the single source of the runtime-info shape. Read-
  * only; never throws.
  */
 @Injectable()

@@ -34,7 +34,7 @@ Source: `audits/v1.6-readability-naming-audit-1.md` (Naming-A).
 | Term | Meaning | Notes |
 | --- | --- | --- |
 | **Runtime** | The generic concept of "an implementation of the Portier service contract", and the name of the API field/endpoint that reports which one is running. | Reserve "runtime" for the generic concept and the API surface. Do not call a specific implementation "the runtime". `GET /api/runtime`; field `runtime: "node" \| "go"`. |
-| **Server** / **TypeScript server** / **Node fallback** | The Node/Express implementation (`@portier/server`, `server.js`). The documented fallback runtime; requires Node.js. | API runtime value is `"node"`. When distinguishing repo components, "server" means this. Avoid "TypeScript runtime" as a label. |
+| **Server** / **TypeScript server** / **Node fallback** | The Node/NestJS implementation (`@portier/server`, `server.js`). The documented fallback runtime; requires Node.js. | API runtime value is `"node"`. When distinguishing repo components, "server" means this. Avoid "TypeScript runtime" as a label. |
 | **Service** / **Go service** / **native service** | The native Go implementation (`service` / `service.exe`, `service/`). The **preferred** packaged production runtime. | API runtime value is `"go"`. Avoid "Go server". |
 | **CLI** | The Go API client under `tools/cli/` (`portier` / `portier.exe`). Talks to the management API; does **not** start the service or contain runtime/forwarding logic. | Stays a pure API client. |
 | **Client** / **web UI** | The React single-page app under `client/`, served from `web/`. | "Client" = the browser UI, distinct from the "CLI". |

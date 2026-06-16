@@ -9,7 +9,7 @@ import type {
 /**
  * Inputs for `buildLiveConnections`. The volatile timestamp source (`now`) is
  * passed in so the builder stays pure and deterministically parity-testable —
- * the caller owns the clock (Express passes `new Date()`; the NestJS service
+ * the caller owns the clock (e.g. `new Date()`; the NestJS service
  * passes its injected `ClockReader`). The connection/session records are
  * supplied pre-computed by the caller (the live registries), so the builder
  * never reads wall-clock-derived fields itself.
@@ -26,9 +26,9 @@ export interface BuildLiveConnectionsInput {
  * per-rule live summary, stamped with `generatedAt`. Pure: identical inputs
  * always produce identical output (including field order, which JSON
  * serialization preserves), so it can be parity-tested deterministically. The
- * aggregation and field order mirror the historical inline Express route exactly;
+ * aggregation and field order match the documented `/api` contract;
  * the `tcpConnections`/`udpSessions` arrays are passed straight through (no copy),
- * as Express did. No side effects.
+ * as before. No side effects.
  */
 export function buildLiveConnections(input: BuildLiveConnectionsInput): LiveConnectionsResponse {
   const { rules, tcpConnections, udpSessions, now } = input;

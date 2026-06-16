@@ -7,8 +7,7 @@ import { toStatusListResponseDto, type StatusListResponseDto } from "./status-li
 /**
  * Transport adapter for `GET /api/status`. No request input (no DTO needed).
  * Delegates to the service and maps the domain status list to
- * `StatusListResponseDto` at the HTTP boundary (matching the existing Express
- * route). Read-only and always `200`; no status logic lives here.
+ * `StatusListResponseDto` at the HTTP boundary (matching the documented `/api` contract). Read-only and always `200`; no status logic lives here.
  */
 @ApiTags("status")
 @Controller("api/status")

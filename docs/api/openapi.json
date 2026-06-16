@@ -240,7 +240,7 @@
         ]
       },
       "post": {
-        "description": "Creates a forward rule. A created rule with autostart enabled starts its forwarder (matching Express).",
+        "description": "Creates a forward rule. A created rule with autostart enabled starts its forwarder.",
         "operationId": "ForwardsController_create",
         "parameters": [],
         "requestBody": {
@@ -293,7 +293,7 @@
     },
     "/api/forwards/reorder": {
       "post": {
-        "description": "Reorders the rules to the given id order; any rule id not listed keeps its relative order at the end (a partial set is allowed, a duplicate id is tolerated, an empty list is a no-op). An unknown id returns 404 and no reorder is persisted. Returns 200 with the full reordered rule list (matching Express; NestJS would otherwise default POST to 201). Reorder is metadata only — running forwarders are not affected.",
+        "description": "Reorders the rules to the given id order; any rule id not listed keeps its relative order at the end (a partial set is allowed, a duplicate id is tolerated, an empty list is a no-op). An unknown id returns 404 and no reorder is persisted. Returns 200 with the full reordered rule list (NestJS would otherwise default POST to 201). Reorder is metadata only — running forwarders are not affected.",
         "operationId": "ForwardsController_reorder",
         "parameters": [],
         "requestBody": {
@@ -420,7 +420,7 @@
         ]
       },
       "delete": {
-        "description": "Deletes a rule. A running rule's forwarder is stopped first; an unknown id returns 404. Returns 204 with no body (matching Express). The `:id` path param has no validation pipe (Express does none) — an unknown id surfaces as the manager's NotFoundError → 404.",
+        "description": "Deletes a rule. A running rule's forwarder is stopped first; an unknown id returns 404. Returns 204 with no body. The `:id` path param has no validation — an unknown id surfaces as the manager's NotFoundError → 404.",
         "operationId": "ForwardsController_remove",
         "parameters": [
           {
@@ -456,7 +456,7 @@
     },
     "/api/forwards/{id}/start": {
       "post": {
-        "description": "Starts the rule's forwarder and returns its current status. Idempotent — an already-running rule returns its status without restarting; autostart/enabled is not a precondition. An unknown id returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "description": "Starts the rule's forwarder and returns its current status. Idempotent — an already-running rule returns its status without restarting; autostart/enabled is not a precondition. An unknown id returns 404. Returns 200 (NestJS would otherwise default POST to 201).",
         "operationId": "ForwardsController_start",
         "parameters": [
           {
@@ -499,7 +499,7 @@
     },
     "/api/forwards/{id}/stop": {
       "post": {
-        "description": "Stops the rule's forwarder and returns its current status. Idempotent — a rule that is not running returns its status without touching a socket. An unknown id returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "description": "Stops the rule's forwarder and returns its current status. Idempotent — a rule that is not running returns its status without touching a socket. An unknown id returns 404. Returns 200 (NestJS would otherwise default POST to 201).",
         "operationId": "ForwardsController_stop",
         "parameters": [
           {
@@ -542,7 +542,7 @@
     },
     "/api/forwards/{id}/diagnose": {
       "post": {
-        "description": "Runs read-only diagnostics for the rule — listen-host/LAN-exposure/privileged-port/common-port advisories, a listen-bind probe (skipped while the rule is running, since Portier already owns the port), target-host DNS resolution, a TCP target-connect probe (skipped for UDP / unresolved targets), and the UDP mode (UDP only) — and returns the ordered checks plus an overall summary. Does not mutate the rule. An unknown id returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "description": "Runs read-only diagnostics for the rule — listen-host/LAN-exposure/privileged-port/common-port advisories, a listen-bind probe (skipped while the rule is running, since Portier already owns the port), target-host DNS resolution, a TCP target-connect probe (skipped for UDP / unresolved targets), and the UDP mode (UDP only) — and returns the ordered checks plus an overall summary. Does not mutate the rule. An unknown id returns 404. Returns 200 (NestJS would otherwise default POST to 201).",
         "operationId": "ForwardsController_diagnose",
         "parameters": [
           {
@@ -585,7 +585,7 @@
     },
     "/api/forwards/groups/{group}/stop": {
       "post": {
-        "description": "Stops every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group. A rule that is not running is skipped (not_running, no socket touched); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "description": "Stops every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group. A rule that is not running is skipped (not_running, no socket touched); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (NestJS would otherwise default POST to 201).",
         "operationId": "ForwardsController_stopGroup",
         "parameters": [
           {
@@ -638,7 +638,7 @@
     },
     "/api/forwards/groups/{group}/start": {
       "post": {
-        "description": "Starts every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group; autostart/enabled is not a precondition. A rule that is already running is skipped (already_running, no new socket); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "description": "Starts every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group; autostart/enabled is not a precondition. A rule that is already running is skipped (already_running, no new socket); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (NestJS would otherwise default POST to 201).",
         "operationId": "ForwardsController_startGroup",
         "parameters": [
           {
@@ -737,7 +737,7 @@
     },
     "/api/config/plan": {
       "post": {
-        "description": "Diffs the desired config against the current rules and returns the plan (operations, summary, errors, warnings) without mutating anything. A missing `desired` key returns 400; invalid desired rules surface as plan errors (still 200). Returns 200 (matching Express; NestJS would otherwise default POST to 201).",
+        "description": "Diffs the desired config against the current rules and returns the plan (operations, summary, errors, warnings) without mutating anything. A missing `desired` key returns 400; invalid desired rules surface as plan errors (still 200). Returns 200 (NestJS would otherwise default POST to 201).",
         "operationId": "ConfigPlanController_plan",
         "parameters": [],
         "requestBody": {

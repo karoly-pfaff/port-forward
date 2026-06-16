@@ -8,9 +8,9 @@ import { CONFIG_PLAN_READER, type ConfigPlanReader } from "./config-plan.reader.
 /**
  * Behaviour for `POST /api/config/plan`: a NON-MUTATING dry-run that diffs the
  * desired config against the current rules and returns the plan. Mirrors the
- * Express route exactly — it inline-validates that the body is an object carrying
+ * documented `/api` contract — it inline-validates that the body is an object carrying
  * a `desired` key (`400 ["desired is required."]` otherwise; note `desired: null`
- * passes this key-presence check, exactly like Express's `"desired" in body`, and
+ * passes this key-presence check, exactly like the documented `"desired" in body`, and
  * surfaces as a plan error, NOT a `400`), then runs the SHARED `buildConfigPlan`
  * over the injected reader's current rules with `generatedAt` stamped from the
  * injected clock (so the volatile timestamp can be pinned for byte-for-byte

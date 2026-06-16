@@ -8,7 +8,7 @@ import { ConfigApplyResponseDto, toConfigApplyResponseDto } from "./config-apply
 /**
  * Transport adapter for `POST /api/config/apply` — the MUTATING desired-state apply.
  * Validation (the `desired`-key-presence check and the destructive-confirmation gate)
- * is delegated to the service to match Express's inline checks exactly, so the
+ * is delegated to the service to match the documented inline checks exactly, so the
  * `ConfigApplyBodyDto` is documentation/typing only (no validation pipe). All
  * success / `ok:false` outcomes are status `200` (so `@HttpCode(200)` — NestJS would
  * otherwise default `POST` to `201`); the two gating errors (missing `desired`,

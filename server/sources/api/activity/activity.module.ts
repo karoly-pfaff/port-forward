@@ -10,7 +10,7 @@ import { ACTIVITY_STORE, type ActivityReader } from "./activity.reader.js";
  * live `ActivityStore` when one is wired (the active NestJS runtime, shared with the
  * forwarding manager so events appear), else a fresh in-memory store
  * (empty → `{ events: [] }`); tests override it with a seeded store. The store is the
- * domain activity store, not Express internals.
+ * domain activity store.
  */
 @Module({
   controllers: [ActivityController],

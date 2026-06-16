@@ -1,7 +1,7 @@
 import type { PortAdvisory } from "@portier/shared";
 
 /**
- * Response DTO for `GET /api/ports/advisory` — the JSON array Express returns.
+ * Response DTO for `GET /api/ports/advisory` — the documented JSON array.
  *
  * The `@portier/shared` types are Portier's REST contract (guarded by
  * `validate:contract`), so the response DTO mirrors that shape exactly and the

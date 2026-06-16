@@ -5,12 +5,12 @@ import { FORWARD_RULE_STOPPER, type ForwardRuleStopper } from "./forwards.writer
 
 /**
  * Behaviour for `POST /api/forwards/:id/stop`: stops a rule's forwarder via the
- * injected stopper (`ForwardManager.stopRule` — the SAME path Express uses, so the
+ * injected stopper (`ForwardManager.stopRule` — the shared domain path, so the
  * not-found handling, idempotent already-stopped behaviour, listener close,
  * `rule.stopped` emission, and returned `ForwardStatus` are identical), and returns
  * the rule's current status. A domain `NotFoundError` (unknown id) is translated to
  * a `404` via `mapManagerError` so the shared error envelope produces the same
- * status + body as Express; any other error is re-thrown → the filter's generic
+ * status + body; any other error is re-thrown → the filter's generic
  * `500`.
  */
 @Injectable()

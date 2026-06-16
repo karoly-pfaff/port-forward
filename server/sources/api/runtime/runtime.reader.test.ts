@@ -17,7 +17,7 @@ describe("createDefaultRuntimeInfoReader", () => {
     expect(reader.options()).toBeUndefined();
     const first = reader.startedAt();
     expect(first).toBeInstanceOf(Date);
-    // Resolved once (mirrors Express's app-creation-time runtimeStartedAt).
+    // Resolved once (app-creation-time start, captured once).
     expect(reader.startedAt()).toBe(first);
   });
 

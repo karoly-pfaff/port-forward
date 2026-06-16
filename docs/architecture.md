@@ -9,11 +9,11 @@
 
 ## Server Flow
 
-1. `server/sources/index.ts` creates a `ConfigStore`, loads saved rules, starts enabled rules, and starts the HTTP server.
-2. `ForwardManager` owns the in-memory rule list, duplicate listen binding checks, persistence, and forwarder lifecycle.
+1. `server/sources/index.ts` creates a `ConfigStore`, loads saved rules, starts enabled rules, and boots the NestJS HTTP server (`createNestApp`) wired to the live `ForwardManager`/`ActivityStore`.
+2. `ForwardManager` (`server/sources/forwarders/`) owns the in-memory rule list, duplicate listen binding checks, persistence, and forwarder lifecycle.
 3. `TcpForwarder` uses Node's `net` module to listen locally and pipe traffic to the target socket in both directions.
 4. `UdpForwarder` uses Node's `dgram` module for one-way, `bidirectional-last-client`, and `bidirectional-multi-client` forwarding.
-5. `api.ts` exposes the REST API with Express.
+5. The NestJS controllers/services under `server/sources/api/` expose the REST API (per-feature modules; shared API infrastructure in `server/sources/api/common/`).
 
 The management UI/API defaults to `127.0.0.1:47831`. CLI flags (`--host`, `--port`) override environment variables (`PORTIER_HOST`, `PORTIER_PORT`), and environment variables override those defaults. The default is intentionally local-only; `0.0.0.0` for management is treated as a danger advisory because it exposes the UI/API on the LAN.
 

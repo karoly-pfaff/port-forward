@@ -34,7 +34,7 @@ describe("StopForwardGroupService.stop", () => {
     });
   });
 
-  it("normalizes the group via decodeURIComponent + trim (matching Express)", async () => {
+  it("normalizes the group via decodeURIComponent + trim", async () => {
     let receivedGroup: string | undefined;
     await service({
       stopGroup: async (group) => {
