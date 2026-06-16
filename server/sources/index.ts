@@ -9,9 +9,9 @@ import { ActivityStore } from "./activity/activity-store.js";
 import { createConsoleLogger, errorFields } from "./logger.js";
 import { resolveServerOptions } from "./server-options.js";
 import type { RuntimeInfoOptions } from "./runtime-info.js";
-import { createNestApp } from "./nest/app.factory.js";
-import type { AppRuntime } from "./nest/common/runtime-context.js";
-import { createStaticFallback, hasStaticClient } from "./nest/static/static-serving.js";
+import { createNestApp } from "./app/app.factory.js";
+import type { AppRuntime } from "./common/runtime-context.js";
+import { createStaticFallback, hasStaticClient } from "./static/static-serving.js";
 
 /**
  * Default Portier TypeScript server entry — the NestJS runtime.
@@ -19,9 +19,7 @@ import { createStaticFallback, hasStaticClient } from "./nest/static/static-serv
  * It owns the same lifecycle the server has always had (resolve options, load the
  * config + start enabled forwarders, bind the HTTP server, graceful shutdown), and
  * builds a NestJS app whose providers are wired to the live `ForwardManager`/
- * `ActivityStore`/runtime info/static client via `createNestApp(runtime)`. The
- * legacy Express implementation is retained under `sources/legacy/` and runs via
- * `npm run start:legacy`.
+ * `ActivityStore`/runtime info/static client via `createNestApp(runtime)`.
  */
 
 function readServerVersion(): string {

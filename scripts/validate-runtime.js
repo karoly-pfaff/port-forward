@@ -233,6 +233,9 @@ async function main() {
   checkFile("web/index.html");
   checkDir("web/assets");
 
+  console.log("\nOpenAPI artifact:");
+  checkFile("api/openapi.json");
+
   console.log("\nreadme.txt content:");
   const readmePath = join(packageDir, "readme.txt");
   if (existsSync(readmePath)) {

@@ -334,6 +334,7 @@ export function buildApplyImportFromPlan(
       continue;
     }
     const desired = op.desired;
+    /* v8 ignore next 3 -- defensive: a non-remove plan operation always carries a desired snapshot */
     if (!desired) {
       continue;
     }

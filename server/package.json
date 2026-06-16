@@ -5,14 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch sources/index.ts",
-    "dev:legacy": "tsx watch sources/legacy/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node build/index.js",
-    "start:nest": "tsx sources/index.ts",
-    "start:legacy": "node build/legacy/index.js",
-    "generate:apidoc": "tsx sources/nest/openapi/generate.ts",
+    "generate:apidoc": "tsx sources/openapi/generate.ts",
+    "copy:apidoc:release": "tsx sources/openapi/copy-release.ts",
     "test": "vitest run sources",
-    "test:nest": "vitest run sources/nest",
     "coverage": "vitest run --coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -24,14 +21,12 @@
     "@portier/shared": "*",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
-    "cors": "^2.8.5",
     "express": "^5.1.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@nestjs/testing": "^11.1.6",
-    "@types/cors": "^2.8.18",
     "@types/express": "^5.0.2",
     "tsx": "^4.19.4"
   }

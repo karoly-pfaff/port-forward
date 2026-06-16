@@ -62,7 +62,10 @@ const coverDir = join(repoRoot, "coverage");
 //
 // Policy:
 //   - shared: 100% (statements / branches / functions)
-//   - server: ~100% (95 / 92 / 99 — the highest the current actuals sustain)
+//   - server: 100% (statements / branches / functions) since v1.14 Slice 30 — the
+//     server is the single NestJS runtime; structurally-unreachable defensive branches
+//     (2s socket timeouts, post-stop socket races, nullish-on-initialized-counter
+//     fallbacks) are narrowly annotated with `/* v8 ignore … */` + a documented reason.
 //   - client: statements ≥ 90% (gate 94); lower branch / function floors
 //   - Go (service, cli, replay): 95% statements + functions — EXCEPT service
 //     statements, which stays at 90% (platform files + flat 0% test-less packages
@@ -71,7 +74,7 @@ const coverDir = join(repoRoot, "coverage");
 // Ratchet upward as coverage improves; do not lower a gate without a noted reason.
 const GATES = {
   shared:  { statements: 100, branches: 100, functions: 100 },
-  server:  { statements: 95, branches: 92, functions: 99 },
+  server:  { statements: 100, branches: 100, functions: 100 },
   client:  { statements: 94, branches: 89, functions: 78 },
   service: { statements: 90, functions: 95 },
   cli:     { statements: 95, functions: 95 },

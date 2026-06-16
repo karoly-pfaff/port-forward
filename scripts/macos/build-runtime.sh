@@ -13,10 +13,17 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTPUT_DIR="${1:-$REPO_ROOT/build/macos}"
 
 ESBUILD="$REPO_ROOT/node_modules/.bin/esbuild"
-# The packaged single-file Node fallback (server.js) bundles the legacy Express
-# server. The Go service is the preferred packaged runtime; bundling the NestJS
-# default into the single-file fallback is a documented follow-up. See server/readme.md.
-BUNDLE_ENTRY="$REPO_ROOT/server/sources/legacy/index.ts"
+# The packaged single-file Node fallback (server.js) bundles the NestJS server
+# (sources/index.ts). NestJS lazily requires optional transports it never uses for a
+# plain HTTP app, so those are marked external for esbuild. The Go service remains the
+# preferred packaged runtime. See server/readme.md.
+BUNDLE_ENTRY="$REPO_ROOT/server/sources/index.ts"
+BUNDLE_EXTERNALS=(
+  --external:@nestjs/microservices
+  --external:@nestjs/websockets/socket-module
+  --external:@nestjs/microservices/microservices-module
+  --external:class-transformer/storage
+)
 BUNDLE_WORK="$OUTPUT_DIR/_bundle"
 BUNDLE_CJS="$BUNDLE_WORK/server.cjs"
 
@@ -42,8 +49,20 @@ echo "Bundling server as server.js..."
   --platform=node \
   --format=cjs \
   --target=node22 \
-  --outfile="$BUNDLE_CJS"
+  --outfile="$BUNDLE_CJS" \
+  "${BUNDLE_EXTERNALS[@]}"
 cp "$BUNDLE_CJS" "$OUTPUT_DIR/server.js"
+
+# The bundle is CommonJS, but the package dir has no package.json and the repo root
+# is "type": "module" — mark the package dir as CommonJS so Node loads the CJS
+# bundle (server.js) correctly instead of failing on its require() calls.
+echo '{ "type": "commonjs" }' > "$OUTPUT_DIR/package.json"
+
+echo "Generating OpenAPI document..."
+npm --prefix "$REPO_ROOT" run generate:apidoc
+
+echo "Copying OpenAPI document into package..."
+npm --prefix "$REPO_ROOT" run copy:apidoc:release -w server -- "$OUTPUT_DIR"
 
 echo "Building Go service for macOS (darwin/amd64)..."
 pushd "$REPO_ROOT/service" > /dev/null

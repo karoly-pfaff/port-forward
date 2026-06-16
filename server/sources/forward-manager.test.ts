@@ -1,7 +1,7 @@
 import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExportedConfig, ForwardRule } from "@portier/shared";
-import { ConflictError, ForwardManager, NotFoundError, ValidationError, type RuleStore } from "./forward-manager.js";
+import { ConflictError, errorMessage, ForwardManager, NotFoundError, ValidationError, type RuleStore } from "./forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
 import { getFreeTcpPort, startRuleStable, startTcpServerOnFreePort } from "./test-helpers.js";
 
@@ -1175,5 +1175,269 @@ describe("ForwardManager rule health (v1.8 Slice 7)", () => {
     expect(manager.getStatus(rule.id).running).toBe(true);
     await manager.stopRule(rule.id);
     expect(manager.getStatus(rule.id).health).toBe("warning");
+  });
+});
+
+describe("ForwardManager coverage hardening (Slice 30)", () => {
+  const managers: ForwardManager[] = [];
+
+  afterEach(async () => {
+    await Promise.all(managers.splice(0).map((m) => m.stopAll()));
+  });
+
+  function track(m: ForwardManager): ForwardManager {
+    managers.push(m);
+    return m;
+  }
+
+  it("errorMessage returns an Error's message and the string form of anything else", () => {
+    expect(errorMessage(new Error("boom"))).toBe("boom");
+    expect(errorMessage("plain")).toBe("plain");
+    expect(errorMessage(42)).toBe("42");
+  });
+
+  it("getStatus reports zeroed counters for stopped TCP/UDP rules and sessions for multi-client", async () => {
+    const m = track(new ForwardManager(new MemoryStore()));
+    const tcp = await m.addRule({
+      name: "t", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48710,
+      targetHost: "127.0.0.1", targetPort: 9100, enabled: false
+    });
+    const oneWay = await m.addRule({
+      name: "u1", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48711,
+      targetHost: "127.0.0.1", targetPort: 9101, enabled: false, udpMode: "one-way"
+    });
+    const multi = await m.addRule({
+      name: "u2", protocol: "udp", listenHost: "127.0.0.1", listenPort: 48712,
+      targetHost: "127.0.0.1", targetPort: 9102, enabled: false, udpMode: "bidirectional-multi-client"
+    });
+
+    const tcpStatus = m.getStatus(tcp.id);
+    expect(tcpStatus.running).toBe(false);
+    expect(tcpStatus.activeConnections).toBe(0);
+    expect(tcpStatus.packetsIn).toBeUndefined();
+
+    const oneWayStatus = m.getStatus(oneWay.id);
+    expect(oneWayStatus.packetsIn).toBe(0);
+    expect(oneWayStatus.packetsOut).toBe(0);
+    expect(oneWayStatus.activeUdpSessions).toBeUndefined();
+
+    expect(m.getStatus(multi.id).activeUdpSessions).toBe(0);
+  });
+
+  it("loadAndStartEnabled starts an enabled rule loaded from the store", async () => {
+    const listenPort = await getFreeTcpPort();
+    const rule: ForwardRule = {
+      id: "load-enabled", name: "Load Enabled", protocol: "tcp", listenHost: "127.0.0.1",
+      listenPort, targetHost: "127.0.0.1", targetPort: 49998, enabled: true
+    };
+    const m = track(new ForwardManager(new MemoryStore([rule])));
+    const started = await m.loadAndStartEnabled();
+    expect(started).toBe(1);
+    expect(m.getStatus("load-enabled").running).toBe(true);
+  });
+
+  it("startRule is idempotent: a second start returns the running status without restarting", async () => {
+    const listenPort = await getFreeTcpPort();
+    const m = track(new ForwardManager(new MemoryStore()));
+    const rule = await m.addRule({
+      name: "idem", protocol: "tcp", listenHost: "127.0.0.1", listenPort,
+      targetHost: "127.0.0.1", targetPort: 49997, enabled: false
+    });
+    await startRuleStable(m, rule.id, getFreeTcpPort);
+    const first = m.getStatus(rule.id);
+    const again = await m.startRule(rule.id);
+    expect(again.running).toBe(true);
+    expect(again.startedAt).toBe(first.startedAt);
+  });
+
+  it("operates without an ActivityStore across the full rule lifecycle", async () => {
+    const listenPort = await getFreeTcpPort();
+    const m = track(new ForwardManager(new MemoryStore())); // no ActivityStore
+    const rule = await m.addRule({
+      name: "no-activity", protocol: "tcp", listenHost: "127.0.0.1", listenPort,
+      targetHost: "127.0.0.1", targetPort: 49996, enabled: false
+    });
+    await startRuleStable(m, rule.id, getFreeTcpPort);
+    await m.updateRule(rule.id, { name: "renamed" });
+    await m.stopRule(rule.id);
+
+    const exported = m.exportConfig();
+    expect(exported.rules.length).toBe(1);
+    const importResult = await m.importConfig(exported, "replace");
+    expect(importResult.errors).toEqual([]);
+
+    await m.deleteRule(m.listRules()[0].id);
+    expect(m.listRules()).toEqual([]);
+  });
+
+  it("importConfig replace generates an id for a valid rule that has none", async () => {
+    const m = track(new ForwardManager(new MemoryStore()));
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [{
+        name: "no-id", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48720,
+        targetHost: "127.0.0.1", targetPort: 9300, enabled: false
+      }] as unknown as ForwardRule[]
+    };
+    const result = await m.importConfig(config, "replace");
+    expect(result.imported).toBe(1);
+    const [imported] = m.listRules();
+    expect(typeof imported.id).toBe("string");
+    expect(imported.id.length).toBeGreaterThan(0);
+  });
+
+  it("importConfig rejects an invalid rule and reports the error without mutating", async () => {
+    const m = track(new ForwardManager(new MemoryStore()));
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [{
+        name: "bad-port", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 70000,
+        targetHost: "127.0.0.1", targetPort: 9301, enabled: false
+      }] as unknown as ForwardRule[]
+    };
+    const result = await m.importConfig(config, "replace");
+    expect(result.imported).toBe(0);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(m.listRules()).toEqual([]);
+  });
+
+  it("importConfig merge regenerates the id when an imported rule clashes with an existing id", async () => {
+    const m = track(new ForwardManager(new MemoryStore()));
+    const existing = await m.addRule({
+      id: "shared-id", name: "existing", protocol: "tcp", listenHost: "127.0.0.1",
+      listenPort: 48730, targetHost: "127.0.0.1", targetPort: 9400, enabled: false
+    });
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [{
+        id: "shared-id", name: "incoming", protocol: "tcp", listenHost: "127.0.0.1",
+        listenPort: 48731, targetHost: "127.0.0.1", targetPort: 9401, enabled: false
+      }] as unknown as ForwardRule[]
+    };
+    const result = await m.importConfig(config, "merge");
+    expect(result.imported).toBe(1);
+    const ids = m.listRules().map((r) => r.id);
+    expect(ids).toContain(existing.id);
+    expect(ids.length).toBe(2);
+    // The incoming rule's clashing id was regenerated to a fresh one.
+    expect(ids.filter((id) => id === "shared-id").length).toBe(1);
+  });
+});
+
+describe("ForwardManager startRule for UDP (Slice 30)", () => {
+  const managers: ForwardManager[] = [];
+  afterEach(async () => {
+    await Promise.all(managers.splice(0).map((m) => m.stopAll()));
+  });
+
+  it("starts a UDP rule through the manager", async () => {
+    const listenPort = await getFreeTcpPort();
+    const manager = new ForwardManager(new MemoryStore());
+    managers.push(manager);
+    const rule = await manager.addRule({
+      name: "udp-start", protocol: "udp", listenHost: "127.0.0.1", listenPort,
+      targetHost: "127.0.0.1", targetPort: 49995, enabled: false, udpMode: "one-way"
+    });
+    await startRuleStable(manager, rule.id, getFreeTcpPort);
+    expect(manager.getStatus(rule.id).running).toBe(true);
+  });
+});
+
+describe("ForwardManager config-level activity emission (Slice 30)", () => {
+  const managers: ForwardManager[] = [];
+  afterEach(async () => {
+    await Promise.all(managers.splice(0).map((m) => m.stopAll()));
+  });
+
+  // Exercises every config-level activity call site: config.exported,
+  // config.import.failed (validation), config.import.failed (duplicate binding),
+  // config.imported (success), and config.import.failed (merge conflict).
+  async function exerciseConfigPaths(manager: ForwardManager): Promise<void> {
+    manager.exportConfig();
+
+    const invalid: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [{ name: "bad", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 70000, targetHost: "127.0.0.1", targetPort: 9500, enabled: false }] as unknown as ForwardRule[]
+    };
+    expect((await manager.importConfig(invalid, "replace")).errors.length).toBeGreaterThan(0);
+
+    const dup: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [
+        { id: "d1", name: "d1", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48740, targetHost: "127.0.0.1", targetPort: 9501, enabled: false },
+        { id: "d2", name: "d2", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48740, targetHost: "127.0.0.1", targetPort: 9502, enabled: false }
+      ] as unknown as ForwardRule[]
+    };
+    expect((await manager.importConfig(dup, "replace")).errors.length).toBeGreaterThan(0);
+
+    const valid: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [{ id: "v1", name: "v1", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48741, targetHost: "127.0.0.1", targetPort: 9503, enabled: false }] as unknown as ForwardRule[]
+    };
+    expect((await manager.importConfig(valid, "replace")).imported).toBe(1);
+
+    // Merge a rule whose listen binding clashes with the just-imported v1.
+    const conflict: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [{ id: "c1", name: "c1", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48741, targetHost: "127.0.0.1", targetPort: 9504, enabled: false }] as unknown as ForwardRule[]
+    };
+    expect((await manager.importConfig(conflict, "merge")).errors.length).toBeGreaterThan(0);
+  }
+
+  it("emits config-level activity events when an ActivityStore is present", async () => {
+    const activity = new ActivityStore();
+    const manager = new ForwardManager(new MemoryStore(), activity);
+    managers.push(manager);
+    await exerciseConfigPaths(manager);
+    const types = activity.list({}).map((e) => e.type);
+    expect(types).toContain("config.exported");
+    expect(types).toContain("config.import.failed");
+    expect(types).toContain("config.imported");
+  });
+
+  it("operates without emitting when no ActivityStore is present", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    managers.push(manager);
+    await exerciseConfigPaths(manager);
+    expect(manager.listRules().length).toBe(1);
+  });
+});
+
+describe("ForwardManager additional branch coverage (Slice 30)", () => {
+  const managers: ForwardManager[] = [];
+  afterEach(async () => {
+    await Promise.all(managers.splice(0).map((m) => m.stopAll()));
+  });
+
+  it("importConfig labels a nameless invalid rule with a placeholder", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    managers.push(manager);
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [{ protocol: "tcp", listenHost: "127.0.0.1", listenPort: 70000, targetHost: "127.0.0.1", targetPort: 9700, enabled: false }] as unknown as ForwardRule[]
+    };
+    const result = await manager.importConfig(config, "replace");
+    expect(result.imported).toBe(0);
+    expect(result.errors[0]).toContain('Rule "?"');
+  });
+
+  it("reorderRules appends rules omitted from the id list, preserving their prior order", async () => {
+    const manager = new ForwardManager(new MemoryStore());
+    managers.push(manager);
+    await manager.addRule({ id: "a", name: "a", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48750, targetHost: "127.0.0.1", targetPort: 9600, enabled: false });
+    await manager.addRule({ id: "b", name: "b", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48751, targetHost: "127.0.0.1", targetPort: 9601, enabled: false });
+    await manager.addRule({ id: "c", name: "c", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48752, targetHost: "127.0.0.1", targetPort: 9602, enabled: false });
+
+    await manager.reorderRules(["c"]); // only c is listed; a and b are appended in prior order
+
+    expect(manager.listRules().map((r) => r.id)).toEqual(["c", "a", "b"]);
   });
 });

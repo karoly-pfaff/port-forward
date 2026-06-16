@@ -1,49 +1,33 @@
 # @portier/server
 
 The Portier **TypeScript runtime/fallback server**: the REST management API, config
-persistence, and forwarding lifecycle for the Node-based runtime. The native Go
-service (`service/`) remains the preferred runtime; this server is the Node
-fallback and the reference TypeScript implementation that `validate:contract`
-checks for parity against Go.
+persistence, and forwarding lifecycle for the Node-based runtime. It is built with
+**NestJS** and is the single TypeScript server implementation. The native Go service
+(`service/`) remains the preferred packaged runtime; this server is the Node fallback
+and the reference TypeScript implementation that `npm run validate:contract` checks
+for parity against Go (**234/234**).
 
-## Default runtime: NestJS (Express retained as legacy)
+`sources/index.ts` is the entry point: it resolves options, loads the config and
+starts enabled forwarders, builds the NestJS app with its providers wired to the
+**live** `ForwardManager`/`ActivityStore`/runtime-info/static client via
+`createNestApp(runtime)`, binds the HTTP server with socket tracking, and shuts down
+gracefully (stop forwarders, flush config, destroy sockets, close the app).
 
-This server has two implementations of the same REST API. **NestJS is now the
-default TypeScript server runtime**; the original **Express** implementation is
-retained under `sources/legacy/` for rollback/reference and as the byte-for-byte
-parity baseline:
-
-| | Default runtime (NestJS) | Legacy (Express) |
-|---|---|---|
-| Entry point | `sources/index.ts` | `sources/legacy/index.ts` |
-| Composition | `sources/nest/app.module.ts` | `sources/legacy/api.ts` (`createApp`) |
-| Framework | NestJS 11 (Express 5 platform) | Express 5 |
-| Status | **Active** — serves the real API, CLI, and web UI | **Legacy** — rollback/reference + parity baseline |
-| Start | `npm start -w server` / root `npm run start:server` | `npm run start:legacy -w server` / root `start:server:legacy` |
-| Dev | `npm run dev -w server` (`start:nest` is an alias) | `npm run dev:legacy -w server` |
-
-The active server entry (`sources/index.ts`) builds the NestJS app with its
-providers wired to the **live** `ForwardManager`/`ActivityStore`/runtime info/static
-client via `createNestApp(runtime)`, and keeps the same lifecycle the server always
-had (load config + start enabled forwarders, bind the HTTP server with socket
-tracking, graceful shutdown). NestJS and Express both serve the same `/api` surface;
-every endpoint is byte-for-byte parity-tested against the Express baseline
-(`*.integration.test.ts`, importing `sources/legacy/api.ts`) and guarded by
-`npm run validate:contract` (**234/234**, now run against the NestJS server). See
-*Runtime switch-readiness checklist* and *Legacy Express server* below.
-
-### Live dependency wiring
+## Live dependency wiring
 
 Each feature provider sources its dependency from the global `RuntimeContextModule`
-(`APP_RUNTIME`): the active server supplies an `AppRuntime` (the live manager +
+(`APP_RUNTIME`): the running server supplies an `AppRuntime` (the live manager +
 activity store + runtime-info reader + static fallback) so every reader/writer token
-resolves to the live `ForwardManager`; `ACTIVITY_STORE` to the live store; etc. When
+resolves to the live `ForwardManager`, `ACTIVITY_STORE` to the live store, etc. When
 no runtime is supplied — OpenAPI generation and tests — `APP_RUNTIME` is `null` and
 the providers fall back to empty/in-memory defaults (tests override the specific
-tokens they seed via `overrideProvider`). The static root (`AppModule`) is used by
-docs/tests; `createLiveAppModule(runtime)` is the live root.
+tokens they seed via `@nestjs/testing` `overrideProvider`). The static `AppModule`
+(`APP_RUNTIME = null`) is the root used by docs/tests; `createLiveAppModule(runtime)`
+returns the live root on a distinct `LiveAppModule` class (so Nest does not merge
+`AppModule`'s static `@Module` metadata and double-register the global). `createNestApp`
+is the single app factory.
 
-### Health probe
+## Health probe
 
 `GET /health` → `{ ok: true, server: "node", name: "Portier" }` is a liveness probe
 that needs no runtime manager. It is intentionally **outside the frozen `/api`
@@ -54,28 +38,16 @@ every `/api/*` route is the Portier `{ "errors": ["..."] }` envelope via the glo
 controller-raised `400`s carry their messages, unknown errors →
 `500 ["Internal server error."]` (no leak); non-API routes keep NestJS's default
 error shape. Controllers raise `ApiBadRequestException(string[])` (etc.) rather than
-hand-rolling the envelope. The full endpoint inventory follows.
+hand-rolling the envelope.
 
-### Migration status (endpoint inventory)
+## Endpoint inventory
 
-The **read-side `/api` migration is complete** (v1.14 Slice 11); the rule CRUD
-trio is migrated — **create** (`POST /api/forwards`, Slice 14), **update**
-(`PATCH /api/forwards/:id`, Slice 15), and **delete** (`DELETE /api/forwards/:id`,
-Slice 16) — plus the single-rule lifecycle pair, **start**
-(`POST /api/forwards/:id/start`, Slice 17) and **stop**
-(`POST /api/forwards/:id/stop`, Slice 18), **reorder**
-(`POST /api/forwards/reorder`, Slice 19), **diagnose**
-(`POST /api/forwards/:id/diagnose`, Slice 20), and the **group-action pair** —
-**group stop** (`POST /api/forwards/groups/:group/stop`, Slice 21) and **group
-start** (`POST /api/forwards/groups/:group/start`, Slice 22). The entire
-`/api/forwards` surface is migrated, and the config milestone is **complete** — the
-**non-mutating** `POST /api/config/plan` dry-run (Slice 23), the **mutating**
-`POST /api/config/import` (Slice 24), and the **mutating** `POST /api/config/apply`
-(Slice 25). **Static client serving** (Slice 26) is migrated too — see the
-*Static client serving* section below. Every endpoint below is served by the
-**NestJS server** (the default runtime, `sources/index.ts`); the legacy Express
-baseline (`sources/legacy/api.ts`) is byte-for-byte parity-tested against it.
-`validate:contract` is **234/234** (run against the NestJS server).
+Every `/api` endpoint below is served by the NestJS server. `validate:contract` is
+the parity guard against the Go service (**234/234**). Each endpoint has unit tests
+(controller/service/reader/writer/mapper) plus an integration test that boots the
+real Nest app; the two app-level integration tests (`app/app.integration.test.ts`
+with `APP_RUNTIME = null`, `app/live-runtime.integration.test.ts` with a live seeded
+runtime) exercise both branches of every feature provider.
 
 | Endpoint | Module | Request DTO | Response DTO | Provider token | Builder / volatile |
 |---|---|---|---|---|---|
@@ -85,254 +57,100 @@ baseline (`sources/legacy/api.ts`) is byte-for-byte parity-tested against it.
 | `DELETE /api/activity` | `api/activity/` | — (no input) | — (`204` no body)³ | `ACTIVITY_STORE` (`ActivityClearer`) | — |
 | `GET /api/status` | `api/status/` | — (no input) | `StatusListResponseDto` | `STATUS_READER` | — |
 | `GET /api/forwards` | `api/forwards/` | — (no input) | `ForwardsListResponseDto` | `FORWARDS_READER` | — |
-| `POST /api/forwards` | `api/forwards/` | `CreateForwardRuleBodyDto`⁴ | `ForwardRuleResponseDto` (`201`) | `FORWARD_RULE_CREATOR` (`ForwardRuleCreator`) | — |
-| `PATCH /api/forwards/:id` | `api/forwards/` | `:id` (`@ApiParam`) + `UpdateForwardRuleBodyDto`⁴ | `ForwardRuleResponseDto` (`200`) | `FORWARD_RULE_UPDATER` (`ForwardRuleUpdater`) | — |
-| `DELETE /api/forwards/:id` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | — (`204` no body)³ | `FORWARD_RULE_DELETER` (`ForwardRuleDeleter`) | — |
-| `POST /api/forwards/:id/start` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STARTER` (`ForwardRuleStarter`) | — |
-| `POST /api/forwards/:id/stop` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STOPPER` (`ForwardRuleStopper`) | — |
-| `POST /api/forwards/reorder` | `api/forwards/` | `ReorderForwardRulesBodyDto` + pipe⁶ | `ForwardRuleResponseDto[]` (`200`) | `FORWARD_RULES_REORDERER` (`ForwardRulesReorderer`) | — |
-| `POST /api/forwards/:id/diagnose` | `api/forwards/` | `:id` (`@ApiParam`)⁴ | `RuleDiagnosticsResultDto` (`200`)⁷ | `DIAGNOSTIC_READER` + `CLOCK_READER` | `diagnoseRule` (`diagnosedAt`) |
-| `POST /api/forwards/groups/:group/stop` | `api/forwards/` | `:group` (`@ApiParam`)⁸ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STOPPER` (`ForwardGroupStopper`) | — |
-| `POST /api/forwards/groups/:group/start` | `api/forwards/` | `:group` (`@ApiParam`)⁸ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STARTER` (`ForwardGroupStarter`) | — |
+| `POST /api/forwards` | `api/forwards/` | `CreateForwardRuleBodyDto`⁴ | `ForwardRuleResponseDto` (`201`) | `FORWARD_RULE_CREATOR` | — |
+| `PATCH /api/forwards/:id` | `api/forwards/` | `:id` + `UpdateForwardRuleBodyDto`⁴ | `ForwardRuleResponseDto` (`200`) | `FORWARD_RULE_UPDATER` | — |
+| `DELETE /api/forwards/:id` | `api/forwards/` | `:id`⁴ | — (`204` no body)³ | `FORWARD_RULE_DELETER` | — |
+| `POST /api/forwards/:id/start` | `api/forwards/` | `:id`⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STARTER` | — |
+| `POST /api/forwards/:id/stop` | `api/forwards/` | `:id`⁴ | `ForwardStatusDto` (`200`)⁵ | `FORWARD_RULE_STOPPER` | — |
+| `POST /api/forwards/reorder` | `api/forwards/` | `ReorderForwardRulesBodyDto` + pipe⁶ | `ForwardRuleResponseDto[]` (`200`) | `FORWARD_RULES_REORDERER` | — |
+| `POST /api/forwards/:id/diagnose` | `api/forwards/` | `:id`⁴ | `RuleDiagnosticsResultDto` (`200`) | `DIAGNOSTIC_READER` + `CLOCK_READER` | `diagnoseRule` (`diagnosedAt`) |
+| `POST /api/forwards/groups/:group/stop` | `api/forwards/` | `:group`⁷ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STOPPER` | — |
+| `POST /api/forwards/groups/:group/start` | `api/forwards/` | `:group`⁷ | `GroupActionResponseDto` (`200`) | `FORWARD_GROUP_STARTER` | — |
 | `GET /api/runtime` | `api/runtime/` | — (no input) | `RuntimeInfoResponseDto` | `RUNTIME_INFO_READER` + `CLOCK_READER` + `PROCESS_READER` | `buildRuntimeInfo` (`uptimeSeconds`) |
 | `GET /api/config/export` | `api/config/` | — (no input) | `ConfigExportResponseDto` | `CONFIG_EXPORT_READER` + `CLOCK_READER` | `buildExportedConfig` (`exportedAt`) |
-| `POST /api/config/plan` | `api/config/` | `ConfigPlanBodyDto`⁹ | `ConfigPlanResponseDto` (`200`) | `CONFIG_PLAN_READER` + `CLOCK_READER` | `buildConfigPlan` (`generatedAt`) |
-| `POST /api/config/import` | `api/config/` | `ConfigImportBodyDto`¹⁰ | `ConfigImportResponseDto` (`200`) / `ConfigImportErrorResponseDto` (`422`)¹⁰ | `CONFIG_IMPORTER` (`ConfigImporter`) | — |
-| `POST /api/config/apply` | `api/config/` | `ConfigApplyBodyDto`¹¹ | `ConfigApplyResponseDto` (`200`)¹¹ | `CONFIG_APPLIER` (`ConfigApplier`) + `CLOCK_READER` | `appliedAt` + `plan.generatedAt` |
+| `POST /api/config/plan` | `api/config/` | `ConfigPlanBodyDto`⁸ | `ConfigPlanResponseDto` (`200`) | `CONFIG_PLAN_READER` + `CLOCK_READER` | `buildConfigPlan` (`generatedAt`) |
+| `POST /api/config/import` | `api/config/` | `ConfigImportBodyDto`⁸ | `ConfigImportResponseDto` (`200`) / `ConfigImportErrorResponseDto` (`422`)⁹ | `CONFIG_IMPORTER` | — |
+| `POST /api/config/apply` | `api/config/` | `ConfigApplyBodyDto`⁸ | `ConfigApplyResponseDto` (`200`)¹⁰ | `CONFIG_APPLIER` + `CLOCK_READER` | `appliedAt` + `plan.generatedAt` |
 | `GET /api/connections` | `api/connections/` | — (no input) | `ConnectionsResponseDto` | `CONNECTIONS_READER` + `CLOCK_READER` | `buildLiveConnections` (`generatedAt`) |
 
-Every migrated endpoint has a byte-for-byte Express↔Nest parity test
-(`*.integration.test.ts`) covering empty/default and (where relevant) seeded
-state plus documented error cases; none normalizes or strips a volatile field.
+Notes: ¹ `/health` returns a typed constant from `HealthService` (no domain data to
+map → no response-DTO mapper). ² `GET /api/activity`'s query is pure silent
+coercion-with-fallback (always `200`), kept endpoint-local in the service rather
+than a transform-only DTO; its **response** is still mapped. ³ `204`-empty responses
+have no body → no response DTO. ⁴ `Create`/`Update` body DTOs are
+**documentation/typing** only — body validation is delegated to the shared
+`validateForwardRule`/`validateForwardRulePatch` inside `ForwardManager.addRule`/
+`updateRule` (the single contract validators, preserving partial-patch merge
+semantics); the `:id` path param is a plain string (`requireRule` returns `404` for
+an unknown id), documented via `@ApiParam`. Manager `ValidationError`/`NotFoundError`/
+`ConflictError` map to `400`/`404`/`409` via the shared `mapManagerError`. A created
+**enabled** rule starts its forwarder; an **update** restarts a *running* rule only
+when a forwarding field changes. ⁵ The **start**/**stop** response body is a
+`ForwardStatus` (reusing `ForwardStatusDto`); `@HttpCode(200)` is required (NestJS
+defaults `POST`→`201`). Start is idempotent; a stopped status is fully deterministic
+(`running:false`, zeroed counters, no `startedAt`). ⁶ **Reorder** has a real
+validated body DTO (`@IsArray` + `@IsString({ each: true })`, message `"ids must be
+an array of strings."`) through `ApiValidationPipe`; it is metadata-only (no
+sockets) — listed ids first, unlisted rules appended in prior order; unknown id →
+`404`, persist failure rolls back. ⁷ Group actions normalize `:group`
+(`decodeURIComponent(...).trim()`), validate with the shared `validateGroupName`
+(`400` on empty/invalid), and `404` on an empty match set; they are behaviour over
+rule metadata (never mutate definitions/order/`enabled`/`group`). ⁸ `ConfigPlanBodyDto`/
+`ConfigImportBodyDto`/`ConfigApplyBodyDto` are documentation/typing only — body
+validation is delegated to inline service checks (key-presence / short-circuit
+ordering that class-validator would diverge from). ⁹ Config import returns
+`200 {result, rules}` or `422 {errors, result}` via `@Res({ passthrough: true })`
+(the `422` carries `result` alongside errors, so it must not flow through the
+`{errors}` filter); the two `400`s (bad mode/config) are thrown. Rollback on persist
+failure is inherited from `ForwardManager.importConfig`. ¹⁰ Config apply mirrors the
+exact gate order (missing `desired` → `400`; `hasErrors` → `200 ok:false`; `dryRun`
+→ `200 ok:true` before the destructive gate; `destructive && !yes` → `400`; drift →
+`replace` import; else `200 ok:true`) — all non-error outcomes are `200`, so the
+controller is `@HttpCode(200)` (no `@Res`). Its two volatile timestamps (`appliedAt`
++ embedded `plan.generatedAt`) are stamped from **one** clock instant.
 
-Notes: ¹ `/health` is a scaffold liveness probe **outside the `/api` contract**;
-it returns a typed constant from `HealthService` (no domain/runtime data to map),
-so it needs no response-DTO mapper. ² `GET /api/activity`'s query is pure silent
-coercion-with-fallback (always `200`) — a transform-only DTO would add ceremony
-and risk parity drift, so the coercion stays endpoint-local in the service
-(documented parity exception); its **response** is still mapped. ³ `204`-empty
-responses have no JSON body, so they have no response DTO (the absent body is the
-response, matching Express). ⁴ `CreateForwardRuleBodyDto`/`UpdateForwardRuleBodyDto`
-are **documentation/typing** DTOs only — body validation is delegated to the shared
-`validateForwardRule`/`validateForwardRulePatch` (`@portier/shared`) inside
-`ForwardManager.addRule`/`updateRule` (the single contract validators, which also
-preserve the partial-patch "absent field is not `undefined`" merge semantics), so
-**no validation pipe runs on the body** (re-expressing the validators as
-class-validator constraints would risk error-message/coercion/`id` drift — a
-documented parity exception); the `:id` path param is a plain string with no
-validation (Express does none — the manager's `requireRule` returns `404` for an
-unknown id), documented via `@ApiParam`. Manager `ValidationError`/`NotFoundError`/`ConflictError`
-are translated to `400`/`404`/`409` via the shared `mapManagerError`. A created
-**enabled** rule starts its forwarder, and an **update** restarts a *running* rule
-only when a forwarding field (`protocol`/`listenHost`/`listenPort`/`targetHost`/`targetPort`/`udpMode`)
-changes — metadata-only updates (name/group/autostart) do not restart and a stopped
-rule is not started (identical to Express); parity tests use `enabled:false`/stopped
-rules (no sockets). ⁵ The **start** response body is a `ForwardStatus` (not a rule),
-so it reuses the `ForwardStatusDto` schema (shared with `GET /api/status`) via a
-small `toForwardStatusResponseDto` mapper; `@HttpCode(200)` is required because
-NestJS defaults `POST`→`201`. **Delete** (`DELETE /api/forwards/:id`) returns `204` with no
-body, stops a running forwarder first (runtime cleanup), rolls back on a persist
-failure, and returns `404` for an unknown id — all inherited by delegating to
-`ForwardManager.deleteRule`; parity tests delete `enabled:false` stopped rules (no
-sockets) and cover success/404/repeat-delete and GET-after-DELETE. **Start**
-(`POST /api/forwards/:id/start`) ⁵ opens the rule's forwarder and returns `200` +
-its `ForwardStatus` (note: NestJS would default `POST`→`201`, so `@HttpCode(200)`
-matches Express); it is **idempotent** (an already-running rule returns its status
-without restarting), autostart/`enabled` is not a precondition, and an unknown id →
-`404` — all inherited by delegating to `ForwardManager.startRule`. A started
-status carries a volatile `startedAt`, so byte-for-byte parity uses the
-**idempotent already-running** path on a **shared** manager (the listener is opened
-once via the Test-A `startRuleStable` bind-retry helper, then both runtimes return
-the identical pinned status); a separate single-runtime cold-start integration test
-opens a real TCP and a real UDP listener through the Nest endpoint and stops it
-(`manager.stopAll()`) afterwards — no leaked sockets, no fixed ports. **Stop**
-(`POST /api/forwards/:id/stop`) is the natural pair — `200` + the rule's
-`ForwardStatus` (`@HttpCode(200)`), idempotent (a not-running rule returns its
-status without touching a socket), unknown id → `404`, all inherited by delegating
-to `ForwardManager.stopRule`. A *stopped* status is fully deterministic
-(`running:false`, zeroed counters, **no `startedAt`**), so — unlike start —
-byte-for-byte parity needs no shared manager: the already-stopped path is
-parity-tested with **zero sockets** (separate managers), and the running-rule stop
-is parity-tested by starting each manager on its own free port (`startRuleStable`)
-and stopping via the endpoint, with `GET /api/status`-after-stop parity and
-`stopAll()` cleanup in `finally`. ⁶ **Reorder** (`POST /api/forwards/reorder`) is
-the FIRST migrated endpoint with a **real validated body DTO** — its `{ ids:
-string[] }` check is simple enough to re-express exactly in class-validator, so
-`ReorderForwardRulesBodyDto` (`@IsArray` + `@IsString({ each: true })`, both
-carrying the exact Express message `"ids must be an array of strings."`) runs
-through `ApiValidationPipe` (not delegated to the manager). Returns `200` + the
-full reordered `ForwardRuleResponse[]` (same shape/mapper as `GET /api/forwards`),
-`@HttpCode(200)`. Reorder is **metadata only** (opens/closes no socket): the listed
-ids go first, any unlisted rule keeps its relative order at the end (partial sets
-allowed, duplicate ids tolerated, empty list is a no-op); an unknown id → `404`
-(via `ForwardManager.reorderRules` → `mapManagerError`) and no reorder is persisted;
-a persist failure rolls back the order. Parity-tested with **separate seeded
-managers** (no sockets) for full/partial/duplicate/empty reorder + GET-after-reorder
-+ unknown-id 404 + invalid-body 400. ⁷ **Diagnose** (`POST /api/forwards/:id/diagnose`)
-is READ-ONLY — it inspects the rule + its running state (the narrow
-`DIAGNOSTIC_READER` = `getRule` + `getStatus`), runs the shared `diagnoseRule` probes
-(listen-bind / target-host DNS / target-connect + listen-host/LAN/privileged/common
-advisories + UDP mode), and returns `200` + a `RuleDiagnosticsResultDto`
-(`@HttpCode(200)`); an unknown id → `404` (the service throws `ApiNotFoundException`
-directly, matching Express's INLINE 404 — `getRule` returns `undefined`, it does not
-throw, so this is not a `mapManagerError` path). Its volatile `diagnosedAt` is pinned
-for parity via the **shared `CLOCK_READER`** on the Nest side and the existing
-`AppOptions.now` seam on the Express side — to enable that, `diagnoseRule` gained an
-optional `now: Date = new Date()` param (behavior-preserving, mirroring the
-`exportConfig(now)` seam; production output unchanged). Because diagnose probes the
-network, byte-for-byte parity uses a **UDP** rule (its `target-connect` is always
-`skip` — no TCP probe; `127.0.0.1` resolves instantly; only a transient UDP
-listen-bind), a **shared** manager, **sequential** calls (so the listen-bind probes
-never overlap), and the pinned clock — no field is stripped/normalized. The 404 path
-(no probes, no `diagnosedAt`) is parity-tested with separate managers. ⁸ **Group
-stop** (`POST /api/forwards/groups/:group/stop`) is the FIRST migrated group action —
-it stops every rule sharing a `group` label (in rule order) via `stopGroup` and
-returns `200` + a `GroupActionResponse` summary (`@HttpCode(200)`). The `:group` path
-param is normalized exactly like Express (`decodeURIComponent(...).trim()`) and
-validated by the SHARED `validateGroupName` (a `400` on empty/invalid — delegated, not
-re-expressed in class-validator), and an empty match set → `404`; the service throws
-the shared `ApiBadRequestException`/`ApiNotFoundException` directly (matching Express's
-inline `400`/`404`). Group stop is **behaviour over rule metadata** — it never mutates
-rule definitions/order/`enabled`/`group`. Because stopping a group of already-stopped
-rules is a deterministic no-op (every result `skipped`/`not_running`, NO socket),
-byte-for-byte parity needs no sockets: it uses **separate seeded `enabled:false`
-managers** (success → all `not_running` skips + GET-unchanged, `404` unknown group,
-`400` empty group, encoded-group normalization). `GroupActionResponse` has no volatile
-field, so no clock seam is needed. **Group start** (`POST /api/forwards/groups/:group/start`,
-Slice 22) is the lifecycle pair — same validation/normalization/response DTO
-(`ForwardGroupStarter`/`FORWARD_GROUP_STARTER` + `startGroup`), `200` +
-`GroupActionResponse`, `400`/`404` identically. It opens sockets for *stopped* rules,
-but the `GroupActionResponse` carries NO volatile field (results are `started`/
-`skipped`/`failed`, no `startedAt`), so byte-for-byte parity is achievable: the
-`400`/`404`/encoded-normalization cases are socket-free (separate managers), the
-success case uses the **idempotent already-running** path on a **shared** manager
-(open the listener once via Test-A `startRuleStable`, then both runtimes return the
-identical `already_running` skips — 1 socket, `stopAll()` cleanup), and a separate
-single-runtime cold-start test starts a real listener through the Nest endpoint
-(`started` + `GET /api/status` running) and `stopAll()`s afterwards. The group-action
-pair (and the whole `/api/forwards` surface) is now migrated.
+**Volatile fields** (`uptimeSeconds`, `exportedAt`, `generatedAt`, `diagnosedAt`,
+`appliedAt`) come from narrow injected readers — `CLOCK_READER` (generic, reused
+across all timestamp endpoints), `PROCESS_READER`, `RUNTIME_INFO_READER` — never read
+inline, so services stay pure and deterministically testable.
 
-⁹ **Config plan** (`POST /api/config/plan`, Slice 23 — the first config-milestone
-endpoint) is a **NON-MUTATING dry-run**: it diffs the desired config against the
-current rules via the shared `buildConfigPlan` and returns the plan (operations,
-summary, errors, warnings) — it never mutates rules, opens sockets, or emits
-activity. The body validation is **delegated** to the service to match Express's
-`"desired" in body` key-presence check exactly (`400 ["desired is required."]` only
-when the `desired` key is absent; `desired: null` is allowed and surfaces as a plan
-error, NOT a `400`, so the `ConfigPlanBodyDto` is documentation/typing only — no
-validation pipe, since class-validator `@IsDefined` would reject `null` and diverge).
-Its volatile `generatedAt` is pinned via the **shared `CLOCK_READER`** (Nest) and the
-existing `AppOptions.now` seam (Express — `buildConfigPlan` already accepted a `now`
-arg; the Express route now threads `options.now`, behavior-preserving). The response
-is mapped through `toConfigPlanResponseDto` (a `structuredClone` deep copy — the plan
-is deeply nested). Byte-for-byte parity uses a **shared** manager (plan is
-non-mutating, so sharing is safe) + the pinned clock — `400`-missing-desired, empty
-plan, add/update/unchanged drift (with a before/after manager-`listRules()` assertion
-proving non-mutation), invalid-desired-rule → plan error (still `200`), and
-`desired: null` → plan error — all match Express with no field stripped.
+## Static client serving
 
-¹⁰ **Config import** (`POST /api/config/import`, Slice 24 — the first MUTATING config
-endpoint) imports a config (`{mode, config}`) in `replace`/`merge` mode via a narrow
-`ConfigImporter`/`CONFIG_IMPORTER` (`importConfig` + `listRules`; domain
-`ForwardManager`), reusing the SHARED `ForwardManager.importConfig` (same
-replace/merge mutation, duplicate-binding/merge-conflict rejection, **persist
-rollback**, enabled-rule start, and `config.imported`/`config.import.failed` activity).
-The body validation is **delegated** to inline service checks to match Express's
-SHORT-CIRCUIT order exactly (`400 ["mode must be replace or merge."]` first, then
-`400 ["config must be a valid Portier config object with version 1 and a rules
-array."]` — class-validator would accumulate both and diverge), so `ConfigImportBodyDto`
-is documentation/typing only. The **`200 {result, rules}`** (import result + the full
-advisory-decorated rule list) and the **`422 {errors, result}`** (import errors WITH
-the result — NOT the plain `{errors}` envelope) are **RETURNED with their status via
-`@Res({ passthrough: true })`** (matching Express's `response.status(...).json(...)`),
-since the `422` body carries `result` and so must NOT flow through the error-envelope
-filter (`toApiError` strips extra fields); only the two `400`s are thrown as
-`ApiBadRequestException` and DO flow through the filter. The import response has **no
-volatile field**, so no clock seam is needed. All `422` paths reject BEFORE mutating.
-Byte-for-byte parity uses **separate seeded managers** (import mutates) with fixed-id
-`enabled:false` rules (deterministic, socket-free): `400` mode/config, `200` replace
-into empty + over seeded (with `GET /api/forwards` + `GET /api/config/export`
-state-after parity), `422` invalid rule (+ no-mutation assertion), and `422` duplicate
-binding. Rollback on persist failure is inherited from `importConfig` (manager-tested,
-Test-D) and unit-covered via a throwing fake (→ generic `500`).
+`static/static-serving.ts` serves the packaged web client:
 
-¹¹ **Config apply** (`POST /api/config/apply`, Slice 25 — the FINAL config endpoint)
-applies a desired config (`{desired, yes?, dryRun?}`) via a narrow
-`ConfigApplier`/`CONFIG_APPLIER` (`listRules` + `importConfig`; domain `ForwardManager`;
-a separate token from `CONFIG_IMPORTER` so each config endpoint is independently
-overridable), running the SHARED `buildConfigPlan` + `buildApplyImportFromPlan` and, on
-the non-dry-run drift path, the SHARED `ForwardManager.importConfig` (`replace`). It
-mirrors Express's exact ordering: missing `desired` key → `400`; `plan.summary.hasErrors`
-→ `200 ok:false`; `dryRun` → `200 ok:true` (BEFORE the destructive gate); `destructive
-&& !yes` → `400`; `hasDrift` → replace import (+ a belt-and-suspenders import-error
-guard → `200 ok:false` via `plan.errors`); else → `200 ok:true`. **All success/`ok:false`
-outcomes are status `200`** (only the two gating errors are `400`), so the controller is
-`@HttpCode(200)` and the service THROWS `ApiBadRequestException` for the `400`s (through
-the shared `{errors}` filter) and RETURNS the `ConfigApplyResponse` for everything else —
-**no `@Res`** is needed (unlike import's `422`). Body validation is **delegated** to inline
-service checks (the `"desired" in body` key-presence check — `desired: null` → plan error,
-not `400` — plus the destructive gate), so `ConfigApplyBodyDto` is documentation/typing
-only. The response carries **two** volatile timestamps — the top-level `appliedAt` and the
-embedded `plan.generatedAt` — both stamped from **one** clock instant: the Express route
-threads `options.now` into both `appliedAt` and `buildConfigPlan`'s `now` (a
-production-invisible refinement; production uses the real wall clock), and the Nest service
-injects `CLOCK_READER`; parity pins the same clock in both runtimes (no field
-stripped/normalized). Byte-for-byte parity uses **separate seeded managers** (apply
-mutates) with fixed-id `enabled:false` rules (deterministic, socket-free) + the pinned
-clock: `400` missing desired, dry-run (pinned `appliedAt`+`generatedAt`, no mutation),
-apply-add (with `GET /api/forwards` + `GET /api/config/export` state-after parity),
-destructive blocked without `yes` (state unchanged), destructive applied with `yes:true`
-(rule removed), invalid desired rule → `ok:false` (no mutation), and no-drift → `ok:true`.
-The import-error guard branch and a persist-failure re-throw (→ generic `500`) are
-service unit-covered via a fake applier.
-
-## Static client serving (Slice 26)
-
-The NestJS server serves the packaged web client with Express-equivalent
-semantics (`server/sources/nest/static/static-serving.ts`):
-
-- **Enable rule** mirrors Express: a static dir is usable only when it contains an
-  `index.html` (`hasStaticClient`/`resolveStaticOptions`). A missing/absent dir is
-  allowed — the API (and the `/api/*` JSON-404 envelope) stays fully usable.
+- **Enable rule:** a static dir is usable only when it contains an `index.html`
+  (`hasStaticClient`/`resolveStaticOptions`). A missing/absent dir is allowed — the
+  API (and the `/api/*` JSON-404 envelope) stays fully usable.
 - **Assets:** `configureStaticAssets(app, dir)` registers `app.useStaticAssets(dir)`
-  (the `express.static` equivalent, pre-router) when enabled.
+  (pre-router) when enabled.
 - **SPA fallback:** an unmatched **non-API** GET/HEAD route serves `index.html`. Nest
   surfaces unmatched routes as `NotFoundException` → the global
   `ApiErrorEnvelopeFilter`, so that filter (the single unmatched-route handler) owns
-  the fallback, delegating the static decision to an injected `StaticFallback`
-  (`STATIC_FALLBACK` token). The `/api/*` envelope branch runs first and is untouched.
-- **Live wiring & default-off:** the active server entry (`sources/index.ts`) builds
-  the runtime's `staticFallback` (`createStaticFallback(staticClientDir)`) and calls
-  `configureStaticAssets(app, staticClientDir)`. When no static dir is wired
-  (`STATIC_FALLBACK` = `disabledStaticFallback`), no static assets are served and the
-  API works with no client build (matching the Express enable-gate).
-- **Parity:** NestJS↔Express raw status+body parity for `/`, SPA routes, a real asset, a
-  missing asset (→ index.html, matching Express), and an unmatched `/api/*` route (→ the
-  JSON envelope). When static is disabled, both keep the API usable and serve no SPA
-  index — the non-API 404 *body shape* still differs (Express HTML vs NestJS JSON), a
-  documented accepted boundary.
-- **OpenAPI:** static serving adds **no** routes; `docs/api/openapi.json` is unchanged
-  and a generator test asserts the doc contains only `/health` + `/api/*` paths.
-
-Static serving runs through the default NestJS runtime (the active server entry
-wires `configureStaticAssets` + `STATIC_FALLBACK` from the resolved client dir).
+  the SPA fallback, delegating the decision to an injected `StaticFallback`
+  (`STATIC_FALLBACK`). The `/api/*` envelope branch runs first.
+- **Live wiring & default-off:** `sources/index.ts` builds the runtime's
+  `staticFallback` (`createStaticFallback(staticClientDir)`) and calls
+  `configureStaticAssets`. With no static dir wired (`STATIC_FALLBACK =
+  disabledStaticFallback`), no static assets are served and the API works with no
+  client build.
+- Static serving adds **no** OpenAPI routes (the generated doc is only `/health` +
+  `/api/*`).
 
 ## DTO / OpenAPI schema ownership
 
-Each feature owns its OpenAPI schema classes. Metadata-only decorated
-`@ApiProperty` classes live in feature-local `*.schema.ts` files inside the feature
-folder (e.g. `api/forwards/forward-rule.schema.ts`, `api/config/config-plan.schema.ts`,
-`api/ports/port-advisory.schema.ts`); the response **mappers** (`to*ResponseDto`) stay
-in the sibling `*.response.dto.ts` (which re-exports the schema class), and validated
-request bodies (class-validator, instantiated by the pipe) stay in `*.body.dto.ts`.
-
-`common/` holds **only genuinely cross-feature** schemas — currently just
-`api-error.schema.ts` (`ApiErrorResponseDto`, the shared `{ errors }` envelope). Do
-**not** reintroduce a single large centralized schema bucket; a feature-owned schema
-belongs in its feature folder, even when another feature imports it (e.g.
-`ForwardRuleDto` is forwards-owned and imported by config-export). The `*.schema.ts`
-files are metadata-only (never instantiated) and are coverage-excluded by the
-`sources/nest/**/*.schema.ts` glob; their generated schemas are asserted through the
+Each feature owns its OpenAPI schema classes. Metadata-only decorated `@ApiProperty`
+classes live in feature-local `*.schema.ts` files (e.g.
+`api/forwards/forward-rule.schema.ts`, `api/config/config-plan.schema.ts`,
+`api/ports/port-advisory.schema.ts`); the response **mappers** (`to*ResponseDto`)
+stay in the sibling `*.response.dto.ts` (which re-exports the schema class), and
+validated request bodies (class-validator, instantiated by the pipe) stay in
+`*.body.dto.ts`. `common/` holds **only genuinely cross-feature** schemas — currently
+just `api-error.schema.ts` (`ApiErrorResponseDto`, the shared `{ errors }` envelope).
+Do **not** reintroduce a centralized schema bucket; a feature-owned schema belongs in
+its feature folder even when another feature imports it (e.g. `ForwardRuleDto` is
+forwards-owned and imported by config-export). The `*.schema.ts` files are
+metadata-only (never instantiated) and coverage-excluded by the
+`sources/**/*.schema.ts` glob; their generated schemas are asserted through the
 OpenAPI generator tests, and the mappers they pair with are 100% covered.
 
 ## OpenAPI artifact placement
@@ -341,218 +159,129 @@ OpenAPI generator tests, and the mappers they pair with are 100% covered.
 controller/DTO metadata (offline — no listener) and writes two artifacts:
 
 - **Primary (server-owned, generated):** `server/build/api/openapi.json` — under the
-  gitignored `build/` output; this is the generator's primary target.
+  gitignored `build/` output; the generator's primary target.
 - **Docs copy (tracked, reviewed):** `docs/api/openapi.json` — synced byte-for-byte
-  from the primary artifact. A generator test (`openapi.test.ts`) is the drift guard:
-  it fails if the tracked copy is stale (run `npm run generate:apidoc` and commit).
+  from the primary artifact. A generator test (`openapi.test.ts`) is the drift guard
+  (it fails if the tracked copy is stale — run `generate:apidoc` and commit). The
+  same test asserts the documented route inventory (`EXPECTED_ROUTES`); a
+  new/removed/re-pathed endpoint must update it.
 
 The serialized document is deterministic — `components.schemas` is sorted by name in
-`serializeOpenApiDocument` so output is stable regardless of module-evaluation order
-(the schema map order is cosmetic; `$ref`s resolve by name).
+`serializeOpenApiDocument` so output is stable regardless of module-evaluation order.
 
-For packaging, `copyOpenApiToRelease(releaseDir, sourcePath)`
-(`sources/nest/openapi/openapi.ts`) copies the already-generated primary artifact to
-`<releaseDir>/api/openapi.json` without regenerating. A packaging step should call it
-with `resolveOpenApiPaths().primary` as the source after generation has run; the
-OpenAPI generator never depends on a release directory existing.
+**Release output:** packaging calls `copyOpenApiToRelease(releaseDir, sourcePath)`
+(`openapi/openapi.ts`) to copy the already-generated primary artifact to
+`<releaseDir>/api/openapi.json` **without regenerating**. The platform build scripts
+(`scripts/{windows,macos,linux}/build-runtime.*`) run `generate:apidoc` and then
+`copy:apidoc:release -w server -- <packageDir>`, so the packaged runtime
+(`build/portier/`, the platform dirs, and release archives) includes
+`api/openapi.json`. The generator never depends on a release directory existing.
 
-## Legacy Express server
+## Packaged Node fallback
 
-The original Express implementation is **retained under `sources/legacy/`**
-(`legacy/api.ts` = `createApp`, `legacy/index.ts` = the Express entry) — **not
-deleted** — so the runtime switch keeps a clear rollback path, and it remains the
-byte-for-byte parity baseline for the `*.integration.test.ts` suites. The reusable
-**domain modules stay shared** (outside `legacy/`): `forward-manager.ts`,
-`config-store.ts`, `config-plan.ts`, `connections-snapshot.ts`, `runtime-info.ts`,
-`config-export.ts`, `diagnose.ts`, the activity store, etc. — both runtimes use them.
+The packaged single-file Node fallback `server.js` is an esbuild `--bundle --minify
+--format=cjs` of `sources/index.ts` (the NestJS entry). NestJS lazily `require()`s a
+few optional transports it never uses for a plain HTTP app, so the build scripts mark
+them external (`@nestjs/microservices`, `@nestjs/websockets/socket-module`,
+`@nestjs/microservices/microservices-module`, `class-transformer/storage`). Because
+the bundle is CommonJS and the repo root is `"type": "module"`, the build scripts also
+write a `{ "type": "commonjs" }` `package.json` into the package dir so Node loads
+`server.js` as CommonJS. The Go service remains the **preferred** packaged runtime
+(the runtime smoke test exercises Go); `server.js` is the Node fallback and boots the
+same NestJS app.
 
-**Rollback:** start the legacy Express server instead of the default — root
-`npm run start:server:legacy` (compiled) or `npm run start:legacy -w server`
-(`node build/legacy/index.js`); dev: `npm run dev:legacy -w server`. No
-data/contract migration is involved, so rollback is a one-line entry-point change.
-The packaged single-file Node fallback (`server.js`) currently bundles the legacy
-Express entry (`sources/legacy/index.ts`) — the Go service is the preferred packaged
-runtime; bundling the NestJS default into the single-file `server.js` (NestJS needs
-its optional transports marked external for esbuild) is a documented follow-up.
-
-**Accepted behavior boundaries** (documented, not regressions): the non-API 404
-*body shape* differs when static is disabled (Express default HTML vs NestJS default
-JSON — not contract-relevant, no SPA index served either way); an unexpected
-manager/persist error maps to a generic `500 { errors: ["Internal server error."] }`
-rather than echoing the Express message (intentional non-leak); response header
-parity (etag/cache-control/content-type) is out of scope (parity asserts status+body,
-matching the legacy Express tests).
-
-Layout:
+## Layout
 
 ```text
 sources/
-  index.ts                      # DEFAULT entry — boots the NestJS server with live deps (excluded from coverage; it starts a listener)
-  legacy/                       # retained Express server (rollback/reference + parity baseline)
-    index.ts                    # Express entry (start:legacy; bundled into the packaged server.js) — coverage-excluded
-    api.ts                      # createApp (Express app factory) — covered by legacy/api.test.ts
-  nest/
+  index.ts                      # server entry — boots NestJS with live deps (coverage-excluded; it starts a listener)
+  app/
     app.factory.ts              # createNestApp(runtime?) — live root with runtime, else static AppModule; configures static assets
-    app.module.ts               # static AppModule (shadow, APP_RUNTIME=null) + createLiveAppModule(runtime); global error filter
-    live-runtime.integration.test.ts  # proves the default runtime uses the live manager/activity/static (not shadow defaults)
-    health/                     # GET /health (controller → service → module)
-    api/                        # each feature: controller → service → reader/writer; *.schema.ts (OpenAPI classes, coverage-excluded);
+    app.module.ts               # static AppModule (APP_RUNTIME=null) + createLiveAppModule(runtime); global error filter
+    app.integration.test.ts     # boots AppModule (null runtime) — health, /api/* envelope
+    live-runtime.integration.test.ts  # boots the live app — proves every feature reflects the live manager/activity/static + mutation
+  health/                       # GET /health (controller → service → module)
+  api/<feature>/                # controller → service → reader/writer; *.schema.ts (OpenAPI classes, coverage-excluded);
                                 #   *.response.dto.ts (mappers, covered); *.body.dto.ts (validated request DTOs)
-      ports/                    # GET /api/ports/advisory — request: *.query.dto + pipe; port-advisory.schema.ts
-      activity/                 # GET + DELETE /api/activity (ACTIVITY_STORE; activity.schema.ts)
-      status/                   # GET /api/status (STATUS_READER; uses forwards/forward-status.schema.ts)
-      forwards/                 # forwards CRUD/lifecycle/group/diagnose; forward-rule(.body).schema.ts, forward-status/group-action/rule-diagnostics.schema.ts
-      runtime/                  # GET /api/runtime (CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; runtime.schema.ts)
-      config/                   # GET /api/config/export, POST /api/config/{plan,import,apply} (CONFIG_* tokens + shared CLOCK_READER; config-*.schema.ts)
-      connections/              # GET /api/connections (CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; connections.schema.ts)
-    static/
-      static-serving.ts         # resolveStaticOptions/hasStaticClient/configureStaticAssets (useStaticAssets) + StaticFallback/STATIC_FALLBACK
-    common/
-      runtime-context.ts        # AppRuntime + APP_RUNTIME + @Global() RuntimeContextModule.forRoot(runtime|null) — feature providers source live deps from it
-      clock.reader.ts           # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider
-      api-error-envelope.ts     # pure toApiError(exception) + isApiPath — the /api error mapping
-      api-error-envelope.filter.ts  # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK) else NestJS default
-      api-errors.ts             # ApiBadRequestException(string[]) — controllers raise this, not a literal
-      api-validation.pipe.ts    # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
-      api-error.schema.ts       # ApiErrorResponseDto — the ONLY common (cross-feature) OpenAPI schema; metadata-only, coverage-excluded
-    openapi/
-      openapi.ts                # generate/serialize(sorted schemas)/resolveOpenApiPaths/writeOpenApiArtifacts/copyOpenApiToRelease — fully covered
-      generate.ts               # logic-free `npm run generate:apidoc` entry — coverage-excluded
-    testing/
-      api-parity.ts             # NestJS↔Express parity harness (boot, fetch, deterministic compare)
+    ports/ activity/ status/ forwards/ runtime/ config/ connections/
+  common/
+    runtime-context.ts          # AppRuntime + APP_RUNTIME + @Global() RuntimeContextModule.forRoot(runtime|null)
+    clock.reader.ts             # ClockReader/CLOCK_READER — shared live-clock provider
+    api-error-envelope.ts       # pure toApiError(exception) + isApiPath — the /api error mapping
+    api-error-envelope.filter.ts  # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK)
+    api-errors.ts               # ApiBadRequestException(string[]) etc. — raised by controllers, not literals
+    api-validation.pipe.ts      # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
+    manager-error.ts            # mapManagerError — domain errors → API exceptions
+    api-error.schema.ts         # ApiErrorResponseDto — the ONLY common (cross-feature) OpenAPI schema (coverage-excluded)
+  static/
+    static-serving.ts           # resolveStaticOptions/hasStaticClient/configureStaticAssets + StaticFallback/STATIC_FALLBACK
+  openapi/
+    openapi.ts                  # generate/serialize(sorted)/resolveOpenApiPaths/writeOpenApiArtifacts/copyOpenApiToRelease — fully covered
+    generate.ts                 # logic-free `npm run generate:apidoc` entry — coverage-excluded
+    copy-release.ts             # logic-free `npm run copy:apidoc:release` entry — coverage-excluded
+  # domain modules (shared by the server, framework-free):
+  forward-manager.ts  config-store.ts  config-plan.ts  config-export.ts
+  connections-snapshot.ts  runtime-info.ts  diagnose.ts  logger.ts  server-options.ts
+  activity/  forwarders/  connections/
 ```
-
-### API documentation (generated OpenAPI)
-
-The API documentation is **generated from the NestJS controller/DTO metadata**
-(`@ApiTags`/`@ApiOperation`/`@Api*Response`/`@ApiProperty`) — it is not
-hand-written. Generate it with:
-
-```bash
-npm run generate:apidoc          # from the repo root (delegates to -w server)
-npm run generate:apidoc -w server
-```
-
-- **Output** — see *OpenAPI artifact placement* above: the primary artifact is the
-  server-owned `server/build/api/openapi.json`, synced byte-for-byte to the tracked,
-  reviewable `docs/api/openapi.json`. Regenerate whenever a migrated endpoint or its
-  DTOs change; an `openapi.test.ts` drift guard fails CI if the tracked copy is stale
-  (the message tells you to run `generate:apidoc`).
-- Generation is **offline** — it inspects the Nest app's metadata via
-  `SwaggerModule.createDocument` without listening on a socket, **always closes
-  the app cleanly** afterwards (no leaked listener — covered by a test), and
-  **does not change Express** (the default runtime) or switch the active runtime.
-  No Swagger UI / `/docs` route is exposed.
-- The document is **deterministic** (schemas sorted by name, stable JSON + trailing
-  newline), so regeneration is idempotent regardless of module-evaluation order.
-- **DTOs are the OpenAPI schema source.** The decorated schema classes live in
-  feature-local `*.schema.ts` files (see *DTO / OpenAPI schema ownership* above),
-  each `implements` its `@portier/shared` type so a contract drift is a compile
-  error; the response **mappers** stay in each feature's `*.response.dto.ts` (the
-  covered logic). The only common schema is `ApiErrorResponseDto` (`{ errors: string[] }`).
-
-Every `sources/nest/` file with executable logic is covered at **100%**
-(statements/branches/functions). The only coverage-excluded nest files are the
-two logic-free process entries (`main.ts`, `openapi/generate.ts` — their helpers
-are fully covered) and the metadata-only `common/api-schemas.ts` (decorated
-`@ApiProperty` schema classes that are never instantiated — no executable logic).
-This mirrors how `sources/index.ts` is excluded.
 
 ## Scripts
 
 ```bash
-# Default runtime — NestJS
-npm run dev        -w server   # default NestJS server (watch, sources/index.ts)
-npm run start      -w server   # compiled default NestJS server (node build/index.js)
-npm run start:nest -w server   # alias of the default NestJS dev start (tsx sources/index.ts)
-npm run build      -w server   # tsc → build/ (NestJS + legacy + shared)
+npm run dev        -w server   # NestJS server (watch, sources/index.ts)
+npm run start      -w server   # compiled server (node build/index.js)
+npm run build      -w server   # tsc → build/
 npm run typecheck  -w server
-npm run test       -w server   # all server tests (NestJS + legacy parity + shared)
-npm run test:nest  -w server   # only the nest/ tests
-npm run generate:apidoc -w server  # regenerate docs/api/openapi.json from NestJS metadata
-
-# Legacy Express (rollback/reference)
-npm run dev:legacy   -w server # legacy Express server (watch, sources/legacy/index.ts)
-npm run start:legacy -w server # compiled legacy Express server (node build/legacy/index.js)
+npm run test       -w server   # all server tests
+npm run generate:apidoc      -w server  # regenerate openapi.json from NestJS metadata
+npm run copy:apidoc:release  -w server -- <dir>  # copy the primary OpenAPI artifact into a package dir
 ```
 
-From the repo root: `npm run start:server` (default NestJS) and
-`npm run start:server:legacy` (legacy Express) both pass `--service --static-dir
-client/build`.
+From the repo root, `npm run start:server` boots the compiled server with
+`--service --static-dir client/build`.
 
-## Migration rules
+## Coverage
 
-- Controllers are **transport adapters only**; behaviour lives in services;
-  features compose as modules. Controllers must **not hand-roll the `{ errors }`
-  envelope** — raise `ApiBadRequestException(string[])` (or another API exception)
-  and let the shared `ApiErrorEnvelopeFilter` produce the contract shape.
-- **Every migrated endpoint has explicit DTOs:** a **request DTO** for any
-  query/route/body input (validated via `ApiValidationPipe(Dto)`, `class-validator`
-  /`class-transformer`, matching Express coercion exactly), and an **explicit
-  response DTO** always — the boundary between domain/runtime data and HTTP JSON.
-  Controllers map the service result through a small pure `to*ResponseDto` mapper
-  (a fresh copy that preserves the Express JSON shape byte-for-byte) rather than
-  returning raw domain objects. The `@portier/shared` types are the REST contract
-  shape, so the mapper is a structural copy (it would become an explicit field
-  pick only to hide a future internal field).
-- Documented exceptions: an endpoint with **no input** needs no request DTO; a
-  `204`-empty response (`DELETE /api/activity`) has **no body → no response DTO**;
-  and a query that is pure silent coercion-with-fallback (always `200`, e.g.
-  `GET /api/activity`) keeps its coercion endpoint-local in the service rather
-  than adding a transform-only DTO. The request validation pipe takes the DTO
-  class **explicitly** (esbuild doesn't emit `design:paramtypes`) and throws
-  `ApiBadRequestException` → `400 { errors }`. Mappers/DTOs are 100% covered.
-- **DTOs are also the API-doc source.** Each migrated endpoint must carry enough
-  Swagger metadata to generate good OpenAPI docs in the **same slice** (no
-  "document it later"): `@ApiTags`/`@ApiOperation` on the controller, an
-  `@Api*Response` for each status (`@ApiOkResponse({ type, isArray })`,
-  `@ApiNoContentResponse` for `204`, `@ApiBadRequestResponse({ type: ApiErrorResponseDto })`
-  for validation errors), `@ApiQuery` for query params (the esbuild/tsx transform
-  does not emit the `@Query` DTO's reflected type, so query params are documented
-  explicitly), and a decorated schema class (in `common/api-schemas.ts`,
-  `@ApiProperty` with **explicit** types, `implements` the shared type) for every
-  response/body shape. After changing an endpoint or its DTOs, run
-  `npm run generate:apidoc` and commit the updated `docs/api/openapi.json` (the
-  drift test enforces this).
-- **API contract parity is mandatory** — every migration step keeps
-  `npm run validate:contract` green (TS↔Go), and no public API path/DTO is
-  renamed for cosmetic reasons. Each migrated endpoint is also checked
-  **byte-for-byte against the existing Express route** with the parity harness
-  (`sources/nest/testing/api-parity.ts`).
-- The existing Express server **remains the active runtime** until a NestJS
-  replacement is explicitly validated (contract + runtime smoke + E2E).
-- No endpoint is migrated without tests and contract validation.
-- A **write/mutation** endpoint adds a narrow write interface (e.g.
-  `ActivityClearer { clear(): void }`) alongside the read one; mutation parity is
-  proven against the **same seeded store instance** shared with Express, and a
-  subsequent read confirms the mutation. Match the Express HTTP status with
-  `@HttpCode(...)` (Nest defaults `DELETE` to `200`; a `204`-empty Express route
-  needs `@HttpCode(204)` + a `void` return). No DTO when the endpoint has no
-  query/body input.
-- An endpoint with **volatile fields** (timestamps, uptime, pid) gets its volatile
-  values from **narrow injected readers** (`ClockReader`/`CLOCK_READER`,
-  `ProcessReader`/`PROCESS_READER`, `RuntimeInfoReader`/`RUNTIME_INFO_READER`),
-  never read inline, so the service stays pure. Parity is **byte-for-byte with no
-  field stripping/normalization**: extract a **shared pure builder** that both the
-  Express route and the Nest service call (e.g. `buildRuntimeInfo` in
-  `sources/runtime-info.ts`) so they cannot drift, and boot **both** apps with the
-  **same fixed volatile inputs** (a minimal optional, production-invisible clock
-  seam on Express `AppOptions` — like the existing `runtimeInfo.startedAt`) so the
-  otherwise-volatile field is deterministic. Never strip a field before comparing,
-  and never use fake timers / mutate global process state. `ClockReader` is generic
-  (reused by `/api/connections` `generatedAt`, `/api/config/export` `exportedAt`,
-  `/api/config/plan` `generatedAt`, `/api/forwards/:id/diagnose` `diagnosedAt`, and
-  `/api/config/apply`'s `appliedAt` + embedded `plan.generatedAt` — one instant pins both).
-- An endpoint that needs runtime/domain state is wired through a **narrow
-  injection token + interface** (e.g. `ACTIVITY_STORE`/`ActivityReader`,
-  `STATUS_READER`/`StatusReader`), with a fake/seeded instance in tests —
-  **never** a real forwarding/socket runtime in endpoint tests (seed only
-  **stopped** rules, no listeners). Production defaults to a trivial empty
-  reader; tests bind the real domain object (`ActivityStore`, `ForwardManager`)
-  to the token — seed a mutable default via `app.get(TOKEN)`, or use
-  `@nestjs/testing` `overrideProvider` when the dependency can't be seeded
-  post-construction (e.g. a store-backed `ForwardManager`).
-- **New migration code reaches 100% meaningful coverage** — keep startup glue in
-  covered helpers (not the process entry) and never broadly exclude new Nest code
-  or lower a coverage gate to pass.
-- Build output stays under `build/`, never `dist/`.
+Every server file with executable logic is covered at **100%** (statements / branches
+/ functions; gate `100/100/100` in `scripts/validate-coverage.js`). The only
+coverage-excluded files are the logic-free process entries (`sources/index.ts`,
+`openapi/generate.ts`, `openapi/copy-release.ts` — their helpers are fully covered)
+and the metadata-only `**/*.schema.ts` OpenAPI schema classes (never instantiated).
+Structurally-unreachable defensive branches (2 s socket-bind/connect timeouts,
+post-stop socket races, nullish-on-initialized-counter fallbacks) are narrowly
+annotated with `/* v8 ignore … -- reason */` rather than broadly excluded.
+
+## Server conventions
+
+- Controllers are **transport adapters only**; behaviour lives in services; features
+  compose as modules. Controllers must **not hand-roll the `{ errors }` envelope** —
+  raise `ApiBadRequestException(string[])` (or another API exception) and let the
+  shared `ApiErrorEnvelopeFilter` produce the contract shape; translate domain errors
+  with `mapManagerError`.
+- **Explicit DTOs:** a request DTO for any query/route/body input (validated via
+  `ApiValidationPipe(Dto)` when the check is simple enough to re-express exactly;
+  delegated to the shared/domain validator otherwise, with a documentation-only DTO),
+  and an explicit response DTO always — the boundary between domain data and HTTP
+  JSON, mapped through a small pure `to*ResponseDto`. Documented exceptions: no input
+  → no request DTO; `204`-empty → no response DTO; pure silent coercion-with-fallback
+  (`GET /api/activity`) keeps coercion endpoint-local. The pipe takes the DTO class
+  **explicitly** (esbuild doesn't emit `design:paramtypes`).
+- **Volatile fields** come from narrow injected readers (`CLOCK_READER` /
+  `PROCESS_READER` / `RUNTIME_INFO_READER`), never inline; a shared pure builder
+  (`buildRuntimeInfo`, `buildExportedConfig`, `buildConfigPlan`, `buildLiveConnections`)
+  produces the response so the timestamp is deterministically testable.
+- **Runtime/domain state** is wired through a narrow injection token + interface
+  (`ACTIVITY_STORE`/`ActivityReader`, `STATUS_READER`, `FORWARD_RULE_*`, `CONFIG_*`,
+  `CONNECTIONS_READER`, `DIAGNOSTIC_READER`, …); the live server binds the real
+  `ForwardManager`/`ActivityStore` via `APP_RUNTIME`, the static `AppModule` falls
+  back to empty defaults, and tests seed via `overrideProvider`. Endpoint tests seed
+  only **stopped** rules (no listeners) unless deliberately exercising sockets (free
+  ports + `stopAll()` cleanup).
+- **API contract parity is mandatory** — `npm run validate:contract` (TS↔Go) stays
+  green and no public API path/DTO is renamed for cosmetic reasons.
+- **OpenAPI docs are generated, not hand-written** — each endpoint carries its
+  `@ApiTags`/`@ApiOperation`/`@Api*Response`/`@ApiQuery` + a decorated `*.schema.ts`
+  class in the same change; run `generate:apidoc` and commit `docs/api/openapi.json`.
+- New code reaches **100% meaningful coverage**; build output stays under `build/`,
+  never `dist/`.
+```

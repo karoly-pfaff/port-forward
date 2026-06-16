@@ -703,3 +703,15 @@ describe("buildConfigPlan — group metadata drift", () => {
     expect(rules[0].id).not.toBe(rules[1].id);
   });
 });
+
+describe("buildConfigPlan clock default (Slice 30)", () => {
+  it("uses the current time when no clock is provided", () => {
+    const before = Date.now();
+    const plan = buildConfigPlan({ currentRules: [], desiredRaw: [] });
+    const after = Date.now();
+    const generated = Date.parse(plan.generatedAt);
+    expect(Number.isNaN(generated)).toBe(false);
+    expect(generated).toBeGreaterThanOrEqual(before);
+    expect(generated).toBeLessThanOrEqual(after);
+  });
+});

@@ -19,12 +19,17 @@ $cliExePath = Join-Path $outputPath "portier.exe"
 $webOutputPath = Join-Path $outputPath "web"
 $bundleWorkPath = Join-Path $outputPath "_bundle"
 $bundleCjsPath = Join-Path $bundleWorkPath "server.cjs"
-# The packaged single-file Node fallback (server.js) bundles the legacy Express
-# server (sources/legacy/index.ts). The Go service is the preferred packaged
-# runtime; bundling the NestJS default (sources/index.ts) into the single-file
-# fallback is a documented follow-up (NestJS needs optional transports marked
-# external for esbuild). See server/readme.md.
-$bundleEntryPath = Join-Path $repoRoot "server\sources\legacy\index.ts"
+# The packaged single-file Node fallback (server.js) bundles the NestJS server
+# (sources/index.ts). NestJS lazily requires optional transports it never uses for
+# a plain HTTP app, so those are marked external for esbuild ($bundleExternals
+# below). The Go service remains the preferred packaged runtime. See server/readme.md.
+$bundleEntryPath = Join-Path $repoRoot "server\sources\index.ts"
+$bundleExternals = @(
+  "--external:@nestjs/microservices",
+  "--external:@nestjs/websockets/socket-module",
+  "--external:@nestjs/microservices/microservices-module",
+  "--external:class-transformer/storage"
+)
 
 function Get-LocalToolPath {
   param([string]$Name)
@@ -70,7 +75,7 @@ Invoke-CommandInRepo "npm.cmd" @("run", "build:client")
 $esbuild = Get-LocalToolPath "esbuild"
 
 Write-Host "Bundling server as server.js..."
-Invoke-CommandInRepo $esbuild @(
+Invoke-CommandInRepo $esbuild (@(
   $bundleEntryPath,
   "--bundle",
   "--minify",
@@ -78,8 +83,19 @@ Invoke-CommandInRepo $esbuild @(
   "--format=cjs",
   "--target=node22",
   "--outfile=$bundleCjsPath"
-)
+) + $bundleExternals)
 Copy-Item -LiteralPath $bundleCjsPath -Destination $serverJsPath -Force
+
+# The bundle is CommonJS, but the package dir has no package.json and the repo root
+# is "type": "module" — without a marker Node would load server.js as ESM and fail on
+# its require() calls. Mark the package dir as CommonJS so the Node fallback runs.
+Set-Content -LiteralPath (Join-Path $outputPath "package.json") -Value '{ "type": "commonjs" }' -Encoding ascii
+
+Write-Host "Generating OpenAPI document..."
+Invoke-CommandInRepo "npm.cmd" @("run", "generate:apidoc")
+
+Write-Host "Copying OpenAPI document into package..."
+Invoke-CommandInRepo "npm.cmd" @("run", "copy:apidoc:release", "-w", "server", "--", $outputPath)
 
 Write-Host "Building Go service for Windows..."
 Push-Location (Join-Path $repoRoot "service")
@@ -134,6 +150,7 @@ Files in this package:
   service.exe   Native Go runtime (preferred; start as Windows Service)
   server.js     Node.js fallback runtime (requires Node.js)
   web\          Built React management UI
+  api\openapi.json  OpenAPI 3 description of the /api surface
   readme.txt    This file
 
 CLI usage (requires a running Portier service):
@@ -183,4 +200,5 @@ Write-Host "Windows package created at $outputPath"
 Write-Host "  CLI        : $cliExePath"
 Write-Host "  Go service : $serviceExePath"
 Write-Host "  Node server: $serverJsPath"
+Write-Host "  OpenAPI    : $(Join-Path $outputPath 'api\openapi.json')"
 Write-Host "  Web UI     : $webOutputPath"
