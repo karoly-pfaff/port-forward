@@ -106,11 +106,6 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.Method == http.MethodGet && r.URL.Path == "/api/ports/advisory" {
-		servePortAdvisory(w, r)
-		return
-	}
-
 	if r.Method == http.MethodGet && r.URL.Path == "/api/connections" {
 		h.serveConnections(w)
 		return
@@ -478,30 +473,6 @@ func rulesToResponses(rules []domain.ForwardRule) []domain.ForwardRuleResponse {
 		responses = append(responses, toRuleResponse(rule))
 	}
 	return responses
-}
-
-func servePortAdvisory(w http.ResponseWriter, r *http.Request) {
-	port, err := strconv.Atoi(r.URL.Query().Get("port"))
-	if err != nil || port < 1 || port > 65535 {
-		writeJSON(w, http.StatusBadRequest, map[string][]string{
-			"errors": {"port must be an integer from 1 to 65535."},
-		})
-		return
-	}
-
-	purpose := r.URL.Query().Get("purpose")
-	if purpose != advisory.PurposeManagement && purpose != advisory.PurposeForward {
-		writeJSON(w, http.StatusBadRequest, map[string][]string{
-			"errors": {"purpose must be management or forward."},
-		})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, advisory.GetPortAdvisories(advisory.Input{
-		Port:       port,
-		ListenHost: r.URL.Query().Get("listenHost"),
-		Purpose:    purpose,
-	}))
 }
 
 func (h *Handler) serveConnections(w http.ResponseWriter) {

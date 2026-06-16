@@ -6,6 +6,16 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.15 Go Service Modular Router (in progress)
 
+### Changed — Slice 5: migrate `GET /api/ports/advisory` into a feature route module
+
+The first non-health/runtime feature route extraction: moved the lowest-risk read-only handler out of the monolithic ordered `serveAPI` dispatch into a feature route module. **Behavior-preserving** — no API/route/error/contract/packaging/runtime change; `validate:contract` stays **234/234** and `validate:openapi:go` stays green.
+
+- New `service/sources/api/ports_routes.go` — `portsRoutes()` registrar + `handlePortAdvisory` (a method on `*Handler`, mirroring `handleHealth`/`handleRuntime`), moved **verbatim** from `api.go`'s `servePortAdvisory`: same `r.URL.Query()` parsing, the same validation (`port` integer 1–65535 → 400 `"port must be an integer from 1 to 65535."`; `purpose` must be `management`/`forward` → 400 `"purpose must be management or forward."`; optional `listenHost`), the same `200 advisory.GetPortAdvisories(...)` success body, and the same `writeJSON` content-type. Read-only, stateless (no manager/persistence/socket dependency).
+- Registered in the modular route table (`routes.go` `modularRoutes()` now appends `h.portsRoutes()`), so `GET /api/ports/advisory` is matched by `dispatchModular` (exact method + exact path) **before** the legacy ordered dispatch; the old `serveAPI` if-chain branch was removed. A wrong method still falls through to the generic `/api` 404 envelope (never 405); exact-vs-prefix precedence for other routes is unchanged.
+- No other feature handler migrated (forwards/lifecycle/group/diagnose/config/activity/connections/static stay on the legacy dispatch). `api.go` keeps its `strconv`/`advisory` imports (still used by `listActivity`/`toRuleResponse`). No new package cycle.
+
+OpenAPI inventory: `GET /api/ports/advisory` stays canonical-covered with statuses `[200,400]` — no inventory change needed; `validate:openapi:go` green. Tests: updated `routes_test.go` (modular table now includes `/api/ports/advisory`; `dispatchModular` claims the exact GET and falls through on wrong method); the existing `TestPortAdvisoryEndpoint`/`TestPortAdvisoryInvalidPort`/`TestPortAdvisoryInvalidPurpose` (full-handler httptest) pass unchanged through the migrated route, and the Slice 1 router dispatch contract test stays green. Validation: `go build`/`go vet` clean; full Go service suite green; `npm run generate:apidoc` → `validate:openapi:go` green; `validate:contract` **234/234**; `validate:runtime:smoke` **24/24**; lint/typecheck clean. **Replay validation skipped** (no replay/`@portier/shared` files touched). Next: Slice 6 — migrate the activity route module (`GET`/`DELETE /api/activity`).
+
 ### Added — Slice 4: Go API inventory validation against the canonical OpenAPI artifact
 
 A standalone, read-only drift gate that compares the Go service's declared HTTP API surface against the **canonical** server-generated OpenAPI artifact at `server/build/api/openapi.json`. This does **not** introduce a second API source of truth — the NestJS/server OpenAPI build artifact stays canonical; the Go gate only reads it and verifies the preferred packaged Go runtime still exposes the documented surface. **No API behavior/contract/packaging/runtime change**; `validate:contract` stays **234/234**.

@@ -101,10 +101,11 @@ dispatcher is being reorganized into focused, `net/http`-compatible per-feature
 route modules (`sources/api/<feature>_routes.go`) behind the `app.App` dependency
 struct, preserving the REST contract, error envelopes, static serving, and
 startup/shutdown semantics exactly (standard `net/http`, no router library).
-**Migrated so far:** `GET /api/health` (`health_routes.go`) and `GET /api/runtime`
-(`runtime_routes.go`); the shared response/request/error plumbing has been
-extracted into `respond.go`. Everything else still flows through the ordered
-`serveAPI` dispatch and will migrate feature-by-feature behind `validate:contract`.
+**Migrated so far:** `GET /api/health` (`health_routes.go`), `GET /api/runtime`
+(`runtime_routes.go`), and `GET /api/ports/advisory` (`ports_routes.go`); the
+shared response/request/error plumbing has been extracted into `respond.go`.
+Everything else still flows through the ordered `serveAPI` dispatch and will
+migrate feature-by-feature behind `validate:contract` + `validate:openapi:go`.
 See `audits/v1.15-go-router-audit-1.md` for the endpoint inventory, target layout,
 route-registration pattern, and slice plan, and `docs/roadmap.md` (v1.15) for the
 goals/non-goals.

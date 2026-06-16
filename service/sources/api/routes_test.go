@@ -17,8 +17,9 @@ func TestModularRoutesRegistered(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
 	want := map[string]string{
-		"/api/health":  http.MethodGet,
-		"/api/runtime": http.MethodGet,
+		"/api/health":         http.MethodGet,
+		"/api/runtime":        http.MethodGet,
+		"/api/ports/advisory": http.MethodGet,
 	}
 	got := map[string]string{}
 	for _, route := range h.routes {
@@ -46,10 +47,12 @@ func TestDispatchModular(t *testing.T) {
 	}{
 		{"health matched", http.MethodGet, "/api/health", true},
 		{"runtime matched", http.MethodGet, "/api/runtime", true},
+		{"ports advisory matched", http.MethodGet, "/api/ports/advisory", true},
 		// Wrong method must NOT be handled here — it falls through to the legacy
 		// dispatch and its generic 404 envelope (404-not-405).
 		{"health wrong method falls through", http.MethodPost, "/api/health", false},
 		{"runtime wrong method falls through", http.MethodDelete, "/api/runtime", false},
+		{"ports advisory wrong method falls through", http.MethodPost, "/api/ports/advisory", false},
 		// A non-migrated path is never claimed by the modular table.
 		{"status not migrated", http.MethodGet, "/api/status", false},
 		{"forwards not migrated", http.MethodGet, "/api/forwards", false},
