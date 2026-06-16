@@ -4,9 +4,9 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — v1.14 — TypeScript Server Migration to NestJS (in progress)
+## [1.14.0] — 2026-06-16 — TypeScript Server Migration to NestJS
 
-v1.14 is an **architecture-migration release, not a feature release**: it moves the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. The Go service remains the preferred runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (still **234/234**). The migration is incremental and reversible — the existing Express server stays the active runtime until a NestJS replacement is explicitly validated.
+v1.14 is an **architecture-migration release, not a feature release**: it moved the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. **NestJS is now the single TypeScript server runtime** (the Express implementation was removed); the Go service remains the preferred packaged runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (**234/234**). The packaged Node fallback (`server.js`) bundles NestJS and boots; the server source tree is homed by concern (root `sources/` = `index.ts`; API + `api/common/` under `api/`); runtime logging uses the NestJS `Logger`; and the server coverage gate is **100/100/100**.
 
 ### Audited — Slice 32: final v1.14 release audit & readiness review — **READY WITH NOTES**
 
