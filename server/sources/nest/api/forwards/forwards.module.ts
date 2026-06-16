@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { CLOCK_READER, defaultClockReader } from "../../common/clock.reader.js";
+import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";
@@ -39,12 +40,11 @@ import {
  * `POST /api/forwards/:id/stop`, `POST /api/forwards/reorder` (reorder, write),
  * `POST /api/forwards/:id/diagnose` (diagnose, read-only), and
  * and the group-action pair `POST /api/forwards/groups/:group/stop` and
- * `POST /api/forwards/groups/:group/start` (write). The `FORWARDS_READER`
- * token defaults to an empty reader and the write/lifecycle tokens plus the
- * `DIAGNOSTIC_READER`/`FORWARD_GROUP_STOPPER`/`FORWARD_GROUP_STARTER` to fresh isolated in-memory managers
- * (no live runtime is wired); when the NestJS server becomes the
- * active runtime they are bound to the shared `ForwardManager`, and tests override
- * them with a seeded manager. The diagnose service also injects the shared
+ * `POST /api/forwards/groups/:group/start` (write). The live `ForwardManager`
+ * satisfies every reader/writer/diagnostic/group interface, so each token resolves
+ * to it when a runtime is wired (the active NestJS runtime); otherwise each falls
+ * back to an empty reader / fresh isolated in-memory manager, and tests override the
+ * tokens with a seeded manager. The diagnose service also injects the shared
  * `CLOCK_READER` (registered here) so its volatile `diagnosedAt` can be pinned in
  * parity tests.
  */
@@ -61,16 +61,16 @@ import {
     DiagnoseForwardRuleService,
     StopForwardGroupService,
     StartForwardGroupService,
-    { provide: FORWARDS_READER, useValue: emptyForwardsReader },
-    { provide: FORWARD_RULE_CREATOR, useFactory: createDefaultForwardRuleCreator },
-    { provide: FORWARD_RULE_UPDATER, useFactory: createDefaultForwardRuleUpdater },
-    { provide: FORWARD_RULE_DELETER, useFactory: createDefaultForwardRuleDeleter },
-    { provide: FORWARD_RULE_STARTER, useFactory: createDefaultForwardRuleStarter },
-    { provide: FORWARD_RULE_STOPPER, useFactory: createDefaultForwardRuleStopper },
-    { provide: FORWARD_RULES_REORDERER, useFactory: createDefaultForwardRulesReorderer },
-    { provide: DIAGNOSTIC_READER, useFactory: createDefaultDiagnosticReader },
-    { provide: FORWARD_GROUP_STOPPER, useFactory: createDefaultForwardGroupStopper },
-    { provide: FORWARD_GROUP_STARTER, useFactory: createDefaultForwardGroupStarter },
+    { provide: FORWARDS_READER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? emptyForwardsReader, inject: [APP_RUNTIME] },
+    { provide: FORWARD_RULE_CREATOR, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardRuleCreator(), inject: [APP_RUNTIME] },
+    { provide: FORWARD_RULE_UPDATER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardRuleUpdater(), inject: [APP_RUNTIME] },
+    { provide: FORWARD_RULE_DELETER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardRuleDeleter(), inject: [APP_RUNTIME] },
+    { provide: FORWARD_RULE_STARTER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardRuleStarter(), inject: [APP_RUNTIME] },
+    { provide: FORWARD_RULE_STOPPER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardRuleStopper(), inject: [APP_RUNTIME] },
+    { provide: FORWARD_RULES_REORDERER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardRulesReorderer(), inject: [APP_RUNTIME] },
+    { provide: DIAGNOSTIC_READER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultDiagnosticReader(), inject: [APP_RUNTIME] },
+    { provide: FORWARD_GROUP_STOPPER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardGroupStopper(), inject: [APP_RUNTIME] },
+    { provide: FORWARD_GROUP_STARTER, useFactory: (rt: AppRuntime | null) => rt?.manager ?? createDefaultForwardGroupStarter(), inject: [APP_RUNTIME] },
     { provide: CLOCK_READER, useValue: defaultClockReader },
   ],
 })

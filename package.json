@@ -23,6 +23,7 @@
     "build:replay": "go -C tools/replay build -o build/replay ./sources",
     "start:dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
     "start:server": "node server/build/index.js --service --static-dir client/build",
+    "start:server:legacy": "node server/build/legacy/index.js --service --static-dir client/build",
     "start:service": "go -C service run ./sources --static-dir ../client/build",
     "test": "npm run test:shared && npm run test:server && npm run test:client && npm run test:service",
     "test:shared": "npm test -w shared",

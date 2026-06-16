@@ -4,7 +4,7 @@ import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { getPortAdvisories, type ForwardRule, type ForwardRuleResponse, type ForwardStatus } from "@portier/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "../../../api.js";
+import { createApp } from "../../../legacy/api.js";
 import { ForwardManager, type RuleStore } from "../../../forward-manager.js";
 import { getFreeTcpPort, getFreeUdpPort, startRuleStable } from "../../../test-helpers.js";
 import { AppModule } from "../../app.module.js";

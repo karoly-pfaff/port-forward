@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch sources/index.ts",
+    "dev:legacy": "tsx watch sources/legacy/index.ts",
     "build": "tsc -p tsconfig.json",
-    "build:nest": "tsc -p tsconfig.json",
-    "start:nest": "tsx sources/nest/main.ts",
+    "start": "node build/index.js",
+    "start:nest": "tsx sources/index.ts",
+    "start:legacy": "node build/legacy/index.js",
     "generate:apidoc": "tsx sources/nest/openapi/generate.ts",
     "test": "vitest run sources",
     "test:nest": "vitest run sources/nest",

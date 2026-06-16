@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
 import { RuntimeController } from "./runtime.controller.js";
 import { RuntimeService } from "./runtime.service.js";
 import {
@@ -8,6 +9,7 @@ import {
   defaultProcessReader,
   PROCESS_READER,
   RUNTIME_INFO_READER,
+  type RuntimeInfoReader,
 } from "./runtime.reader.js";
 
 /**
@@ -24,7 +26,12 @@ import {
     RuntimeService,
     { provide: CLOCK_READER, useValue: defaultClockReader },
     { provide: PROCESS_READER, useValue: defaultProcessReader },
-    { provide: RUNTIME_INFO_READER, useFactory: createDefaultRuntimeInfoReader },
+    {
+      provide: RUNTIME_INFO_READER,
+      useFactory: (rt: AppRuntime | null): RuntimeInfoReader =>
+        rt?.runtimeInfoReader ?? createDefaultRuntimeInfoReader(),
+      inject: [APP_RUNTIME],
+    },
   ],
 })
 export class RuntimeModule {}

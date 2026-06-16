@@ -2305,19 +2305,17 @@ server/
 
 - **Slice 28 (done) — final NestJS migration audit & switch-readiness review:** **Result: PASS.** An audit/remediation slice (NOT a runtime switch). Confirmed: all 20 Express `/api/*` endpoints migrated + `/api` 404 envelope + static/SPA serving (`/health` outside the frozen contract); OpenAPI 18 paths match exactly (new inventory regression guard); byte-for-byte parity per endpoint (volatile pinned, free-port sockets + `stopAll()` cleanup, `/api/not-migrated` probe); request/response DTOs complete (documented exceptions: activity coercion, `204` no-body, `config-import` `@Res` `422 {errors,result}`); no ambiguous `unknown` Swagger metadata; feature-local schemas with only `ApiErrorResponseDto` common; no hand-rolled envelopes; narrow providers with no Nest-production import of Express `createApp`/Go/CLI/replay; static gating/fallback/envelope-precedence intact, no OpenAPI pollution; deterministic OpenAPI artifact workflow (primary `server/build/api/openapi.json` + tracked docs copy + release helper). Added a **switch-readiness checklist** to `server/readme.md` (wire real runtime tokens/static/config-export activity, scripts/packaging, smoke tests, rollback plan, `legacy/` Express preservation, accepted boundaries). `validate:contract` 234/234; coverage gates PASS (no lowering), every measured Nest file 100%. **Express remains the default active runtime; the runtime switch + `legacy/` Express move is a separate, explicit later slice.**
 
+- **Slice 29 (done) — switch default TypeScript runtime from Express to NestJS:** the runtime switch. **NestJS is now the default TypeScript server runtime**; Express is retained under `sources/legacy/` (not deleted) for rollback/reference + the parity baseline. `sources/index.ts` builds a NestJS app via `createNestApp(runtime)` with the same lifecycle (load config + start enabled forwarders, bind HTTP server, graceful shutdown). **Live wiring:** a `@Global()` `RuntimeContextModule`/`APP_RUNTIME` feeds every feature provider the live `ForwardManager`/`ActivityStore`/runtime info/static (shadow `null` for OpenAPI/tests; `createLiveAppModule(runtime)` is the live root) — proven by a new `live-runtime.integration.test.ts`. Scripts: default `dev`/`start`/`start:nest` + root `start:server`; legacy `dev:legacy`/`start:legacy` + root `start:server:legacy`. The packaged single-file `server.js` Node fallback bundles the legacy Express entry (Go is the preferred packaged runtime; bundling NestJS into the single-file fallback is a documented follow-up); the obsolete shadow scaffold (`nest/main.ts`/`bootstrap.ts`/`nest-options.ts`) is removed. `validate:contract` **234/234 against the rebuilt NestJS server**; coverage gates PASS (no lowering); 843 server tests; lint/typecheck/build green. Rollback = one-line entry switch to the preserved legacy Express. **v1.14's migration is functionally complete — NestJS is the default runtime, Express is the documented rollback path.**
+
 **Milestone 5 — Diagnose, connections, and diagnostics migration** *(done — diagnose Slice 20, connections Slice 11; diagnostics/export had no separate endpoint)*
 
-**Milestone 6 — Static client serving and runtime smoke** *(static serving done — Slice 26; live runtime switch + smoke deferred to the switch-readiness slice)*
-- Migrate diagnose, connections, and diagnostics/export endpoints (if present); preserve labels/check IDs unless intentionally changed and contract-tested; preserve live connection/session shapes.
-- *Acceptance:* `validate:contract` diagnose/connections groups pass; E2E live connections still pass.
+**Milestone 6 — Static client serving and runtime switch** *(done — static serving Slice 26; default-runtime switch to NestJS Slice 29)*
+- Static serving migrated (Slice 26); NestJS made the default runtime (Slice 29) with the live-dependency wiring; web UI loads through the NestJS server.
+- *Acceptance:* `validate:contract` 234/234 against the NestJS server; static + SPA serve through the default runtime.
 
-**Milestone 6 — Static client serving and runtime smoke**
-- Migrate static serving to a NestJS-compatible implementation; preserve API-only behavior when the static client is missing; preserve built-client serving; update runtime smoke if needed.
-- *Acceptance:* `npm run validate:runtime:smoke` passes; web UI loads through the NestJS server.
-
-**Milestone 7 — Remove old Express composition**
-- Remove old Express app wiring after full parity; keep reusable domain modules; update docs and scripts; move server tests to the NestJS test harness where appropriate; remove obsolete dependencies.
-- *Acceptance:* no old Express-only routing remains unless deliberately kept; no duplicate server paths; lint/typecheck/test clean.
+**Milestone 7 — Preserve Express as legacy (done — Slice 29) / optional follow-ups**
+- Express is **preserved under `sources/legacy/`** (the rollback path + parity baseline), not removed — both runtimes share the domain modules. *Optional follow-ups (not blocking v1.14):* bundle the NestJS default into the single-file packaged `server.js` (needs esbuild externals for NestJS optional transports; currently the Node fallback bundles legacy Express, and the Go service is the preferred packaged runtime); restore the `config.exported` activity emission on the live config-export read if desired.
+- *Acceptance:* no duplicate active runtime; legacy retained for rollback; lint/typecheck/test clean.
 
 ### Validation Requirements
 

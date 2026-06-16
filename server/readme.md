@@ -6,92 +6,55 @@ service (`service/`) remains the preferred runtime; this server is the Node
 fallback and the reference TypeScript implementation that `validate:contract`
 checks for parity against Go.
 
-## Two coexisting implementations
+## Default runtime: NestJS (Express retained as legacy)
 
-This server has two implementations of the same REST API: the **Express** app
-(the default active runtime) and a **NestJS** app (served only under
-`npm run start:nest`). Both serve the same `/api` surface; the migration to NestJS
-is incremental and reversible, and both currently coexist:
+This server has two implementations of the same REST API. **NestJS is now the
+default TypeScript server runtime**; the original **Express** implementation is
+retained under `sources/legacy/` for rollback/reference and as the byte-for-byte
+parity baseline:
 
-| | Active runtime | Shadow runtime (NestJS) |
+| | Default runtime (NestJS) | Legacy (Express) |
 |---|---|---|
-| Entry point | `sources/index.ts` | `sources/nest/main.ts` |
-| Composition | `sources/api.ts` (`createApp`) | `sources/nest/app.module.ts` |
-| Framework | Express 5 | NestJS 11 (Express 5 platform) |
-| Status | **Active** — serves the real API, CLI, and web UI | **Shadow** — served only under `start:nest` |
-| Scripts | `dev`, `build`, `start` (via root) | `start:nest`, `build:nest`, `test:nest` |
+| Entry point | `sources/index.ts` | `sources/legacy/index.ts` |
+| Composition | `sources/nest/app.module.ts` | `sources/legacy/api.ts` (`createApp`) |
+| Framework | NestJS 11 (Express 5 platform) | Express 5 |
+| Status | **Active** — serves the real API, CLI, and web UI | **Legacy** — rollback/reference + parity baseline |
+| Start | `npm start -w server` / root `npm run start:server` | `npm run start:legacy -w server` / root `start:server:legacy` |
+| Dev | `npm run dev -w server` (`start:nest` is an alias) | `npm run dev:legacy -w server` |
 
-The **Express server is the default active server.** The NestJS app under
-`sources/nest/` does not replace it, is not started by the normal runtime, and
-does not change any REST/API behavior. Every NestJS endpoint is checked
-byte-for-byte against its Express counterpart and guarded by
-`npm run validate:contract` (234/234). The eventual runtime switch (making NestJS
-the default) is a deliberate, separately-validated step that preserves a rollback
-path — see *Legacy Express server (future work)* below.
+The active server entry (`sources/index.ts`) builds the NestJS app with its
+providers wired to the **live** `ForwardManager`/`ActivityStore`/runtime info/static
+client via `createNestApp(runtime)`, and keeps the same lifecycle the server always
+had (load config + start enabled forwarders, bind the HTTP server with socket
+tracking, graceful shutdown). NestJS and Express both serve the same `/api` surface;
+every endpoint is byte-for-byte parity-tested against the Express baseline
+(`*.integration.test.ts`, importing `sources/legacy/api.ts`) and guarded by
+`npm run validate:contract` (**234/234**, now run against the NestJS server). See
+*Runtime switch-readiness checklist* and *Legacy Express server* below.
 
-### NestJS scaffold surface
+### Live dependency wiring
 
-- `GET /health` → `{ ok: true, server: "node", name: "Portier" }` — a liveness
-  probe that needs no runtime manager. It is **outside the frozen `/api`
-  contract**; aligning to the documented `GET /api/health` (currently
-  "TypeScript server: not implemented") is deferred to the endpoint-migration
-  slices so it lands behind `validate:contract`.
-- `GET /api/ports/advisory` (v1.14 Slice 2) — the first migrated read-only API
-  route. **Byte-for-byte identical to the existing Express route** (parity-tested)
-  and served only under `start:nest`; the Express server still serves the
-  default route unchanged.
-- `GET /api/activity` (v1.14 Slice 4) + `DELETE /api/activity` (v1.14 Slice 8 —
-  first migrated write) over an injected store (`ACTIVITY_STORE` token, default =
-  a fresh domain `ActivityStore`). GET reads via `ActivityReader`; DELETE clears
-  via `ActivityClearer` and returns `204` empty (`@HttpCode(204)`, no DTO — no
-  input). Byte-for-byte parity-tested; shadow-only under `start:nest`.
-- `GET /api/status` (v1.14 Slice 5) — read-only per-rule status over a narrow
-  `StatusReader` (`STATUS_READER` token, default = a trivial empty reader; the
-  domain `ForwardManager` satisfies it and is bound in tests / when Nest is
-  active). The first manager-dependent read; byte-for-byte parity-tested with
-  stopped rules (no volatile fields); shadow-only under `start:nest`.
-- `GET /api/forwards` (v1.14 Slice 6) — read-only rule list (each rule decorated
-  with port advisories via the shared `getPortAdvisories`) over a narrow
-  `ForwardsReader` (`FORWARDS_READER` token, same provider pattern as status).
-  Byte-for-byte parity-tested; shadow-only. The write/lifecycle routes under
-  `/api/forwards/...` stay with Express, deferred.
-- `GET /api/runtime` (v1.14 Slice 9) — the first migrated endpoint with
-  **volatile** fields (`uptimeSeconds`, process `pid`/`platform`/`arch`). Both the
-  Express route and the Nest `RuntimeService` call one shared pure builder
-  (`buildRuntimeInfo` in `sources/runtime-info.ts`), so the shape cannot drift.
-  Volatile values come from three narrow readers — `ClockReader`/`CLOCK_READER`
-  (generic `now()`, now shared from `common/clock.reader.ts`),
-  `ProcessReader`/`PROCESS_READER`, and `RuntimeInfoReader`/`RUNTIME_INFO_READER`.
-  Byte-for-byte parity-tested by booting Express and Nest with the **same fixed
-  clock + runtime info** (real process → matching `pid`/`platform`/`arch`), so
-  `uptimeSeconds` is deterministic and **no field is normalized/stripped**.
-  Shadow-only.
-- `GET /api/config/export` (v1.14 Slice 10) — the second volatile read endpoint
-  (`exportedAt`). Both the Express manager (`ForwardManager.exportConfig`) and the
-  Nest `ConfigExportService` build the snapshot via the shared pure builder
-  `buildExportedConfig` (in `sources/config-export.ts`), with `exportedAt` stamped
-  from the shared `ClockReader`. Read-only over a narrow
-  `ConfigExportReader`/`CONFIG_EXPORT_READER`; the `config.exported` activity
-  emission (a write side-effect) stays with the Express manager, deferred with the
-  config-write migration. Byte-for-byte parity-tested by booting both apps with the
-  same fixed clock + the same seeded manager (`exportedAt` and rules deterministic,
-  **no field normalized/stripped**). Shadow-only; config import/write stays with
-  Express.
-- `GET /api/connections` (v1.14 Slice 11) — the last volatile read endpoint
-  (`generatedAt`). Both the Express route and the Nest `ConnectionsService` build
-  the snapshot via the shared pure builder `buildLiveConnections` (in
-  `sources/connections-snapshot.ts` — the route's former inline per-rule
-  aggregation), with `generatedAt` from the shared `ClockReader`. Read-only over a
-  narrow `ConnectionsReader`/`CONNECTIONS_READER`. Byte-for-byte parity-tested with
-  **seeded fixed `TcpConnectionInfo`/`UdpSessionInfo` records (no sockets/registries)**
-  and a pinned clock, so every field is deterministic (**no normalization/stripping**).
-  Shadow-only; no connection lifecycle/mutation.
-- All `/api/*` errors → the Portier `{ "errors": ["..."] }` envelope via the
-  global `ApiErrorEnvelopeFilter` (v1.14 Slice 3): unmatched routes →
-  `404 ["API route was not found."]`, controller-raised `400`s carry their
-  messages, unknown errors → `500 ["Internal server error."]` (no leak). Non-API
-  routes keep NestJS's default error shape. Controllers raise
-  `ApiBadRequestException(string[])` rather than hand-rolling the envelope.
+Each feature provider sources its dependency from the global `RuntimeContextModule`
+(`APP_RUNTIME`): the active server supplies an `AppRuntime` (the live manager +
+activity store + runtime-info reader + static fallback) so every reader/writer token
+resolves to the live `ForwardManager`; `ACTIVITY_STORE` to the live store; etc. When
+no runtime is supplied — OpenAPI generation and tests — `APP_RUNTIME` is `null` and
+the providers fall back to empty/in-memory defaults (tests override the specific
+tokens they seed via `overrideProvider`). The static root (`AppModule`) is used by
+docs/tests; `createLiveAppModule(runtime)` is the live root.
+
+### Health probe
+
+`GET /health` → `{ ok: true, server: "node", name: "Portier" }` is a liveness probe
+that needs no runtime manager. It is intentionally **outside the frozen `/api`
+contract** (the documented `GET /api/health` is "TypeScript server: not implemented",
+and aligning it would be a deliberate contract-tested change). The error model for
+every `/api/*` route is the Portier `{ "errors": ["..."] }` envelope via the global
+`ApiErrorEnvelopeFilter`: unmatched routes → `404 ["API route was not found."]`,
+controller-raised `400`s carry their messages, unknown errors →
+`500 ["Internal server error."]` (no leak); non-API routes keep NestJS's default
+error shape. Controllers raise `ApiBadRequestException(string[])` (etc.) rather than
+hand-rolling the envelope. The full endpoint inventory follows.
 
 ### Migration status (endpoint inventory)
 
@@ -109,10 +72,10 @@ start** (`POST /api/forwards/groups/:group/start`, Slice 22). The entire
 **non-mutating** `POST /api/config/plan` dry-run (Slice 23), the **mutating**
 `POST /api/config/import` (Slice 24), and the **mutating** `POST /api/config/apply`
 (Slice 25). **Static client serving** (Slice 26) is migrated too — see the
-*Static client serving* section below. Every endpoint below is **shadow-only** —
-served by the Nest app only under `npm run start:nest`; the Express server
-(`sources/index.ts` + `sources/api.ts`) remains the **default active runtime** and
-serves all routes unchanged. `validate:contract` is 234/234.
+*Static client serving* section below. Every endpoint below is served by the
+**NestJS server** (the default runtime, `sources/index.ts`); the legacy Express
+baseline (`sources/legacy/api.ts`) is byte-for-byte parity-tested against it.
+`validate:contract` is **234/234** (run against the NestJS server).
 
 | Endpoint | Module | Request DTO | Response DTO | Provider token | Builder / volatile |
 |---|---|---|---|---|---|
@@ -325,7 +288,7 @@ service unit-covered via a fake applier.
 
 ## Static client serving (Slice 26)
 
-The Nest shadow runtime can serve the packaged web client with Express-equivalent
+The NestJS server serves the packaged web client with Express-equivalent
 semantics (`server/sources/nest/static/static-serving.ts`):
 
 - **Enable rule** mirrors Express: a static dir is usable only when it contains an
@@ -338,22 +301,21 @@ semantics (`server/sources/nest/static/static-serving.ts`):
   `ApiErrorEnvelopeFilter`, so that filter (the single unmatched-route handler) owns
   the fallback, delegating the static decision to an injected `StaticFallback`
   (`STATIC_FALLBACK` token). The `/api/*` envelope branch runs first and is untouched.
-- **Shadow-only & default-off:** `STATIC_FALLBACK` defaults to `disabledStaticFallback`
-  (the scaffold wires no static dir), so the live scaffold serves no static assets and
-  the API works with no client build. Static serving is proven via tests + the reusable
-  `configureStaticAssets` helper; live wiring into `npm run start:nest` is deferred to
-  the runtime-switch slice (no `main.ts`/`bootstrap.ts` change).
-- **Parity:** Express↔Nest raw status+body parity for `/`, SPA routes, a real asset, a
+- **Live wiring & default-off:** the active server entry (`sources/index.ts`) builds
+  the runtime's `staticFallback` (`createStaticFallback(staticClientDir)`) and calls
+  `configureStaticAssets(app, staticClientDir)`. When no static dir is wired
+  (`STATIC_FALLBACK` = `disabledStaticFallback`), no static assets are served and the
+  API works with no client build (matching the Express enable-gate).
+- **Parity:** NestJS↔Express raw status+body parity for `/`, SPA routes, a real asset, a
   missing asset (→ index.html, matching Express), and an unmatched `/api/*` route (→ the
   JSON envelope). When static is disabled, both keep the API usable and serve no SPA
-  index — the non-API 404 *body shape* still differs (Express HTML vs NestJS JSON), the
-  documented pre-existing scaffold boundary.
+  index — the non-API 404 *body shape* still differs (Express HTML vs NestJS JSON), a
+  documented accepted boundary.
 - **OpenAPI:** static serving adds **no** routes; `docs/api/openapi.json` is unchanged
   and a generator test asserts the doc contains only `/health` + `/api/*` paths.
 
-With static serving migrated, **v1.14 is ready for the final migration audit /
-switch-readiness review**; the live runtime switch (making NestJS the default) is a
-deliberate, separately-validated later step.
+Static serving runs through the default NestJS runtime (the active server entry
+wires `configureStaticAssets` + `STATIC_FALLBACK` from the resolved client dir).
 
 ## DTO / OpenAPI schema ownership
 
@@ -394,92 +356,70 @@ For packaging, `copyOpenApiToRelease(releaseDir, sourcePath)`
 with `resolveOpenApiPaths().primary` as the source after generation has run; the
 OpenAPI generator never depends on a release directory existing.
 
-## Legacy Express server (future work)
+## Legacy Express server
 
-When NestJS eventually becomes the default runtime, the existing Express
-implementation (`sources/index.ts` + `sources/api.ts` and its supporting modules)
-will be **preserved under a `legacy/` directory**, not deleted — so the runtime
-switch keeps a clear rollback path. That move is **future work**: this codebase has
-not moved any Express code yet, and the Express server remains the active runtime.
-Until then, do not delete the Express server, and keep the reusable domain modules
-(`forward-manager.ts`, `config-plan.ts`, `connections-snapshot.ts`, `diagnose.ts`,
-the activity store, etc.) shared by both runtimes.
+The original Express implementation is **retained under `sources/legacy/`**
+(`legacy/api.ts` = `createApp`, `legacy/index.ts` = the Express entry) — **not
+deleted** — so the runtime switch keeps a clear rollback path, and it remains the
+byte-for-byte parity baseline for the `*.integration.test.ts` suites. The reusable
+**domain modules stay shared** (outside `legacy/`): `forward-manager.ts`,
+`config-store.ts`, `config-plan.ts`, `connections-snapshot.ts`, `runtime-info.ts`,
+`config-export.ts`, `diagnose.ts`, the activity store, etc. — both runtimes use them.
 
-## Runtime switch-readiness checklist (NestJS as default)
+**Rollback:** start the legacy Express server instead of the default — root
+`npm run start:server:legacy` (compiled) or `npm run start:legacy -w server`
+(`node build/legacy/index.js`); dev: `npm run dev:legacy -w server`. No
+data/contract migration is involved, so rollback is a one-line entry-point change.
+The packaged single-file Node fallback (`server.js`) currently bundles the legacy
+Express entry (`sources/legacy/index.ts`) — the Go service is the preferred packaged
+runtime; bundling the NestJS default into the single-file `server.js` (NestJS needs
+its optional transports marked external for esbuild) is a documented follow-up.
 
-The final v1.14 audit confirms the NestJS app is functionally ready to become the
-default runtime. **Express remains the default after this audit** — making NestJS
-the default is a **separate, explicit slice**, and moving Express under `legacy/`
-happens in that switch slice (or a dedicated prep slice), **not here**. When that
-slice is undertaken, it must:
-
-1. **Wire the real runtime into NestJS.** Bind every reader/writer token
-   (`STATUS_READER`, `FORWARDS_READER`, `FORWARD_RULE_*`, `FORWARD_GROUP_*`,
-   `DIAGNOSTIC_READER`, `CONFIG_EXPORT_READER`/`CONFIG_PLAN_READER`/`CONFIG_IMPORTER`/
-   `CONFIG_APPLIER`, `CONNECTIONS_READER`, `ACTIVITY_STORE`, `RUNTIME_INFO_READER`)
-   to the live `ForwardManager`/`ActivityStore` (today they default to empty/in-memory),
-   and resolve real `RUNTIME_INFO_READER`/`PROCESS_READER` values.
-2. **Wire static serving + the config import/export activity write.** Call
-   `configureStaticAssets(app, staticDir)` and bind `STATIC_FALLBACK` to
-   `createStaticFallback(staticDir)` from the resolved static dir; restore the
-   `config.exported` activity emission on the live config-export path (the Nest read
-   is currently a pure snapshot).
-3. **Update scripts/commands.** `dev`/`build`/`start` (and the packaged runtime entry)
-   should boot the NestJS app instead of `sources/index.ts`; keep `build:nest`/
-   `test:nest`; preserve the `start:nest` name or repurpose it. Update
-   `build:runtime`/packaging to bundle the NestJS server. Packaging should call
-   `copyOpenApiToRelease(releaseDir, resolveOpenApiPaths().primary)` after
-   `generate:apidoc` to ship `<releaseDir>/api/openapi.json`.
-4. **Preserve Express under `legacy/`** (not deleted) so the switch keeps a rollback
-   path; keep the shared domain modules out of `legacy/` (both runtimes use them).
-5. **Smoke + validation.** Run `npm run validate:contract` (must stay 234/234),
-   `npm run validate:runtime:smoke`, `npm run test:e2e` (the web UI must load through
-   NestJS), `npm run validate:config`, and the platform service-install checks.
-6. **Rollback plan.** If a regression appears, switch the runtime entry back to the
-   preserved Express server (`legacy/`) — no data/contract migration is involved, so
-   rollback is a one-line entry-point change.
-
-**Known accepted boundaries** (documented, not blockers): the non-API 404 *body
-shape* differs when static is disabled (Express default HTML vs NestJS default JSON
-— not contract-relevant, no SPA index served either way); an unexpected
+**Accepted behavior boundaries** (documented, not regressions): the non-API 404
+*body shape* differs when static is disabled (Express default HTML vs NestJS default
+JSON — not contract-relevant, no SPA index served either way); an unexpected
 manager/persist error maps to a generic `500 { errors: ["Internal server error."] }`
 rather than echoing the Express message (intentional non-leak); response header
 parity (etag/cache-control/content-type) is out of scope (parity asserts status+body,
-matching the existing Express tests).
+matching the legacy Express tests).
 
 Layout:
 
 ```text
-sources/nest/
-  main.ts                       # logic-free process entry — excluded from coverage (importing it starts a listener)
-  bootstrap.ts                  # bootstrap(listen) + reportBootstrapFailure(error) — fully covered
-  nest-options.ts               # resolveNestListenOptions(env) — fully covered
-  app.factory.ts                # createNestApp() — builds the app without listening (shared by bootstrap + tests)
-  app.module.ts                 # root module; imports feature modules; registers the global error filter
-  health/                       # GET /health (controller → service → module)
-  api/                          # each feature: controller → service → reader/writer; *.schema.ts (OpenAPI classes, coverage-excluded);
+sources/
+  index.ts                      # DEFAULT entry — boots the NestJS server with live deps (excluded from coverage; it starts a listener)
+  legacy/                       # retained Express server (rollback/reference + parity baseline)
+    index.ts                    # Express entry (start:legacy; bundled into the packaged server.js) — coverage-excluded
+    api.ts                      # createApp (Express app factory) — covered by legacy/api.test.ts
+  nest/
+    app.factory.ts              # createNestApp(runtime?) — live root with runtime, else static AppModule; configures static assets
+    app.module.ts               # static AppModule (shadow, APP_RUNTIME=null) + createLiveAppModule(runtime); global error filter
+    live-runtime.integration.test.ts  # proves the default runtime uses the live manager/activity/static (not shadow defaults)
+    health/                     # GET /health (controller → service → module)
+    api/                        # each feature: controller → service → reader/writer; *.schema.ts (OpenAPI classes, coverage-excluded);
                                 #   *.response.dto.ts (mappers, covered); *.body.dto.ts (validated request DTOs)
-    ports/                      # GET /api/ports/advisory — request: *.query.dto + pipe; port-advisory.schema.ts; response: *.response.dto + mapper
-    activity/                   # GET + DELETE /api/activity (ACTIVITY_STORE + ActivityReader/ActivityClearer in activity.reader.ts; activity.schema.ts)
-    status/                     # GET /api/status (injected STATUS_READER; uses forwards/forward-status.schema.ts)
-    forwards/                   # forwards CRUD/lifecycle/group/diagnose; forward-rule(.body).schema.ts, forward-status.schema.ts, group-action.schema.ts, rule-diagnostics.schema.ts
-    runtime/                    # GET /api/runtime (volatile: CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; runtime.schema.ts)
-    config/                     # GET /api/config/export, POST /api/config/{plan,import,apply} (CONFIG_EXPORT/PLAN_READER, CONFIG_IMPORTER/APPLIER + shared CLOCK_READER; config-{export,plan,import,apply}.schema.ts)
-    connections/                # GET /api/connections (volatile generatedAt: CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; connections.schema.ts)
-  static/
-    static-serving.ts           # resolveStaticOptions/hasStaticClient/configureStaticAssets (useStaticAssets) + StaticFallback/STATIC_FALLBACK (SPA index fallback)
-  common/
-    clock.reader.ts              # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider for volatile-timestamp endpoints
-    api-error-envelope.ts        # pure toApiError(exception) + isApiPath — the /api error mapping
-    api-error-envelope.filter.ts # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK) else NestJS default
-    api-errors.ts                # ApiBadRequestException(string[]) — controllers raise this, not a literal
-    api-validation.pipe.ts       # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
-    api-error.schema.ts          # ApiErrorResponseDto — the ONLY common (cross-feature) OpenAPI schema; metadata-only, coverage-excluded
-  openapi/
-    openapi.ts                  # generate/serialize(sorted schemas)/resolveOpenApiPaths/writeOpenApiArtifacts/copyOpenApiToRelease — fully covered
-    generate.ts                 # logic-free `npm run generate:apidoc` entry (writes server/build/api/openapi.json + docs copy) — coverage-excluded
-  testing/
-    api-parity.ts               # Express↔Nest parity harness (boot, fetch, deterministic compare)
+      ports/                    # GET /api/ports/advisory — request: *.query.dto + pipe; port-advisory.schema.ts
+      activity/                 # GET + DELETE /api/activity (ACTIVITY_STORE; activity.schema.ts)
+      status/                   # GET /api/status (STATUS_READER; uses forwards/forward-status.schema.ts)
+      forwards/                 # forwards CRUD/lifecycle/group/diagnose; forward-rule(.body).schema.ts, forward-status/group-action/rule-diagnostics.schema.ts
+      runtime/                  # GET /api/runtime (CLOCK_READER + PROCESS_READER + RUNTIME_INFO_READER; shared buildRuntimeInfo; runtime.schema.ts)
+      config/                   # GET /api/config/export, POST /api/config/{plan,import,apply} (CONFIG_* tokens + shared CLOCK_READER; config-*.schema.ts)
+      connections/              # GET /api/connections (CONNECTIONS_READER + shared CLOCK_READER; shared buildLiveConnections; connections.schema.ts)
+    static/
+      static-serving.ts         # resolveStaticOptions/hasStaticClient/configureStaticAssets (useStaticAssets) + StaticFallback/STATIC_FALLBACK
+    common/
+      runtime-context.ts        # AppRuntime + APP_RUNTIME + @Global() RuntimeContextModule.forRoot(runtime|null) — feature providers source live deps from it
+      clock.reader.ts           # ClockReader/CLOCK_READER/defaultClockReader — shared live-clock provider
+      api-error-envelope.ts     # pure toApiError(exception) + isApiPath — the /api error mapping
+      api-error-envelope.filter.ts  # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK) else NestJS default
+      api-errors.ts             # ApiBadRequestException(string[]) — controllers raise this, not a literal
+      api-validation.pipe.ts    # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
+      api-error.schema.ts       # ApiErrorResponseDto — the ONLY common (cross-feature) OpenAPI schema; metadata-only, coverage-excluded
+    openapi/
+      openapi.ts                # generate/serialize(sorted schemas)/resolveOpenApiPaths/writeOpenApiArtifacts/copyOpenApiToRelease — fully covered
+      generate.ts               # logic-free `npm run generate:apidoc` entry — coverage-excluded
+    testing/
+      api-parity.ts             # NestJS↔Express parity harness (boot, fetch, deterministic compare)
 ```
 
 ### API documentation (generated OpenAPI)
@@ -521,20 +461,24 @@ This mirrors how `sources/index.ts` is excluded.
 ## Scripts
 
 ```bash
-npm run dev        -w server   # active Express server (watch)
-npm run build      -w server   # tsc → build/ (includes the nest scaffold)
+# Default runtime — NestJS
+npm run dev        -w server   # default NestJS server (watch, sources/index.ts)
+npm run start      -w server   # compiled default NestJS server (node build/index.js)
+npm run start:nest -w server   # alias of the default NestJS dev start (tsx sources/index.ts)
+npm run build      -w server   # tsc → build/ (NestJS + legacy + shared)
 npm run typecheck  -w server
-npm run test       -w server   # all server tests (Express + nest scaffold)
+npm run test       -w server   # all server tests (NestJS + legacy parity + shared)
+npm run test:nest  -w server   # only the nest/ tests
+npm run generate:apidoc -w server  # regenerate docs/api/openapi.json from NestJS metadata
 
-npm run build:nest -w server      # build (alias — nest is part of the unified server build)
-npm run start:nest -w server      # run the NestJS scaffold (scaffold only — not the active server)
-npm run generate:apidoc -w server # regenerate docs/api/openapi.json from Nest metadata
-npm run test:nest  -w server   # run only the nest scaffold tests
+# Legacy Express (rollback/reference)
+npm run dev:legacy   -w server # legacy Express server (watch, sources/legacy/index.ts)
+npm run start:legacy -w server # compiled legacy Express server (node build/legacy/index.js)
 ```
 
-`start:nest` binds `127.0.0.1` only and defaults to port `47832` (override with
-`PORTIER_NEST_PORT` / `PORTIER_NEST_HOST`) so it never collides with the
-management server's default `127.0.0.1:47831`.
+From the repo root: `npm run start:server` (default NestJS) and
+`npm run start:server:legacy` (legacy Express) both pass `--service --static-dir
+client/build`.
 
 ## Migration rules
 

@@ -8,7 +8,7 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Test } from "@nestjs/testing";
 import type { ForwardRule } from "@portier/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "../../api.js";
+import { createApp } from "../../legacy/api.js";
 import { ForwardManager, type RuleStore } from "../../forward-manager.js";
 import { AppModule } from "../app.module.js";
 import { startHandlerServer, startNestServer, type ParityServer } from "../testing/api-parity.js";

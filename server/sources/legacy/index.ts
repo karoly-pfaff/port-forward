@@ -1,33 +1,24 @@
-import type http from "node:http";
+// ── LEGACY Express server runtime ────────────────────────────────────────────
+// The NestJS server (`sources/index.ts`) is the default TypeScript runtime. This
+// Express implementation is retained for rollback/reference and runs via
+// `npm run start:legacy` (and is the entry the packaged single-file `server.js`
+// Node fallback bundles). It is not the default runtime. Do not delete it.
+import http from "node:http";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Socket } from "node:net";
-import { ConfigStore } from "./config-store.js";
-import { ForwardManager } from "./forward-manager.js";
-import { ActivityStore } from "./activity/activity-store.js";
-import { createConsoleLogger, errorFields } from "./logger.js";
-import { resolveServerOptions } from "./server-options.js";
-import type { RuntimeInfoOptions } from "./runtime-info.js";
-import { createNestApp } from "./nest/app.factory.js";
-import type { AppRuntime } from "./nest/common/runtime-context.js";
-import { createStaticFallback, hasStaticClient } from "./nest/static/static-serving.js";
-
-/**
- * Default Portier TypeScript server entry — the NestJS runtime.
- *
- * It owns the same lifecycle the server has always had (resolve options, load the
- * config + start enabled forwarders, bind the HTTP server, graceful shutdown), and
- * builds a NestJS app whose providers are wired to the live `ForwardManager`/
- * `ActivityStore`/runtime info/static client via `createNestApp(runtime)`. The
- * legacy Express implementation is retained under `sources/legacy/` and runs via
- * `npm run start:legacy`.
- */
+import { createApp, hasStaticClient } from "./api.js";
+import { ConfigStore } from "../config-store.js";
+import { ForwardManager } from "../forward-manager.js";
+import { ActivityStore } from "../activity/activity-store.js";
+import { createConsoleLogger, errorFields } from "../logger.js";
+import { resolveServerOptions } from "../server-options.js";
 
 function readServerVersion(): string {
   try {
-    // From build/index.js up to server/package.json.
-    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "package.json");
+    // From build/legacy/index.js up to server/package.json.
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "package.json");
     const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
     return typeof pkg.version === "string" ? pkg.version : "unknown";
   } catch {
@@ -60,36 +51,26 @@ async function main(): Promise<void> {
   const manager = new ForwardManager(store, activity);
   const startedForwardRuleCount = await manager.loadAndStartEnabled();
 
-  const runtimeInfo: RuntimeInfoOptions = {
+  const runtimeInfo = {
     version: readServerVersion(),
     managementHost: options.host,
     managementPort: options.port,
     configPath: options.configPath,
     staticDir: options.staticClientDir,
     serviceMode: options.service,
-    startedAt,
+    startedAt
   };
 
-  // The single live manager satisfies every reader/writer interface; the activity
-  // store, runtime-info reader, and static fallback back the remaining providers.
-  const runtime: AppRuntime = {
-    manager,
-    activity,
-    runtimeInfoReader: { options: () => runtimeInfo, startedAt: () => startedAt },
-    staticFallback: createStaticFallback(options.staticClientDir),
-    staticClientDir: options.staticClientDir,
-  };
-
-  const app = await createNestApp(runtime);
-  const server = app.getHttpServer() as http.Server;
+  const app = createApp(manager, { staticClientDir: options.staticClientDir, activity, runtimeInfo });
+  const server = http.createServer(app);
   const httpSockets = new Set<Socket>();
 
-  server.on("connection", (socket: Socket) => {
+  server.on("connection", (socket) => {
     httpSockets.add(socket);
     socket.on("close", () => httpSockets.delete(socket));
   });
 
-  await app.listen(options.port, options.host);
+  await listenHttpServer(server, options.port, options.host);
   server.on("error", (error) => {
     logger.error("server.error", "HTTP server error.", errorFields(error));
   });
@@ -102,18 +83,17 @@ async function main(): Promise<void> {
   }
 
   logger.info("server.started", "Portier server started.", {
-    runtime: "nest",
     service: options.service,
     configPath: options.configPath,
     bindAddress: `${options.host}:${options.port}`,
     staticClientDir: options.staticClientDir,
     staticClientDirSource: options.staticClientDirSource,
-    startedForwardRuleCount,
+    startedForwardRuleCount
   });
   if (!hasStaticClient(options.staticClientDir)) {
     logger.warn("static_client.unavailable", "Web UI static files were not found; API remains available.", {
       staticClientDir: options.staticClientDir,
-      staticClientDirSource: options.staticClientDirSource,
+      staticClientDirSource: options.staticClientDirSource
     });
   }
 
@@ -139,7 +119,7 @@ async function main(): Promise<void> {
       for (const socket of httpSockets) {
         socket.destroy();
       }
-      await app.close();
+      await closeHttpServer(server);
       logger.info("shutdown.http_closed", "HTTP server closed.");
       process.exit(0);
     } catch (error) {
@@ -153,5 +133,34 @@ async function main(): Promise<void> {
   });
   process.on("SIGTERM", (signal) => {
     void shutdown(signal);
+  });
+}
+
+function listenHttpServer(httpServer: http.Server, port: number, host: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: Error) => {
+      httpServer.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      httpServer.off("error", onError);
+      resolve();
+    };
+
+    httpServer.once("error", onError);
+    httpServer.once("listening", onListening);
+    httpServer.listen(port, host);
+  });
+}
+
+function closeHttpServer(httpServer: http.Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    httpServer.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
   });
 }

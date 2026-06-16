@@ -6,9 +6,9 @@ import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import type { ForwardRule, ImportResult } from "@portier/shared";
 import { createApp, normalizePlatform, normalizeArch, type RuntimeInfoOptions } from "./api.js";
-import { ForwardManager, type RuleStore } from "./forward-manager.js";
-import { ActivityStore } from "./activity/activity-store.js";
-import { getFreeTcpPort, getFreeUdpPort } from "./test-helpers.js";
+import { ForwardManager, type RuleStore } from "../forward-manager.js";
+import { ActivityStore } from "../activity/activity-store.js";
+import { getFreeTcpPort, getFreeUdpPort } from "../test-helpers.js";
 
 class MemoryStore implements RuleStore {
   constructor(private rules: ForwardRule[] = []) {}

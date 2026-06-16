@@ -1,20 +1,26 @@
 import { Module } from "@nestjs/common";
 import { ActivityStore } from "../../../activity/activity-store.js";
+import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
 import { ActivityController } from "./activity.controller.js";
 import { ActivityService } from "./activity.service.js";
 import { ACTIVITY_STORE, type ActivityReader } from "./activity.reader.js";
 
 /**
- * `GET /api/activity`. The `ACTIVITY_STORE` token defaults to a fresh in-memory
- * `ActivityStore` (empty → `{ events: [] }`); when the NestJS server becomes the
- * active runtime it will be bound to the shared store, and tests override it with
- * a seeded store. The store is the domain activity store, not Express internals.
+ * `GET /api/activity` + `DELETE /api/activity`. `ACTIVITY_STORE` resolves to the
+ * live `ActivityStore` when one is wired (the active NestJS runtime, shared with the
+ * forwarding manager so events appear), else a fresh in-memory store
+ * (empty → `{ events: [] }`); tests override it with a seeded store. The store is the
+ * domain activity store, not Express internals.
  */
 @Module({
   controllers: [ActivityController],
   providers: [
     ActivityService,
-    { provide: ACTIVITY_STORE, useFactory: (): ActivityReader => new ActivityStore() },
+    {
+      provide: ACTIVITY_STORE,
+      useFactory: (rt: AppRuntime | null): ActivityReader => rt?.activity ?? new ActivityStore(),
+      inject: [APP_RUNTIME],
+    },
   ],
 })
 export class ActivityModule {}

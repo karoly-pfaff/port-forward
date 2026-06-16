@@ -1,3 +1,8 @@
+// ── LEGACY Express app factory ───────────────────────────────────────────────
+// `createApp` builds the original Express implementation of the REST API + static
+// serving. The NestJS server (`sources/nest/`) is the default TypeScript runtime;
+// this is retained for rollback/reference and as the byte-for-byte parity baseline
+// in the `*.integration.test.ts` suites. It is not wired into the default runtime.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import express from "express";
@@ -11,18 +16,18 @@ import type {
 } from "@portier/shared";
 import { getPortAdvisories, summarizeGroupAction, validateGroupName } from "@portier/shared";
 import type { GroupActionType } from "@portier/shared";
-import type { ForwardManager } from "./forward-manager.js";
-import { ConflictError, NotFoundError, ValidationError } from "./forward-manager.js";
-import { diagnoseRule } from "./diagnose.js";
-import type { ActivityStore } from "./activity/activity-store.js";
-import { buildApplyImportFromPlan, buildConfigPlan } from "./config-plan.js";
-import { buildLiveConnections } from "./connections-snapshot.js";
-import { buildRuntimeInfo, type RuntimeInfoOptions } from "./runtime-info.js";
+import type { ForwardManager } from "../forward-manager.js";
+import { ConflictError, NotFoundError, ValidationError } from "../forward-manager.js";
+import { diagnoseRule } from "../diagnose.js";
+import type { ActivityStore } from "../activity/activity-store.js";
+import { buildApplyImportFromPlan, buildConfigPlan } from "../config-plan.js";
+import { buildLiveConnections } from "../connections-snapshot.js";
+import { buildRuntimeInfo, type RuntimeInfoOptions } from "../runtime-info.js";
 
 // Re-exported for backward compatibility; the canonical definitions live in
 // ./runtime-info.ts (shared with the NestJS runtime service).
-export { normalizeArch, normalizePlatform } from "./runtime-info.js";
-export type { RuntimeInfoOptions } from "./runtime-info.js";
+export { normalizeArch, normalizePlatform } from "../runtime-info.js";
+export type { RuntimeInfoOptions } from "../runtime-info.js";
 
 export interface AppOptions {
   staticClientDir?: string;

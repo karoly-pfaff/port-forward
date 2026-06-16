@@ -13,7 +13,10 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTPUT_DIR="${1:-$REPO_ROOT/build/linux}"
 
 ESBUILD="$REPO_ROOT/node_modules/.bin/esbuild"
-BUNDLE_ENTRY="$REPO_ROOT/server/sources/index.ts"
+# The packaged single-file Node fallback (server.js) bundles the legacy Express
+# server. The Go service is the preferred packaged runtime; bundling the NestJS
+# default into the single-file fallback is a documented follow-up. See server/readme.md.
+BUNDLE_ENTRY="$REPO_ROOT/server/sources/legacy/index.ts"
 BUNDLE_WORK="$OUTPUT_DIR/_bundle"
 BUNDLE_CJS="$BUNDLE_WORK/server.cjs"
 

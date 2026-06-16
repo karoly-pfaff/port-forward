@@ -19,7 +19,12 @@ $cliExePath = Join-Path $outputPath "portier.exe"
 $webOutputPath = Join-Path $outputPath "web"
 $bundleWorkPath = Join-Path $outputPath "_bundle"
 $bundleCjsPath = Join-Path $bundleWorkPath "server.cjs"
-$bundleEntryPath = Join-Path $repoRoot "server\sources\index.ts"
+# The packaged single-file Node fallback (server.js) bundles the legacy Express
+# server (sources/legacy/index.ts). The Go service is the preferred packaged
+# runtime; bundling the NestJS default (sources/index.ts) into the single-file
+# fallback is a documented follow-up (NestJS needs optional transports marked
+# external for esbuild). See server/readme.md.
+$bundleEntryPath = Join-Path $repoRoot "server\sources\legacy\index.ts"
 
 function Get-LocalToolPath {
   param([string]$Name)

@@ -9,7 +9,7 @@ import type {
   UdpSessionInfo,
 } from "@portier/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createApp } from "../../../api.js";
+import { createApp } from "../../../legacy/api.js";
 import { ForwardManager, type RuleStore } from "../../../forward-manager.js";
 import { AppModule } from "../../app.module.js";
 import { createNestApp } from "../../app.factory.js";
