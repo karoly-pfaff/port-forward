@@ -2,9 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -703,56 +701,4 @@ func applyImportErrorResponse(plan configplan.Response, errs []string, appliedAt
 	return applyResponse{
 		Ok: false, DryRun: false, AppliedAt: appliedAt, Plan: plan, Applied: zeroCounts,
 	}
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
-}
-
-func decodeRequest(w http.ResponseWriter, r *http.Request, target any) bool {
-	raw, err := readBody(r)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {err.Error()}})
-		return false
-	}
-	if err := json.Unmarshal(raw, target); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": {err.Error()}})
-		return false
-	}
-	return true
-}
-
-func readBody(r *http.Request) ([]byte, error) {
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1_000_000))
-	if err != nil {
-		return nil, err
-	}
-	if len(raw) == 0 {
-		return nil, errors.New("request body must be JSON.")
-	}
-	return raw, nil
-}
-
-func writeManagerError(w http.ResponseWriter, err error) {
-	var validationError manager.ValidationError
-	if errors.As(err, &validationError) {
-		writeJSON(w, http.StatusBadRequest, map[string][]string{"errors": validationError.Errors})
-		return
-	}
-
-	var conflictError manager.ConflictError
-	if errors.As(err, &conflictError) {
-		writeJSON(w, http.StatusConflict, map[string][]string{"errors": {conflictError.Message}})
-		return
-	}
-
-	var notFoundError manager.NotFoundError
-	if errors.As(err, &notFoundError) {
-		writeJSON(w, http.StatusNotFound, map[string][]string{"errors": {notFoundError.Message}})
-		return
-	}
-
-	writeJSON(w, http.StatusInternalServerError, map[string][]string{"errors": {err.Error()}})
 }

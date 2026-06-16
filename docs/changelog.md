@@ -6,6 +6,16 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.15 Go Service Modular Router (in progress)
 
+### Changed — Slice 3: extract shared response/error helpers into `api/respond.go`
+
+Behavior-preserving extraction of the shared HTTP request/response/error plumbing out of the `api.go` monolith into a small focused file. **No API behavior/route/contract/packaging/runtime change**; `validate:contract` stays **234/234**.
+
+- Moved `writeJSON`, `decodeRequest`, `readBody`, and `writeManagerError` from `service/sources/api/api.go` into the new `service/sources/api/respond.go` (same `package api`) **verbatim** — no signature, status code, body string, JSON envelope, content-type, 204/no-body, malformed-JSON, empty-body, 1 MB request-body-limit, or manager-error mapping (validation → 400, conflict → 409, not found → 404, generic → 500, no raw-internal leak) change. `api.go` no longer owns this generic plumbing; the now-unused `errors`/`io` imports were dropped from it.
+- No new package, no cycle (`respond.go` stays in `package api`, importing only `encoding/json`/`errors`/`io`/`net/http`/`manager`); both the legacy ordered `serveAPI` handlers and the migrated feature route modules reuse the helpers, and future feature route files can too.
+- No feature handler migration in this slice (forwards/lifecycle/group/diagnose/config/activity/connections/ports/static stay where they are).
+
+Tests: added `service/sources/api/respond_test.go` (focused unit tests for `writeJSON` status/content-type/body, `decodeRequest` valid/malformed/empty, the 1 MB `readBody` truncation, and the `writeManagerError` validation/conflict/not-found mappings) — complementing the existing `readBody`/generic-500 tests in `errorpaths_test.go` (left untouched, no CRLF churn). Validation: `go build`/`go vet` clean; full Go service suite green; `validate:contract` **234/234** (rebuilt binary); `validate:runtime:smoke` **24/24**; lint/typecheck clean. **Replay validation skipped** (no replay/`@portier/shared` files touched). Next: Slice 4 — migrate a small read-only feature handler group (likely `GET /api/ports/advisory` or activity) into a feature route module.
+
 ### Added — Slice 2: `app.App` dependency container + `api.NewHandler(app)` skeleton; health/runtime migrated
 
 Introduced the Go service modularization skeleton: an explicit application dependency container and a route-registration shape, with the two safest endpoints (health + runtime) migrated into it. **No API behavior/route/contract/packaging change**; `validate:contract` stays **234/234**; the Slice 1 router dispatch contract test is unchanged and green.
