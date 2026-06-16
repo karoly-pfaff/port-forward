@@ -43,19 +43,40 @@ describe("generateOpenApiDocument", () => {
     expect(doc.components?.schemas).toBeTypeOf("object");
   });
 
-  it("documents every migrated route and method", () => {
-    expect(doc.paths["/health"]?.get).toBeDefined();
-    expect(doc.paths["/api/ports/advisory"]?.get).toBeDefined();
-    expect(doc.paths["/api/activity"]?.get).toBeDefined();
-    expect(doc.paths["/api/activity"]?.delete).toBeDefined();
-    expect(doc.paths["/api/status"]?.get).toBeDefined();
-    expect(doc.paths["/api/forwards"]?.get).toBeDefined();
-    expect(doc.paths["/api/runtime"]?.get).toBeDefined();
-    expect(doc.paths["/api/config/export"]?.get).toBeDefined();
-    expect(doc.paths["/api/config/plan"]?.post).toBeDefined();
-    expect(doc.paths["/api/config/import"]?.post).toBeDefined();
-    expect(doc.paths["/api/config/apply"]?.post).toBeDefined();
-    expect(doc.paths["/api/connections"]?.get).toBeDefined();
+  // The canonical migrated-endpoint inventory: every `/api` endpoint (and `/health`)
+  // with its method(s). This is the single regression guard — adding, removing, or
+  // re-pathing an endpoint must update this map (and a stray/missing path trips the
+  // exact-path-set assertion below). Mirrors the Express routes in `sources/api.ts`.
+  const EXPECTED_ROUTES: Record<string, string[]> = {
+    "/health": ["get"],
+    "/api/ports/advisory": ["get"],
+    "/api/activity": ["get", "delete"],
+    "/api/status": ["get"],
+    "/api/forwards": ["get", "post"],
+    "/api/forwards/{id}": ["patch", "delete"],
+    "/api/forwards/{id}/start": ["post"],
+    "/api/forwards/{id}/stop": ["post"],
+    "/api/forwards/reorder": ["post"],
+    "/api/forwards/{id}/diagnose": ["post"],
+    "/api/forwards/groups/{group}/start": ["post"],
+    "/api/forwards/groups/{group}/stop": ["post"],
+    "/api/runtime": ["get"],
+    "/api/config/export": ["get"],
+    "/api/config/plan": ["post"],
+    "/api/config/import": ["post"],
+    "/api/config/apply": ["post"],
+    "/api/connections": ["get"],
+  };
+
+  it("documents exactly the migrated endpoint inventory (paths + methods)", () => {
+    // Exact path set — a missing or stray path fails here.
+    expect(Object.keys(doc.paths).sort()).toEqual(Object.keys(EXPECTED_ROUTES).sort());
+    // Each path documents exactly its expected method(s).
+    for (const [path, methods] of Object.entries(EXPECTED_ROUTES)) {
+      const item = (doc.paths[path] ?? {}) as Record<string, unknown>;
+      const documented = ["get", "post", "patch", "delete", "put"].filter((m) => item[m] !== undefined);
+      expect(documented.sort(), `methods for ${path}`).toEqual([...methods].sort());
+    }
   });
 
   it("documents POST /api/config/import with its body, 200/422 responses, and 400 error", () => {

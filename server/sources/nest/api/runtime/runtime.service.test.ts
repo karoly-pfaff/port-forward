@@ -56,7 +56,7 @@ describe("RuntimeService.get", () => {
     });
   });
 
-  it("applies defaults when no runtime info is wired (scaffold case)", () => {
+  it("applies defaults when no runtime info is wired (default case)", () => {
     const result = service({ pid: 99, platform: "darwin", arch: "arm64" }).get();
     expect(result.version).toBe("unknown");
     expect(result.runtime).toBe("node");

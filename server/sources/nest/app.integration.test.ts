@@ -4,11 +4,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNestApp } from "./app.factory.js";
 
 /**
- * Boots the real NestJS scaffold (DI graph, routing, global filter) on an
+ * Boots the real NestJS app (DI graph, routing, global filter) on an
  * ephemeral loopback port and exercises it over HTTP — proving the wiring, not
  * just the units. This is the only test that starts a listener.
  */
-describe("NestJS scaffold app (integration)", () => {
+describe("NestJS app (integration)", () => {
   let app: INestApplication;
   let baseUrl: string;
 
@@ -22,7 +22,7 @@ describe("NestJS scaffold app (integration)", () => {
     await app.close();
   });
 
-  it("serves GET /health with the documented scaffold shape", async () => {
+  it("serves GET /health with the documented health shape", async () => {
     const response = await fetch(`${baseUrl}/health`);
 
     expect(response.status).toBe(200);
@@ -30,7 +30,7 @@ describe("NestJS scaffold app (integration)", () => {
   });
 
   it("returns the contract 404 envelope for an unknown /api route", async () => {
-    // Use a path that is not (yet) migrated into the Nest scaffold.
+    // Use a path that is not served by any controller.
     const response = await fetch(`${baseUrl}/api/not-migrated`);
 
     expect(response.status).toBe(404);

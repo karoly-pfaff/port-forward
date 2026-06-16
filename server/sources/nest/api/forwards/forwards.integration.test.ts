@@ -79,7 +79,7 @@ async function bootPair(
   };
 }
 
-describe("GET /api/forwards (Nest) — scaffold default", () => {
+describe("GET /api/forwards (Nest) — default app", () => {
   let nestApp: INestApplication;
   let nest: ParityServer;
 
@@ -226,7 +226,7 @@ function postRule(baseUrl: string, body: unknown): Promise<ApiResponse> {
   });
 }
 
-describe("POST /api/forwards (Nest) — scaffold default", () => {
+describe("POST /api/forwards (Nest) — default app", () => {
   let nestApp: INestApplication;
   let nest: ParityServer;
 

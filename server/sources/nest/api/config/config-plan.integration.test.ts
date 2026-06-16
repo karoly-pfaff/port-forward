@@ -73,7 +73,7 @@ async function bootPair(
 
 const TCP_RULE = { id: "r1", name: "Web", protocol: "tcp", listenHost: "127.0.0.1", listenPort: 48010, targetHost: "127.0.0.1", targetPort: 8080, enabled: false } as const;
 
-describe("POST /api/config/plan (Nest) — scaffold default", () => {
+describe("POST /api/config/plan (Nest) — default app", () => {
   let nestApp: INestApplication;
   let nest: ParityServer;
 

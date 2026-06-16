@@ -405,6 +405,48 @@ Until then, do not delete the Express server, and keep the reusable domain modul
 (`forward-manager.ts`, `config-plan.ts`, `connections-snapshot.ts`, `diagnose.ts`,
 the activity store, etc.) shared by both runtimes.
 
+## Runtime switch-readiness checklist (NestJS as default)
+
+The final v1.14 audit confirms the NestJS app is functionally ready to become the
+default runtime. **Express remains the default after this audit** — making NestJS
+the default is a **separate, explicit slice**, and moving Express under `legacy/`
+happens in that switch slice (or a dedicated prep slice), **not here**. When that
+slice is undertaken, it must:
+
+1. **Wire the real runtime into NestJS.** Bind every reader/writer token
+   (`STATUS_READER`, `FORWARDS_READER`, `FORWARD_RULE_*`, `FORWARD_GROUP_*`,
+   `DIAGNOSTIC_READER`, `CONFIG_EXPORT_READER`/`CONFIG_PLAN_READER`/`CONFIG_IMPORTER`/
+   `CONFIG_APPLIER`, `CONNECTIONS_READER`, `ACTIVITY_STORE`, `RUNTIME_INFO_READER`)
+   to the live `ForwardManager`/`ActivityStore` (today they default to empty/in-memory),
+   and resolve real `RUNTIME_INFO_READER`/`PROCESS_READER` values.
+2. **Wire static serving + the config import/export activity write.** Call
+   `configureStaticAssets(app, staticDir)` and bind `STATIC_FALLBACK` to
+   `createStaticFallback(staticDir)` from the resolved static dir; restore the
+   `config.exported` activity emission on the live config-export path (the Nest read
+   is currently a pure snapshot).
+3. **Update scripts/commands.** `dev`/`build`/`start` (and the packaged runtime entry)
+   should boot the NestJS app instead of `sources/index.ts`; keep `build:nest`/
+   `test:nest`; preserve the `start:nest` name or repurpose it. Update
+   `build:runtime`/packaging to bundle the NestJS server. Packaging should call
+   `copyOpenApiToRelease(releaseDir, resolveOpenApiPaths().primary)` after
+   `generate:apidoc` to ship `<releaseDir>/api/openapi.json`.
+4. **Preserve Express under `legacy/`** (not deleted) so the switch keeps a rollback
+   path; keep the shared domain modules out of `legacy/` (both runtimes use them).
+5. **Smoke + validation.** Run `npm run validate:contract` (must stay 234/234),
+   `npm run validate:runtime:smoke`, `npm run test:e2e` (the web UI must load through
+   NestJS), `npm run validate:config`, and the platform service-install checks.
+6. **Rollback plan.** If a regression appears, switch the runtime entry back to the
+   preserved Express server (`legacy/`) — no data/contract migration is involved, so
+   rollback is a one-line entry-point change.
+
+**Known accepted boundaries** (documented, not blockers): the non-API 404 *body
+shape* differs when static is disabled (Express default HTML vs NestJS default JSON
+— not contract-relevant, no SPA index served either way); an unexpected
+manager/persist error maps to a generic `500 { errors: ["Internal server error."] }`
+rather than echoing the Express message (intentional non-leak); response header
+parity (etag/cache-control/content-type) is out of scope (parity asserts status+body,
+matching the existing Express tests).
+
 Layout:
 
 ```text

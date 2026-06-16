@@ -83,7 +83,7 @@ describe("createDefaultForwardRuleDeleter", () => {
 
 describe("createDefaultForwardRuleStarter", () => {
   it("creates an isolated in-memory starter that returns 404-able NotFound for an unknown id (no runtime wired)", async () => {
-    // The scaffold default is an empty ForwardManager — starting an unknown id
+    // The default is an empty ForwardManager — starting an unknown id
     // rejects with NotFoundError (no rule, no socket opened).
     const starter = createDefaultForwardRuleStarter();
     await expect(starter.startRule("missing")).rejects.toThrow(/not found/i);
@@ -92,7 +92,7 @@ describe("createDefaultForwardRuleStarter", () => {
 
 describe("createDefaultForwardRuleStopper", () => {
   it("creates an isolated in-memory stopper that returns 404-able NotFound for an unknown id (no runtime wired)", async () => {
-    // The scaffold default is an empty ForwardManager — stopping an unknown id
+    // The default is an empty ForwardManager — stopping an unknown id
     // rejects with NotFoundError (no rule, no socket touched).
     const stopper = createDefaultForwardRuleStopper();
     await expect(stopper.stopRule("missing")).rejects.toThrow(/not found/i);

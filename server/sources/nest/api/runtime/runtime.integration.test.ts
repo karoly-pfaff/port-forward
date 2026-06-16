@@ -69,7 +69,7 @@ async function nestWithFixedVolatiles(): Promise<INestApplication> {
   return moduleRef.createNestApplication({ logger: false });
 }
 
-describe("GET /api/runtime (Nest) — scaffold default", () => {
+describe("GET /api/runtime (Nest) — default app", () => {
   let nestApp: INestApplication;
   let nest: ParityServer;
 
@@ -82,7 +82,7 @@ describe("GET /api/runtime (Nest) — scaffold default", () => {
     await nest.close();
   });
 
-  it("returns runtime info with scaffold defaults and real process metadata", async () => {
+  it("returns runtime info with default config and real process metadata", async () => {
     const response = await fetchApi(nest.baseUrl, "/api/runtime");
     expect(response.status).toBe(200);
 

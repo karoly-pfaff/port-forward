@@ -57,7 +57,7 @@ async function bootPair(
   };
 }
 
-describe("GET /api/status (Nest) — scaffold default", () => {
+describe("GET /api/status (Nest) — default app", () => {
   let nestApp: INestApplication;
   let nest: ParityServer;
 

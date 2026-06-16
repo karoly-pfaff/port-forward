@@ -117,7 +117,7 @@ describe("static client serving (Nest) — disabled (no static dir)", () => {
   let express: ParityServer;
 
   beforeAll(async () => {
-    // Scaffold default: no static assets configured, STATIC_FALLBACK is the disabled default.
+    // Default: no static assets configured, STATIC_FALLBACK is the disabled default.
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     const nestApp = moduleRef.createNestApplication({ logger: false });
     nest = await startNestServer(nestApp);
@@ -151,7 +151,7 @@ describe("static client serving (Nest) — disabled (no static dir)", () => {
     ]);
     // Both 404; neither returns the SPA index. (The exact non-API 404 body shape
     // differs — Express's default HTML vs NestJS's default JSON — a documented
-    // pre-existing scaffold boundary, not asserted here.)
+    // pre-existing documented boundary, not asserted here.)
     expect(e.status).toBe(404);
     expect(e.text).not.toContain("Portier");
     expect(n.status).toBe(404);

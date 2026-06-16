@@ -82,7 +82,7 @@ async function nestWithFixedClock(reader: ConnectionsReader): Promise<INestAppli
   return moduleRef.createNestApplication({ logger: false });
 }
 
-describe("GET /api/connections (Nest) — scaffold default", () => {
+describe("GET /api/connections (Nest) — default app", () => {
   let nestApp: INestApplication;
   let nest: ParityServer;
 
