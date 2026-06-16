@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { RuntimeInfo } from "@portier/shared";
-import { buildRuntimeInfo } from "../../runtime-info.js";
+import { buildRuntimeInfo } from "../../runtime/runtime-info.js";
 import {
   CLOCK_READER,
   PROCESS_READER,

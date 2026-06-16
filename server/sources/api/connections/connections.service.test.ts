@@ -2,7 +2,7 @@ import type { ForwardRule, TcpConnectionInfo, UdpSessionInfo } from "@portier/sh
 import { describe, expect, it } from "vitest";
 import { ConnectionsService } from "./connections.service.js";
 import type { ConnectionsReader } from "./connections.reader.js";
-import type { ClockReader } from "../../common/clock.reader.js";
+import type { ClockReader } from "../common/clock.reader.js";
 
 const NOW = new Date("2026-06-14T12:00:30.000Z");
 

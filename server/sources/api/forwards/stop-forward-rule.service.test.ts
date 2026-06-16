@@ -1,7 +1,7 @@
 import type { ForwardStatus } from "@portier/shared";
 import { describe, expect, it } from "vitest";
-import { NotFoundError } from "../../forward-manager.js";
-import { ApiNotFoundException } from "../../common/api-errors.js";
+import { NotFoundError } from "../../forwarders/forward-manager.js";
+import { ApiNotFoundException } from "../common/api-errors.js";
 import { StopForwardRuleService } from "./stop-forward-rule.service.js";
 import type { ForwardRuleStopper } from "./forwards.writer.js";
 

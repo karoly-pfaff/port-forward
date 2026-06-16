@@ -1,7 +1,7 @@
 import type { ForwardRule } from "@portier/shared";
 import { describe, expect, it } from "vitest";
-import { ConflictError, ValidationError } from "../../forward-manager.js";
-import { ApiBadRequestException, ApiConflictException } from "../../common/api-errors.js";
+import { ConflictError, ValidationError } from "../../forwarders/forward-manager.js";
+import { ApiBadRequestException, ApiConflictException } from "../common/api-errors.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import type { ForwardRuleCreator } from "./forwards.writer.js";
 

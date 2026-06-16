@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { summarizeGroupAction, validateGroupName, type GroupActionResponse } from "@portier/shared";
-import { ApiBadRequestException, ApiNotFoundException } from "../../common/api-errors.js";
+import { ApiBadRequestException, ApiNotFoundException } from "../common/api-errors.js";
 import { FORWARD_GROUP_STOPPER, type ForwardGroupStopper } from "./forwards.writer.js";
 
 /**

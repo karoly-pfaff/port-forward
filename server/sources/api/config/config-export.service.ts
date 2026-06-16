@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ExportedConfig } from "@portier/shared";
-import { buildExportedConfig } from "../../config-export.js";
-import { CLOCK_READER, type ClockReader } from "../../common/clock.reader.js";
+import { buildExportedConfig } from "../../config/config-export.js";
+import { CLOCK_READER, type ClockReader } from "../common/clock.reader.js";
 import {
   CONFIG_EXPORT_READER,
   type ConfigExportReader,

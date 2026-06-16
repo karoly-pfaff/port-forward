@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
-import { CLOCK_READER, defaultClockReader } from "../../common/clock.reader.js";
-import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
+import { CLOCK_READER, defaultClockReader } from "../common/clock.reader.js";
+import { APP_RUNTIME, type AppRuntime } from "../../app/runtime-context.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";

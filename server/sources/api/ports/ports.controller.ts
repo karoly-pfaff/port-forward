@@ -1,8 +1,8 @@
 import { Controller, Get, Inject, Query } from "@nestjs/common";
 import { ApiBadRequestResponse, ApiOkResponse, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
-import { ApiErrorResponseDto } from "../../common/api-error.schema.js";
+import { ApiErrorResponseDto } from "../common/api-error.schema.js";
 import { PortAdvisoryDto } from "./port-advisory.schema.js";
-import { ApiValidationPipe } from "../../common/api-validation.pipe.js";
+import { ApiValidationPipe } from "../common/api-validation.pipe.js";
 import { PortsAdvisoryQueryDto } from "./ports-advisory.query.dto.js";
 import { toPortsAdvisoryResponseDto, type PortsAdvisoryResponseDto } from "./ports-advisory.response.dto.js";
 import { PortsService } from "./ports.service.js";

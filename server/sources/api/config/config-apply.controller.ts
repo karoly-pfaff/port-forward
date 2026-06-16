@@ -1,6 +1,6 @@
 import { Body, Controller, HttpCode, Inject, Post } from "@nestjs/common";
 import { ApiBadRequestResponse, ApiBody, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { ApiErrorResponseDto } from "../../common/api-error.schema.js";
+import { ApiErrorResponseDto } from "../common/api-error.schema.js";
 import { ConfigApplyBodyDto } from "./config-apply.schema.js";
 import { ConfigApplyService } from "./config-apply.service.js";
 import { ConfigApplyResponseDto, toConfigApplyResponseDto } from "./config-apply.response.dto.js";

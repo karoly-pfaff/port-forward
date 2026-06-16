@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { LiveConnectionsResponse } from "@portier/shared";
-import { buildLiveConnections } from "../../connections-snapshot.js";
-import { CLOCK_READER, type ClockReader } from "../../common/clock.reader.js";
+import { buildLiveConnections } from "../../connections/connections-snapshot.js";
+import { CLOCK_READER, type ClockReader } from "../common/clock.reader.js";
 import {
   CONNECTIONS_READER,
   type ConnectionsReader,

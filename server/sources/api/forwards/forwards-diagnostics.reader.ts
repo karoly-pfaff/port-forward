@@ -1,5 +1,5 @@
 import type { ForwardRule, ForwardStatus } from "@portier/shared";
-import { ForwardManager } from "../../forward-manager.js";
+import { ForwardManager } from "../../forwarders/forward-manager.js";
 import { InMemoryRuleStore } from "./forwards.writer.js";
 
 /**

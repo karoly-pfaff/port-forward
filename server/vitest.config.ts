@@ -20,7 +20,7 @@ export default defineConfig({
       // (controllers reference them via @ApiOkResponse; the response mappers — the covered logic, in
       // the sibling *.response.dto.ts — return plain objects), so there is no executable logic to
       // cover, only decorator metadata. Each lives in its owning feature folder.
-      exclude: ["sources/**/*.test.ts", "sources/test-helpers.ts", "sources/index.ts", "sources/openapi/generate.ts", "sources/openapi/copy-release.ts", "sources/**/*.schema.ts", "sources/forwarders/types.ts", "build/**", "*.config.ts"]
+      exclude: ["sources/**/*.test.ts", "sources/testing/test-helpers.ts", "sources/index.ts", "sources/openapi/generate.ts", "sources/openapi/copy-release.ts", "sources/**/*.schema.ts", "sources/forwarders/types.ts", "build/**", "*.config.ts"]
     }
   }
 });

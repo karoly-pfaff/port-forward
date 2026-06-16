@@ -144,8 +144,9 @@ classes live in feature-local `*.schema.ts` files (e.g.
 `api/ports/port-advisory.schema.ts`); the response **mappers** (`to*ResponseDto`)
 stay in the sibling `*.response.dto.ts` (which re-exports the schema class), and
 validated request bodies (class-validator, instantiated by the pipe) stay in
-`*.body.dto.ts`. `common/` holds **only genuinely cross-feature** schemas — currently
-just `api-error.schema.ts` (`ApiErrorResponseDto`, the shared `{ errors }` envelope).
+`*.body.dto.ts`. `api/common/` holds **only genuinely cross-feature** schemas —
+currently just `api-error.schema.ts` (`ApiErrorResponseDto`, the shared `{ errors }`
+envelope).
 Do **not** reintroduce a centralized schema bucket; a feature-owned schema belongs in
 its feature folder even when another feature imports it (e.g. `ForwardRuleDto` is
 forwards-owned and imported by config-export). The `*.schema.ts` files are
@@ -192,38 +193,69 @@ same NestJS app.
 
 ## Layout
 
+The root of `sources/` holds only the process entry (`index.ts`); every other file
+has a homed folder. API (HTTP) code lives under `api/` — per-feature folders plus
+`api/common/` for the API-layer shared infrastructure; framework-free
+domain/runtime/persistence logic lives in its own concern folder; and app/bootstrap
+wiring lives under `app/`.
+
 ```text
 sources/
-  index.ts                      # server entry — boots NestJS with live deps (coverage-excluded; it starts a listener)
-  app/
-    app.factory.ts              # createNestApp(runtime?) — live root with runtime, else static AppModule; configures static assets
+  index.ts                      # the ONLY root file — server entry; boots NestJS via createNestApp + NestJS Logger (coverage-excluded)
+  app/                          # app/bootstrap/runtime wiring
+    app.factory.ts              # createNestApp(runtime?, options?) — live vs static root; resolveLoggerOption; configures static assets
     app.module.ts               # static AppModule (APP_RUNTIME=null) + createLiveAppModule(runtime); global error filter
-    app.integration.test.ts     # boots AppModule (null runtime) — health, /api/* envelope
-    live-runtime.integration.test.ts  # boots the live app — proves every feature reflects the live manager/activity/static + mutation
-  health/                       # GET /health (controller → service → module)
-  api/<feature>/                # controller → service → reader/writer; *.schema.ts (OpenAPI classes, coverage-excluded);
-                                #   *.response.dto.ts (mappers, covered); *.body.dto.ts (validated request DTOs)
-    ports/ activity/ status/ forwards/ runtime/ config/ connections/
-  common/
     runtime-context.ts          # AppRuntime + APP_RUNTIME + @Global() RuntimeContextModule.forRoot(runtime|null)
-    clock.reader.ts             # ClockReader/CLOCK_READER — shared live-clock provider
-    api-error-envelope.ts       # pure toApiError(exception) + isApiPath — the /api error mapping
-    api-error-envelope.filter.ts  # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK)
-    api-errors.ts               # ApiBadRequestException(string[]) etc. — raised by controllers, not literals
-    api-validation.pipe.ts      # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
-    manager-error.ts            # mapManagerError — domain errors → API exceptions
-    api-error.schema.ts         # ApiErrorResponseDto — the ONLY common (cross-feature) OpenAPI schema (coverage-excluded)
+    server-options.ts           # resolveServerOptions — CLI/env option resolution for the entry
+  health/                       # GET /health (controller → service → module)
+  api/                          # the HTTP/API layer
+    <feature>/                  # controller → service → reader/writer; *.schema.ts (OpenAPI classes, coverage-excluded);
+                                #   *.response.dto.ts (mappers, covered); *.body.dto.ts (validated request DTOs)
+      ports/ activity/ status/ forwards/ runtime/ config/ connections/
+    forwards/manager-error.ts   # mapManagerError — ForwardManager domain errors → API exceptions (forwards-owned)
+    common/                     # API-layer shared infrastructure (used only by api/ features + the app filter registration):
+      clock.reader.ts           # ClockReader/CLOCK_READER — shared live-clock provider (runtime/config/connections/diagnose)
+      api-error-envelope.ts     # pure toApiError(exception) + isApiPath — the /api error mapping
+      api-error-envelope.filter.ts  # global catch-all filter: /api/* → envelope, non-API → SPA index fallback (STATIC_FALLBACK)
+      api-errors.ts             # ApiBadRequestException(string[]) etc. — raised by controllers, not literals
+      api-validation.pipe.ts    # ApiValidationPipe(Dto) — class-validator/-transformer → ApiBadRequestException
+      api-error.schema.ts       # ApiErrorResponseDto — the ONLY cross-feature OpenAPI schema (coverage-excluded)
   static/
     static-serving.ts           # resolveStaticOptions/hasStaticClient/configureStaticAssets + StaticFallback/STATIC_FALLBACK
   openapi/
     openapi.ts                  # generate/serialize(sorted)/resolveOpenApiPaths/writeOpenApiArtifacts/copyOpenApiToRelease — fully covered
     generate.ts                 # logic-free `npm run generate:apidoc` entry — coverage-excluded
     copy-release.ts             # logic-free `npm run copy:apidoc:release` entry — coverage-excluded
-  # domain modules (shared by the server, framework-free):
-  forward-manager.ts  config-store.ts  config-plan.ts  config-export.ts
-  connections-snapshot.ts  runtime-info.ts  diagnose.ts  logger.ts  server-options.ts
-  activity/  forwarders/  connections/
+  # framework-free domain / runtime / persistence concern folders:
+  forwarders/                   # forward-manager.ts (rule lifecycle/manager) + tcp/udp forwarders + types
+  config/                       # config-export.ts (buildExportedConfig) + config-plan.ts (buildConfigPlan/buildApplyImportFromPlan)
+  persistence/                  # config-store.ts (atomic rules.json store)
+  connections/                  # connections-snapshot.ts (buildLiveConnections) + tcp/udp connection registries
+  runtime/                      # runtime-info.ts (buildRuntimeInfo)
+  diagnostics/                  # diagnose.ts (diagnoseRule probes)
+  activity/                     # activity-store.ts
+  testing/                      # test-helpers.ts (test-only; coverage-excluded)
 ```
+
+**Ownership rules:** the root `sources/` directory holds only `index.ts`. Domain
+logic does NOT live under `api/` (which is HTTP-only); it lives in its concern folder
+(`forwarders/`, `config/`, `persistence/`, `connections/`, `runtime/`, `diagnostics/`,
+`activity/`). There is **no `sources/common/`** — API-layer shared infrastructure (the
+error envelope/filter/exceptions, the validation pipe, the shared `CLOCK_READER`, and
+the single cross-feature `ApiErrorResponseDto` schema) lives in **`api/common/`**,
+because its only consumers are `api/` features (plus `app/app.module.ts`, which
+registers the global error filter). A feature-owned helper lives in its
+feature/concern folder (e.g. `manager-error.ts` is forwards-owned → `api/forwards/`).
+DTO/schema ownership stays feature-local (`*.schema.ts` per feature).
+
+**Logging policy:** server **runtime** logging goes through the NestJS `Logger` (the
+entry uses `new Logger("Server")`; services use `new Logger(ClassName.name)` where
+they log). `createNestApp` enables the logger for a live runtime
+(`DEFAULT_SERVER_LOG_LEVELS`) and silences it for OpenAPI generation / tests
+(`resolveLoggerOption`, overridable via `CreateNestAppOptions.logger`). There is no
+custom logger abstraction and no global `console` monkey-patching. The only `console.*`
+calls are in the logic-free **build-tooling** entries (`openapi/generate.ts`,
+`openapi/copy-release.ts`) — normal CLI/script output, outside runtime logging.
 
 ## Scripts
 
@@ -245,8 +277,9 @@ From the repo root, `npm run start:server` boots the compiled server with
 Every server file with executable logic is covered at **100%** (statements / branches
 / functions; gate `100/100/100` in `scripts/validate-coverage.js`). The only
 coverage-excluded files are the logic-free process entries (`sources/index.ts`,
-`openapi/generate.ts`, `openapi/copy-release.ts` — their helpers are fully covered)
-and the metadata-only `**/*.schema.ts` OpenAPI schema classes (never instantiated).
+`openapi/generate.ts`, `openapi/copy-release.ts` — their helpers are fully covered),
+the test-only `testing/test-helpers.ts`, and the metadata-only `**/*.schema.ts`
+OpenAPI schema classes (never instantiated).
 Structurally-unreachable defensive branches (2 s socket-bind/connect timeouts,
 post-stop socket races, nullish-on-initialized-counter fallbacks) are narrowly
 annotated with `/* v8 ignore … -- reason */` rather than broadly excluded.

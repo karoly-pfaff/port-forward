@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
+import { APP_RUNTIME, type AppRuntime } from "../../app/runtime-context.js";
 import { RuntimeController } from "./runtime.controller.js";
 import { RuntimeService } from "./runtime.service.js";
 import {

@@ -1,7 +1,7 @@
 import type { ExportedConfig, ForwardRule, ImportMode, ImportResult } from "@portier/shared";
 import { describe, expect, it, vi } from "vitest";
-import { ApiBadRequestException } from "../../common/api-errors.js";
-import type { ClockReader } from "../../common/clock.reader.js";
+import { ApiBadRequestException } from "../common/api-errors.js";
+import type { ClockReader } from "../common/clock.reader.js";
 import { ConfigApplyService } from "./config-apply.service.js";
 import type { ConfigApplier } from "./config-apply.writer.js";
 

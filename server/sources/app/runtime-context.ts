@@ -1,6 +1,6 @@
 import { Global, Module, type DynamicModule } from "@nestjs/common";
 import type { ActivityStore } from "../activity/activity-store.js";
-import type { ForwardManager } from "../forward-manager.js";
+import type { ForwardManager } from "../forwarders/forward-manager.js";
 import type { RuntimeInfoReader } from "../api/runtime/runtime.reader.js";
 import type { StaticFallback } from "../static/static-serving.js";
 

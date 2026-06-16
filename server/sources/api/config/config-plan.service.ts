@@ -1,8 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ConfigPlanResponse } from "@portier/shared";
-import { buildConfigPlan } from "../../config-plan.js";
-import { ApiBadRequestException } from "../../common/api-errors.js";
-import { CLOCK_READER, type ClockReader } from "../../common/clock.reader.js";
+import { buildConfigPlan } from "../../config/config-plan.js";
+import { ApiBadRequestException } from "../common/api-errors.js";
+import { CLOCK_READER, type ClockReader } from "../common/clock.reader.js";
 import { CONFIG_PLAN_READER, type ConfigPlanReader } from "./config-plan.reader.js";
 
 /**

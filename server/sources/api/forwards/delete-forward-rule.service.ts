@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { mapManagerError } from "../../common/manager-error.js";
+import { mapManagerError } from "./manager-error.js";
 import { FORWARD_RULE_DELETER, type ForwardRuleDeleter } from "./forwards.writer.js";
 
 /**

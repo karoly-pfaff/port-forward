@@ -3,24 +3,31 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Socket } from "node:net";
-import { ConfigStore } from "./config-store.js";
-import { ForwardManager } from "./forward-manager.js";
+import { Logger } from "@nestjs/common";
+import { ConfigStore } from "./persistence/config-store.js";
+import { ForwardManager } from "./forwarders/forward-manager.js";
 import { ActivityStore } from "./activity/activity-store.js";
-import { createConsoleLogger, errorFields } from "./logger.js";
-import { resolveServerOptions } from "./server-options.js";
-import type { RuntimeInfoOptions } from "./runtime-info.js";
+import { resolveServerOptions } from "./app/server-options.js";
+import type { RuntimeInfoOptions } from "./runtime/runtime-info.js";
 import { createNestApp } from "./app/app.factory.js";
-import type { AppRuntime } from "./common/runtime-context.js";
+import type { AppRuntime } from "./app/runtime-context.js";
 import { createStaticFallback, hasStaticClient } from "./static/static-serving.js";
 
 /**
- * Default Portier TypeScript server entry — the NestJS runtime.
+ * Portier TypeScript server entry — the NestJS runtime.
  *
- * It owns the same lifecycle the server has always had (resolve options, load the
- * config + start enabled forwarders, bind the HTTP server, graceful shutdown), and
- * builds a NestJS app whose providers are wired to the live `ForwardManager`/
- * `ActivityStore`/runtime info/static client via `createNestApp(runtime)`.
+ * It owns the server lifecycle (resolve options, load the config + start enabled
+ * forwarders, bind the HTTP server, graceful shutdown) and builds a NestJS app whose
+ * providers are wired to the live `ForwardManager`/`ActivityStore`/runtime info/static
+ * client via `createNestApp(runtime)`. Runtime logging goes through the NestJS `Logger`.
  */
+
+const logger = new Logger("Server");
+
+/** The stack (or string form) of a thrown value, for `Logger.error`'s stack argument. */
+function stackOf(error: unknown): string | undefined {
+  return error instanceof Error ? error.stack : String(error);
+}
 
 function readServerVersion(): string {
   try {
@@ -33,20 +40,18 @@ function readServerVersion(): string {
   }
 }
 
-const logger = createConsoleLogger();
-
 process.on("uncaughtException", (error) => {
-  logger.error("process.uncaught_exception", "Uncaught exception.", errorFields(error));
+  logger.error("Uncaught exception.", stackOf(error));
   process.exit(1);
 });
 
 process.on("unhandledRejection", (error) => {
-  logger.error("process.unhandled_rejection", "Unhandled rejection.", errorFields(error));
+  logger.error("Unhandled rejection.", stackOf(error));
   process.exit(1);
 });
 
 void main().catch((error: unknown) => {
-  logger.error("server.start_failed", "Portier server failed to start.", errorFields(error));
+  logger.error("Portier server failed to start.", stackOf(error));
   process.exit(1);
 });
 
@@ -89,59 +94,54 @@ async function main(): Promise<void> {
 
   await app.listen(options.port, options.host);
   server.on("error", (error) => {
-    logger.error("server.error", "HTTP server error.", errorFields(error));
+    logger.error("HTTP server error.", stackOf(error));
   });
   if (options.host === "0.0.0.0") {
     logger.warn(
-      "server.management_lan_exposure",
-      "Management API is bound to 0.0.0.0 — the web UI and REST API are reachable from the local network.",
-      { bindAddress: `${options.host}:${options.port}` }
+      `Management API is bound to 0.0.0.0 (${options.host}:${options.port}) — the web UI and REST API are reachable from the local network.`
     );
   }
 
-  logger.info("server.started", "Portier server started.", {
-    runtime: "nest",
-    service: options.service,
-    configPath: options.configPath,
-    bindAddress: `${options.host}:${options.port}`,
-    staticClientDir: options.staticClientDir,
-    staticClientDirSource: options.staticClientDirSource,
-    startedForwardRuleCount,
-  });
+  logger.log(
+    `Portier server started on ${options.host}:${options.port} ` +
+      `(service=${options.service}, config=${options.configPath}, ` +
+      `static=${options.staticClientDir} [${options.staticClientDirSource}], ` +
+      `startedForwarders=${startedForwardRuleCount}).`
+  );
   if (!hasStaticClient(options.staticClientDir)) {
-    logger.warn("static_client.unavailable", "Web UI static files were not found; API remains available.", {
-      staticClientDir: options.staticClientDir,
-      staticClientDirSource: options.staticClientDirSource,
-    });
+    logger.warn(
+      `Web UI static files were not found at ${options.staticClientDir} ` +
+        `[${options.staticClientDirSource}]; API remains available.`
+    );
   }
 
   let shutdownStarted = false;
   async function shutdown(signal: NodeJS.Signals): Promise<void> {
     if (shutdownStarted) {
-      logger.warn("shutdown.duplicate_signal", "Shutdown already in progress.", { signal });
+      logger.warn(`Shutdown already in progress (signal ${signal}).`);
       return;
     }
     shutdownStarted = true;
 
-    logger.info("shutdown.received", "Shutdown signal received.", { signal });
+    logger.log(`Shutdown signal received (${signal}).`);
     try {
-      logger.info("shutdown.forwarders_stopping", "Stopping TCP and UDP forwarders.");
+      logger.log("Stopping TCP and UDP forwarders.");
       await manager.stopAll();
-      logger.info("shutdown.forwarders_stopped", "Forwarders stopped.");
+      logger.log("Forwarders stopped.");
 
-      logger.info("shutdown.config_flushing", "Flushing config store.");
+      logger.log("Flushing config store.");
       await manager.flush();
-      logger.info("shutdown.config_flushed", "Config store flushed.");
+      logger.log("Config store flushed.");
 
-      logger.info("shutdown.http_closing", "Closing HTTP server.", { activeHttpSockets: httpSockets.size });
+      logger.log(`Closing HTTP server (${httpSockets.size} active sockets).`);
       for (const socket of httpSockets) {
         socket.destroy();
       }
       await app.close();
-      logger.info("shutdown.http_closed", "HTTP server closed.");
+      logger.log("HTTP server closed.");
       process.exit(0);
     } catch (error) {
-      logger.error("shutdown.failed", "Shutdown failed.", errorFields(error));
+      logger.error("Shutdown failed.", stackOf(error));
       process.exit(1);
     }
   }

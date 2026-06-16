@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
-import { CLOCK_READER, defaultClockReader } from "../../common/clock.reader.js";
-import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
+import { CLOCK_READER, defaultClockReader } from "../common/clock.reader.js";
+import { APP_RUNTIME, type AppRuntime } from "../../app/runtime-context.js";
 import { ConnectionsController } from "./connections.controller.js";
 import { ConnectionsService } from "./connections.service.js";
 import { CONNECTIONS_READER, emptyConnectionsReader, type ConnectionsReader } from "./connections.reader.js";

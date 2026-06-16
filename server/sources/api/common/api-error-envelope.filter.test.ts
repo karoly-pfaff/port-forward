@@ -1,6 +1,6 @@
 import { BadRequestException, HttpException, NotFoundException, type ArgumentsHost } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
-import type { StaticFallback } from "../static/static-serving.js";
+import type { StaticFallback } from "../../static/static-serving.js";
 import { ApiErrorEnvelopeFilter } from "./api-error-envelope.filter.js";
 
 interface CapturedResponse {

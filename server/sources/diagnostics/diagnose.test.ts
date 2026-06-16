@@ -3,7 +3,7 @@ import dgram from "node:dgram";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ForwardRule } from "@portier/shared";
 import { diagnoseRule } from "./diagnose.js";
-import { getFreeTcpPort, getFreeUdpPort } from "./test-helpers.js";
+import { getFreeTcpPort, getFreeUdpPort } from "../testing/test-helpers.js";
 
 function udpRule(overrides: Partial<ForwardRule> = {}): ForwardRule {
   return {

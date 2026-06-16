@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ApiBadRequestException } from "../../common/api-errors.js";
-import { ApiValidationPipe } from "../../common/api-validation.pipe.js";
+import { ApiBadRequestException } from "../common/api-errors.js";
+import { ApiValidationPipe } from "../common/api-validation.pipe.js";
 import { ReorderForwardRulesBodyDto } from "./reorder-forward-rules.body.dto.js";
 
 const pipe = new ApiValidationPipe(ReorderForwardRulesBodyDto);

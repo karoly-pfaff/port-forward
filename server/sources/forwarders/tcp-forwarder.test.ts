@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ActivityEventInput, ForwardRule } from "@portier/shared";
 import { TcpForwarder } from "./tcp-forwarder.js";
 import { TcpConnectionRegistry } from "../connections/tcp-connection-registry.js";
-import { getFreeTcpPort, startForwarderOnFreePort } from "../test-helpers.js";
+import { getFreeTcpPort, startForwarderOnFreePort } from "../testing/test-helpers.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 

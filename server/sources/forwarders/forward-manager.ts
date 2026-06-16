@@ -1,13 +1,13 @@
 import crypto from "node:crypto";
 import type { ActivityEventType, ActivitySeverity, ExportedConfig, ForwardRule, ForwardRuleInput, ForwardStatus, GroupActionResult, ImportMode, ImportResult, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
 import { deriveRuleHealth, listenKey, validateForwardRule, validateForwardRulePatch } from "@portier/shared";
-import { buildExportedConfig } from "./config-export.js";
-import type { Forwarder, ForwarderStatus } from "./forwarders/types.js";
-import { TcpForwarder } from "./forwarders/tcp-forwarder.js";
-import { UdpForwarder } from "./forwarders/udp-forwarder.js";
-import type { ActivityStore } from "./activity/activity-store.js";
-import { TcpConnectionRegistry } from "./connections/tcp-connection-registry.js";
-import { UdpSessionRegistry } from "./connections/udp-session-registry.js";
+import { buildExportedConfig } from "../config/config-export.js";
+import type { Forwarder, ForwarderStatus } from "./types.js";
+import { TcpForwarder } from "./tcp-forwarder.js";
+import { UdpForwarder } from "./udp-forwarder.js";
+import type { ActivityStore } from "../activity/activity-store.js";
+import { TcpConnectionRegistry } from "../connections/tcp-connection-registry.js";
+import { UdpSessionRegistry } from "../connections/udp-session-registry.js";
 
 export interface RuleStore {
   load(): Promise<ForwardRule[]>;

@@ -2,7 +2,7 @@ import type { ForwardRule } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import { ConfigExportService } from "./config-export.service.js";
 import type { ConfigExportReader } from "./config-export.reader.js";
-import type { ClockReader } from "../../common/clock.reader.js";
+import type { ClockReader } from "../common/clock.reader.js";
 
 const NOW = new Date("2026-06-14T12:00:00.000Z");
 

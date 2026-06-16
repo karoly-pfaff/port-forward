@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ForwardRuleResponse } from "@portier/shared";
-import { mapManagerError } from "../../common/manager-error.js";
+import { mapManagerError } from "./manager-error.js";
 import { toForwardRuleResponse } from "./forward-rule-response.js";
 import { FORWARD_RULES_REORDERER, type ForwardRulesReorderer } from "./forwards.writer.js";
 

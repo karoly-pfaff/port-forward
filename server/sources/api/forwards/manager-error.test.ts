@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ConflictError, NotFoundError, ValidationError } from "../forward-manager.js";
-import { ApiBadRequestException, ApiConflictException, ApiNotFoundException } from "./api-errors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../forwarders/forward-manager.js";
+import { ApiBadRequestException, ApiConflictException, ApiNotFoundException } from "../common/api-errors.js";
 import { mapManagerError } from "./manager-error.js";
 
 describe("mapManagerError", () => {

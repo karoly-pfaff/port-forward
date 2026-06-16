@@ -2,7 +2,7 @@ import dgram from "node:dgram";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ActivityEventInput, ForwardRule } from "@portier/shared";
 import { UdpForwarder } from "./udp-forwarder.js";
-import { bindUdpSocketOnFreePort, getFreeUdpPort, startForwarderOnFreePort } from "../test-helpers.js";
+import { bindUdpSocketOnFreePort, getFreeUdpPort, startForwarderOnFreePort } from "../testing/test-helpers.js";
 import { UdpSessionRegistry } from "../connections/udp-session-registry.js";
 
 const cleanup: Array<() => Promise<void>> = [];

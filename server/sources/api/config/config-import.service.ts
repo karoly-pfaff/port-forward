@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { ExportedConfig, ForwardRuleResponse, ImportResult } from "@portier/shared";
-import { ApiBadRequestException } from "../../common/api-errors.js";
+import { ApiBadRequestException } from "../common/api-errors.js";
 import { toForwardRuleResponse } from "../forwards/forward-rule-response.js";
 import { CONFIG_IMPORTER, type ConfigImporter } from "./config-import.writer.js";
 

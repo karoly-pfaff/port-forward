@@ -1,4 +1,4 @@
-import type { RuntimeInfoOptions } from "../../runtime-info.js";
+import type { RuntimeInfoOptions } from "../../runtime/runtime-info.js";
 
 /**
  * Volatile/process-and-time providers for `GET /api/runtime`.
@@ -14,7 +14,7 @@ import type { RuntimeInfoOptions } from "../../runtime-info.js";
  * it; it is re-exported here so the runtime feature's imports stay stable.
  */
 
-export { type ClockReader, CLOCK_READER, defaultClockReader } from "../../common/clock.reader.js";
+export { type ClockReader, CLOCK_READER, defaultClockReader } from "../common/clock.reader.js";
 
 /** Process-metadata provider (`pid`/`platform`/`arch`). */
 export interface ProcessReader {

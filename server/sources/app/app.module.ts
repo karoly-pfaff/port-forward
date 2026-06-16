@@ -9,8 +9,8 @@ import { ForwardsModule } from "../api/forwards/forwards.module.js";
 import { RuntimeModule } from "../api/runtime/runtime.module.js";
 import { ConfigModule } from "../api/config/config.module.js";
 import { ConnectionsModule } from "../api/connections/connections.module.js";
-import { ApiErrorEnvelopeFilter } from "../common/api-error-envelope.filter.js";
-import { APP_RUNTIME, RuntimeContextModule, type AppRuntime } from "../common/runtime-context.js";
+import { ApiErrorEnvelopeFilter } from "../api/common/api-error-envelope.filter.js";
+import { APP_RUNTIME, RuntimeContextModule, type AppRuntime } from "./runtime-context.js";
 import { STATIC_FALLBACK, disabledStaticFallback, type StaticFallback } from "../static/static-serving.js";
 
 /**

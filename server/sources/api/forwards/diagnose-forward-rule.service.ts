@@ -1,8 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { RuleDiagnosticsResult } from "@portier/shared";
-import { diagnoseRule } from "../../diagnose.js";
-import { ApiNotFoundException } from "../../common/api-errors.js";
-import { CLOCK_READER, type ClockReader } from "../../common/clock.reader.js";
+import { diagnoseRule } from "../../diagnostics/diagnose.js";
+import { ApiNotFoundException } from "../common/api-errors.js";
+import { CLOCK_READER, type ClockReader } from "../common/clock.reader.js";
 import { DIAGNOSTIC_READER, type DiagnosticReader } from "./forwards-diagnostics.reader.js";
 
 /**

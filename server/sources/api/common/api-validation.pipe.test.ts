@@ -1,6 +1,6 @@
 import type { ValidationError } from "class-validator";
 import { describe, expect, it } from "vitest";
-import { PortsAdvisoryQueryDto } from "../api/ports/ports-advisory.query.dto.js";
+import { PortsAdvisoryQueryDto } from "../ports/ports-advisory.query.dto.js";
 import { ApiBadRequestException } from "./api-errors.js";
 import { ApiValidationPipe, flattenValidationErrors } from "./api-validation.pipe.js";
 

@@ -1,7 +1,7 @@
 import type { ForwardRuleResponse } from "@portier/shared";
 import type { Response } from "express";
 import { describe, expect, it } from "vitest";
-import { ApiBadRequestException } from "../../common/api-errors.js";
+import { ApiBadRequestException } from "../common/api-errors.js";
 import { ConfigImportController } from "./config-import.controller.js";
 import type { ConfigImportOutcome, ConfigImportService } from "./config-import.service.js";
 

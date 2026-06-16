@@ -6,10 +6,10 @@ import type { INestApplication } from "@nestjs/common";
 import type { ActivityEvent, ForwardRule, ForwardRuleResponse, ForwardStatus, RuntimeInfo } from "@portier/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ActivityStore } from "../activity/activity-store.js";
-import { ForwardManager, type RuleStore } from "../forward-manager.js";
-import type { RuntimeInfoOptions } from "../runtime-info.js";
+import { ForwardManager, type RuleStore } from "../forwarders/forward-manager.js";
+import type { RuntimeInfoOptions } from "../runtime/runtime-info.js";
 import { createNestApp } from "./app.factory.js";
-import type { AppRuntime } from "../common/runtime-context.js";
+import type { AppRuntime } from "./runtime-context.js";
 import { createStaticFallback } from "../static/static-serving.js";
 
 /**
@@ -85,7 +85,7 @@ beforeAll(async () => {
     staticClientDir: staticDir,
   };
 
-  app = await createNestApp(runtime);
+  app = await createNestApp(runtime, { logger: false });
   await app.listen(0, "127.0.0.1");
   baseUrl = await app.getUrl();
 });

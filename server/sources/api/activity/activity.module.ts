@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ActivityStore } from "../../activity/activity-store.js";
-import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
+import { APP_RUNTIME, type AppRuntime } from "../../app/runtime-context.js";
 import { ActivityController } from "./activity.controller.js";
 import { ActivityService } from "./activity.service.js";
 import { ACTIVITY_STORE, type ActivityReader } from "./activity.reader.js";

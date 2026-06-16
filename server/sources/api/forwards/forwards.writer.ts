@@ -1,5 +1,5 @@
 import type { ForwardRule, ForwardStatus, GroupActionResult } from "@portier/shared";
-import { ForwardManager, type RuleStore } from "../../forward-manager.js";
+import { ForwardManager, type RuleStore } from "../../forwarders/forward-manager.js";
 
 /**
  * Narrow write capability for `POST /api/forwards` (rule creation). The real

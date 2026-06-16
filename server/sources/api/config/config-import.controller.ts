@@ -8,7 +8,7 @@ import {
   ApiTags,
 } from "@nestjs/swagger";
 import type { Response } from "express";
-import { ApiErrorResponseDto } from "../../common/api-error.schema.js";
+import { ApiErrorResponseDto } from "../common/api-error.schema.js";
 import { ConfigImportBodyDto } from "./config-import.schema.js";
 import { ConfigImportService } from "./config-import.service.js";
 import {

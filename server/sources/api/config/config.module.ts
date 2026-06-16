@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
-import { CLOCK_READER, defaultClockReader } from "../../common/clock.reader.js";
-import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
+import { CLOCK_READER, defaultClockReader } from "../common/clock.reader.js";
+import { APP_RUNTIME, type AppRuntime } from "../../app/runtime-context.js";
 import { ConfigApplyController } from "./config-apply.controller.js";
 import { ConfigApplyService } from "./config-apply.service.js";
 import { CONFIG_APPLIER, createDefaultConfigApplier, type ConfigApplier } from "./config-apply.writer.js";

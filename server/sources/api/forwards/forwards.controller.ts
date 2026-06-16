@@ -11,13 +11,13 @@ import {
   ApiParam,
   ApiTags,
 } from "@nestjs/swagger";
-import { ApiErrorResponseDto } from "../../common/api-error.schema.js";
+import { ApiErrorResponseDto } from "../common/api-error.schema.js";
 import { CreateForwardRuleBodyDto, UpdateForwardRuleBodyDto } from "./forward-rule.body.schema.js";
 import { ForwardRuleResponseDto } from "./forward-rule.schema.js";
 import { ForwardStatusDto } from "./forward-status.schema.js";
 import { GroupActionResponseDto } from "./group-action.schema.js";
 import { RuleDiagnosticsResultDto } from "./rule-diagnostics.schema.js";
-import { ApiValidationPipe } from "../../common/api-validation.pipe.js";
+import { ApiValidationPipe } from "../common/api-validation.pipe.js";
 import { CreateForwardRuleService } from "./create-forward-rule.service.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";

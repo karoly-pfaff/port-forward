@@ -1,6 +1,6 @@
 import type { GroupActionResult } from "@portier/shared";
 import { describe, expect, it } from "vitest";
-import { ApiBadRequestException, ApiNotFoundException } from "../../common/api-errors.js";
+import { ApiBadRequestException, ApiNotFoundException } from "../common/api-errors.js";
 import { StopForwardGroupService } from "./stop-forward-group.service.js";
 import type { ForwardGroupStopper } from "./forwards.writer.js";
 

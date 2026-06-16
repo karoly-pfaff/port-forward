@@ -1,6 +1,6 @@
 import type { ExportedConfig, ForwardRule, ImportMode, ImportResult } from "@portier/shared";
 import { describe, expect, it } from "vitest";
-import { ApiBadRequestException } from "../../common/api-errors.js";
+import { ApiBadRequestException } from "../common/api-errors.js";
 import { ConfigImportService } from "./config-import.service.js";
 import type { ConfigImporter } from "./config-import.writer.js";
 

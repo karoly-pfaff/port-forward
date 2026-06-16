@@ -8,6 +8,17 @@ All notable changes to Portier are documented here.
 
 v1.14 is an **architecture-migration release, not a feature release**: it moves the TypeScript Node fallback server from a single Express app to a NestJS modules/controllers/services structure while preserving the existing REST API contract, error taxonomy, static client serving, and Go-service parity. The Go service remains the preferred runtime; the CLI and web UI work unchanged; `validate:contract` stays the parity source of truth (still **234/234**). The migration is incremental and reversible — the existing Express server stays the active runtime until a NestJS replacement is explicitly validated.
 
+### Changed — Slice 31: server source layout cleanup and NestJS logging consolidation
+
+Structural cleanup before the final v1.14 release audit. No API behavior/contract change; CLI/UI/Go/replay untouched; `validate:contract` stays **234/234**; `docs/api/openapi.json` unchanged.
+
+- **Root `sources/` now holds only the entry (`index.ts`).** The domain/runtime/persistence files that sat beside the entry moved into homed concern folders: `forwarders/forward-manager.ts`, `config/{config-export,config-plan}.ts`, `persistence/config-store.ts`, `connections/connections-snapshot.ts`, `runtime/runtime-info.ts`, `diagnostics/diagnose.ts`, plus `app/server-options.ts` and `testing/test-helpers.ts`.
+- **The root `common/` is dissolved.** Its files are used only by the `api/` layer (plus `app/app.module.ts`'s global-filter registration), so the API-layer shared infrastructure — the error envelope/filter/exceptions, the validation pipe, the shared `CLOCK_READER`, and the single cross-feature `ApiErrorResponseDto` schema — moved to **`api/common/`**. The two feature/bootstrap-owned files left `common/` separately: `runtime-context.ts` → `app/` (DI/bootstrap wiring) and `manager-error.ts` → `api/forwards/` (forwards-owned). There is no longer a `sources/common/`.
+- **Runtime logging consolidated onto the NestJS `Logger`.** The bespoke structured-console logger was removed; the entry uses `new Logger("Server")`, and `createNestApp` enables the NestJS logger for a live runtime (silent for OpenAPI generation / tests via `resolveLoggerOption`/`CreateNestAppOptions`). The only remaining `console.*` calls are the logic-free OpenAPI build-tooling entries (normal script output, outside runtime logging).
+- DTO/schema ownership stays feature-local. No `sources/nest/` or `sources/legacy/` structure returns. Coverage gate stays **100/100/100**.
+
+Validation: lint/typecheck/build clean; full `npm run test` green (shared 105, server 614, client 449, all 12 Go packages); `validate:contract` 234/234; `validate:coverage:server` 100/100/100; `validate:runtime:smoke` 24/24 (the packaged NestJS `server.js` boots with NestJS logging).
+
 ### Changed — Slice 30: server structure cleanup, 100% coverage gate, release OpenAPI artifact
 
 The post-switch hardening slice — NestJS is now the **normal server implementation**, not a migration scaffold. No API behavior/contract change; CLI/UI/Go/replay untouched; `validate:contract` stays **234/234** (run against the NestJS server); `docs/api/openapi.json` unchanged.

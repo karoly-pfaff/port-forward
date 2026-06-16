@@ -1,7 +1,7 @@
 import type { ForwardRule } from "@portier/shared";
 import { describe, expect, it } from "vitest";
-import { ApiBadRequestException } from "../../common/api-errors.js";
-import type { ClockReader } from "../../common/clock.reader.js";
+import { ApiBadRequestException } from "../common/api-errors.js";
+import type { ClockReader } from "../common/clock.reader.js";
 import { ConfigPlanService } from "./config-plan.service.js";
 import type { ConfigPlanReader } from "./config-plan.reader.js";
 

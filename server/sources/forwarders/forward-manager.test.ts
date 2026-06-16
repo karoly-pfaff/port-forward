@@ -2,8 +2,8 @@ import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExportedConfig, ForwardRule } from "@portier/shared";
 import { ConflictError, errorMessage, ForwardManager, NotFoundError, ValidationError, type RuleStore } from "./forward-manager.js";
-import { ActivityStore } from "./activity/activity-store.js";
-import { getFreeTcpPort, startRuleStable, startTcpServerOnFreePort } from "./test-helpers.js";
+import { ActivityStore } from "../activity/activity-store.js";
+import { getFreeTcpPort, startRuleStable, startTcpServerOnFreePort } from "../testing/test-helpers.js";
 
 class MemoryStore implements RuleStore {
   constructor(private rules: ForwardRule[] = []) {}

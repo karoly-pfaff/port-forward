@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RuntimeInfoOptions } from "../../runtime-info.js";
+import type { RuntimeInfoOptions } from "../../runtime/runtime-info.js";
 import { RuntimeService } from "./runtime.service.js";
 import type { ClockReader, ProcessReader, RuntimeInfoReader } from "./runtime.reader.js";
 

@@ -1,8 +1,8 @@
 import type { ForwardRule, ForwardStatus } from "@portier/shared";
 import { describe, expect, it } from "vitest";
-import { getFreeUdpPort } from "../../test-helpers.js";
-import { ApiNotFoundException } from "../../common/api-errors.js";
-import type { ClockReader } from "../../common/clock.reader.js";
+import { getFreeUdpPort } from "../../testing/test-helpers.js";
+import { ApiNotFoundException } from "../common/api-errors.js";
+import type { ClockReader } from "../common/clock.reader.js";
 import { DiagnoseForwardRuleService } from "./diagnose-forward-rule.service.js";
 import type { DiagnosticReader } from "./forwards-diagnostics.reader.js";
 

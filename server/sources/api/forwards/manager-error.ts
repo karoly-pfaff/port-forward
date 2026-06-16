@@ -1,5 +1,5 @@
-import { ConflictError, NotFoundError, ValidationError } from "../forward-manager.js";
-import { ApiBadRequestException, ApiConflictException, ApiNotFoundException } from "./api-errors.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../forwarders/forward-manager.js";
+import { ApiBadRequestException, ApiConflictException, ApiNotFoundException } from "../common/api-errors.js";
 
 /**
  * Translates a domain `ForwardManager` error into the matching Nest API

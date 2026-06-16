@@ -1,7 +1,7 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Inject, NotFoundException } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { isApiPath, toApiError } from "./api-error-envelope.js";
-import { STATIC_FALLBACK, disabledStaticFallback, type StaticFallback } from "../static/static-serving.js";
+import { STATIC_FALLBACK, disabledStaticFallback, type StaticFallback } from "../../static/static-serving.js";
 
 /**
  * Global exception filter that gives every `/api/*` route the Portier error

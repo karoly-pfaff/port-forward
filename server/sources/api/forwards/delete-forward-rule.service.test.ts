@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ConflictError, NotFoundError, ValidationError } from "../../forward-manager.js";
+import { ConflictError, NotFoundError, ValidationError } from "../../forwarders/forward-manager.js";
 import {
   ApiBadRequestException,
   ApiConflictException,
   ApiNotFoundException,
-} from "../../common/api-errors.js";
+} from "../common/api-errors.js";
 import { DeleteForwardRuleService } from "./delete-forward-rule.service.js";
 import type { ForwardRuleDeleter } from "./forwards.writer.js";
 

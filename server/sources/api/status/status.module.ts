@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common";
-import { APP_RUNTIME, type AppRuntime } from "../../common/runtime-context.js";
+import { APP_RUNTIME, type AppRuntime } from "../../app/runtime-context.js";
 import { StatusController } from "./status.controller.js";
 import { emptyStatusReader, STATUS_READER, type StatusReader } from "./status.reader.js";
 import { StatusService } from "./status.service.js";
