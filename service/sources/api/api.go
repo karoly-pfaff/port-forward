@@ -11,7 +11,6 @@ import (
 	"portier/service/sources/advisory"
 	"portier/service/sources/app"
 	"portier/service/sources/configplan"
-	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 	"portier/service/sources/manager"
 	"portier/service/sources/static"
@@ -96,11 +95,6 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(r.URL.Path, "/api/forwards/") {
 		h.serveForwardByID(w, r)
-		return
-	}
-
-	if r.Method == http.MethodGet && r.URL.Path == "/api/connections" {
-		h.serveConnections(w)
 		return
 	}
 
@@ -427,80 +421,6 @@ func rulesToResponses(rules []domain.ForwardRule) []domain.ForwardRuleResponse {
 		responses = append(responses, toRuleResponse(rule))
 	}
 	return responses
-}
-
-func (h *Handler) serveConnections(w http.ResponseWriter) {
-	tcpConns := h.manager.GetLiveTCPConnections()
-	if tcpConns == nil {
-		tcpConns = make([]connections.TcpConnectionInfo, 0)
-	}
-	udpSessions := h.manager.GetLiveUDPSessions()
-	if udpSessions == nil {
-		udpSessions = make([]connections.UdpSessionInfo, 0)
-	}
-
-	rules := h.manager.ListRules()
-	summaries := make([]connections.RuleLiveSummary, 0, len(rules))
-	for _, rule := range rules {
-		summaries = append(summaries, buildRuleLiveSummary(rule, tcpConns, udpSessions))
-	}
-
-	writeJSON(w, http.StatusOK, connections.LiveConnectionsResponse{
-		GeneratedAt:    time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
-		TCPConnections: tcpConns,
-		UDPSessions:    udpSessions,
-		RuleSummaries:  summaries,
-	})
-}
-
-func buildRuleLiveSummary(
-	rule domain.ForwardRule,
-	tcpConns []connections.TcpConnectionInfo,
-	udpSessions []connections.UdpSessionInfo,
-) connections.RuleLiveSummary {
-	var bytesIn, bytesOut, packetsIn, packetsOut int64
-	activeTCP := 0
-	activeUDP := 0
-	var lastTrafficAt *string
-
-	for _, conn := range tcpConns {
-		if conn.RuleID == rule.ID {
-			activeTCP++
-			bytesIn += conn.BytesIn
-			bytesOut += conn.BytesOut
-			if lastTrafficAt == nil || conn.StartedAt > *lastTrafficAt {
-				t := conn.StartedAt
-				lastTrafficAt = &t
-			}
-		}
-	}
-
-	for _, sess := range udpSessions {
-		if sess.RuleID == rule.ID {
-			activeUDP++
-			bytesIn += sess.BytesIn
-			bytesOut += sess.BytesOut
-			packetsIn += sess.PacketsIn
-			packetsOut += sess.PacketsOut
-			if lastTrafficAt == nil || sess.LastSeenAt > *lastTrafficAt {
-				t := sess.LastSeenAt
-				lastTrafficAt = &t
-			}
-		}
-	}
-
-	return connections.RuleLiveSummary{
-		RuleID:               rule.ID,
-		RuleName:             rule.Name,
-		Protocol:             string(rule.Protocol),
-		ActiveTCPConnections: activeTCP,
-		ActiveUDPSessions:    activeUDP,
-		BytesIn:              bytesIn,
-		BytesOut:             bytesOut,
-		PacketsIn:            packetsIn,
-		PacketsOut:           packetsOut,
-		LastTrafficAt:        lastTrafficAt,
-	}
 }
 
 func toRuleResponse(rule domain.ForwardRule) domain.ForwardRuleResponse {

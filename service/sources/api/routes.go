@@ -29,6 +29,7 @@ func (h *Handler) modularRoutes() []modularRoute {
 	routes = append(routes, h.portsRoutes()...)
 	routes = append(routes, h.activityRoutes()...)
 	routes = append(routes, h.statusRoutes()...)
+	routes = append(routes, h.connectionsRoutes()...)
 	return routes
 }
 

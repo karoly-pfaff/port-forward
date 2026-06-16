@@ -25,6 +25,7 @@ func TestModularRoutesRegistered(t *testing.T) {
 		"GET /api/activity":       true,
 		"DELETE /api/activity":    true,
 		"GET /api/status":         true,
+		"GET /api/connections":    true,
 	}
 	got := map[string]bool{}
 	for _, route := range h.routes {
@@ -56,6 +57,7 @@ func TestDispatchModular(t *testing.T) {
 		{"activity GET matched", http.MethodGet, "/api/activity", true},
 		{"activity DELETE matched", http.MethodDelete, "/api/activity", true},
 		{"status matched", http.MethodGet, "/api/status", true},
+		{"connections matched", http.MethodGet, "/api/connections", true},
 		// Wrong method must NOT be handled here — it falls through to the legacy
 		// dispatch and its generic 404 envelope (404-not-405).
 		{"health wrong method falls through", http.MethodPost, "/api/health", false},
@@ -65,9 +67,11 @@ func TestDispatchModular(t *testing.T) {
 		{"activity subpath falls through", http.MethodGet, "/api/activity/extra", false},
 		{"status wrong method falls through", http.MethodPost, "/api/status", false},
 		{"status subpath falls through", http.MethodGet, "/api/status/extra", false},
+		{"connections wrong method falls through", http.MethodPost, "/api/connections", false},
+		{"connections subpath falls through", http.MethodGet, "/api/connections/extra", false},
 		// A non-migrated path is never claimed by the modular table.
 		{"forwards not migrated", http.MethodGet, "/api/forwards", false},
-		{"connections not migrated", http.MethodGet, "/api/connections", false},
+		{"config export not migrated", http.MethodGet, "/api/config/export", false},
 	}
 
 	for _, tc := range cases {
