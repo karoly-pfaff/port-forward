@@ -16,22 +16,26 @@ import (
 func TestModularRoutesRegistered(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
-	want := map[string]string{
-		"/api/health":         http.MethodGet,
-		"/api/runtime":        http.MethodGet,
-		"/api/ports/advisory": http.MethodGet,
+	// Each entry is a (method, path) pair; /api/activity intentionally appears
+	// twice (GET + DELETE) — the first multi-method same-path modular route.
+	want := map[string]bool{
+		"GET /api/health":         true,
+		"GET /api/runtime":        true,
+		"GET /api/ports/advisory": true,
+		"GET /api/activity":       true,
+		"DELETE /api/activity":    true,
 	}
-	got := map[string]string{}
+	got := map[string]bool{}
 	for _, route := range h.routes {
-		got[route.path] = route.method
+		got[route.method+" "+route.path] = true
 	}
 
 	if len(h.routes) != len(want) {
 		t.Fatalf("modular routes = %d (%v), want %d", len(h.routes), got, len(want))
 	}
-	for path, method := range want {
-		if got[path] != method {
-			t.Fatalf("route %s = %q, want %q", path, got[path], method)
+	for key := range want {
+		if !got[key] {
+			t.Fatalf("missing modular route %q (have %v)", key, got)
 		}
 	}
 }
@@ -48,11 +52,15 @@ func TestDispatchModular(t *testing.T) {
 		{"health matched", http.MethodGet, "/api/health", true},
 		{"runtime matched", http.MethodGet, "/api/runtime", true},
 		{"ports advisory matched", http.MethodGet, "/api/ports/advisory", true},
+		{"activity GET matched", http.MethodGet, "/api/activity", true},
+		{"activity DELETE matched", http.MethodDelete, "/api/activity", true},
 		// Wrong method must NOT be handled here — it falls through to the legacy
 		// dispatch and its generic 404 envelope (404-not-405).
 		{"health wrong method falls through", http.MethodPost, "/api/health", false},
 		{"runtime wrong method falls through", http.MethodDelete, "/api/runtime", false},
 		{"ports advisory wrong method falls through", http.MethodPost, "/api/ports/advisory", false},
+		{"activity wrong method falls through", http.MethodPost, "/api/activity", false},
+		{"activity subpath falls through", http.MethodGet, "/api/activity/extra", false},
 		// A non-migrated path is never claimed by the modular table.
 		{"status not migrated", http.MethodGet, "/api/status", false},
 		{"forwards not migrated", http.MethodGet, "/api/forwards", false},

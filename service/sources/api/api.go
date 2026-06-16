@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
-	"portier/service/sources/activity"
 	"portier/service/sources/advisory"
 	"portier/service/sources/app"
 	"portier/service/sources/configplan"
@@ -131,48 +129,9 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if r.URL.Path == "/api/activity" {
-		if r.Method == http.MethodGet {
-			h.listActivity(w, r)
-			return
-		}
-		if r.Method == http.MethodDelete {
-			h.clearActivity(w)
-			return
-		}
-	}
-
 	writeJSON(w, http.StatusNotFound, map[string][]string{
 		"errors": {notFoundMessage},
 	})
-}
-
-func (h *Handler) listActivity(w http.ResponseWriter, r *http.Request) {
-	params := activity.ListParams{}
-	q := r.URL.Query()
-
-	if limitStr := q.Get("limit"); limitStr != "" {
-		if n, err := strconv.Atoi(limitStr); err == nil {
-			params.Limit = n
-		}
-	}
-	if ruleID := q.Get("ruleId"); ruleID != "" {
-		params.RuleID = &ruleID
-	}
-	if eventType := q.Get("type"); eventType != "" {
-		params.Type = &eventType
-	}
-	if severity := q.Get("severity"); severity != "" {
-		params.Severity = &severity
-	}
-
-	events := h.manager.ListActivity(params)
-	writeJSON(w, http.StatusOK, map[string]any{"events": events})
-}
-
-func (h *Handler) clearActivity(w http.ResponseWriter) {
-	h.manager.ClearActivity()
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) createForward(w http.ResponseWriter, r *http.Request) {
