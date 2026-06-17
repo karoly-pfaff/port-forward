@@ -667,3 +667,7 @@ Events include:
 - `GET /api/config/export`
 - `POST /api/config/import` — body: `{ mode, config }`
 - `POST /api/forwards/reorder` — body: `{ ids: string[] }`
+
+## Credits
+
+Portier was built with human direction and AI assistance — with the human firmly in the loop. See [Credits](docs/credits.md).

@@ -4,6 +4,30 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
+## [1.16.0] - 2026-06-17 - Post-Migration Architecture & Reliability Audit
+
+A hardening release, not a feature release: a ten-audit review of Portier after the v1.14 NestJS migration and v1.15 Go chi-router migration, plus a synthesis-and-fix-plan and a small docs-polish pass. No API/contract behavior changed, no coverage gate was lowered, and no installer/upgrade work was moved into v1.16.
+
+Audits completed (verdicts): Contract Parity (PASS), Architecture & Module Boundary (PASS), Resilience & Data Durability (PASS WITH NOTES), Security & Local-Safety (PASS WITH NOTES), Observability & Replay (PASS WITH NOTES), Automation/Policy/Workflow (PASS WITH NOTES), Testing & Coverage (PASS WITH NOTES), Complexity/Duplication/Maintainability (PASS WITH NOTES), Documentation/Glossary/Operator UX (PASS WITH NOTES), Release Readiness & Packaging (PASS WITH NOTES). Result: 3 PASS, 7 PASS WITH NOTES, 0 FAIL, 0 release blockers. A synthesis-and-fix-plan consolidated and classified all findings.
+
+Docs polish (Option A — no behavior change):
+- API error/method conventions documented (`{ "errors": [...] }` envelope; unknown `/api/*` and wrong-method both return the 404-not-405 envelope; Go-only `GET /api/health` vs NestJS-only `GET /health`; generic-500 behavior and the v1.19 redaction follow-up).
+- Docs index navigation completed (roadmap, CLI/replay, service/server readmes).
+- Reserved `policy.Warning` severity note added to the CLI docs.
+- Config-export topology-sensitivity warning added to the API contract docs.
+- Release "Version Surfaces To Bump" checklist added; `api/openapi.json` added to the documented package-layout block.
+
+Validation:
+- lint, typecheck, full unit tests, CLI tests, contract parity, OpenAPI inventory, all coverage gates (no gate lowered), config compatibility, CLI/replay validation, build, and runtime smoke passed.
+- Known caveat: the Playwright E2E web server currently fails to boot because it launches the NestJS server via `tsx` from the repo root, where `tsconfig.json` lacks `experimentalDecorators` (pre-existing since the v1.14 NestJS switch; product behavior is validated by contract parity against the built server and by runtime smoke). Tracked as a follow-up.
+
+Deferred follow-ups (no v1.16 blockers):
+- R-1 fatal autostart / corrupt-config startup lockout → v1.17.
+- O-1 unwired UDP `PruneExpired` / one-way session registry growth → v1.17 or a dedicated fix slice.
+- S-1 Go generic-500 message redaction (parity with the NestJS fixed message) → v1.19.
+- L-1 strict lint hardening → v1.19.
+- Install / service / upgrade experience → v1.18.
+
 ## [1.15.0] - 2026-06-17 - Go Service Modular Router
 
 The native Go service API layer was reorganized from a monolithic dispatcher into focused route modules on `github.com/go-chi/chi/v5`, behind the explicit `app.App` dependency container.

@@ -586,7 +586,11 @@ Behavior:
 
 Purpose: lightweight health probe for the native Go service.
 
-TypeScript server: not implemented.
+This is a Go-only liveness endpoint, intentionally outside the canonical `/api`
+contract. The NestJS TypeScript server does not serve `GET /api/health`; it exposes
+a separate `GET /health` liveness probe instead (also outside the `/api` contract).
+Both are intentional, documented exceptions and are excluded from the cross-runtime
+OpenAPI inventory accordingly.
 
 Go service response:
 
@@ -597,6 +601,28 @@ Go service response:
   "name": "Portier"
 }
 ```
+
+## Error And Method Conventions
+
+These behaviors are identical across the TypeScript (NestJS) server and the Go
+service unless noted, and are guarded by `npm run validate:contract`.
+
+- **Error envelope.** All `/api` errors use `{ "errors": [ "message", ... ] }`.
+  Validation → `400`, conflict → `409`, not found → `404`.
+- **Unknown `/api/*` route → `404`.** Any unmatched API path returns the stable
+  envelope `{ "errors": ["API route was not found."] }`.
+- **Wrong method on a known API path → `404`, not `405`.** A request to an existing
+  API path with an unsupported method returns the same `404` "API route was not
+  found." envelope (intentional 404-not-405 behavior); Portier does not emit `405`
+  for the `/api` surface.
+- **Liveness endpoints are outside the `/api` contract.** The Go service serves
+  `GET /api/health`; the NestJS server serves `GET /health` (see above).
+- **Generic unexpected `500`.** An unexpected/internal failure returns a generic
+  `500` with the `{ "errors": [...] }` envelope and no stack trace. The NestJS
+  server uses a fixed `"Internal server error."` message; the Go service currently
+  returns the underlying error's message text. This path is intentionally not
+  modelled in OpenAPI, and stricter Go redaction (parity with the NestJS fixed
+  message) is tracked for v1.19 RC hardening.
 
 ## Static File Serving
 

@@ -4,7 +4,7 @@ import type { RuntimeInfo } from "@portier/shared";
 /** Response body for `GET /api/runtime` — metadata-only, `implements RuntimeInfo`. */
 export class RuntimeInfoResponseDto implements RuntimeInfo {
   @ApiProperty({ type: String, example: "Portier" }) name!: string;
-  @ApiProperty({ type: String, example: "1.15.0" }) version!: string;
+  @ApiProperty({ type: String, example: "1.16.0" }) version!: string;
   @ApiProperty({ enum: ["node", "go"], description: "Runtime implementation serving the API." })
   runtime!: RuntimeInfo["runtime"];
   @ApiProperty({ enum: ["windows", "macos", "linux", "unknown"] }) platform!: RuntimeInfo["platform"];
