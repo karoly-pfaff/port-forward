@@ -16,9 +16,11 @@ Response: `ForwardRuleResponse[]`.
 
 `ForwardRuleResponse` is a `ForwardRule` plus `advisories: PortAdvisory[]`.
 
-### Optional rule group metadata (v1.8)
+### Optional rule group metadata
 
-A forward rule MAY carry an optional `group` label — operator-facing, **behavior-neutral** metadata introduced in v1.8 as the foundation for rule grouping/profiles. It does **not** affect forwarding, lifecycle, duplicate-binding (still `protocol + listenHost + listenPort` only), or status behavior.
+A forward rule MAY carry an optional `group` label: operator-facing, **behavior-neutral**
+metadata used to organize rules. It does **not** affect forwarding, lifecycle,
+duplicate-binding (still `protocol + listenHost + listenPort` only), or status behavior.
 
 - `group`: optional string. Omitted (not `null`, not empty) when the rule has no group — legacy rules without a `group` remain valid and are returned unchanged.
 - Validation (identical in the TypeScript and Go runtimes, parity-tested via `validate:contract`):
@@ -97,9 +99,12 @@ Errors:
 
 Go service: TCP and UDP rules close the listener and active sockets.
 
-## `POST /api/forwards/groups/:group/start` · `POST /api/forwards/groups/:group/stop`
+## `POST /api/forwards/groups/:group/start` / `POST /api/forwards/groups/:group/stop`
 
-Purpose: start or stop **all** rules that share a `group` label (v1.8 Slice 4). These are **behaviour over existing rule metadata** — they never change rule definitions, order, `enabled`/autostart, or `group`, and duplicate-binding behaviour is unchanged. The per-rule lifecycle is identical to the single-rule `:id/start` and `:id/stop` endpoints.
+Purpose: start or stop **all** rules that share a `group` label. These are
+**behavior over existing rule metadata**: they never change rule definitions, order,
+`enabled`/autostart, or `group`, and duplicate-binding behavior is unchanged. The
+per-rule lifecycle is identical to the single-rule `:id/start` and `:id/stop` endpoints.
 
 Path: `:group` is the URL-encoded group label. It is validated like any group label and, additionally, must be **non-empty** (a group operation needs a target): trimmed; rejected (`group is required.`) when empty/whitespace; otherwise ≤ 64 characters with no control characters. Matching uses the normalized (trimmed) group value and is exact/case-sensitive.
 
@@ -136,7 +141,9 @@ Errors:
 - `400` for an invalid group label (`group is required.`, `group must be 64 characters or fewer.`, `group must not contain control characters.`).
 - `404` (standard `{ errors: [...] }` envelope) when **no rule** has the requested group — group operations do not silently no-op on an absent target.
 
-Ungrouped bulk actions are intentionally **not** provided in this slice. The TypeScript server and Go service implement identical behaviour and response shape; `validate:contract` guards parity (`group:start`).
+Ungrouped bulk actions are intentionally **not** provided by these endpoints. The
+TypeScript server and Go service implement identical behavior and response shape;
+`validate:contract` guards parity.
 
 ## `GET /api/status`
 
@@ -146,7 +153,7 @@ Request body: none.
 
 Response: `ForwardStatus[]`.
 
-### Rule health (v1.8)
+### Rule health
 
 Each `ForwardStatus` carries a required `health: "healthy" | "warning" | "error"` field — an operator-facing classification **derived deterministically from existing runtime state**. It performs **no target probing and no background check**; it is purely a function of `enabled`, `running`, and `lastError`. Health is distinct from the lifecycle `running` state.
 
@@ -264,7 +271,7 @@ Both runtimes must declare and emit exactly this set. `validate:contract` guards
 
 ## `DELETE /api/activity`
 
-Purpose: clear the in-memory activity log. Added in v1.2.
+Purpose: clear the in-memory activity log.
 
 Both runtimes implement this endpoint. Does not affect forwarding rules or runtime state.
 
@@ -272,7 +279,7 @@ Response: `204 No Content`
 
 ## `GET /api/runtime`
 
-Purpose: expose runtime environment details for the local management UI. Added in v1.2.
+Purpose: expose runtime environment details for the local management UI.
 
 Both runtimes implement this endpoint with the same response shape.
 
@@ -309,7 +316,7 @@ Field notes:
 
 ## `POST /api/forwards/:id/diagnose`
 
-Purpose: run diagnostic checks against an existing forward rule without changing rule state. Added in v1.2.
+Purpose: run diagnostic checks against an existing forward rule without changing rule state.
 
 Both runtimes implement this endpoint with the same response shape.
 
@@ -372,7 +379,7 @@ UDP reachability cannot be proven without a protocol-specific response from the 
 
 Purpose: return a read-only snapshot of active TCP connections and UDP sessions for all running forwarding rules, along with per-rule live traffic summaries.
 
-Implemented in v1.4 Slice 7. Both runtimes expose the same response shape.
+Both runtimes expose the same response shape.
 
 Request body: none.
 
@@ -459,11 +466,11 @@ Field notes:
 - UDP `one-way` mode: per-client session metadata may be limited; see UDP mode notes.
 - UDP `bidirectional-last-client` mode: only the most recent client session is available.
 
-## `POST /api/config/plan` — Implemented (both runtimes, v1.5)
+## `POST /api/config/plan`
 
 Purpose: compare a desired config against the currently running Portier configuration and return a structured plan showing adds, updates, removes, and unchanged rules. Read-only — does not modify state.
 
-Implemented in v1.5 Slice 2 (TypeScript server) and v1.5 Slice 3 (Go service). Both runtimes pass all contract assertions.
+Both runtimes implement this endpoint.
 
 Request body:
 
@@ -532,11 +539,11 @@ Error conditions:
 
 Does not mutate running config. Does not start or stop rules.
 
-## `POST /api/config/apply` — Implemented (v1.5)
+## `POST /api/config/apply`
 
 Purpose: apply a desired config to the running configuration after explicit confirmation. Supports dry-run mode.
 
-Implemented in TypeScript server and Go service (v1.5 Slice 5). Both runtimes pass all 9 contract assertions.
+Both runtimes implement this endpoint.
 
 Request body:
 
@@ -629,9 +636,10 @@ The client should import these from `@portier/shared`:
 - `RuleDiagnosticsResult`
 - port constants and advisory helpers
 
-### Added in v1.4 Slice 2, implemented in v1.4 Slice 7
+### Live connection types
 
-The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GET /api/connections` endpoint is implemented in both runtimes as of v1.4 Slice 7.
+The following types are defined in `@portier/shared`. The `GET /api/connections`
+endpoint is implemented in both runtimes.
 
 - `LiveConnectionsResponse` — top-level response for `GET /api/connections`
 - `TcpConnectionInfo` — individual TCP connection record; `status: LiveConnectionStatus`
@@ -640,7 +648,7 @@ The following types are defined in `@portier/shared` as of v1.4 Slice 2. The `GE
 - `LiveConnectionStatus` — `"active"` (TCP connections are either active or gone)
 - `UdpSessionStatus` — `"active" | "idle"`
 
-### Added in v1.5 — Plan/diff/apply types
+### Plan/diff/apply types
 
 The following types are defined in `@portier/shared` (`shared/sources/plan.ts`). Both `POST /api/config/plan` and `POST /api/config/apply` are implemented in both the TypeScript server and Go service.
 

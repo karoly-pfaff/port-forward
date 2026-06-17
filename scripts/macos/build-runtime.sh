@@ -59,10 +59,10 @@ cp "$BUNDLE_CJS" "$OUTPUT_DIR/server.js"
 echo '{ "type": "commonjs" }' > "$OUTPUT_DIR/package.json"
 
 echo "Generating OpenAPI document..."
-npm --prefix "$REPO_ROOT" run generate:apidoc
+npm --prefix "$REPO_ROOT" run apidoc:generate
 
 echo "Copying OpenAPI document into package..."
-npm --prefix "$REPO_ROOT" run copy:apidoc:release -w server -- "$OUTPUT_DIR"
+npm --prefix "$REPO_ROOT" run apidoc:release -w server -- "$OUTPUT_DIR"
 
 echo "Building Go service for macOS (darwin/amd64)..."
 pushd "$REPO_ROOT/service" > /dev/null

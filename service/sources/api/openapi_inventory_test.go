@@ -7,7 +7,7 @@
 //	go -C service test -count=1 -tags openapi_inventory \
 //	  -run TestGoAPIInventoryMatchesOpenAPI ./sources/api/
 //
-// after `npm run generate:apidoc` has produced server/build/api/openapi.json.
+// after `npm run apidoc:generate` has produced server/build/api/openapi.json.
 // The pure comparison logic it calls lives (and is unit-tested) in
 // route_inventory_test.go.
 
@@ -23,7 +23,7 @@ import (
 // (routeInventory) matches the canonical server-generated OpenAPI artifact. The
 // NestJS/server OpenAPI document stays the single source of truth; this only
 // reads it. It does not generate OpenAPI and never falls back to
-// docs/api/openapi.json.
+// docs/openapi.json.
 func TestGoAPIInventoryMatchesOpenAPI(t *testing.T) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -55,7 +55,7 @@ func TestGoAPIInventoryMatchesOpenAPI(t *testing.T) {
 				"Canonical artifact: %s\n"+
 				"If the OpenAPI changed intentionally, update the Go handlers and the inventory in\n"+
 				"service/sources/api/route_inventory_test.go to match. The OpenAPI document remains\n"+
-				"the source of truth (regenerate with `npm run generate:apidoc`).",
+				"the source of truth (regenerate with `npm run apidoc:generate`).",
 			strings.Join(diffs, "\n  "), artifact)
 	}
 }

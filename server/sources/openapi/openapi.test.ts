@@ -11,6 +11,7 @@ import {
   copyOpenApiToRelease,
   generateOpenApiDocument,
   OPENAPI_DOC_VERSION,
+  OPENAPI_DOCS_RELATIVE_PATH,
   OPENAPI_DOCS_PATH,
   OPENAPI_RELATIVE_PATH,
   resolveOpenApiPaths,
@@ -414,12 +415,13 @@ describe("writeOpenApiDocument", () => {
 });
 
 describe("resolveOpenApiPaths", () => {
-  it("resolves the primary (server build) and docs-copy paths under api/openapi.json", () => {
+  it("resolves the primary build path and the tracked docs-copy path", () => {
     const paths = resolveOpenApiPaths();
     expect(paths.primary.replace(/\\/g, "/")).toMatch(/\/server\/build\/api\/openapi\.json$/);
-    expect(paths.docs.replace(/\\/g, "/")).toMatch(/\/docs\/api\/openapi\.json$/);
+    expect(paths.docs.replace(/\\/g, "/")).toMatch(/\/docs\/openapi\.json$/);
     expect(paths.docs).toBe(OPENAPI_DOCS_PATH);
     expect(OPENAPI_RELATIVE_PATH.replace(/\\/g, "/")).toBe("api/openapi.json");
+    expect(OPENAPI_DOCS_RELATIVE_PATH).toBe("openapi.json");
   });
 });
 
@@ -432,7 +434,7 @@ describe("writeOpenApiArtifacts", () => {
 
   it("writes the primary artifact and a byte-for-byte docs copy", async () => {
     dir = mkdtempSync(join(tmpdir(), "portier-openapi-art-"));
-    const paths = { primary: join(dir, "build", "api", "openapi.json"), docs: join(dir, "docs", "api", "openapi.json") };
+    const paths = { primary: join(dir, "build", "api", "openapi.json"), docs: join(dir, "docs", "openapi.json") };
     const doc = await generateOpenApiDocument();
 
     const returned = writeOpenApiArtifacts(doc, paths);
@@ -483,8 +485,8 @@ describe("copyOpenApiToRelease", () => {
   });
 });
 
-describe("tracked docs/api/openapi.json", () => {
-  it("is up to date with generation (run `npm run generate:apidoc` if this fails)", async () => {
+describe("tracked docs/openapi.json", () => {
+  it("is up to date with generation (run `npm run apidoc:generate` if this fails)", async () => {
     const tracked = readFileSync(OPENAPI_DOCS_PATH, "utf8");
     const fresh = serializeOpenApiDocument(await generateOpenApiDocument());
     expect(tracked).toBe(fresh);

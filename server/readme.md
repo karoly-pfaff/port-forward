@@ -162,14 +162,14 @@ OpenAPI generator tests, and the mappers they pair with are 100% covered.
 
 ## OpenAPI artifact placement
 
-`npm run generate:apidoc` generates the OpenAPI document from the NestJS
+`npm run apidoc:generate` generates the OpenAPI document from the NestJS
 controller/DTO metadata (offline — no listener) and writes two artifacts:
 
 - **Primary (server-owned, generated):** `server/build/api/openapi.json` — under the
   gitignored `build/` output; the generator's primary target.
-- **Docs copy (tracked, reviewed):** `docs/api/openapi.json` — synced byte-for-byte
+- **Docs copy (tracked, reviewed):** `docs/openapi.json` — synced byte-for-byte
   from the primary artifact. A generator test (`openapi.test.ts`) is the drift guard
-  (it fails if the tracked copy is stale — run `generate:apidoc` and commit). The
+  (it fails if the tracked copy is stale — run `apidoc:generate` and commit). The
   same test asserts the documented route inventory (`EXPECTED_ROUTES`); a
   new/removed/re-pathed endpoint must update it.
 
@@ -179,8 +179,8 @@ The serialized document is deterministic — `components.schemas` is sorted by n
 **Release output:** packaging calls `copyOpenApiToRelease(releaseDir, sourcePath)`
 (`openapi/openapi.ts`) to copy the already-generated primary artifact to
 `<releaseDir>/api/openapi.json` **without regenerating**. The platform build scripts
-(`scripts/{windows,macos,linux}/build-runtime.*`) run `generate:apidoc` and then
-`copy:apidoc:release -w server -- <packageDir>`, so the packaged runtime
+(`scripts/{windows,macos,linux}/build-runtime.*`) run `apidoc:generate` and then
+`apidoc:release -w server -- <packageDir>`, so the packaged runtime
 (`build/portier/`, the platform dirs, and release archives) includes
 `api/openapi.json`. The generator never depends on a release directory existing.
 
@@ -230,8 +230,8 @@ sources/
     static-serving.ts           # resolveStaticOptions/hasStaticClient/configureStaticAssets + StaticFallback/STATIC_FALLBACK
   openapi/
     openapi.ts                  # generate/serialize(sorted)/resolveOpenApiPaths/writeOpenApiArtifacts/copyOpenApiToRelease — fully covered
-    generate.ts                 # logic-free `npm run generate:apidoc` entry — coverage-excluded
-    copy-release.ts             # logic-free `npm run copy:apidoc:release` entry — coverage-excluded
+    generate.ts                 # logic-free `npm run apidoc:generate` entry — coverage-excluded
+    release.ts                  # logic-free `npm run apidoc:release` entry — coverage-excluded
   # framework-free domain / runtime / persistence concern folders:
   forwarders/                   # forward-manager.ts (rule lifecycle/manager) + tcp/udp forwarders + types
   config/                       # config-export.ts (buildExportedConfig + configExportedActivityEvent) + config-plan.ts (buildConfigPlan/buildApplyImportFromPlan)
@@ -261,7 +261,7 @@ they log). `createNestApp` enables the logger for a live runtime
 (`resolveLoggerOption`, overridable via `CreateNestAppOptions.logger`). There is no
 custom logger abstraction and no global `console` monkey-patching. The only `console.*`
 calls are in the logic-free **build-tooling** entries (`openapi/generate.ts`,
-`openapi/copy-release.ts`) — normal CLI/script output, outside runtime logging.
+`openapi/release.ts`) — normal CLI/script output, outside runtime logging.
 
 ## Scripts
 
@@ -271,8 +271,8 @@ npm run start      -w server   # compiled server (node build/index.js)
 npm run build      -w server   # tsc → build/
 npm run typecheck  -w server
 npm run test       -w server   # all server tests
-npm run generate:apidoc      -w server  # regenerate openapi.json from NestJS metadata
-npm run copy:apidoc:release  -w server -- <dir>  # copy the primary OpenAPI artifact into a package dir
+npm run apidoc:generate      -w server  # regenerate openapi.json from NestJS metadata
+npm run apidoc:release       -w server -- <dir>  # copy the primary OpenAPI artifact into a package dir
 ```
 
 From the repo root, `npm run start:server` boots the compiled server with
@@ -283,7 +283,7 @@ From the repo root, `npm run start:server` boots the compiled server with
 Every server file with executable logic is covered at **100%** (statements / branches
 / functions; gate `100/100/100` in `scripts/validate-coverage.js`). The only
 coverage-excluded files are the logic-free process entries (`sources/index.ts`,
-`openapi/generate.ts`, `openapi/copy-release.ts` — their helpers are fully covered),
+`openapi/generate.ts`, `openapi/release.ts` — their helpers are fully covered),
 the test-only `testing/test-helpers.ts`, and the metadata-only `**/*.schema.ts`
 OpenAPI schema classes (never instantiated).
 Structurally-unreachable defensive branches (2 s socket-bind/connect timeouts,
@@ -320,7 +320,7 @@ annotated with `/* v8 ignore … -- reason */` rather than broadly excluded.
   green and no public API path/DTO is renamed for cosmetic reasons.
 - **OpenAPI docs are generated, not hand-written** — each endpoint carries its
   `@ApiTags`/`@ApiOperation`/`@Api*Response`/`@ApiQuery` + a decorated `*.schema.ts`
-  class in the same change; run `generate:apidoc` and commit `docs/api/openapi.json`.
+  class in the same change; run `apidoc:generate` and commit `docs/openapi.json`.
 - New code reaches **100% meaningful coverage**; build output stays under `build/`,
   never `dist/`.
 ```

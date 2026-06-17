@@ -335,13 +335,13 @@ func canonicalOpenAPIRelPath() string {
 }
 
 // locateCanonicalOpenAPI finds server/build/api/openapi.json at or above startDir,
-// failing with an actionable message (never falling back to docs/api/openapi.json).
+// failing with an actionable message (never falling back to docs/openapi.json).
 func locateCanonicalOpenAPI(startDir string) (string, error) {
 	rel := canonicalOpenAPIRelPath()
 	if p, ok := findFileUpwards(startDir, rel); ok {
 		return p, nil
 	}
-	return "", fmt.Errorf("canonical OpenAPI artifact (%s) not found at or above %s; run `npm run generate:apidoc` first", rel, startDir)
+	return "", fmt.Errorf("canonical OpenAPI artifact (%s) not found at or above %s; run `npm run apidoc:generate` first", rel, startDir)
 }
 
 // --- unit tests (pure logic; no artifact required) ---
@@ -581,8 +581,8 @@ func TestLocateCanonicalOpenAPI(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when artifact is missing")
 	}
-	if !strings.Contains(err.Error(), "npm run generate:apidoc") {
-		t.Fatalf("error should point to `npm run generate:apidoc`, got: %v", err)
+	if !strings.Contains(err.Error(), "npm run apidoc:generate") {
+		t.Fatalf("error should point to `npm run apidoc:generate`, got: %v", err)
 	}
 }
 

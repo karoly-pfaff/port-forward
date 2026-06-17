@@ -1,118 +1,137 @@
 # Portier Glossary
 
-Canonical terms used across Portier docs, code reviews, audit work, and future v1.x development. The goal is one shared vocabulary so the same concept is named the same way in prose.
+Canonical terms for Portier docs, UI copy, CLI output, reviews, and API references.
+This glossary names concepts; it does not rename frozen API fields, REST paths, or CLI
+commands. Keep entries short. Put feature history in `docs/changelog.md` or
+`docs/roadmap.md`.
 
-This file does **not** rename any existing API field, REST path, or CLI command. Where a frozen public term differs from the preferred prose term, the exception is called out. Treat "avoid/alias" words as synonyms in writing — do not rename code to match them.
+## Core Terms
 
-Source: `audits/v1.6-readability-naming-audit-1.md` (Naming-A).
+- **Forward rule**: A configured TCP or UDP port forward:
+  `protocol + listenHost:listenPort -> targetHost:targetPort`, plus `enabled` and,
+  for UDP, `udpMode`. "Rule" is the acceptable short form.
+- **Group**: Optional rule metadata (`ForwardRule.group`) used to organize rules.
+  It is behavior-neutral except for explicit group actions. It does not affect forwarding,
+  duplicate-binding checks, status, or lifecycle.
+- **Config**: Ambiguous by itself. Prefer a qualified term: exported config, desired
+  config, config plan, config apply, config import, or config export.
+- **Exported config**: The portable current-rule bundle:
+  `{ version, exportedAt, rules }`.
+- **Desired config**: The target rule set supplied to plan/apply.
+- **Config plan**: A read-only computed diff between current rules and a desired config.
+- **Config diff**: A human-readable presentation of a config plan.
+- **Config apply**: Plan-based application of a desired config after required gates
+  such as errors, dry-run, and destructive confirmation.
+- **Config import**: Bulk loading of an exported config in `merge` or `replace` mode.
+- **Config export**: Read-only dump of current rules as an exported config.
+- **Drift**: The current config differs from the desired config.
+- **Duplicate binding**: A conflicting listen tuple:
+  `protocol + listenHost + listenPort`. TCP and UDP may use the same port number
+  because they are different protocols.
 
----
+## Runtime Terms
 
-## Core concepts
+- **Runtime**: The generic implementation of the Portier service contract. Also the
+  API field whose values are `"node"` or `"go"`.
+- **TypeScript server** or **Node fallback**: The `server/` runtime and packaged
+  `server.js` fallback. API runtime value: `"node"`.
+- **Go service** or **native service**: The `service/` runtime and preferred packaged
+  production service. API runtime value: `"go"`.
+- **CLI**: The Go `portier` command under `tools/cli/`. It talks to the management API
+  unless a command is explicitly offline.
+- **Client** or **web UI**: The React app under `client/`, served from `web/`.
+- **Replay tool**: The offline `tools/replay` tool. It reads saved artifacts and never
+  contacts the runtime, executes workflows, mutates inputs, or uploads data.
 
-| Term | Meaning | Notes / frozen exceptions |
-| --- | --- | --- |
-| **Forward rule** (short: **rule**) | A configured TCP/UDP port forward: `protocol + listenHost:listenPort → targetHost:targetPort`, with `enabled` and (for UDP) `udpMode`. | Domain type `ForwardRule`; UI nav "Forward Rules". Prefer "forward rule" / "rule"; avoid "forward" alone as a noun. |
-| **Group** | An optional, behavior-neutral label on a forward rule (`ForwardRule.group`) used to organize rules (v1.8 Operator Power Tools foundation). Metadata only — does **not** affect forwarding, lifecycle, duplicate-binding, or status. Optional; trimmed; empty normalizes to absent; ≤ 64 chars, no control characters. | Added v1.8 Slice 1. A material (drift-producing) but **non-destructive** plan field. Not a "tag" or "profile" (those are not multi-valued/separate concepts yet). Frozen field name `group`. |
-| **`/api/forwards`** | The REST collection of forward rules (`GET`/`POST`/`PATCH`/`DELETE /api/forwards[/:id]`). | **Frozen REST path** — the one place "forward" is the noun. Do not rename. |
-| **Config** | Overloaded prefix — always qualify it. Distinct meanings: rule persistence (`rules.json`), the plan/apply engine, the export/import DTO, and the desired-state input. The bare word "config" alone is ambiguous; use one of the qualified terms below. | — |
-| **Exported config** | The serialized bundle of all current rules: `{ version: "1", exportedAt, rules: [...] }`. | DTO `ExportedConfig`; `GET /api/config/export`. |
-| **Desired config** | The target rule set supplied as input to plan/apply (the `desired` request field). | Type `DesiredConfig`. Avoid "target config". |
-| **Config plan** | A computed diff between the running rules and a desired config: operations (add/update/remove/unchanged), summary counts, drift/error flags, warnings. Read-only — computes, never mutates. | `POST /api/config/plan`, `ConfigPlanResponse`. |
-| **Config diff** | A human-readable *presentation* of a config plan (CLI `config diff`). | Same underlying plan as `config plan`; a view, not a separate computation. |
-| **Config apply** | Plan-based application of a desired config: build a plan, gate on errors/destructive/dry-run, then (on drift) perform a replace-import. | `POST /api/config/apply`. "Apply" is plan-based; it *uses* replace-import internally — that is an implementation detail, not "import". |
-| **Config import** | Bulk load of an exported config in one of two modes. | `POST /api/config/import`; `ImportMode` = `merge` \| `replace`. Avoid "load". |
-| **Config export** | Read-only dump of the current rules as an exported config. | `GET /api/config/export`. |
-| **Drift** | The running config differs from the desired config (`plan.summary.hasDrift`). | CLI `--fail-on-drift`. Avoid "difference". |
-| **Import mode: merge** | Add imported rules to the existing set; clashing IDs are regenerated; a listen-binding conflict (with an existing rule or within the imported set) rejects the whole import. | — |
-| **Import mode: replace** | Stop all rules, remove all existing rules, apply the imported set, restart enabled ones. A duplicate listen binding within the imported set rejects the whole import. | Config apply uses replace-import under the hood. |
+## Rule State
 
----
+- **enabled**: Persisted desired state. Enabled rules start automatically at launch.
+- **running**: Observed runtime state; the forwarder is bound and serving.
+- **status**: Observed runtime view: running state, counters, active connections or
+  sessions, `lastError`, and timestamps.
+- **health**: Operator-facing interpretation of existing state:
+  `healthy`, `warning`, or `error`. Derived from `enabled`, `running`, and `lastError`;
+  it never implies target probing or background monitoring.
+- **lastError**: Last observed forwarding error for a rule. Cleared on successful start.
+- **Duplicate rule**: A client-only UI convenience that opens the create form prefilled
+  from another rule. It creates through the normal API path and does not copy runtime state.
 
-## Runtime terminology
+## Activity And Diagnostics
 
-| Term | Meaning | Notes |
-| --- | --- | --- |
-| **Runtime** | The generic concept of "an implementation of the Portier service contract", and the name of the API field/endpoint that reports which one is running. | Reserve "runtime" for the generic concept and the API surface. Do not call a specific implementation "the runtime". `GET /api/runtime`; field `runtime: "node" \| "go"`. |
-| **Server** / **TypeScript server** / **Node fallback** | The Node/NestJS implementation (`@portier/server`, `server.js`). The documented fallback runtime; requires Node.js. | API runtime value is `"node"`. When distinguishing repo components, "server" means this. Avoid "TypeScript runtime" as a label. |
-| **Service** / **Go service** / **native service** | The native Go implementation (`service` / `service.exe`, `service/`). The **preferred** packaged production runtime. | API runtime value is `"go"`. Avoid "Go server". |
-| **CLI** | The Go API client under `tools/cli/` (`portier` / `portier.exe`). Talks to the management API; does **not** start the service or contain runtime/forwarding logic. | Stays a pure API client. |
-| **Client** / **web UI** | The React single-page app under `client/`, served from `web/`. | "Client" = the browser UI, distinct from the "CLI". |
-| **Replay tool** | The standalone offline analysis tool under `tools/replay/` (`replay`, a separate Go module `portier/replay`). Reads **saved** workflow artifacts (run/plan reports, history exports, support-report bundles). `replay plan` reports what offline analysis each artifact can support; `replay analyze` (the **replay analysis**) produces deterministic findings/insights from the artifact contents; `replay timeline` (the **replay timeline**) reconstructs a deterministic ordered list of events the artifact records, bracketed by clearly-marked synthetic lifecycle events; `replay compare` (the **replay comparison**) diffs two saved artifacts and reports what changed; `replay explain` (the **replay explanation**) maps the emitted codes an artifact records to local offline explanations. | A **separate tool beside the CLI**, not a `portier` subcommand. Strictly **offline and read-only** — never executes workflows, contacts the runtime, reads referenced files, mutates inputs, enforces policy, or uploads. The replay timeline must distinguish **synthetic** reconstruction events from **saved** artifact events and never invent timestamps; `replay compare` must mark **mixed-kind** comparisons as limited (never claim cross-kind equivalence); `replay explain` must **preserve unknown codes** (marked unknown, never dropped) and uses a **small local** explanation registry (not the CLI's). The replay plan, analysis, timeline, comparison, and explanation are **distinct local tool schemas** (not the REST contract). |
+- **Activity event**: An in-memory event in `/api/activity`: rule lifecycle, TCP
+  connection, UDP packet/session, or config event.
+- **Activity type**: The event type value such as `rule.started` or
+  `config.import.failed`. It is a contract value, not a cosmetic label.
+- **Activity severity**: `info`, `success`, `warning`, or `error`.
+- **Advisory**: A structured port-advisory object `{ code, severity, message }`.
+- **Warning**: A severity/category. Do not use it as a synonym for the advisory object.
+- **Diagnose**: A per-rule diagnostic action (`POST /api/forwards/:id/diagnose`,
+  CLI `diagnose`).
+- **Diagnostic check**: One check inside a diagnose result.
+- **Diagnostics export**: A runtime-wide support export. Distinct from per-rule diagnose.
+- **Doctor**: A deterministic multi-check operator diagnostic. `config doctor` analyzes
+  a local config file offline; `doctor` reads the live runtime without mutating it.
+- **Doctor check**: One finding in a doctor report. Check codes such as `config.valid`
+  are stable operator-facing identifiers.
+- **Support bundle**: A doctor-centered directory of support artifacts. It excludes
+  secrets, environment dumps, process lists, and logs.
+- **AI handoff prompt**: A local prompt template for asking an assistant to interpret
+  Portier output. Portier does not upload anything.
 
-The two runtimes implement **one** REST contract; the CLI carries a third (DTO-only) copy. `validate:contract` guards parity across all three. The replay tool reads exported artifacts after the fact — it is not part of the live REST contract.
+## Policy And Workflow Terms
 
----
+- **Policy**: Operator-defined safe-operation guardrails evaluated against a config.
+  Policy evaluation is dry-run unless a future feature explicitly says otherwise.
+- **Policy finding**: One result in a policy report. Policy codes are stable
+  operator-facing identifiers.
+- **Policy template**: A built-in starter policy file that renders to the same schema
+  accepted by `policy check`.
+- **Policy review**: Offline comparison of current vs candidate config that evaluates
+  only the candidate against a policy and reports a compact summary.
+- **Policy baseline**: A compact snapshot of accepted policy findings for later compare.
+  It is not a config copy.
+- **Finding fingerprint**: Stable identifier used to compare policy findings without
+  depending on volatile rule IDs.
+- **Explanation**: Static offline reference text for a stable code. Explanations do not
+  imply probing, enforcement, or automatic remediation.
+- **Workflow**: An ordered JSON-defined sequence of existing safe Portier operations.
+  It is not a general scripting language.
+- **Workflow plan**: Dry-run validation of a workflow definition.
+- **Workflow runbook**: Command preview for a valid workflow; it never executes commands.
+- **Workflow run**: Read-only execution of a valid workflow through existing evaluators.
+  It never mutates config, enforces policy, schedules work, or runs shell commands.
+- **Workflow support report**: Offline bundle made from an existing workflow report.
+- **Workflow run history**: Opt-in, bounded, local metadata about workflow runs. It never
+  records raw configs, policies, full reports, secrets, logs, environment, process data,
+  runtime URLs, or tokens.
 
-## Rule lifecycle and state
+## Live Traffic Terms
 
-| Term | Meaning | Notes |
-| --- | --- | --- |
-| **enabled** | Persisted *desired* on/off state of a rule (`ForwardRule.enabled`, stored in `rules.json`). Enabled rules are started at launch. | Desired state, not observed state. |
-| **running** | Observed *runtime* state — whether the forwarder is currently bound and serving (`ForwardStatus.running`). | Observed state. A rule can be **enabled but not running** after a failed start (e.g. port already in use). |
-| **status** | The observed runtime view of a rule: `running`, byte/packet counters, `lastError`, active connections/sessions (`ForwardStatus`, `GET /api/status`). | Distinct from the persisted rule. |
-| **health** | An operator-facing *interpretation* of a rule's status — `healthy` / `warning` / `error` (`ForwardStatus.health`). **Derived deterministically** from `enabled`/`running`/`lastError`; performs no target probing. | Added v1.8. **Distinct from `status`/`running`** (lifecycle) — health is the operator reading. `error` = has `lastError`; `warning` = enabled but not running; `healthy` = running clean or intentionally stopped. Does NOT imply active monitoring. |
-| **lastError** | The last forwarding error observed for a rule (bind failure, socket error), surfaced on its status. | Best-effort diagnostic; cleared on a successful (re)start. |
-| **Startup behavior** | On launch, enabled rules are started automatically (TS `loadAndStartEnabled`, Go `StartEnabled`). | There is no separate "autostart" field — "enabled" *is* the start-on-launch flag. |
-| **Duplicate rule** | A UI convenience (web client) that opens the create form pre-filled from an existing rule, so a new rule can be built from it. Added v1.8 Slice 8. | **Client-only, create flow** — no backend "duplicate" endpoint. The source rule is never modified; the duplicate saves through the normal create path (`POST /api/forwards`). The copy gets a `<name> copy` name, **autostart forced off**, no id, and the source's `group`; runtime-only state (status/`lastError`/health) is not copied. |
+- **Live connection**: A tracked TCP connection in `GET /api/connections` and the
+  Live Connections view.
+- **UDP session**: A tracked UDP flow. UDP has no connection, so Portier tracks sessions.
 
----
+## Frozen Public Names
 
-## Activity and diagnostics
+Do not rename these for cosmetic consistency:
 
-| Term | Meaning | Notes |
-| --- | --- | --- |
-| **Activity event** | An entry in the in-memory activity log (`ActivityEvent`, `GET /api/activity`): rule lifecycle, TCP connection, UDP packet/session, and config events. | Use "activity event", not "log event"/"log entry". |
-| **Activity type** | The event-type value (e.g. `rule.started`, `config.import.failed`). 17 canonical values. | **Contract value**, not a cosmetic label — guarded by `validate:contract` (see `docs/api-contract.md` and the Fix Slice 5 rule). |
-| **Activity severity** | The event severity: `info` \| `success` \| `warning` \| `error`. | Contract value; guarded for value/parity. |
-| **Advisory** | The structured port-advisory **object** `{ code, severity, message }` (`PortAdvisory`, `GET /api/ports/advisory`). | The *object*. Advisory wording is canonical in `@portier/shared`. |
-| **Warning** | A **severity/category**, not an object: advisory severity `warning`, and the plan type `ConfigPlanWarning`. | Keep distinct from "advisory". Do not call an advisory object "a warning". |
-| **Diagnose** | A per-rule diagnostic action: run a set of checks against one rule (`POST /api/forwards/:id/diagnose`, CLI `diagnose`, `RuleDiagnosticsResult`). | Verb/action on a single rule. |
-| **Diagnostic check** | One check within a diagnose result (`DiagnosticCheck`: id/label/status/message). | The unit inside a diagnose. |
-| **Diagnostics export** | A support **bundle** across the whole runtime (CLI `diagnostics export`). A distinct feature from per-rule diagnose. | Don't conflate with "diagnose". |
-| **Doctor** | A deterministic operator diagnostic that runs a set of **checks** and reports a graded summary (v1.9 Doctor & Config Toolkit). Two forms: **config doctor** (CLI `config doctor <file>`) — an **offline** analysis of a local config file; and the live **runtime doctor** (CLI `doctor`) — read-only checks against the running runtime (reachability, version, rule health, config readability). | A graded multi-check report, not a single per-rule action (that is "diagnose"). The offline config doctor must not require a live runtime; neither doctor mutates anything or probes targets. The live doctor reads rule health from the API `health` field — it does not re-derive it. |
-| **Doctor check** | One finding within a doctor report (`DoctorCheckResult`: `code`/`severity`/`title`/`message`/optional `details`). Each has a stable, operator-facing **check code** (e.g. `config.valid`, `config.lan_exposure`). | The unit inside a doctor report. Check codes are a CLI/tool contract — do not rename casually. |
-| **Support bundle** | The doctor-centric **directory** of artifacts produced by CLI `support-bundle --out <dir>` (v1.9): `manifest.json`, `doctor.json` (same schema as `doctor --json`), `doctor.txt`, `explanations.json`, and optional `runtime.json`/`config-export.json`. | A directory of doctor artifacts. Distinct from **Diagnostics export** (the single-file JSON bundle). Reuses the doctor report schema — no second schema. Excludes env/process/logs/tokens. |
-| **AI handoff prompt** | A reusable copy-paste prompt (`prompts/doctor.md`, v1.9) for asking an AI assistant to interpret doctor output. **Portier sends nothing** — the user pastes locally-generated output into an assistant of their choice. | Plain-text template only; no AI integration/upload/telemetry. Tells the assistant to treat the report as source of truth and never to request secrets. |
-| **Policy** | An operator-defined set of **safe-operation guardrails** evaluated against a config (v1.10). A small JSON file (`schemaVersion: 1` + a `rules` object of boolean guardrails: `requireGroup`, `allowLanExposure`, `allowPrivilegedPorts`, `allowAutostart`, `forbidDuplicateBindings`). Evaluated by CLI `policy check` against either a local config file (`--config`, **offline**) or the **live runtime config** (`--runtime`, read-only via config export). | Guardrails, **not** runtime/config diagnostics ("doctor") and **not** field validity ("validate"). Dry-run only in v1.10 — no enforcement/automation/mutation; runtime mode is read-only. No `allowUdp`/protocol restriction (UDP is first-class). |
-| **Policy finding** | One result within a policy report (`PolicyFinding`: `code`/`severity`/`title`/`message`/optional `details`), aggregated into a `PolicyReport` (`findings`/`summary`/`result`). Each has a stable, operator-facing **policy code** (e.g. `policy.lan_exposure_forbidden`, `policy.valid`). | The unit inside a policy report. Policy codes are a CLI/tool contract — do not rename casually. Distinct from a **doctor check**. |
-| **Policy template** | A built-in, named starter **policy** file (v1.10). Three deterministic templates — `local-safe`, `managed`, `permissive` — each a complete `schemaVersion: 1` policy printed by CLI `policy template <name>` (`--list` to enumerate, `--out <file>` to save). | A convenience for producing a valid policy file; the rendered/saved output is directly usable by `policy check`. Same schema as a hand-written policy — no extra guardrails, no protocol restriction/`allowUdp`. |
-| **Policy review** | A dry-run comparison (v1.10) of a **current** config against a **candidate** config that evaluates only the candidate against a **policy** and reports a compact change summary plus the candidate's policy findings. CLI `policy review --current <file> --candidate <file> --policy <file>`. | Offline and read-only — never applies/imports, never contacts the runtime. Reuses the `policy check` finding/report semantics; the change summary is scalar counts, **not** a full config diff. |
-| **Policy baseline** | An accepted **snapshot of policy findings** at a point in time (v1.10): a small JSON file (`schemaVersion: 1`, `createdAt`, `source`, `result`, fingerprinted `findings`). CLI `policy baseline create` saves one from a policy report; `policy baseline compare` reports which findings are **new/resolved/unchanged** versus the baseline. | A snapshot of findings, **not** a config copy (no raw config/secrets/runtime host data). Offline, deterministic (stable finding **fingerprints**). New findings fail; resolved-only changes do not. No enforcement. |
-| **Finding fingerprint** | A deterministic, source-independent string identifying a policy finding for baseline matching (v1.10): rule-scoped `code\|name\|protocol\|listenHost\|listenPort`, duplicate-binding `code\|protocol\|listenHost\|listenPort\|<sorted rule names>`, else `code\|message`. | Stable across offline vs runtime reports; never uses volatile rule IDs. Used only by **policy baseline** compare/create. |
-| **Explanation** | Static, deterministic, **offline** reference text for one stable code (`{code, title, meaning, action, severity, related}`). Covers doctor/check codes, policy finding codes, and workflow validation codes. Surfaced by CLI `explain <code>` / `explain --list`, and inline via `--explain` on `doctor` / `config doctor` / `policy check` / `workflow plan`. | One shared type/registry model (`tools/cli/sources/explain`); each domain owns its explanation data and the explain command merges them. Reference text only — never implies probing, enforcement, or automatic remediation. A policy explanation frames a finding as a **policy choice**, not necessarily a defect. |
-| **Workflow** | An operator-authored, ordered sequence of existing safe Portier operations described in a small JSON file (`schemaVersion: 1` + a non-empty `steps` array; v1.11). Step types name existing operations — `policy.check`, `policy.review`, `policy.baseline.compare`. CLI `workflow plan --file <file>` validates the schema + step references and prints a deterministic **workflow plan**. | Composes existing safe operations by reference; it is **not** a new operation or a scripting language. In v1.11 Slice 1 it is **plan/validate only** — no execution, no runtime contact, no mutation, no enforcement, no scheduler. |
-| **Workflow plan** | The deterministic dry-run result of validating a **workflow** (`{schemaVersion, name, steps:[{id, type, code, status, message, inputs, dependsOn}], summary, result}`; v1.11). Each step is `valid`/`invalid` and carries a **workflow validation code**; the plan `result` is `valid` only when every step is valid. | A validation/plan report, kept **separate** from the policy/doctor report models. Step `inputs`/`dependsOn` describe what a step *would* use; the plan never executes a step or opens the files a step refers to. |
-| **Workflow validation code** | A stable, operator-facing identifier for one workflow step-validation outcome (`workflow.step.*`, v1.11): `workflow.step.valid` plus 14 invalid-step codes (e.g. `workflow.step.unknown_report_from`). Carried on each `StepPlan` and explainable via `explain <code>` / `workflow plan --explain`. | A CLI/tool contract — do not rename casually. Exactly 15 codes (locked by test); each must have an **Explanation**. Distinct from a doctor check code and a policy finding code. |
-| **Workflow template** | A built-in, named starter **workflow** file (v1.11). Four deterministic templates — `policy-baseline-check`, `policy-check-local`, `policy-check-runtime`, `policy-review` — each a complete `schemaVersion: 1` workflow printed by CLI `workflow template <name>` (`--list` to enumerate, `--out <file>` to save). | A convenience for producing a valid workflow file; the rendered/saved output is directly usable by `workflow plan`. Composes only the existing validated step types — no execution/scheduler/mutation fields. Mirrors the **policy template** convention. |
-| **Workflow runbook** | The deterministic **command preview** for a valid workflow (`{workflow, steps:[{id, type, command, display, notes}], summary, result}`; v1.11). CLI `workflow runbook --file <file>` maps each step to the Portier CLI command a user would run manually (`command` = canonical argv, `display` = copy/paste string). A `reportFrom` step uses an explicit `<report-from:step-id>` placeholder, not a real path. | A **preview only** — Portier never executes the listed commands, contacts the runtime, or reads referenced files. Built only from a valid plan (`result` is always `ready`); an invalid workflow yields the plan + exit 1 instead. Distinct from the **workflow plan** (validation result). |
-| **Workflow run** | The deterministic result of **executing** a valid workflow read-only (`{workflow, steps:[{id, type, status, exitCode, message, report?}], summary, result}`; v1.11). CLI `workflow run --file <file>` runs each step by calling the existing policy evaluator/review/baseline-compare directly; a `reportFrom` step consumes the producing step's **in-memory** report. | **Read-only execution** — it evaluates policies and compares baselines but NEVER runs a shell command, applies/imports configs, enforces a policy, schedules, or mutates files; the only runtime contact is a read-only runtime-config read. A failed or skipped step fails the run (`result` `passed`/`failed`); runtime-unreachable exits 3. Distinct from the **workflow runbook** (a preview that never executes). |
-| **Workflow run code** | A stable, operator-facing identifier for one workflow-run failure/skip outcome (`workflow.run.*`, v1.11 Slice 6): `workflow.run.dependency_failed` (a `reportFrom` dependency produced no report → step skipped), `workflow.run.runtime_unreachable` (a runtime `policy.check` could not reach the runtime), `workflow.run.input_failed` (a referenced config/policy/baseline/report file, or the runtime config, was unreadable/malformed). Explainable via `explain <code>` / `workflow run --explain`. | A CLI/tool contract — do not rename casually. Exactly 3 codes (locked by test); each must have an **Explanation**. Distinct from a **workflow validation code** (`workflow.step.*`, a plan outcome): a run code describes an *execution* failure/skip. A failed policy step is explained by its **policy finding codes**, not a workflow-run code. |
-| **Workflow support report** | A small local diagnostic **bundle** packaged from an EXISTING workflow plan/run JSON report (`workflow report --from <report.json> --out <dir>`; v1.11 Slice 7). Directory of `manifest.json`, `summary.txt`, `report.json` (a normalized view — step id/type/status/message + explainable codes, with each run step's embedded report dropped), and `explanations.json` (canonical explanations for the emitted codes, `{}` when none). | A **packaging step only** — fully offline and read-only: it parses ONLY the provided report and NEVER executes a workflow, contacts the runtime, reads the files a step refers to, collects logs/env/process data, mutates the input, or uploads. Carries no raw config, secrets, or runtime data. Mirrors the `support-bundle` directory convention (non-empty `--out` refused). For AI handoff, pair with [`prompts/workflow.md`](../prompts/workflow.md). |
-| **Workflow run history** | An **opt-in**, bounded, local record of `workflow run` outcomes (v1.12 Slice 1). `workflow run --record-history` appends one **compact** entry per completed run (`{id, createdAt, workflow, result, summary, steps:[{id, type, status, exitCode}], codes?}`) to `<user-config-dir>/portier/workflow-history.json`; `workflow history list`/`stats`/`show`/`export`/`prune`/`clear` inspect, summarize, export, prune, and clear it. | **Local observability, opt-in** — nothing is recorded without `--record-history`; no background collection, telemetry, or upload. Stores **compact metadata only** — never raw configs/policies, full embedded reports, file contents, logs, env vars, process data, secrets, runtime URLs, or tokens. Bounded to the latest **100** runs (newest first). A history write failure never hides the run result; an invalid plan is never recorded. |
-| **Workflow history prune** | A destructive, local removal of history entries (`workflow history prune`; v1.12 Slice 5) in one explicit mode: retention (`--keep <n>` keeps the newest N) or filter (`--result`/`--workflow`/`--code` remove matching). Requires `--yes`; reports `{removed, kept, totalBefore, totalAfter}`. | **Local-only mutation of the compact history store** — never contacts the runtime, executes a workflow, reads workflow-referenced files, or touches configs/policies/reports. Exactly one mode (keep XOR filters); `--limit` not accepted. Requires `--yes`; an empty match (or missing history) is a successful no-op (removes 0). |
-| **Workflow history stats** | A deterministic summary of the (optionally filtered) local workflow run history (`workflow history stats`; v1.12 Slice 4): `totalStored`/`shown`, result counts (passed/failed), step status counts (passed/failed/skipped), and grouped counts for workflows, step types, and codes. | **Local read-only observability** over the compact history — never contacts the runtime, executes a workflow, reads workflow-referenced files, or scans raw reports. Reuses the **workflow history filter** semantics (applied before counting). Code counts count the **runs containing** each code (codes are deduped per run), not occurrences; grouped tables sort count-desc then key-asc. Empty history and empty match sets are successes (exit 0, zero stats). |
-| **Workflow history filter** | An optional, AND-combined filter on `workflow history list`/`stats` (v1.12 Slices 3–4): `--result <passed\|failed>`, `--workflow <name>` (exact), `--code <code>` (run whose `codes` contains it), and `--limit <n>` (newest N after filtering). The `--json` view adds `{filters?, shown, totalStored}`. | **Local read-only navigation** over the compact history — it never contacts the runtime, executes a workflow, reads workflow-referenced files, mutates the store, or scans raw reports. Filters combine with AND; `--limit` applies after filtering (newest matches). An empty match set is a success (exit 0), not an error; an invalid filter value is a usage error (exit 2). |
-| **Workflow history export** | A compact, deterministic JSON **snapshot** of the local workflow run history written by `workflow history export --out <file>` (v1.12 Slice 2): `{schemaVersion, createdAt, source:"workflow-history", runCount, runs[…], safety{…}}`, where `runs` are the stored compact entries (newest first) and `safety` is eight always-false flags stating the exclusions. | A **local archive/share** snapshot — fully offline and read-only: it never mutates the history store, contacts the runtime, executes a workflow, or reads workflow-referenced files. Carries the same compact metadata as the store (no raw configs/policies, full reports, secrets, logs, env, process data, runtime URLs, or tokens). Empty/missing history → a valid `runCount: 0` snapshot. With global `--json`, stdout is byte-identical to the file. Not for AI handoff — that is the **workflow support report** bundle. |
+- REST path `/api/forwards`.
+- Rule fields `listenHost` and `targetHost`.
+- Observed connection/session fields `clientAddress` and `targetAddress`.
+- Runtime values `"node"` and `"go"`.
+- Existing CLI command names.
 
-| **Live connection** | A tracked **TCP** connection (`TcpConnectionInfo`, "Live Connections" view, `GET /api/connections`). | TCP = connection. |
-| **UDP session** | A tracked **UDP** flow (`UdpSessionInfo`). UDP has no connection, so Portier tracks sessions. | UDP = session. Keep the TCP/UDP split deliberate. |
+## Writing Rules
 
----
+- Prefer "forward rule" in prose; "rule" is fine when context is clear.
+- Use "Go service" and "TypeScript server" when distinguishing implementations.
+- Use "config apply" for plan-based apply and "config import" for import endpoints.
+- Use "activity event" for `/api/activity`.
+- Keep "advisory" and "warning" distinct.
+- Use "live connection" for TCP and "UDP session" for UDP.
+- Use "diagnose" for the per-rule action and "diagnostics export" for the bundle.
+- Use "doctor" for graded diagnostic reports.
+- Use "policy" for guardrails and "workflow" for ordered safe-operation definitions.
 
-## Naming rules / exceptions
-
-- Prefer **"forward rule"** in prose; **"rule"** is the acceptable short form. Avoid "forward" alone as a noun.
-- **`/api/forwards`** is a frozen REST path — do not rename it.
-- **Do not rename public API fields** for cosmetic consistency — including `listenHost` / `targetHost` (rule config) and `clientAddress` / `targetAddress` (observed connection). They name the same kind of value at different layers; that is intentional and frozen.
-- When distinguishing runtimes, prefer **"Go service"** and **"TypeScript server / Node fallback"**. Reserve **"runtime"** for the generic concept and the `runtime` API field (values `node` / `go`).
-- Use **"config apply"** only for plan-based apply, never for raw import. Use **"config import"** for `/api/config/import` (modes `merge` / `replace`).
-- Use **"activity event"** (not "log event") for `/api/activity`; activity type/severity are contract values.
-- Use **"advisory"** for the object and **"warning"** for a severity/category — keep them distinct.
-- Use **"live connection"** for TCP and **"UDP session"** for UDP.
-- Use **"diagnose"** for the per-rule action and **"diagnostics export"** for the support bundle.
-- Use **"doctor"** for a graded, multi-check diagnostic report (e.g. **config doctor**); keep it distinct from per-rule "diagnose". **Doctor check codes** (e.g. `config.valid`) are stable operator-facing identifiers.
-- Use **"policy"** for operator-defined safe-operation guardrails (CLI `policy check`); keep it distinct from "doctor" (diagnostics) and "validate" (field validity). **Policy finding codes** (e.g. `policy.lan_exposure_forbidden`) are stable operator-facing identifiers. There is no protocol-restriction/`allowUdp` policy — UDP is first-class.
-- Use **"workflow"** for an ordered sequence of existing safe operations defined in a JSON file (CLI `workflow plan`), and **"workflow plan"** for its dry-run validation result; keep both distinct from "recipe" (a future execution feature). **Workflow step types** (e.g. `policy.check`) and **workflow validation codes** (e.g. `workflow.step.unknown_report_from`) are stable operator-facing identifiers, each code with an Explanation. A **workflow template** is a built-in starter workflow (`workflow template <name>`), mirroring the policy-template convention and directly usable by `workflow plan`. A **workflow runbook** (`workflow runbook`) is a command preview of a valid workflow — a list of the CLI commands to run manually, never executed. A **workflow run** (`workflow run`) executes a valid workflow **read-only** — it evaluates policies/reviews/baselines but never mutates anything, runs a shell command, or enforces a policy. **Workflow run codes** (`workflow.run.*`, e.g. `workflow.run.dependency_failed`) are stable operator-facing identifiers for run failure/skip outcomes, each with an Explanation; `workflow run --explain` adds inline/JSON explanations for failed/skipped steps (their policy finding codes and/or a `workflow.run.*` code) without changing execution. A **workflow support report** (`workflow report`) packages an existing plan/run report into a local offline bundle (manifest/summary/report/explanations) for review or AI handoff — it never re-runs anything or reads referenced files. **Workflow run history** (v1.12) is the **opt-in**, bounded, local record of `workflow run` outcomes (`workflow run --record-history`; inspected via `workflow history list`/`show`/`export`/`clear`) — compact metadata only, never raw configs/policies/full reports/secrets/logs/env/process/runtime URLs/tokens, and recorded only when explicitly requested (no telemetry, upload, or background collection). A **workflow history export** (`workflow history export --out <file>`) is a compact, offline, read-only JSON snapshot of that history (with an explicit always-false `safety` object) for local archiving/sharing — distinct from the **workflow support report** bundle, which is for AI handoff. **Workflow history filters** (`workflow history list`/`stats` `--result/--workflow/--code/--limit`) are local, read-only AND-combined filters over the compact history (empty match = success; invalid value = usage error). **Workflow history stats** (`workflow history stats`) is a local, read-only, deterministic summary of the (optionally filtered) compact history (result/workflow/step-status/step-type/code counts). **Workflow history prune** (`workflow history prune`) is a destructive, `--yes`-gated, local-only removal of history entries (by `--keep <n>` retention or by `--result`/`--workflow`/`--code` filter) that mutates only the compact history store. A workflow composes existing operations — it is not a scripting language; v1.11 Slices 1–7 plan/validate/explain/template/runbook/run (read-only)/run-explain/report only, and v1.12 Slices 1–5 add opt-in local run history + history export + history list filters + history stats + history prune — no runtime mutation, enforcement, scheduling, or shell execution.
-
-New docs, API responses, CLI output, or UI labels should use these terms, or update this glossary if a genuinely new concept is introduced. Renames of frozen public terms are out of scope; CLI command-file naming cleanup and UI wording alignment are deferred follow-ups (see the readability/naming audit).
+New public wording should use these terms or update this glossary when a genuinely new
+concept is introduced.

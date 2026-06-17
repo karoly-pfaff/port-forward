@@ -14,10 +14,10 @@ import { createNestApp } from "../app/app.factory.js";
  * never starts a listener or mutates runtime state; it only inspects the Nest app's metadata.
  *
  * Artifact placement: the **primary** artifact is server-owned generated output
- * (`server/build/api/openapi.json`), and `docs/api/openapi.json` is a tracked,
+ * (`server/build/api/openapi.json`), and `docs/openapi.json` is a tracked,
  * reviewable **copy** synced from it. A separate helper copies the primary artifact
  * into a release/package directory during packaging (no regeneration). Regenerate
- * with `npm run generate:apidoc` whenever an endpoint or its DTOs change.
+ * with `npm run apidoc:generate` whenever an endpoint or its DTOs change.
  */
 
 /** Version stamped into the generated document's `info.version` (kept stable for deterministic output). */
@@ -26,8 +26,11 @@ export const OPENAPI_DOC_VERSION = "1.15";
 /** Path of the directory this module lives in (`server/sources/openapi`). */
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** The relative path of the OpenAPI file within any output root (build, docs copy, release). */
+/** Relative path for generated/runtime OpenAPI artifacts under build and release roots. */
 export const OPENAPI_RELATIVE_PATH = join("api", "openapi.json");
+
+/** Relative path for the tracked docs copy under `docs/`. */
+export const OPENAPI_DOCS_RELATIVE_PATH = "openapi.json";
 
 /** Resolved output paths for the generated OpenAPI artifacts. */
 export interface OpenApiPaths {
@@ -42,8 +45,8 @@ export function resolveOpenApiPaths(): OpenApiPaths {
   return {
     // server/sources/openapi -> server/build/api/openapi.json
     primary: join(HERE, "../../build", OPENAPI_RELATIVE_PATH),
-    // server/sources/openapi -> docs/api/openapi.json
-    docs: join(HERE, "../../../docs", OPENAPI_RELATIVE_PATH),
+    // server/sources/openapi -> docs/openapi.json
+    docs: join(HERE, "../../../docs", OPENAPI_DOCS_RELATIVE_PATH),
   };
 }
 

@@ -6,6 +6,7 @@ Project documentation index.
 
 - [architecture.md](architecture.md) — monorepo layout, server runtimes, package layout, forwarding internals, UDP modes, activity log, platform service support.
 - [api-contract.md](api-contract.md) — full REST API contract: endpoints, request/response shapes, static file serving, error format.
+- [glossary.md](glossary.md) — canonical Portier terms and frozen public-name exceptions.
 
 ## Releases
 
@@ -15,6 +16,7 @@ Raw release readiness audit reports live in `audits/` (gitignored, local only).
 
 ## Platform Deployment
 
+- [installer.md](installer.md) — current packaged layout, platform install paths, release artifacts, and packaging validation.
 - [scripts/windows/readme.md](../scripts/windows/readme.md) — Windows service install, packaging, both runtimes.
 - [scripts/macos/readme.md](../scripts/macos/readme.md) — macOS LaunchAgent install, Go service and Node fallback modes.
 - [scripts/linux/readme.md](../scripts/linux/readme.md) — Linux systemd unit, both runtimes, firewall notes.

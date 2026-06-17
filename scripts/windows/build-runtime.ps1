@@ -92,10 +92,10 @@ Copy-Item -LiteralPath $bundleCjsPath -Destination $serverJsPath -Force
 Set-Content -LiteralPath (Join-Path $outputPath "package.json") -Value '{ "type": "commonjs" }' -Encoding ascii
 
 Write-Host "Generating OpenAPI document..."
-Invoke-CommandInRepo "npm.cmd" @("run", "generate:apidoc")
+Invoke-CommandInRepo "npm.cmd" @("run", "apidoc:generate")
 
 Write-Host "Copying OpenAPI document into package..."
-Invoke-CommandInRepo "npm.cmd" @("run", "copy:apidoc:release", "-w", "server", "--", $outputPath)
+Invoke-CommandInRepo "npm.cmd" @("run", "apidoc:release", "-w", "server", "--", $outputPath)
 
 Write-Host "Building Go service for Windows..."
 Push-Location (Join-Path $repoRoot "service")
