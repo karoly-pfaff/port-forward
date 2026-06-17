@@ -118,18 +118,26 @@ endpoints `GET`/`DELETE /api/activity` (`activity_routes.go` — the first
 multi-method same-path module and the first 204/no-body modular response),
 `GET /api/status` (`status_routes.go`), `GET /api/connections`
 (`connections_routes.go`, with its `buildRuleLiveSummary` helper), and the
-forward-rule read/list `GET /api/forwards` (`forwards_routes.go`); the shared
-response/request/error plumbing lives in `respond.go`. The forwards
-write/lifecycle/group routes (`POST`/`PATCH`/`DELETE`, reorder,
-start/stop/diagnose, group actions) and config export/import/plan/apply still
-flow through `serveLegacyAPI`, so the shared `rulesToResponses`/`toRuleResponse`
-mappers stay in `api.go` until that write group migrates. Parameterized routes
-are **not** migrated yet: group/id routes still read `r.URL.EscapedPath()`
-(preserving encoded `/` in a group name); when they move onto chi `{param}`
-patterns, `chi.URLParam` URL-DECODES the segment, so that encoded-slash behavior
-must be re-established (a hard acceptance criterion for that slice, guarded by
-`TestGroupActionEncodedSpace`). Everything migrates feature-by-feature behind
-`validate:contract` + `validate:openapi:go`.
+**entire forwards surface** (`forwards_routes.go`, Slice 11): the read/list
+`GET /api/forwards`, the write routes `POST /api/forwards` +
+`PATCH`/`DELETE /api/forwards/{id}`, the lifecycle routes
+`POST /api/forwards/{id}/{start,stop,diagnose}`, `POST /api/forwards/reorder`,
+and the group actions `POST /api/forwards/groups/{group}/{start,stop}`. The
+shared response/request/error plumbing lives in `respond.go`; the shared
+rule→response mappers (`rulesToResponses`/`toRuleResponse`, used by both the
+forwards routes and the legacy config import handler) live in `rule_response.go`.
+**Encoded-path handling (the key constraint):** the `{id}`/`{group}` chi
+patterns are used for route SHAPE only — each handler extracts the segment with
+the original logic (rule ids from `r.URL.Path`; group names from
+`r.URL.EscapedPath()` + `url.PathUnescape`), **never `chi.URLParam`** (which
+would URL-decode and collapse an encoded `/`), so an encoded `/` (`%2F`) or
+space (`%20`) in a group name is preserved (guarded by
+`TestGroupActionEncodedSpace` / `TestGroupActionEncodedSlash`). Static routes
+(`/api/forwards`, `/api/forwards/reorder`, `/api/forwards/groups/...`) take chi
+precedence over the `{id}` param route, so reorder and group actions are never
+misrouted as an id. **Only config export/import/plan/apply now flow through
+`serveLegacyAPI`** (the remaining legacy routes); everything else migrates
+feature-by-feature behind `validate:contract` + `validate:openapi:go`.
 See `audits/v1.15-go-router-audit-1.md` for the endpoint inventory, target layout,
 route-registration pattern, and slice plan, and `docs/roadmap.md` (v1.15) for the
 goals/non-goals.

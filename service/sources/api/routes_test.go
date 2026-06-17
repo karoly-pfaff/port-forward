@@ -22,14 +22,23 @@ func TestModularRoutesRegistered(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
 	want := map[string]bool{
-		"GET /api/health":         true,
-		"GET /api/runtime":        true,
-		"GET /api/ports/advisory": true,
-		"GET /api/activity":       true,
-		"DELETE /api/activity":    true,
-		"GET /api/status":         true,
-		"GET /api/connections":    true,
-		"GET /api/forwards":       true,
+		"GET /api/health":                         true,
+		"GET /api/runtime":                        true,
+		"GET /api/ports/advisory":                 true,
+		"GET /api/activity":                       true,
+		"DELETE /api/activity":                    true,
+		"GET /api/status":                         true,
+		"GET /api/connections":                    true,
+		"GET /api/forwards":                       true,
+		"POST /api/forwards":                      true,
+		"POST /api/forwards/reorder":              true,
+		"PATCH /api/forwards/{id}":                true,
+		"DELETE /api/forwards/{id}":               true,
+		"POST /api/forwards/{id}/start":           true,
+		"POST /api/forwards/{id}/stop":            true,
+		"POST /api/forwards/{id}/diagnose":        true,
+		"POST /api/forwards/groups/{group}/start": true,
+		"POST /api/forwards/groups/{group}/stop":  true,
 	}
 	got := map[string]bool{}
 	for _, route := range h.modularRoutes() {
@@ -116,6 +125,12 @@ func TestAPIRouterMethodMismatchReturns404Envelope(t *testing.T) {
 		{http.MethodPost, "/api/activity"},
 		{http.MethodPost, "/api/status"},
 		{http.MethodPost, "/api/connections"},
+		// Forwards write/lifecycle/group routes: a wrong method on a known path
+		// must still produce the generic envelope (chi MethodNotAllowed → legacy).
+		{http.MethodPut, "/api/forwards/abc"},              // no PUT on {id}
+		{http.MethodGet, "/api/forwards/reorder"},          // reorder is POST-only
+		{http.MethodGet, "/api/forwards/abc/start"},        // lifecycle is POST-only
+		{http.MethodGet, "/api/forwards/groups/web/start"}, // group action is POST-only
 	}
 
 	for _, tc := range cases {
@@ -140,6 +155,7 @@ func TestAPIRouterUnknownPathReturns404Envelope(t *testing.T) {
 		"/api/connections/extra",
 		"/api/activity/extra",
 		"/api/forwards/extra/extra",
+		"/api/forwards/abc/restart", // unknown {id} subaction
 	}
 
 	for _, path := range paths {
@@ -153,37 +169,61 @@ func TestAPIRouterUnknownPathReturns404Envelope(t *testing.T) {
 	}
 }
 
-// TestAPIRouterFallsThroughToLegacy confirms the still-unmigrated routes are
-// reached through the chi NotFound fallback. None of these is registered on the
-// chi router, so chi delegates to serveLegacyAPI, which owns them. We assert the
-// request reaches the legacy handler (not a generic miss) by checking a
-// route-specific outcome.
-func TestAPIRouterFallsThroughToLegacy(t *testing.T) {
+// TestAPIRouterConfigRoutesUseLegacy confirms the still-unmigrated config routes
+// are reached through the chi NotFound fallback (they are not registered on chi).
+// We assert the request reaches the legacy handler by checking a route-specific
+// outcome rather than the generic 404 envelope.
+func TestAPIRouterConfigRoutesUseLegacy(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
-	// POST /api/forwards (create) reaches the legacy createForward, which rejects
-	// the empty body with 400 — proving the exact GET /api/forwards chi route did
-	// not shadow the POST verb.
-	createRec := httptest.NewRecorder()
-	h.ServeHTTP(createRec, httptest.NewRequest(http.MethodPost, "/api/forwards", nil))
-	if createRec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /api/forwards: status = %d, want 400 (legacy createForward)", createRec.Code)
-	}
-
-	// POST /api/forwards/reorder reaches the legacy reorderForwards (400 on a
-	// missing ids body) — the exact /api/forwards chi route does not shadow the
-	// reorder prefix.
-	reorderRec := httptest.NewRecorder()
-	h.ServeHTTP(reorderRec, httptest.NewRequest(http.MethodPost, "/api/forwards/reorder", nil))
-	if reorderRec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /api/forwards/reorder: status = %d, want 400 (legacy reorderForwards)", reorderRec.Code)
-	}
-
-	// GET /api/config/export (still legacy) is served, not 404 — proving config
-	// routes still flow through the fallback.
+	// GET /api/config/export is served (200), not the generic 404 — config routes
+	// still flow through serveLegacyAPI.
 	exportRec := httptest.NewRecorder()
 	h.ServeHTTP(exportRec, httptest.NewRequest(http.MethodGet, "/api/config/export", nil))
 	if exportRec.Code != http.StatusOK {
 		t.Fatalf("GET /api/config/export: status = %d, want 200 (legacy export)", exportRec.Code)
+	}
+
+	// POST /api/config/plan with an empty body reaches the legacy configPlan, which
+	// rejects it with 400 (not the generic route-not-found envelope).
+	planRec := httptest.NewRecorder()
+	h.ServeHTTP(planRec, httptest.NewRequest(http.MethodPost, "/api/config/plan", nil))
+	if planRec.Code != http.StatusBadRequest || isNotFoundEnvelope(t, planRec) {
+		t.Fatalf("POST /api/config/plan: status = %d (envelope=%v), want 400 from legacy configPlan", planRec.Code, isNotFoundEnvelope(t, planRec))
+	}
+}
+
+// TestAPIRouterForwardsPrecedence proves the chi forwards routes do not misroute
+// reorder or group actions as an {id}, and that the write/lifecycle routes reach
+// their handlers (not the legacy 404 fallback). The full CRUD/lifecycle/group
+// response bodies are covered by api_test.go / group_test.go; here we only lock
+// the routing decisions.
+func TestAPIRouterForwardsPrecedence(t *testing.T) {
+	h := newTestHandler(t, "", "missing")
+
+	// POST /api/forwards (create) is now chi-owned; an empty body is rejected with
+	// 400 by createForward (proving GET /api/forwards does not shadow the POST).
+	createRec := httptest.NewRecorder()
+	h.ServeHTTP(createRec, httptest.NewRequest(http.MethodPost, "/api/forwards", nil))
+	if createRec.Code != http.StatusBadRequest || isNotFoundEnvelope(t, createRec) {
+		t.Fatalf("POST /api/forwards: status = %d, want 400 from createForward (not misrouted)", createRec.Code)
+	}
+
+	// POST /api/forwards/reorder reaches reorderForwards (400 on a missing ids
+	// body) — the static reorder route wins over the {id} param route, so reorder
+	// is NOT treated as a rule id.
+	reorderRec := httptest.NewRecorder()
+	h.ServeHTTP(reorderRec, httptest.NewRequest(http.MethodPost, "/api/forwards/reorder", nil))
+	if reorderRec.Code != http.StatusBadRequest || isNotFoundEnvelope(t, reorderRec) {
+		t.Fatalf("POST /api/forwards/reorder: status = %d, want 400 from reorderForwards (not misrouted as id)", reorderRec.Code)
+	}
+
+	// POST /api/forwards/groups/ghost/start reaches the group handler (the static
+	// groups route wins over {id}); an unknown group returns the group-specific
+	// 404 message, NOT the generic route-not-found envelope and NOT misrouted.
+	groupRec := httptest.NewRecorder()
+	h.ServeHTTP(groupRec, httptest.NewRequest(http.MethodPost, "/api/forwards/groups/ghost/start", nil))
+	if groupRec.Code != http.StatusNotFound || isNotFoundEnvelope(t, groupRec) {
+		t.Fatalf("POST /api/forwards/groups/ghost/start: status = %d (envelope=%v), want a group-specific 404 (not misrouted as id)", groupRec.Code, isNotFoundEnvelope(t, groupRec))
 	}
 }

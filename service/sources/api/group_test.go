@@ -186,3 +186,21 @@ func TestGroupActionEncodedSpace(t *testing.T) {
 		t.Fatalf("unexpected summary: %#v", body)
 	}
 }
+
+// TestGroupActionEncodedSlash pins that an encoded "/" (%2F) inside a group name
+// stays a single segment and decodes to a literal "/" — the hard encoded-path
+// requirement for the v1.15 Slice 11 chi migration. The chi {group} pattern
+// matches the encoded segment against r.URL.RawPath (which keeps %2F intact),
+// and the handler re-derives the group from EscapedPath + url.PathUnescape
+// rather than chi.URLParam (which would have decoded the slash and split it).
+func TestGroupActionEncodedSlash(t *testing.T) {
+	srv := newGroupServer(t, []domain.ForwardRule{groupTestRule(t, "w1", "Web One", "web/team")})
+
+	resp, body := postGroup(t, srv, "/api/forwards/groups/web%2Fteam/start")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if body.Group != "web/team" || body.Succeeded != 1 {
+		t.Fatalf("unexpected summary: %#v", body)
+	}
+}
