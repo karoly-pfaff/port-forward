@@ -2,10 +2,10 @@ package domain
 
 import "strings"
 
-// RuleHealth is the operator-facing health classification for a rule (v1.8
-// Slice 7). It is derived deterministically from existing runtime state — it
-// does NOT probe targets or run any background check. Mirrors the TypeScript
-// RuleHealth union; parity-tested via validate:contract.
+// RuleHealth is the operator-facing health classification for a rule. It is
+// derived deterministically from existing runtime state — it does NOT probe
+// targets or run any background check. Mirrors the TypeScript RuleHealth union;
+// parity-tested via validate:contract.
 type RuleHealth string
 
 const (

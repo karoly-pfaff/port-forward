@@ -2,10 +2,9 @@ package api
 
 // Go service API inventory — the declared HTTP API surface of the Go runtime,
 // compared against the canonical server-generated OpenAPI artifact
-// (server/build/api/openapi.json) to catch drift as the v1.15 router
-// modularization moves handlers around. The NestJS/server OpenAPI build artifact
-// stays the single source of truth; this is a read-only drift gate, not a
-// competing API document.
+// (server/build/api/openapi.json) to catch drift between the Go routes and the
+// documented API. The NestJS/server OpenAPI build artifact stays the single
+// source of truth; this is a read-only drift gate, not a competing API document.
 //
 // This lives in a _test.go file deliberately: it is a dev/CI validation concern,
 // so it adds zero code to the production service binary. The pure comparison
@@ -48,7 +47,7 @@ func canonical(method, path string, statuses ...int) routeInventoryEntry {
 // contract* status codes (matching the OpenAPI operation responses); the
 // universal generic-500 no-leak path (an unexpected/persist failure surfaced by
 // writeManagerError) is intentionally not enumerated here because OpenAPI does
-// not model it for any operation — see the durable Slice-4 rule.
+// not model it for any operation.
 func routeInventory() []routeInventoryEntry {
 	return []routeInventoryEntry{
 		canonical("GET", "/api/forwards", 200),

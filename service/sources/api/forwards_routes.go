@@ -11,14 +11,13 @@ import (
 )
 
 // forwardsRoutes registers the forward-rule API surface: the read/list endpoint
-// plus the write, ID, lifecycle, and group-action routes (v1.15 Slice 11). The
-// {id} and {group} chi patterns are used for route SHAPE only — each handler
-// extracts the id/group segment from the request path with the original parsing
-// logic (NEVER chi.URLParam), so encoded behavior is byte-identical to the
-// pre-migration legacy dispatch:
+// plus the write, ID, lifecycle, and group-action routes. The {id} and {group}
+// chi patterns are used for route SHAPE only — each handler extracts the
+// id/group segment from the request path itself (NEVER chi.URLParam), which is
+// what preserves the encoded-path semantics:
 //
-//   - rule ids come from r.URL.Path (decoded) exactly as the old serveForwardByID
-//     did; ids are UUIDs, so there is no encoding to preserve there;
+//   - rule ids come from r.URL.Path (decoded); ids are UUIDs, so there is no
+//     encoding to preserve there;
 //   - group names come from r.URL.EscapedPath() + url.PathUnescape, so an encoded
 //     "/" (%2F) or space (%20) in a group name is preserved (see
 //     TestGroupActionEncodedSpace / TestGroupActionEncodedSlash). chi matches the
@@ -55,8 +54,8 @@ func (h *Handler) handleListForwards(w http.ResponseWriter, _ *http.Request) {
 }
 
 // ruleIDFromPath extracts the {id} segment from a /api/forwards/{id}[/...] path
-// using r.URL.Path (decoded) — the exact extraction the legacy serveForwardByID
-// used. Rule ids are UUIDs, so there is no percent-encoding to preserve.
+// using r.URL.Path (decoded). Rule ids are UUIDs, so there is no percent-encoding
+// to preserve.
 func ruleIDFromPath(r *http.Request) string {
 	remainder := strings.TrimPrefix(r.URL.Path, "/api/forwards/")
 	return strings.SplitN(remainder, "/", 2)[0]
@@ -200,9 +199,8 @@ func (h *Handler) handleStopGroup(w http.ResponseWriter, r *http.Request) {
 // groupAction handles POST /api/forwards/groups/{group}/{start,stop}. The action
 // is fixed by the chi route; the {group} segment is re-parsed from the escaped
 // path (NOT chi.URLParam) so an encoded "/" inside a group name stays a single
-// segment and is decoded exactly as the legacy serveGroupAction did. Behaviour
-// over existing rule metadata — never mutates rule definitions, order, or
-// metadata.
+// segment and decodes to a literal "/". Behaviour over existing rule metadata —
+// never mutates rule definitions, order, or metadata.
 func (h *Handler) groupAction(w http.ResponseWriter, r *http.Request, action string) {
 	remainder := strings.TrimPrefix(r.URL.EscapedPath(), "/api/forwards/groups/")
 	groupSegment := strings.SplitN(remainder, "/", 2)[0]

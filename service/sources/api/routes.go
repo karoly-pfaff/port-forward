@@ -7,25 +7,26 @@ import (
 )
 
 // modularRoute is one explicit method+path → handler registration for an
-// endpoint served by a feature route module (v1.15). The per-feature registrars
-// return these and buildAPIRouter mounts them onto the chi API router.
+// endpoint served by a feature route module. The per-feature registrars return
+// these and buildAPIRouter mounts them onto the chi API router.
 //
 // Routes are registered as exact static patterns (or chi {param} patterns for
 // the forwards id/group routes). A request whose path is not a registered
 // pattern (chi NotFound) OR whose method is not registered for an existing
 // pattern (chi MethodNotAllowed) is routed to writeAPINotFound, which emits the
 // generic /api 404 envelope. Routing a method mismatch there is what preserves
-// the established 404-not-405 behavior (chi's default MethodNotAllowed would
-// emit a 405). Static routes take chi precedence over the {id} param route, so
-// reorder/group/config paths are never misrouted as a rule id.
+// Portier's intentional 404-not-405 behavior (chi's default MethodNotAllowed
+// would emit a 405). Static routes take chi precedence over the {id} param
+// route, so reorder/group/config paths are never misrouted as a rule id.
 type modularRoute struct {
 	method  string
 	path    string
 	handler http.HandlerFunc
 }
 
-// modularRoutes composes the per-feature route registrars. As of Slice 12 every
-// API route is registered here; there is no legacy ordered dispatch left.
+// modularRoutes composes the per-feature route registrars — every API route is
+// registered here. Add a new endpoint's registrar to this list (and keep the
+// route_inventory_test.go inventory in lockstep).
 func (h *Handler) modularRoutes() []modularRoute {
 	var routes []modularRoute
 	routes = append(routes, h.healthRoutes()...)

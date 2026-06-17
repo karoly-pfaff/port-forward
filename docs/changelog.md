@@ -6,6 +6,16 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.15 Go Service Modular Router (in progress)
 
+### Changed — Slice 14: remove stale migration comments, align production wording
+
+Documentation/comment cleanup after the chi router migration — **no behavior change** (only Go comments, one test-function rename, and durable-doc wording; no route registration, handler logic, response body, status code, OpenAPI inventory, static, or dependency change). `validate:contract` stays **234/234** and `validate:openapi:go` stays green (the OpenAPI artifact is byte-identical).
+
+- **Production Go comments** now describe the final architecture, not the migration process: removed "Slice N" citations, "pre-migration / pre-modularization handler", "temporary h.manager bridge", "legacy serveForwardByID/serveGroupAction", "the first modular registration", and "currently monolithic serveAPI" wording across `api.go`, `routes.go`, `config_routes.go`, `forwards_routes.go`, `activity_routes.go`, `connections_routes.go`, `ports_routes.go`, `status_routes.go`, `respond.go`, `rule_response.go`, plus the `(v1.8 Slice 4/7)` citations in `domain/domain.go` and `domain/health.go`. The encoded-path, 404-not-405, route-precedence, and OpenAPI-inventory rationale comments were kept (reworded to stable language).
+- **Tests**: renamed `TestAPIRouterServesMigratedRoutes` → `TestAPIRouterServesRegisteredRoutes`; reworded stale "not the legacy 404 fallback" / "served the 404 fallback, want the migrated handler" / "Slice 12 retired serveLegacyAPI" / "before the v1.15 modularization" / "the v1.15 Slice 11 chi migration" labels in `routes_test.go`, `router_contract_test.go`, `route_inventory_test.go`, `group_test.go`, and the `configplan/plan_test.go` section header — all behavior-preserving (no coverage change, no test deleted).
+- **Durable docs**: `service/readme.md` already described the completed chi architecture (Slice 13); the roadmap's v1.15 one-line summary dropped "optionally adopting chi" → chi is the settled router, and the status line notes Slice 14. Changelog/audit history is left intact as release history.
+
+Validation: `go build`/`go vet` clean; full Go service suite green (incl. the renamed test); `npm run generate:apidoc` → `validate:openapi:go` green (no artifact drift); `validate:contract` **234/234**; `validate:runtime:smoke` **24/24**; lint/typecheck clean. **Replay validation skipped** (no replay/`@portier/shared` files touched). This closes out the v1.15 router migration cleanup; next is a v1.15 release-readiness audit or the next roadmap item.
+
 ### Changed — Slice 13: final Go router cleanup, bridge removal, and consistency pass
 
 The final cleanup/audit pass after the chi router migration. **Behavior-preserving** — no API/route/error/contract/packaging/runtime change; `validate:contract` stays **234/234** and `validate:openapi:go` stays green.

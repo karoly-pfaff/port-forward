@@ -1,9 +1,8 @@
 package api
 
 // Shared HTTP request/response/error plumbing for the service API layer. These
-// helpers are used by the (currently monolithic) serveAPI handlers and by the
-// migrated feature route modules; keeping them in one small file lets future
-// feature route files reuse them without depending on api.go's handler bodies.
+// helpers are reused by every feature route module, kept in one small file so a
+// route file can use them without depending on another feature's handler bodies.
 // Behavior here is contract-covered — preserve status codes, body strings, the
 // {"errors": [...]} envelope, content type, the request body size limit, and the
 // manager-error → status mapping exactly.

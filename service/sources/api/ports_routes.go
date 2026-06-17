@@ -14,10 +14,10 @@ func (h *Handler) portsRoutes() []modularRoute {
 	}
 }
 
-// handlePortAdvisory returns port advisories for a candidate port + purpose.
-// It is read-only and stateless (no manager dependency); the query parsing,
-// validation, status codes, error messages, and success shape are identical to
-// the pre-modularization handler.
+// handlePortAdvisory returns port advisories for the requested port + purpose.
+// It is read-only and stateless (no manager dependency). It parses and validates
+// the query, returning a 400 with an error message for a missing/out-of-range
+// port or an invalid purpose, otherwise the advisory list.
 func (h *Handler) handlePortAdvisory(w http.ResponseWriter, r *http.Request) {
 	port, err := strconv.Atoi(r.URL.Query().Get("port"))
 	if err != nil || port < 1 || port > 65535 {

@@ -41,10 +41,10 @@ type PortAdvisory struct {
 	Message  string `json:"message"`
 }
 
-// GroupActionResult is the per-rule outcome of a group start/stop operation
-// (v1.8 Slice 4). Status is started/stopped (succeeded), skipped, or failed;
-// Reason carries the skip token (already_running / not_running) or, for a
-// failure, the error message.
+// GroupActionResult is the per-rule outcome of a group start/stop operation.
+// Status is started/stopped (succeeded), skipped, or failed; Reason carries the
+// skip token (already_running / not_running) or, for a failure, the error
+// message.
 type GroupActionResult struct {
 	RuleID   string `json:"ruleId"`
 	RuleName string `json:"ruleName"`

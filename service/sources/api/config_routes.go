@@ -9,11 +9,10 @@ import (
 	"portier/service/sources/domain"
 )
 
-// configRoutes registers the config export/import/plan/apply endpoints — the
-// last routes migrated off the legacy ordered dispatch (v1.15 Slice 12). These
+// configRoutes registers the config export/import/plan/apply endpoints. These
 // are exact static paths; a wrong method or unknown /api/config/... subpath does
-// not match here and falls through (chi NotFound/MethodNotAllowed → the generic
-// /api 404 envelope, never a 405).
+// not match here and is routed (chi NotFound/MethodNotAllowed → writeAPINotFound)
+// to the generic /api 404 envelope, never a 405.
 func (h *Handler) configRoutes() []modularRoute {
 	return []modularRoute{
 		{method: http.MethodGet, path: "/api/config/export", handler: h.handleConfigExport},
@@ -24,7 +23,7 @@ func (h *Handler) configRoutes() []modularRoute {
 }
 
 // handleConfigExport returns the exported config snapshot. Read-only, no request
-// input; behavior is identical to the pre-migration inline handler.
+// input.
 func (h *Handler) handleConfigExport(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, h.app.Manager.ExportConfig())
 }

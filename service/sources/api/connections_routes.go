@@ -17,10 +17,9 @@ func (h *Handler) connectionsRoutes() []modularRoute {
 
 // handleConnections returns the live TCP connections, UDP sessions, and per-rule
 // traffic summaries. Read-only with no request input; it only reads the live
-// registries + rules via h.app.Manager (no socket open/close). Behavior —
-// the GeneratedAt timestamp formatting, the nil→empty-slice normalization, the
-// per-rule summaries, and the 200 LiveConnectionsResponse body via writeJSON — is
-// identical to the pre-modularization handler.
+// registries + rules via h.app.Manager (no socket open/close). It builds the
+// GeneratedAt timestamp, normalizes nil slices to empty, computes the per-rule
+// summaries, and returns the 200 LiveConnectionsResponse body via writeJSON.
 func (h *Handler) handleConnections(w http.ResponseWriter, _ *http.Request) {
 	tcpConns := h.app.Manager.GetLiveTCPConnections()
 	if tcpConns == nil {

@@ -9,23 +9,23 @@ import (
 	"testing"
 )
 
-// These tests pin the CURRENT routing/dispatch contract of serveAPI before the
-// v1.15 modularization splits dispatch into focused route modules. They capture
-// the order-sensitive and method-sensitive decisions that are easiest to break
-// when route registration moves into per-feature modules or onto a different
-// router (chi/ServeMux), independently of the per-endpoint behavior already
+// These tests pin the routing contract through Handler.ServeHTTP end to end,
+// capturing the order- and method-sensitive decisions that are easy to break if
+// route registration changes, independently of the per-endpoint behavior already
 // covered in api_test.go:
 //
 //   - a known path with an unsupported method returns the JSON 404 envelope
-//     (NOT 405) — chi/ServeMux would default to 405, so this must stay locked;
-//   - route precedence: exact paths (/api/forwards, /api/forwards/reorder) win
-//     over the /api/forwards/ prefix, and the /api/forwards/groups/ prefix is
-//     matched before the /api/forwards/ id prefix;
+//     (NOT 405) — chi's default MethodNotAllowed would emit a 405, so this must
+//     stay locked;
+//   - route precedence: static routes (/api/forwards, /api/forwards/reorder, and
+//     the /api/forwards/groups/{group}/... actions) win over the
+//     /api/forwards/{id} param route, so reorder and group actions are never
+//     matched as a rule id;
 //   - every unmatched /api route (including bare /api) returns the JSON 404
 //     envelope, while a non-API path with no static client returns a plain 404.
 //
 // All cases run against an empty in-memory manager (missing config), so no
-// sockets are opened and dispatch is exercised in isolation.
+// sockets are opened and routing is exercised in isolation.
 
 const apiNotFoundBody = "API route was not found."
 

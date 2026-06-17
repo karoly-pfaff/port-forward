@@ -316,7 +316,7 @@ func TestListenPortChangeValue(t *testing.T) {
 	}
 }
 
-// ── Rule group metadata (v1.8 Slice 1) ───────────────────────────────────────
+// ── Rule group metadata ──────────────────────────────────────────────────────
 
 func TestGroupChangeIsNonDestructiveUpdate(t *testing.T) {
 	g := "before-team"

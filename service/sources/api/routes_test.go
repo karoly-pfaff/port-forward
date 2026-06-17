@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-// Every API route is served through the chi-backed API router (v1.15 Slice
-// 10–12); anything chi cannot match (chi NotFound / MethodNotAllowed) is routed
-// to writeAPINotFound, the generic /api 404 envelope. These tests pin the chi
-// integration mechanics — the registered route set, the 404-not-405
-// method-mismatch behavior, and the unknown-path fallback — complementing the
-// per-endpoint behavior tests and the Slice 1 router dispatch contract (which
-// drives ServeHTTP end to end).
+// Every API route is served through the chi-backed API router; anything chi
+// cannot match (chi NotFound / MethodNotAllowed) is routed to writeAPINotFound,
+// the generic /api 404 envelope. These tests pin the chi integration mechanics —
+// the registered route set, the 404-not-405 method-mismatch behavior, and the
+// unknown-path fallback — complementing the per-endpoint behavior tests and the
+// router dispatch contract (router_contract_test.go, which drives ServeHTTP end
+// to end).
 
 // TestModularRoutesRegistered asserts the exact set of routes mounted onto the
 // chi router. Each entry is a (method, path) pair; /api/activity intentionally
@@ -78,9 +78,9 @@ func isNotFoundEnvelope(t *testing.T, rec *httptest.ResponseRecorder) bool {
 	return len(body.Errors) == 1 && body.Errors[0] == notFoundMessage
 }
 
-// TestAPIRouterServesMigratedRoutes confirms each migrated route is matched and
-// served by the chi router (not the legacy 404 fallback).
-func TestAPIRouterServesMigratedRoutes(t *testing.T) {
+// TestAPIRouterServesRegisteredRoutes confirms each registered route is matched
+// and served by the chi router (not the 404 fallback).
+func TestAPIRouterServesRegisteredRoutes(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
 	cases := []struct {
@@ -107,14 +107,14 @@ func TestAPIRouterServesMigratedRoutes(t *testing.T) {
 				t.Fatalf("%s %s: status = %d, want %d", tc.method, tc.path, rec.Code, tc.status)
 			}
 			if isNotFoundEnvelope(t, rec) {
-				t.Fatalf("%s %s: served the 404 fallback, want the migrated handler", tc.method, tc.path)
+				t.Fatalf("%s %s: served the 404 fallback, want the registered handler", tc.method, tc.path)
 			}
 		})
 	}
 }
 
 // TestAPIRouterMethodMismatchReturns404Envelope pins that a wrong method on a
-// migrated path returns the generic /api 404 JSON envelope, NOT a 405. chi's
+// known path returns the generic /api 404 JSON envelope, NOT a 405. chi's
 // MethodNotAllowed is routed to writeAPINotFound, which emits the envelope.
 func TestAPIRouterMethodMismatchReturns404Envelope(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
@@ -178,9 +178,9 @@ func TestAPIRouterUnknownPathReturns404Envelope(t *testing.T) {
 	}
 }
 
-// TestAPIRouterConfigRoutes confirms the config routes are now chi-owned (Slice
-// 12 retired serveLegacyAPI). The full export/import/plan/apply response bodies
-// are covered by api_test.go; here we only lock the routing decisions.
+// TestAPIRouterConfigRoutes confirms the config routes are served by chi. The
+// full export/import/plan/apply response bodies are covered by api_test.go; here
+// we only lock the routing decisions.
 func TestAPIRouterConfigRoutes(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
@@ -218,9 +218,9 @@ func TestAPIRouterConfigRoutes(t *testing.T) {
 
 // TestAPIRouterForwardsPrecedence proves the chi forwards routes do not misroute
 // reorder or group actions as an {id}, and that the write/lifecycle routes reach
-// their handlers (not the legacy 404 fallback). The full CRUD/lifecycle/group
-// response bodies are covered by api_test.go / group_test.go; here we only lock
-// the routing decisions.
+// their handlers (not the 404 fallback). The full CRUD/lifecycle/group response
+// bodies are covered by api_test.go / group_test.go; here we only lock the
+// routing decisions.
 func TestAPIRouterForwardsPrecedence(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 

@@ -188,8 +188,7 @@ func TestGroupActionEncodedSpace(t *testing.T) {
 }
 
 // TestGroupActionEncodedSlash pins that an encoded "/" (%2F) inside a group name
-// stays a single segment and decodes to a literal "/" — the hard encoded-path
-// requirement for the v1.15 Slice 11 chi migration. The chi {group} pattern
+// stays a single segment and decodes to a literal "/". The chi {group} pattern
 // matches the encoded segment against r.URL.RawPath (which keeps %2F intact),
 // and the handler re-derives the group from EscapedPath + url.PathUnescape
 // rather than chi.URLParam (which would have decoded the slash and split it).
