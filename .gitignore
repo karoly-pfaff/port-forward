@@ -41,7 +41,11 @@ test-results/
 blob-report/
 
 # Audit documents
-audits/
+# Curated audit reports in audits/*.md are tracked; private/raw notes stay ignored.
+audits/private/
+audits/*.tmp
+audits/*.raw.md
+audits/*.draft.md
 
 # Personal scratch files
 todo.md
