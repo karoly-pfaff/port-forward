@@ -150,6 +150,22 @@ Run this before tagging or publishing release artifacts.
 - [ ] `npm run test:e2e`
 - [ ] `npm run validate:runtime:smoke`
 
+### Version Surfaces To Bump
+
+When releasing a new version, update every surface below to the same version (none
+are auto-derived; the two OpenAPI surfaces are hardcoded and easy to forget):
+
+- [ ] `package.json` (root)
+- [ ] `client/package.json`
+- [ ] `server/package.json`
+- [ ] `shared/package.json`
+- [ ] `service/sources/version/version.go` (`Version`)
+- [ ] `tools/cli/sources/version/version.go` (`Version`)
+- [ ] `tools/replay/sources/version/version.go` (`Version`)
+- [ ] `server/sources/openapi/openapi.ts` (`OPENAPI_DOC_VERSION`, minor `x.y` convention)
+- [ ] `server/sources/api/runtime/runtime.schema.ts` (`version` example, full `x.y.z`)
+- [ ] Regenerate the OpenAPI doc after bumping: `npm run apidoc:generate` (updates `server/build/api/openapi.json` + the tracked `docs/openapi.json`)
+
 ### Release Artifact Validation
 
 - [ ] Build current-platform artifacts:
@@ -179,6 +195,7 @@ service / service.exe
 server.js
 web/index.html
 web/assets/
+api/openapi.json
 readme.txt
 ```
 

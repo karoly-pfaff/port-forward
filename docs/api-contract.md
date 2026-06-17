@@ -211,6 +211,8 @@ Response:
 }
 ```
 
+Sensitivity: the exported config contains no secrets, but it reveals local network topology (listen/target hosts and ports, rule and group names). Treat an exported config as local diagnostic data and review it before sharing.
+
 ## `POST /api/config/import`
 
 Purpose: import rules from a previously exported config. Validates all rules atomically — no partial import.
