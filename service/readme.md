@@ -117,27 +117,31 @@ far:** `GET /api/health` (`health_routes.go`), `GET /api/runtime`
 endpoints `GET`/`DELETE /api/activity` (`activity_routes.go` — the first
 multi-method same-path module and the first 204/no-body modular response),
 `GET /api/status` (`status_routes.go`), `GET /api/connections`
-(`connections_routes.go`, with its `buildRuleLiveSummary` helper), and the
+(`connections_routes.go`, with its `buildRuleLiveSummary` helper), the
 **entire forwards surface** (`forwards_routes.go`, Slice 11): the read/list
 `GET /api/forwards`, the write routes `POST /api/forwards` +
 `PATCH`/`DELETE /api/forwards/{id}`, the lifecycle routes
 `POST /api/forwards/{id}/{start,stop,diagnose}`, `POST /api/forwards/reorder`,
-and the group actions `POST /api/forwards/groups/{group}/{start,stop}`. The
+and the group actions `POST /api/forwards/groups/{group}/{start,stop}`; and the
+**config routes** (`config_routes.go`, Slice 12): `GET /api/config/export`,
+`POST /api/config/{import,plan,apply}`. **As of Slice 12 every API route is
+chi-owned — the legacy ordered `serveLegacyAPI` dispatch was retired.** The
 shared response/request/error plumbing lives in `respond.go`; the shared
 rule→response mappers (`rulesToResponses`/`toRuleResponse`, used by both the
-forwards routes and the legacy config import handler) live in `rule_response.go`.
-**Encoded-path handling (the key constraint):** the `{id}`/`{group}` chi
-patterns are used for route SHAPE only — each handler extracts the segment with
-the original logic (rule ids from `r.URL.Path`; group names from
-`r.URL.EscapedPath()` + `url.PathUnescape`), **never `chi.URLParam`** (which
-would URL-decode and collapse an encoded `/`), so an encoded `/` (`%2F`) or
-space (`%20`) in a group name is preserved (guarded by
-`TestGroupActionEncodedSpace` / `TestGroupActionEncodedSlash`). Static routes
-(`/api/forwards`, `/api/forwards/reorder`, `/api/forwards/groups/...`) take chi
-precedence over the `{id}` param route, so reorder and group actions are never
-misrouted as an id. **Only config export/import/plan/apply now flow through
-`serveLegacyAPI`** (the remaining legacy routes); everything else migrates
-feature-by-feature behind `validate:contract` + `validate:openapi:go`.
+forwards routes and the config import handler) live in `rule_response.go`.
+**Unknown API paths and wrong-method requests** are routed by chi's
+`NotFound`/`MethodNotAllowed` to `writeAPINotFound`, which emits the generic
+`/api` 404 JSON envelope — never a 405 (the established 404-not-405 contract).
+The top-level API/static boundary stays owned by `Handler.ServeHTTP` (chi only
+serves `/api`). **Encoded-path handling (the key constraint for the forwards
+`{id}`/`{group}` routes):** the chi patterns identify route SHAPE only — each
+handler extracts the segment with the original logic (rule ids from
+`r.URL.Path`; group names from `r.URL.EscapedPath()` + `url.PathUnescape`),
+**never `chi.URLParam`** (which would URL-decode and collapse an encoded `/`),
+so an encoded `/` (`%2F`) or space (`%20`) in a group name is preserved (guarded
+by `TestGroupActionEncodedSpace` / `TestGroupActionEncodedSlash`). Static routes
+take chi precedence over the `{id}` param route, so reorder, group, and config
+paths are never misrouted as an id.
 See `audits/v1.15-go-router-audit-1.md` for the endpoint inventory, target layout,
 route-registration pattern, and slice plan, and `docs/roadmap.md` (v1.15) for the
 goals/non-goals.

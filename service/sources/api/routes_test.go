@@ -7,13 +7,13 @@ import (
 	"testing"
 )
 
-// The migrated feature routes are served through the chi-backed API router
-// (v1.15 Slice 10); everything else falls through (chi NotFound /
-// MethodNotAllowed) to the legacy ordered serveLegacyAPI dispatch. These tests
-// pin the chi integration mechanics — the registered route set, the
-// 404-not-405 method-mismatch behavior, and the legacy fall-through for
-// unmigrated routes — complementing the per-endpoint behavior tests and the
-// Slice 1 router dispatch contract (which drives ServeHTTP end to end).
+// Every API route is served through the chi-backed API router (v1.15 Slice
+// 10–12); anything chi cannot match (chi NotFound / MethodNotAllowed) is routed
+// to writeAPINotFound, the generic /api 404 envelope. These tests pin the chi
+// integration mechanics — the registered route set, the 404-not-405
+// method-mismatch behavior, and the unknown-path fallback — complementing the
+// per-endpoint behavior tests and the Slice 1 router dispatch contract (which
+// drives ServeHTTP end to end).
 
 // TestModularRoutesRegistered asserts the exact set of routes mounted onto the
 // chi router. Each entry is a (method, path) pair; /api/activity intentionally
@@ -39,6 +39,10 @@ func TestModularRoutesRegistered(t *testing.T) {
 		"POST /api/forwards/{id}/diagnose":        true,
 		"POST /api/forwards/groups/{group}/start": true,
 		"POST /api/forwards/groups/{group}/stop":  true,
+		"GET /api/config/export":                  true,
+		"POST /api/config/import":                 true,
+		"POST /api/config/plan":                   true,
+		"POST /api/config/apply":                  true,
 	}
 	got := map[string]bool{}
 	for _, route := range h.modularRoutes() {
@@ -92,6 +96,7 @@ func TestAPIRouterServesMigratedRoutes(t *testing.T) {
 		{http.MethodGet, "/api/status", http.StatusOK},
 		{http.MethodGet, "/api/connections", http.StatusOK},
 		{http.MethodGet, "/api/forwards", http.StatusOK},
+		{http.MethodGet, "/api/config/export", http.StatusOK},
 	}
 
 	for _, tc := range cases {
@@ -102,7 +107,7 @@ func TestAPIRouterServesMigratedRoutes(t *testing.T) {
 				t.Fatalf("%s %s: status = %d, want %d", tc.method, tc.path, rec.Code, tc.status)
 			}
 			if isNotFoundEnvelope(t, rec) {
-				t.Fatalf("%s %s: served the legacy 404 envelope, want the migrated handler", tc.method, tc.path)
+				t.Fatalf("%s %s: served the 404 fallback, want the migrated handler", tc.method, tc.path)
 			}
 		})
 	}
@@ -110,8 +115,7 @@ func TestAPIRouterServesMigratedRoutes(t *testing.T) {
 
 // TestAPIRouterMethodMismatchReturns404Envelope pins that a wrong method on a
 // migrated path returns the generic /api 404 JSON envelope, NOT a 405. chi's
-// MethodNotAllowed is delegated to serveLegacyAPI, which falls through to the
-// envelope when no legacy route owns the path.
+// MethodNotAllowed is routed to writeAPINotFound, which emits the envelope.
 func TestAPIRouterMethodMismatchReturns404Envelope(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
@@ -125,12 +129,15 @@ func TestAPIRouterMethodMismatchReturns404Envelope(t *testing.T) {
 		{http.MethodPost, "/api/activity"},
 		{http.MethodPost, "/api/status"},
 		{http.MethodPost, "/api/connections"},
-		// Forwards write/lifecycle/group routes: a wrong method on a known path
-		// must still produce the generic envelope (chi MethodNotAllowed → legacy).
+		// Forwards/config routes: a wrong method on a known path must still produce
+		// the generic envelope (chi MethodNotAllowed → writeAPINotFound, never 405).
 		{http.MethodPut, "/api/forwards/abc"},              // no PUT on {id}
 		{http.MethodGet, "/api/forwards/reorder"},          // reorder is POST-only
 		{http.MethodGet, "/api/forwards/abc/start"},        // lifecycle is POST-only
 		{http.MethodGet, "/api/forwards/groups/web/start"}, // group action is POST-only
+		{http.MethodPut, "/api/config/export"},             // export is GET-only
+		{http.MethodGet, "/api/config/import"},             // import is POST-only
+		{http.MethodGet, "/api/config/apply"},              // apply is POST-only
 	}
 
 	for _, tc := range cases {
@@ -145,7 +152,7 @@ func TestAPIRouterMethodMismatchReturns404Envelope(t *testing.T) {
 }
 
 // TestAPIRouterUnknownPathReturns404Envelope pins that an unknown API path (chi
-// NotFound) is delegated to the legacy dispatch and ends in the 404 envelope.
+// NotFound) is routed to writeAPINotFound and ends in the 404 envelope.
 func TestAPIRouterUnknownPathReturns404Envelope(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
@@ -156,6 +163,8 @@ func TestAPIRouterUnknownPathReturns404Envelope(t *testing.T) {
 		"/api/activity/extra",
 		"/api/forwards/extra/extra",
 		"/api/forwards/abc/restart", // unknown {id} subaction
+		"/api/config/export/extra",  // exact config route is not a prefix
+		"/api/config/unknown",       // unknown config subpath
 	}
 
 	for _, path := range paths {
@@ -169,27 +178,41 @@ func TestAPIRouterUnknownPathReturns404Envelope(t *testing.T) {
 	}
 }
 
-// TestAPIRouterConfigRoutesUseLegacy confirms the still-unmigrated config routes
-// are reached through the chi NotFound fallback (they are not registered on chi).
-// We assert the request reaches the legacy handler by checking a route-specific
-// outcome rather than the generic 404 envelope.
-func TestAPIRouterConfigRoutesUseLegacy(t *testing.T) {
+// TestAPIRouterConfigRoutes confirms the config routes are now chi-owned (Slice
+// 12 retired serveLegacyAPI). The full export/import/plan/apply response bodies
+// are covered by api_test.go; here we only lock the routing decisions.
+func TestAPIRouterConfigRoutes(t *testing.T) {
 	h := newTestHandler(t, "", "missing")
 
-	// GET /api/config/export is served (200), not the generic 404 — config routes
-	// still flow through serveLegacyAPI.
+	// GET /api/config/export is served (200), not the generic 404.
 	exportRec := httptest.NewRecorder()
 	h.ServeHTTP(exportRec, httptest.NewRequest(http.MethodGet, "/api/config/export", nil))
-	if exportRec.Code != http.StatusOK {
-		t.Fatalf("GET /api/config/export: status = %d, want 200 (legacy export)", exportRec.Code)
+	if exportRec.Code != http.StatusOK || isNotFoundEnvelope(t, exportRec) {
+		t.Fatalf("GET /api/config/export: status = %d, want 200 (chi export)", exportRec.Code)
 	}
 
-	// POST /api/config/plan with an empty body reaches the legacy configPlan, which
-	// rejects it with 400 (not the generic route-not-found envelope).
+	// POST /api/config/plan with an empty body reaches configPlan, which rejects it
+	// with 400 (not the generic route-not-found envelope).
 	planRec := httptest.NewRecorder()
 	h.ServeHTTP(planRec, httptest.NewRequest(http.MethodPost, "/api/config/plan", nil))
 	if planRec.Code != http.StatusBadRequest || isNotFoundEnvelope(t, planRec) {
-		t.Fatalf("POST /api/config/plan: status = %d (envelope=%v), want 400 from legacy configPlan", planRec.Code, isNotFoundEnvelope(t, planRec))
+		t.Fatalf("POST /api/config/plan: status = %d (envelope=%v), want 400 from configPlan", planRec.Code, isNotFoundEnvelope(t, planRec))
+	}
+
+	// POST /api/config/import with an empty body reaches importConfig (400 on the
+	// missing-JSON body), proving it is chi-owned and reachable.
+	importRec := httptest.NewRecorder()
+	h.ServeHTTP(importRec, httptest.NewRequest(http.MethodPost, "/api/config/import", nil))
+	if importRec.Code != http.StatusBadRequest || isNotFoundEnvelope(t, importRec) {
+		t.Fatalf("POST /api/config/import: status = %d (envelope=%v), want 400 from importConfig", importRec.Code, isNotFoundEnvelope(t, importRec))
+	}
+
+	// POST /api/config/apply with an empty body reaches configApply (400 on the
+	// missing-JSON body).
+	applyRec := httptest.NewRecorder()
+	h.ServeHTTP(applyRec, httptest.NewRequest(http.MethodPost, "/api/config/apply", nil))
+	if applyRec.Code != http.StatusBadRequest || isNotFoundEnvelope(t, applyRec) {
+		t.Fatalf("POST /api/config/apply: status = %d (envelope=%v), want 400 from configApply", applyRec.Code, isNotFoundEnvelope(t, applyRec))
 	}
 }
 

@@ -30,8 +30,8 @@ import (
 // Static routes (/api/forwards, /api/forwards/reorder, /api/forwards/groups/...)
 // take precedence over the {id} param route in chi, so reorder and group actions
 // are never misrouted as an id. A wrong method or unknown forwards subpath does
-// not match here and falls through (chi NotFound/MethodNotAllowed → the legacy
-// dispatch) to the generic /api 404 envelope (never a 405).
+// not match here and is routed (chi NotFound/MethodNotAllowed → writeAPINotFound)
+// to the generic /api 404 envelope (never a 405).
 func (h *Handler) forwardsRoutes() []modularRoute {
 	return []modularRoute{
 		{method: http.MethodGet, path: "/api/forwards", handler: h.handleListForwards},
