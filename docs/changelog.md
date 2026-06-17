@@ -6,6 +6,16 @@ All notable changes to Portier are documented here.
 
 ## [Unreleased] — v1.15 Go Service Modular Router (in progress)
 
+### Changed — v1.15 coverage-gate audit (Go service): function gate confirmed ≥95%, statement gate held at 90%
+
+Part of the v1.15 release-readiness audit: inspected the Go service coverage gate and measured actual coverage to decide whether the statement and function gates can be raised to ≥95%. **No gate changed** (docs/comment only); `validate:coverage:service` PASS, `validate:contract` **234/234**, `validate:openapi:go` green, runtime smoke 24/24.
+
+- **Measured (cross-package):** statements **90.3%** (1663/1842), functions **96.6%** (230/238).
+- **Function gate already satisfies the ≥95% requirement** (95, actual 96.6%) — left at 95 (not ratcheted to 96: only ~1 function of headroom, too brittle per the opportunistic-ratchet policy).
+- **Statement gate cannot be raised to 95%** and was kept at 90: the cross-package statement actual is structurally capped near 90.3% by un-unit-testable entry/platform code that is 0% by policy — the process entry (`sources/main.go` `main`/`runPortier`/`logStartup`), the Windows service-host (`sources/platform/windows.go`), and `sources/logger.New` — plus five product packages still below 95% (config 82.1%, forwarders 86.7%, activity 89.5%, domain 91.7%, manager 92.6%). Raising it would require faking entry-point tests or product tests that still can't clear the structural floor.
+- **No gate lowered; no meaningless tests added.** Smallest meaningful follow-up (recorded, not done in this audit): real error-path tests for `config`/`forwarders`/`activity` — lifts the product floor but cannot reach 95% alone while the entry/platform code stays the documented Go-coverage exception.
+- Docs updated to record the measured baseline + rationale: `CLAUDE.md`/`AGENTS.md` coverage prose, `docs/checklist.md` (`docs/coverage-baseline.md` does not exist — the baseline is recorded in `CLAUDE.md`); the `scripts/validate-coverage.js` gate values + comment were left unchanged (no gate change).
+
 ### Changed — Slice 14: remove stale migration comments, align production wording
 
 Documentation/comment cleanup after the chi router migration — **no behavior change** (only Go comments, one test-function rename, and durable-doc wording; no route registration, handler logic, response body, status code, OpenAPI inventory, static, or dependency change). `validate:contract` stays **234/234** and `validate:openapi:go` stays green (the OpenAPI artifact is byte-identical).
