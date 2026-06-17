@@ -4,7 +4,25 @@ All notable changes to Portier are documented here.
 
 ---
 
-## [Unreleased] — v1.15 Go Service Modular Router (in progress)
+## [1.15.0] — 2026-06-17 — Go Service Modular Router (chi API Router)
+
+The Go-service counterpart to v1.14: the native service's HTTP/API layer was reorganized from a single monolithic `api.go` dispatcher into focused per-feature route modules on the **`github.com/go-chi/chi/v5`** router, behind an explicit `app.App` dependency container. **Behavior-preserving — no API contract, response, error, packaging, or runtime behavior change; `validate:contract` stays 234/234; the Go service remains the preferred packaged runtime.** No TypeScript server, CLI, replay, or shared-contract behavior changed (only the v1.15.0 version bump touches non-service version surfaces).
+
+**Highlights:**
+- **chi is the Go API router foundation.** All 21 API routes are owned by chi, mounted from per-feature `api/<feature>_routes.go` registrars (`health`, `runtime`, `ports`, `activity`, `status`, `connections`, `forwards`, `config`) via `buildAPIRouter`.
+- **Legacy dispatch removed.** The monolithic ordered `serveAPI`/`serveLegacyAPI` if-chain and the interim `dispatchModular` are gone; `api.go` is infrastructure-only (`Handler`, `NewHandler`, `ServeHTTP`, `isAPIPath`, `writeAPINotFound`).
+- **`app.App` is the single dependency container.** The temporary `Handler.manager` bridge was removed — handlers read `h.app.Manager`.
+- **API/static boundary preserved.** `Handler.ServeHTTP` still owns the `/api`-vs-static split; chi only ever serves `/api`.
+- **404-not-405 preserved.** A wrong method on a known path and an unknown `/api/*` path both return the generic `/api` JSON 404 envelope via `writeAPINotFound` (chi `NotFound`/`MethodNotAllowed`), never a 405.
+- **Encoded group/id behavior guarded.** The chi `{id}`/`{group}` patterns identify route shape only; handlers extract the segment from `r.URL.Path`/`r.URL.EscapedPath()` (never `chi.URLParam`), so an encoded `/`(`%2F`) or space(`%20`) in a group name is preserved — covered by `TestGroupActionEncodedSpace`/`TestGroupActionEncodedSlash`.
+- **Go OpenAPI inventory gate added** (`npm run validate:openapi:go`): a read-only drift check that compares the Go route/method/status inventory against the canonical server-generated `server/build/api/openapi.json`, with explicit whitelists (Go-only `GET /api/health`; OpenAPI-only `GET /health`). It complements — never replaces — `validate:contract`. A `route_inventory_test.go` consistency test ties the live chi registration (`modularRoutes()`) to the inventory both directions.
+- **Shared HTTP plumbing cleaned up:** request/response/error helpers in `respond.go`, the rule→response mappers in `rule_response.go`; stale migration/slice comments removed from production code so it describes the final architecture.
+
+**Coverage gate audit (Go service):** measured statements **90.3%** (1663/1842), functions **96.6%** (230/238). The **function gate already satisfies ≥95%** (gate 95). The **statement gate stays at 90%** — the cross-package statement actual is structurally capped near 90.3% by un-unit-testable entry/platform code that is 0% by policy (`main.go` `main`/`runPortier`/`logStartup`, `platform/windows.go`, `logger.New`) plus product packages below 95% (config/forwarders/activity/domain/manager). **No gate was lowered; no fake tests added.** The meaningful follow-up (not part of this release) is real error-path tests for `config`/`forwarders`/`activity`.
+
+**Validation:** `go build`/`go vet`/`go test ./...` green; `validate:openapi:go` green; `validate:contract` **234/234**; `validate:coverage:service` PASS (90/95); `validate:runtime:smoke` **24/24**; `lint`/`typecheck`/`npm run test` green. **No API behavior or contract changes.**
+
+---
 
 ### Changed — v1.15 coverage-gate audit (Go service): function gate confirmed ≥95%, statement gate held at 90%
 
