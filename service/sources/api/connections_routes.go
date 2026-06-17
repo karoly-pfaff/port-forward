@@ -17,21 +17,21 @@ func (h *Handler) connectionsRoutes() []modularRoute {
 
 // handleConnections returns the live TCP connections, UDP sessions, and per-rule
 // traffic summaries. Read-only with no request input; it only reads the live
-// registries + rules via the h.manager bridge (no socket open/close). Behavior —
+// registries + rules via h.app.Manager (no socket open/close). Behavior —
 // the GeneratedAt timestamp formatting, the nil→empty-slice normalization, the
 // per-rule summaries, and the 200 LiveConnectionsResponse body via writeJSON — is
 // identical to the pre-modularization handler.
 func (h *Handler) handleConnections(w http.ResponseWriter, _ *http.Request) {
-	tcpConns := h.manager.GetLiveTCPConnections()
+	tcpConns := h.app.Manager.GetLiveTCPConnections()
 	if tcpConns == nil {
 		tcpConns = make([]connections.TcpConnectionInfo, 0)
 	}
-	udpSessions := h.manager.GetLiveUDPSessions()
+	udpSessions := h.app.Manager.GetLiveUDPSessions()
 	if udpSessions == nil {
 		udpSessions = make([]connections.UdpSessionInfo, 0)
 	}
 
-	rules := h.manager.ListRules()
+	rules := h.app.Manager.ListRules()
 	summaries := make([]connections.RuleLiveSummary, 0, len(rules))
 	for _, rule := range rules {
 		summaries = append(summaries, buildRuleLiveSummary(rule, tcpConns, udpSessions))

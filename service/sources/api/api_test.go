@@ -384,7 +384,7 @@ func TestCreateForward(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPITCPPort(t)
 	handler := newTestHandler(t, "", configPath)
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -464,7 +464,7 @@ func TestPatchForwardingFieldRestartsTCPForwarder(t *testing.T) {
 	defer stopSecond()
 	listenPort := freeAPITCPPort(t)
 	handler := newTestHandler(t, "", writeTCPRuleConfig(t, "rule-1", listenPort, firstPort, true))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -522,7 +522,7 @@ func TestDeleteForwardStopsRunningTCPForwarder(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPITCPPort(t)
 	handler := newTestHandler(t, "", writeTCPRuleConfig(t, "rule-1", listenPort, targetPort, true))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -560,7 +560,7 @@ func TestStartAndStopForward(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPITCPPort(t)
 	handler := newTestHandler(t, "", writeTCPRuleConfig(t, "rule-1", listenPort, targetPort, true))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -644,7 +644,7 @@ func TestConfigImport(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPITCPPort(t)
 	handler := newTestHandler(t, "", writeSingleRuleConfig(t))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1481,7 +1481,7 @@ func TestStartStopUDPForward(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPIUDPPort(t)
 	handler := newTestHandler(t, "", writeUDPRuleConfig(t, "udp-1", listenPort, targetPort, false))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1526,7 +1526,7 @@ func TestStatusShowsRunningUDPRuleWithStats(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPIUDPPort(t)
 	handler := newTestHandler(t, "", writeUDPRuleConfig(t, "udp-stat", listenPort, targetPort, false))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1570,7 +1570,7 @@ func TestPatchForwardingFieldRestartsUDPForwarder(t *testing.T) {
 	defer stopSecond()
 	listenPort := freeAPIUDPPort(t)
 	handler := newTestHandler(t, "", writeUDPRuleConfig(t, "udp-patch", listenPort, firstTarget, false))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -1612,7 +1612,7 @@ func TestDeleteForwardStopsRunningUDPForwarder(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPIUDPPort(t)
 	handler := newTestHandler(t, "", writeUDPRuleConfig(t, "udp-del", listenPort, targetPort, false))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -2068,7 +2068,7 @@ func TestDiagnoseRunningRuleDoesNotFailListenBind(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPITCPPort(t)
 	handler := newTestHandler(t, "", writeTCPRuleConfig(t, "diag-run", listenPort, targetPort, false))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -2284,7 +2284,7 @@ func TestConnectionsActiveTCPConnectionAppearsInResponse(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPITCPPort(t)
 	handler := newTestHandler(t, "", writeTCPRuleConfig(t, "live-tcp", listenPort, targetPort, true))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -2357,7 +2357,7 @@ func TestConnectionsActiveUDPSessionAppearsInResponse(t *testing.T) {
 	defer stopTarget()
 	listenPort := freeAPIUDPPort(t)
 	handler := newTestHandler(t, "", writeUDPRuleConfig(t, "live-udp", listenPort, targetPort, true))
-	defer handler.manager.StopAll()
+	defer handler.app.Manager.StopAll()
 	server := httptest.NewServer(handler)
 	defer server.Close()
 

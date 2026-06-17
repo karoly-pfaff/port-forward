@@ -49,9 +49,9 @@ func (h *Handler) forwardsRoutes() []modularRoute {
 
 // handleListForwards returns every configured forward rule decorated with port
 // advisories. Read-only, no request input, no side effects. Reads rule state via
-// the h.manager bridge.
+// h.app.Manager.
 func (h *Handler) handleListForwards(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, rulesToResponses(h.manager.ListRules()))
+	writeJSON(w, http.StatusOK, rulesToResponses(h.app.Manager.ListRules()))
 }
 
 // ruleIDFromPath extracts the {id} segment from a /api/forwards/{id}[/...] path
@@ -68,7 +68,7 @@ func (h *Handler) createForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rule, err := h.manager.CreateRule(input)
+	rule, err := h.app.Manager.CreateRule(input)
 	if err != nil {
 		writeManagerError(w, err)
 		return
@@ -92,7 +92,7 @@ func (h *Handler) updateForward(w http.ResponseWriter, r *http.Request, ruleID s
 		return
 	}
 
-	rule, err := h.manager.UpdateRule(ruleID, patch)
+	rule, err := h.app.Manager.UpdateRule(ruleID, patch)
 	if err != nil {
 		writeManagerError(w, err)
 		return
@@ -105,7 +105,7 @@ func (h *Handler) handleDeleteForward(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) deleteForward(w http.ResponseWriter, ruleID string) {
-	if err := h.manager.DeleteRule(ruleID); err != nil {
+	if err := h.app.Manager.DeleteRule(ruleID); err != nil {
 		writeManagerError(w, err)
 		return
 	}
@@ -117,7 +117,7 @@ func (h *Handler) handleStartForward(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) startForward(w http.ResponseWriter, ruleID string) {
-	status, err := h.manager.StartRule(ruleID)
+	status, err := h.app.Manager.StartRule(ruleID)
 	if err != nil {
 		writeManagerError(w, err)
 		return
@@ -130,7 +130,7 @@ func (h *Handler) handleStopForward(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) stopForward(w http.ResponseWriter, ruleID string) {
-	status, err := h.manager.StopRule(ruleID)
+	status, err := h.app.Manager.StopRule(ruleID)
 	if err != nil {
 		writeManagerError(w, err)
 		return
@@ -144,7 +144,7 @@ func (h *Handler) handleDiagnoseForward(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) diagnoseForward(w http.ResponseWriter, ruleID string) {
 	var targetRule *domain.ForwardRule
-	for _, r := range h.manager.ListRules() {
+	for _, r := range h.app.Manager.ListRules() {
 		if r.ID == ruleID {
 			rule := r
 			targetRule = &rule
@@ -159,7 +159,7 @@ func (h *Handler) diagnoseForward(w http.ResponseWriter, ruleID string) {
 	}
 
 	var isRunning bool
-	for _, s := range h.manager.ListStatus() {
+	for _, s := range h.app.Manager.ListStatus() {
 		if s.RuleID == ruleID {
 			isRunning = s.Running
 			break
@@ -182,11 +182,11 @@ func (h *Handler) reorderForwards(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.manager.ReorderRules(body.IDs); err != nil {
+	if err := h.app.Manager.ReorderRules(body.IDs); err != nil {
 		writeManagerError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, rulesToResponses(h.manager.ListRules()))
+	writeJSON(w, http.StatusOK, rulesToResponses(h.app.Manager.ListRules()))
 }
 
 func (h *Handler) handleStartGroup(w http.ResponseWriter, r *http.Request) {
@@ -220,9 +220,9 @@ func (h *Handler) groupAction(w http.ResponseWriter, r *http.Request, action str
 
 	var results []domain.GroupActionResult
 	if action == "start" {
-		results = h.manager.StartGroup(group)
+		results = h.app.Manager.StartGroup(group)
 	} else {
-		results = h.manager.StopGroup(group)
+		results = h.app.Manager.StopGroup(group)
 	}
 	if len(results) == 0 {
 		writeJSON(w, http.StatusNotFound, map[string][]string{

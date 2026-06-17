@@ -184,13 +184,11 @@ func TestImportConfig_MalformedBody_Returns400(t *testing.T) {
 
 func TestNewHandler_AppliesDefaults(t *testing.T) {
 	// app.New applies the defaults (nil Manager, zero StartedAt, empty Version);
-	// NewHandler then exposes them through the app container + manager bridge.
+	// NewHandler exposes them through the app container (app.App is the single
+	// dependency container — there is no separate manager bridge).
 	h := NewHandler(app.New(nil, options.Options{}, time.Time{}, ""))
-	if h.manager == nil {
-		t.Fatal("nil Manager should default to a fresh manager")
-	}
 	if h.app.Manager == nil {
-		t.Fatal("app.Manager should be populated")
+		t.Fatal("nil Manager should default to a fresh manager")
 	}
 	if h.app.Version == "" {
 		t.Fatal("empty Version should default to the build version")

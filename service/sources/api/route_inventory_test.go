@@ -353,6 +353,39 @@ func TestRouteInventoryIsConsistent(t *testing.T) {
 	}
 }
 
+// TestRouteInventoryMatchesModularRoutes ties the static route inventory to the
+// LIVE chi route registration (h.modularRoutes()): every registered route must
+// have an inventory entry and vice versa, on the exact (method, path) pair. This
+// is an always-on guard (ordinary `go test`, no build tag) so that adding or
+// removing a chi route without updating the inventory fails immediately — before
+// the OpenAPI cross-artifact gate. The chi {id}/{group} patterns already use the
+// same placeholder form as the inventory's canonical paths, so they compare
+// directly.
+func TestRouteInventoryMatchesModularRoutes(t *testing.T) {
+	h := newTestHandler(t, "", "missing")
+
+	registered := map[string]bool{}
+	for _, route := range h.modularRoutes() {
+		registered[route.method+" "+route.path] = true
+	}
+
+	inventory := map[string]bool{}
+	for _, entry := range routeInventory() {
+		inventory[entry.Method+" "+entry.Path] = true
+	}
+
+	for key := range registered {
+		if !inventory[key] {
+			t.Errorf("chi route %q has no routeInventory() entry (update the inventory)", key)
+		}
+	}
+	for key := range inventory {
+		if !registered[key] {
+			t.Errorf("routeInventory() entry %q is not registered on the chi router", key)
+		}
+	}
+}
+
 func TestInventoryConsistencyDetectsProblems(t *testing.T) {
 	bad := []routeInventoryEntry{
 		{Method: "get", Path: "api/x", Statuses: nil, Canonical: true, Additive: true}, // bad method, rel path, no status, both flags

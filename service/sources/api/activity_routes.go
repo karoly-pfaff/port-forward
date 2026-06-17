@@ -10,8 +10,8 @@ import (
 // activityRoutes registers the activity log endpoints. Both share the exact path
 // /api/activity on different methods — the first modular registration to expose
 // two methods on one path; chi matches each (method, path) pair, so a third
-// method (e.g. POST) falls through (MethodNotAllowed → legacy) to the generic
-// /api 404 envelope.
+// method (e.g. POST) is routed (MethodNotAllowed → writeAPINotFound) to the
+// generic /api 404 envelope.
 func (h *Handler) activityRoutes() []modularRoute {
 	return []modularRoute{
 		{method: http.MethodGet, path: "/api/activity", handler: h.handleListActivity},
@@ -23,7 +23,7 @@ func (h *Handler) activityRoutes() []modularRoute {
 // limit/ruleId/type/severity query params (an unparseable limit is ignored,
 // falling back to the store default). Behavior — query parsing, defaults, and the
 // 200 {"events": ...} body — is identical to the pre-modularization handler; it
-// reads the activity store via the h.manager bridge.
+// reads the activity store via h.app.Manager.
 func (h *Handler) handleListActivity(w http.ResponseWriter, r *http.Request) {
 	params := activity.ListParams{}
 	q := r.URL.Query()
@@ -43,15 +43,15 @@ func (h *Handler) handleListActivity(w http.ResponseWriter, r *http.Request) {
 		params.Severity = &severity
 	}
 
-	events := h.manager.ListActivity(params)
+	events := h.app.Manager.ListActivity(params)
 	writeJSON(w, http.StatusOK, map[string]any{"events": events})
 }
 
 // handleClearActivity clears the activity log and returns 204 with no body (and
 // no Content-Type — it does not go through writeJSON). Behavior identical to the
-// pre-modularization handler; it mutates the activity store via the h.manager
-// bridge.
+// pre-modularization handler; it mutates the activity store via
+// h.app.Manager.
 func (h *Handler) handleClearActivity(w http.ResponseWriter, _ *http.Request) {
-	h.manager.ClearActivity()
+	h.app.Manager.ClearActivity()
 	w.WriteHeader(http.StatusNoContent)
 }

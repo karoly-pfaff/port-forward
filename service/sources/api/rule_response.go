@@ -8,8 +8,8 @@ import (
 // rulesToResponses / toRuleResponse map domain rules to the API response shape,
 // decorating each rule with port advisories. They are forwards-domain helpers
 // but are shared: the forwards routes (list/create/update/reorder) and the
-// legacy config import handler both use them, so they live in this small
-// package-level file rather than in either feature module (v1.15 Slice 11).
+// config import handler both use them, so they live in this small package-level
+// file rather than in either feature module (v1.15 Slice 11).
 func rulesToResponses(rules []domain.ForwardRule) []domain.ForwardRuleResponse {
 	responses := make([]domain.ForwardRuleResponse, 0, len(rules))
 	for _, rule := range rules {

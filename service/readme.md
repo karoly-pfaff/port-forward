@@ -83,36 +83,41 @@ The HTTP layer is built from an explicit dependency container, `app.App`
 `api.NewHandler(app)`) and serves it via `http.Server` with graceful shutdown.
 `api.NewHandler(app *app.App)` is the construction path.
 
-`ServeHTTP` routes API paths (`/api` or `/api/*`) into `serveAPI` and otherwise
-serves the static client (or a plain 404 when no client is built). `serveAPI`
-first consults the **modular route table** (`dispatchModular`, exact method +
-exact path — see `sources/api/routes.go`) for endpoints migrated into feature
-route modules, then falls through to the legacy ordered method+path dispatch
-(exact matches plus the `/api/forwards/groups/` and `/api/forwards/` prefixes),
-falling through to a JSON `404 {"errors":["API route was not found."]}`. A method
-mismatch on a known path returns that same JSON 404 (never a 405): the modular
-table matches only on an exact method, so a wrong method falls through to the
-legacy dispatch and its generic envelope. Shared response/request/error helpers
-(`writeJSON`, `decodeRequest`, `readBody`, `writeManagerError`) live in
-`sources/api/respond.go`; diagnose check helpers live in `sources/api/diagnose.go`.
+`ServeHTTP` routes API paths (`/api` or `/api/*`) into the **chi API router**
+(`h.apiRouter`, built by `buildAPIRouter` in `sources/api/routes.go`) and
+otherwise serves the static client (or a plain 404 when no client is built). The
+chi router mounts every API route from the per-feature registrars; anything it
+cannot match — an unknown path (chi `NotFound`) or a wrong method on a known path
+(chi `MethodNotAllowed`) — is routed to `writeAPINotFound`, which emits the JSON
+`404 {"errors":["API route was not found."]}` envelope (never a 405). The
+top-level API/static boundary stays owned by `Handler.ServeHTTP` — chi only ever
+serves requests under `/api`. Shared response/request/error helpers (`writeJSON`,
+`decodeRequest`, `readBody`, `writeManagerError`) live in `sources/api/respond.go`;
+diagnose check helpers live in `sources/api/diagnose.go`. The feature handlers
+reach the rule manager through `h.app.Manager` — `app.App` is the single
+dependency container (no separate manager bridge).
 
-**v1.15 — Go Service Modular Router (in progress):** the monolithic `api.go`
-dispatcher is being reorganized into focused per-feature route modules
+**v1.15 — Go Service Modular Router (complete):** the monolithic `api.go`
+dispatcher was reorganized into focused per-feature route modules
 (`sources/api/<feature>_routes.go`) behind the `app.App` dependency struct,
 preserving the REST contract, error envelopes, static serving, and
 startup/shutdown semantics exactly. **The Go API router foundation is `chi`**
-(`github.com/go-chi/chi/v5`, Slice 10): each migrated route is mounted on a
-chi router built in `buildAPIRouter` (`routes.go`); anything chi cannot match —
-an unknown path (`NotFound`) or a wrong method on a known path
-(`MethodNotAllowed`) — is delegated to the legacy ordered `serveLegacyAPI`
-dispatch, which serves the still-unmigrated routes and ends in the generic
-`/api` 404 envelope. **The top-level API/static boundary stays owned by Portier
+(`github.com/go-chi/chi/v5`, Slice 10): every route is mounted on a chi router
+built in `buildAPIRouter` (`routes.go`); anything chi cannot match — an unknown
+path (`NotFound`) or a wrong method on a known path (`MethodNotAllowed`) — is
+routed to `writeAPINotFound`, which emits the generic `/api` 404 envelope.
+**The top-level API/static boundary stays owned by Portier
 (`Handler.ServeHTTP`), not chi** — chi only ever serves requests under `/api`;
 non-API paths still go to static serving (or a plain 404 with no client build).
 **The 404-not-405 behavior is intentional and preserved:** a wrong method on an
 existing API path returns the generic `/api` 404 JSON envelope, never a 405
-(chi's `MethodNotAllowed` is routed through `serveLegacyAPI`). **Migrated so
-far:** `GET /api/health` (`health_routes.go`), `GET /api/runtime`
+(chi's `MethodNotAllowed` is routed to `writeAPINotFound`). As of Slice 12 there
+is **no legacy ordered dispatch** (`serveLegacyAPI` was retired); as of Slice 13
+there is **no temporary `h.manager` bridge** (`app.App` is the single dependency
+container, reached via `h.app.Manager`), and a `route_inventory_test.go`
+consistency test ties the live chi registration (`modularRoutes()`) to the
+OpenAPI inventory both directions. **The route modules:** `GET /api/health`
+(`health_routes.go`), `GET /api/runtime`
 (`runtime_routes.go`), `GET /api/ports/advisory` (`ports_routes.go`), the activity
 endpoints `GET`/`DELETE /api/activity` (`activity_routes.go` — the first
 multi-method same-path module and the first 204/no-body modular response),

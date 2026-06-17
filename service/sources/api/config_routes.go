@@ -26,7 +26,7 @@ func (h *Handler) configRoutes() []modularRoute {
 // handleConfigExport returns the exported config snapshot. Read-only, no request
 // input; behavior is identical to the pre-migration inline handler.
 func (h *Handler) handleConfigExport(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, h.manager.ExportConfig())
+	writeJSON(w, http.StatusOK, h.app.Manager.ExportConfig())
 }
 
 func (h *Handler) configPlan(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +49,7 @@ func (h *Handler) configPlan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	plan := configplan.BuildConfigPlan(configplan.Input{
-		CurrentRules: h.manager.ListRules(),
+		CurrentRules: h.app.Manager.ListRules(),
 		DesiredRaw:   *body.Desired,
 	})
 	writeJSON(w, http.StatusOK, plan)
@@ -86,7 +86,7 @@ func (h *Handler) importConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.manager.ImportConfig(domain.ExportedConfig{
+	result, err := h.app.Manager.ImportConfig(domain.ExportedConfig{
 		Version:    importedConfig.Version,
 		ExportedAt: importedConfig.ExportedAt,
 		Rules:      importedConfig.Rules,
@@ -99,7 +99,7 @@ func (h *Handler) importConfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": result.Errors, "result": result})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"result": result, "rules": rulesToResponses(h.manager.ListRules())})
+	writeJSON(w, http.StatusOK, map[string]any{"result": result, "rules": rulesToResponses(h.app.Manager.ListRules())})
 }
 
 type applyResponse struct {
@@ -133,7 +133,7 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 
 	appliedAt := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	plan := configplan.BuildConfigPlan(configplan.Input{
-		CurrentRules: h.manager.ListRules(),
+		CurrentRules: h.app.Manager.ListRules(),
 		DesiredRaw:   *body.Desired,
 	})
 
@@ -165,7 +165,7 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if plan.Summary.HasDrift {
-		result, err := h.manager.ImportConfig(domain.ExportedConfig{
+		result, err := h.app.Manager.ImportConfig(domain.ExportedConfig{
 			Version: "1", Rules: applyResult.Rules,
 		}, "replace")
 		if err != nil {

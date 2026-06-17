@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"portier/service/sources/app"
-	"portier/service/sources/manager"
 	"portier/service/sources/static"
 )
 
@@ -14,7 +13,9 @@ const notFoundMessage = "API route was not found."
 // Handler is the service HTTP entry point. It holds the explicit dependency
 // container (app.App) and the chi API router (v1.15). As of Slice 12 every API
 // route is served by the chi router; an unmatched request returns the generic
-// /api 404 envelope via writeAPINotFound.
+// /api 404 envelope via writeAPINotFound. The feature route handlers reach the
+// rule manager through h.app.Manager — app.App is the single dependency
+// container (the temporary h.manager bridge was removed in Slice 13).
 type Handler struct {
 	app             *app.App
 	staticAvailable bool
@@ -23,12 +24,6 @@ type Handler struct {
 	// only ever serves requests under /api; its NotFound/MethodNotAllowed handlers
 	// emit the generic /api 404 envelope (writeAPINotFound) — never a 405.
 	apiRouter http.Handler
-
-	// manager is the bridge the feature route handlers (forwards, config) use to
-	// reach the rule manager (v1.15 Slice 2). It mirrors app.Manager; a later
-	// cleanup slice may have each handler read app.Manager directly and remove
-	// this field.
-	manager *manager.Manager
 }
 
 // NewHandler builds the HTTP handler from the explicit app dependency container.
@@ -38,7 +33,6 @@ func NewHandler(application *app.App) *Handler {
 	h := &Handler{
 		app:             application,
 		staticAvailable: static.HasClient(application.Options.StaticDir),
-		manager:         application.Manager,
 	}
 	h.apiRouter = h.buildAPIRouter()
 	return h
