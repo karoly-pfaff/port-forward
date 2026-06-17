@@ -307,5 +307,9 @@ Use these when the change touches the listed area.
 
 - [ ] Keep current operational guidance in docs.
 - [ ] Keep history in `docs/changelog.md`, `docs/roadmap.md`, or `audits/`.
+- [ ] For audit publication, keep reviewed public reports in `audits/` and raw/internal
+  notes in gitignored `audits/private/`.
+- [ ] Before moving an audit into public `audits/`, check for secrets, local machine
+  paths, raw config/log output, and sensitive security disclosure.
 - [ ] Update `docs/glossary.md` for new public terms.
 - [ ] Update this checklist if validation expectations change.

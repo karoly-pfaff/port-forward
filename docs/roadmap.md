@@ -153,8 +153,10 @@ audits/v1.16-audit-synthesis-and-fix-plan.md
 2. Produce a synthesis and fix plan.
 3. Classify findings: **MUST / SHOULD / NICE / DEFER / DO NOT DO**.
 4. Execute only the MUST/SHOULD fixes needed for v1.16.
-5. Run the release-readiness checkpoint.
-6. Prepare the v1.16 release only after validation passes.
+5. Curate audit documents for publication: keep reviewed public audit reports in
+   `audits/`, and keep raw/internal audit notes under `audits/private/` (gitignored).
+6. Run the release-readiness checkpoint.
+7. Prepare the v1.16 release only after validation passes.
 
 ### Audit Principles
 
@@ -170,6 +172,8 @@ audits/v1.16-audit-synthesis-and-fix-plan.md
 Portier v1.16 is ready when:
 
 - All audits and the synthesis are complete.
+- Audit documents are curated: public-ready reports live in `audits/`, and raw/internal
+  notes live in `audits/private/`.
 - No unresolved MUST findings remain.
 - TypeScript NestJS server and Go modular service parity is verified.
 - CLI and replay tool responsibilities are clear.

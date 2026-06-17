@@ -12,7 +12,9 @@ Project documentation index.
 
 - [changelog.md](changelog.md) — version history and notable changes per release.
 
-Raw release readiness audit reports live in `audits/` (gitignored, local only).
+Audit reports live in `audits/`. During active audit work the directory may contain
+raw local notes; before publication, reviewed public reports stay in `audits/` and
+raw/internal notes move under gitignored `audits/private/`.
 
 ## Platform Deployment
 
