@@ -10,6 +10,7 @@ import (
 	"portier/service/sources/connections"
 	"portier/service/sources/domain"
 	"portier/service/sources/forwarders"
+	"portier/service/sources/recovery"
 	"portier/service/sources/validation"
 )
 
@@ -22,6 +23,7 @@ type Manager struct {
 	onEventLog  forwarders.LogFunc
 	tcpRegistry *connections.TcpConnectionRegistry
 	udpRegistry *connections.UdpSessionRegistry
+	recovery    *recovery.State
 }
 
 type runtimeState struct {
@@ -51,13 +53,32 @@ func NewWithStore(store *config.Store, rules []domain.ForwardRule) (*Manager, er
 	}, nil
 }
 
+// NewFromConfig builds a Manager from the persisted config, recovering from
+// config-load failures instead of failing startup. A malformed, schema-invalid,
+// or unreadable config no longer aborts the process: the recovery loader
+// classifies the failure (quarantining the bad file where safe), the manager
+// starts with no active rules, and RecoveryState() reports the condition while
+// blocking writes so the bad config cannot be silently overwritten.
+//
+// It can still return an error for non-recoverable construction failures (e.g. a
+// persisted duplicate listen binding in an otherwise-valid config); making that
+// path non-fatal is Slice 3 (autostart recovery).
 func NewFromConfig(configPath string) (*Manager, error) {
 	store := config.NewStore(configPath)
-	rules, err := store.Load()
+	rules, state := recovery.LoadConfig(configPath)
+	manager, err := NewWithStore(&store, rules)
 	if err != nil {
 		return nil, err
 	}
-	return NewWithStore(&store, rules)
+	manager.recovery = state
+	return manager, nil
+}
+
+// RecoveryState returns the active startup recovery state, or nil when the
+// config loaded normally. Internal accessor for later API/UI/CLI surfacing
+// (Slice 5) and for tests.
+func (m *Manager) RecoveryState() *recovery.State {
+	return m.recovery
 }
 
 func (m *Manager) SetStartLogger(logger func(rule domain.ForwardRule)) {
@@ -543,6 +564,9 @@ func (m *Manager) statusForRule(rule domain.ForwardRule) domain.ForwardStatus {
 }
 
 func (m *Manager) persist() error {
+	if m.recovery.Active() && m.recovery.WritesBlocked {
+		return RecoveryError{Message: "Configuration is in recovery mode; rule changes are blocked until the configuration is repaired."}
+	}
 	if m.store == nil {
 		return nil
 	}
@@ -714,5 +738,17 @@ type NotFoundError struct {
 }
 
 func (e NotFoundError) Error() string {
+	return e.Message
+}
+
+// RecoveryError is returned when a mutating operation is refused because the
+// runtime is in config-load recovery mode (writes blocked). It carries no API
+// schema change: the existing error envelope surfaces the message. Slice 5 will
+// decide on a dedicated status code / surfacing.
+type RecoveryError struct {
+	Message string
+}
+
+func (e RecoveryError) Error() string {
 	return e.Message
 }

@@ -232,7 +232,10 @@ and recover.
    autostart failure classes, recovery principles, the recommended-behavior table,
    quarantine/preservation policy, the observability direction, and the implementation
    slice sequence. Design-only; no code/API/version change. Addresses v1.16 Finding R-1.
-2. Go startup recovery foundation (non-fatal config load + quarantine + recovery state).
+2. **Go startup recovery foundation (done):** non-fatal config load with classification,
+   same-directory quarantine of bad config, internal recovery state, and write-block so a
+   bad config is never silently overwritten (`service/sources/recovery`). Duplicate-binding
+   and autostart bind failures remain fatal until Slice 3.
 3. Go autostart recovery (per-rule autostart failures non-fatal — the core R-1 fix).
 4. TypeScript/NestJS parity recovery.
 5. API/diagnostics/UI/CLI surfacing (additive `recovery` block, doctor check, UI banner).

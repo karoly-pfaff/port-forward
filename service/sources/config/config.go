@@ -11,6 +11,17 @@ import (
 	"portier/service/sources/validation"
 )
 
+// ErrMalformed marks a config whose bytes are not a valid Portier config
+// container: invalid JSON, or a well-formed JSON value that is neither a rules
+// array nor a {"rules": [...]} object. ErrSchemaInvalid marks a config that
+// decodes as a rules container but contains at least one rule that fails
+// validation. Callers (e.g. the recovery loader) classify load failures with
+// errors.Is rather than matching message text.
+var (
+	ErrMalformed     = errors.New("config is malformed")
+	ErrSchemaInvalid = errors.New("config has an invalid rule")
+)
+
 type Store struct {
 	path string
 }
@@ -28,6 +39,14 @@ func (s Store) Load() ([]domain.ForwardRule, error) {
 		return nil, err
 	}
 
+	return Parse(raw)
+}
+
+// Parse decodes and validates raw config bytes into forward rules. It is the
+// pure (no IO) core of Load, exposed so the startup recovery loader can classify
+// a read-from-disk config without re-implementing the decode/validate rules.
+// Failures wrap ErrMalformed (bad container) or ErrSchemaInvalid (bad rule).
+func Parse(raw []byte) ([]domain.ForwardRule, error) {
 	ruleItems, err := decodeRuleItems(raw)
 	if err != nil {
 		return nil, err
@@ -35,9 +54,9 @@ func (s Store) Load() ([]domain.ForwardRule, error) {
 
 	rules := make([]domain.ForwardRule, 0, len(ruleItems))
 	for index, item := range ruleItems {
-		rule, errors := validation.DecodeAndValidateForwardRule(item)
-		if len(errors) > 0 {
-			return nil, fmt.Errorf("Invalid rule at index %d: %s", index, joinErrors(errors))
+		rule, errs := validation.DecodeAndValidateForwardRule(item)
+		if len(errs) > 0 {
+			return nil, fmt.Errorf("%w: Invalid rule at index %d: %s", ErrSchemaInvalid, index, joinErrors(errs))
 		}
 		rules = append(rules, rule)
 	}
@@ -116,10 +135,10 @@ func decodeRuleItems(raw []byte) ([]json.RawMessage, error) {
 
 	var syntaxError *json.SyntaxError
 	if err := json.Unmarshal(raw, &json.RawMessage{}); errors.As(err, &syntaxError) {
-		return nil, fmt.Errorf("Invalid JSON: %w", err)
+		return nil, fmt.Errorf("%w: Invalid JSON: %v", ErrMalformed, err)
 	}
 
-	return nil, errors.New("Config file must contain an array of forward rules.")
+	return nil, fmt.Errorf("%w: Config file must contain an array of forward rules.", ErrMalformed)
 }
 
 func joinErrors(errors []string) string {

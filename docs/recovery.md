@@ -358,11 +358,28 @@ is valid).
 ## Implementation slices
 
 1. **Recovery policy / design document** — *this slice.* No code/API/version change.
-2. **Go startup recovery foundation:** make `config.Store.Load` failures (classes 2–4) and
-   the duplicate-binding guard (class 5) non-fatal at boot; start the management API with
-   zero/partial active rules; introduce an internal recovery-state value + quarantine
-   helper; loud structured startup log; block auto-overwrite while in file-level recovery.
-   Tests. No API contract change yet.
+2. **Go startup recovery foundation (done):** config-load failures (classes 2–4) are
+   non-fatal at boot; the management API starts with zero active rules; recovery is carried
+   by an internal `recovery.State`; the bad file is quarantined where safe; startup logs a
+   loud `Warn`; writes are blocked while recovery is active. Tests. No API contract change.
+   Implemented as:
+   - **Package `service/sources/recovery`** owns `State` (reason, message, configPath,
+     quarantinePath, writesBlocked, detectedAt) and `LoadConfig` (never returns a fatal
+     error; classifies and returns empty rules + `*State`).
+   - **Classification uses typed errors, not string matching:** `config.Parse` (extracted
+     from `config.Store.Load`) wraps `config.ErrMalformed` / `config.ErrSchemaInvalid`, and
+     the loader distinguishes unreadable (read error) vs malformed vs schema-invalid.
+   - **Quarantine** = atomic same-directory rename to `rules.json.corrupt-<UTC>` (with a
+     `-N` suffix on collision so a prior quarantine is never overwritten). Unreadable files
+     are **not** quarantined (preserved in place); a failed quarantine leaves the original
+     untouched and keeps recovery active.
+   - **Write-block** is enforced at the single `manager.persist()` choke point, so
+     create/update/delete/reorder/import are all refused with a `manager.RecoveryError`
+     while recovery is active — preventing a fresh empty config from overwriting the bad
+     one. The error flows through the existing error envelope (generic 500) for now; a
+     dedicated status/surface is Slice 5.
+   - **Deferred to Slice 3:** the persisted duplicate-binding guard (class 5) and per-rule
+     autostart failures (class 6) are still fatal at boot; this slice covers config-load only.
 3. **Go autostart recovery (core R-1 fix):** make the `StartEnabled` boot loop catch
    per-rule failures (class 6) so other enabled rules continue and the API always starts;
    confirm `lastError`/`health`/`rule.error` coverage. Tests. No API contract change.

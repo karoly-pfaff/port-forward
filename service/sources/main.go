@@ -77,6 +77,18 @@ func runPortier(ctx context.Context, opts options.Options, log *slog.Logger) err
 	if err != nil {
 		return fmt.Errorf("Failed to load config: %w", err)
 	}
+	if state := forwardManager.RecoveryState(); state.Active() {
+		// Config-load recovery (R-1): the service keeps running with no active
+		// rules so the management API stays reachable. Log loudly; writes are
+		// blocked until the configuration is repaired.
+		log.Warn("Started in configuration recovery mode",
+			"reason", string(state.Reason),
+			"configPath", state.ConfigPath,
+			"quarantinePath", state.QuarantinePath,
+			"writesBlocked", state.WritesBlocked,
+			"detail", state.Message,
+		)
+	}
 	forwardManager.SetEventLogger(func(message string, args ...any) {
 		log.Info(message, args...)
 	})

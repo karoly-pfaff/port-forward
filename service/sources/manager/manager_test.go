@@ -1641,21 +1641,29 @@ func TestReorderRulesPersistFailureRollsBack(t *testing.T) {
 	}
 }
 
-// ── NewFromConfig error path ──────────────────────────────────────────────────
+// ── NewFromConfig recovery path ───────────────────────────────────────────────
 
-// TestNewFromConfigLoadError asserts that NewFromConfig propagates a config Load
-// error (e.g. invalid JSON) rather than returning a partially-initialised manager.
-func TestNewFromConfigLoadError(t *testing.T) {
+// TestNewFromConfigLoadRecovers asserts that NewFromConfig no longer treats an
+// invalid config (e.g. invalid JSON) as fatal (v1.17 R-1): it returns a usable
+// manager in recovery mode with no active rules, rather than a nil manager + error.
+// Detailed classification/quarantine behavior is covered in recovery_test.go.
+func TestNewFromConfigLoadRecovers(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(configPath, []byte("not valid json"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	m, err := NewFromConfig(configPath)
-	if err == nil {
-		t.Fatal("expected error from invalid config")
+	if err != nil {
+		t.Fatalf("NewFromConfig must not fail for invalid config: %v", err)
 	}
-	if m != nil {
-		t.Fatal("expected nil manager on error")
+	if m == nil {
+		t.Fatal("expected a usable manager in recovery mode")
+	}
+	if !m.RecoveryState().Active() {
+		t.Fatal("expected active recovery state for invalid config")
+	}
+	if len(m.ListRules()) != 0 {
+		t.Fatalf("rules = %#v, want empty in recovery mode", m.ListRules())
 	}
 }
 
