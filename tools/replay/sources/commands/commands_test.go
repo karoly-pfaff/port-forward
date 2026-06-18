@@ -90,8 +90,8 @@ func TestRun_VersionCommand(t *testing.T) {
 
 func TestVersion_IsCurrentRelease(t *testing.T) {
 	// The replay tool version tracks the overall Portier release version.
-	if version.Version != "1.16.0" {
-		t.Errorf("version.Version = %q, want 1.16.0", version.Version)
+	if version.Version != "1.17.0" {
+		t.Errorf("version.Version = %q, want 1.17.0", version.Version)
 	}
 }
 

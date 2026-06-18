@@ -4,6 +4,36 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
+## [1.17.0] - 2026-06-18 - Migration & Recovery
+
+A reliability release that resolves the v1.16 audit finding **R-1** (fatal startup lockout): a bad or unbindable configuration no longer kills the service. Portier now starts in a recoverable, observable state across both runtimes (Go service and TypeScript/NestJS), and gains an offline config migration/normalization command. No installer/upgrade work (v1.18) or lint/security hardening (v1.19) was started; no coverage gate was lowered.
+
+Startup recovery (R-1 resolved, Go + TypeScript/NestJS):
+- A malformed, schema-invalid, or unreadable `rules.json` no longer aborts startup — the management API stays reachable with no active rules.
+- Bad config is preserved: malformed/schema-invalid files are quarantined in place to a timestamped `rules.json.corrupt-<UTC>` sibling (never overwriting a prior quarantine); an unreadable file is left untouched. Writes are blocked while recovery is active, so a fresh empty config can never silently overwrite the bad one.
+- Persisted duplicate listen bindings no longer abort startup: the rules load, conflicting enabled rules are skipped at autostart (no arbitrary winner) and reported per-rule, and unrelated rules still start.
+- A per-rule autostart bind failure is non-fatal: the rule is left enabled-but-stopped with `lastError`/`health: "error"` while other rules and the API start. Create/update/import duplicate validation stays strict.
+
+Recovery surfacing (additive, backward-compatible):
+- `GET /api/runtime` carries an always-present `recovery` block (`{ active: false }` normally; reason/message/configPath/quarantinePath/writesBlocked/detectedAt when active), identical across runtimes and documented in OpenAPI.
+- Diagnostics/support bundle includes the recovery state via `runtime.json`; `portier doctor` emits a `config.recovery_active` warning when active; the web UI shows a recovery banner only when active. Per-rule autostart/duplicate failures stay rule-level and do not trigger the global banner.
+
+Runtime validation:
+- `validate:runtime:smoke` now covers normal **and** configuration-recovery startup; a packaged-runtime recovery smoke boots the Go service against a corrupt `rules.json` and asserts `/api/runtime.recovery.active`. `validate:config` was updated to assert recovery-mode startup (a bad config no longer aborts).
+
+Config migration & versioning:
+- New offline `portier config migrate <file>`: classifies the file (bare-array / wrapper-object / exported), validates, and normalizes a valid config to the canonical bare-array shape. Dry-run by default; `--write` is **backup-first** (`<file>.bak-<UTC>`) and atomic. A malformed, schema-invalid, or unsupported-version file is never written or overwritten.
+- The persisted `rules.json` remains a backward-compatible unversioned bare array (no startup auto-migration); the export/import envelope version remains `"1"`; unsupported/future envelope versions are refused.
+
+Validation:
+- lint, typecheck, full unit tests (shared/server/client/service), CLI and replay tests, all coverage gates (server/service/client/cli — none lowered), config compatibility (`validate:config`), contract parity (`validate:contract`, 237 checks), Go OpenAPI inventory, runtime smoke + recovery smoke, and current-platform release artifact build/validate all passed.
+- Known caveat (pre-existing, unchanged since v1.14): the Playwright E2E web server fails to boot because it launches the NestJS server via `tsx` from the repo root, where `tsconfig.json` lacks `experimentalDecorators`. Product behavior is covered by contract parity against the built server, runtime/recovery smoke, and the full unit suites. Tracked as a follow-up.
+
+Deferred follow-ups (unchanged scope boundaries):
+- Install / service / upgrade experience → v1.18.
+- Go generic-500 message redaction and strict lint hardening → v1.19.
+- A versioned *persisted* config envelope and cross-version migration steps → future (not needed at a single config version).
+
 ## [1.16.0] - 2026-06-17 - Post-Migration Architecture & Reliability Audit
 
 A hardening release, not a feature release: a ten-audit review of Portier after the v1.14 NestJS migration and v1.15 Go chi-router migration, plus a synthesis-and-fix-plan and a small docs-polish pass. No API/contract behavior changed, no coverage gate was lowered, and no installer/upgrade work was moved into v1.16.
