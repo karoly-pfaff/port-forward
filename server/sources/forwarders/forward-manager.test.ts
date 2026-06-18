@@ -1,8 +1,9 @@
 import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ExportedConfig, ForwardRule } from "@portier/shared";
-import { ConflictError, errorMessage, ForwardManager, NotFoundError, ValidationError, type RuleStore } from "./forward-manager.js";
+import { ConflictError, errorMessage, ForwardManager, NotFoundError, RecoveryError, ValidationError, type RuleStore } from "./forward-manager.js";
 import { ActivityStore } from "../activity/activity-store.js";
+import type { RecoveryLoadResult } from "../recovery/config-recovery.js";
 import { getFreeTcpPort, startRuleStable, startTcpServerOnFreePort } from "../testing/test-helpers.js";
 
 class MemoryStore implements RuleStore {
@@ -1231,8 +1232,8 @@ describe("ForwardManager coverage hardening (Slice 30)", () => {
       listenPort, targetHost: "127.0.0.1", targetPort: 49998, enabled: true
     };
     const m = track(new ForwardManager(new MemoryStore([rule])));
-    const started = await m.loadAndStartEnabled();
-    expect(started).toBe(1);
+    const result = await m.loadAndStartEnabled();
+    expect(result.started).toBe(1);
     expect(m.getStatus("load-enabled").running).toBe(true);
   });
 
@@ -1407,6 +1408,147 @@ describe("ForwardManager config-level activity emission (Slice 30)", () => {
     managers.push(manager);
     await exerciseConfigPaths(manager);
     expect(manager.listRules().length).toBe(1);
+  });
+});
+
+// ── v1.17 Slice 4: startup recovery parity ────────────────────────────────────
+
+// RecoveryStore is a RuleStore whose loadWithRecovery returns a prepared recovery
+// result, so the manager's write-block path can be exercised without real IO.
+class RecoveryStore implements RuleStore {
+  saveCallCount = 0;
+  constructor(private readonly result: RecoveryLoadResult) {}
+  async load(): Promise<ForwardRule[]> {
+    return this.result.rules.map((rule) => ({ ...rule }));
+  }
+  async loadWithRecovery(): Promise<RecoveryLoadResult> {
+    return { rules: this.result.rules.map((rule) => ({ ...rule })), recovery: this.result.recovery };
+  }
+  async save(): Promise<void> {
+    this.saveCallCount += 1;
+  }
+}
+
+describe("ForwardManager startup recovery (Slice 4)", () => {
+  const managers: ForwardManager[] = [];
+  afterEach(async () => {
+    await Promise.all(managers.splice(0).map((m) => m.stopAll()));
+  });
+  function track(m: ForwardManager): ForwardManager {
+    managers.push(m);
+    return m;
+  }
+
+  function tcpRule(over: Partial<ForwardRule> & Pick<ForwardRule, "id" | "listenPort">): ForwardRule {
+    return {
+      name: over.id,
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      targetHost: "127.0.0.1",
+      targetPort: 9000,
+      enabled: true,
+      ...over,
+    } as ForwardRule;
+  }
+
+  it("loadAndStartEnabled is non-fatal: a failed rule does not block other enabled rules", async () => {
+    const { server, port: occupiedPort } = await startTcpServerOnFreePort();
+    try {
+      const goodPort = await getFreeTcpPort();
+      const bad = tcpRule({ id: "bad", listenPort: occupiedPort });
+      const good = tcpRule({ id: "good", listenPort: goodPort });
+      const m = track(new ForwardManager(new MemoryStore([bad, good]), new ActivityStore()));
+
+      const result = await m.loadAndStartEnabled();
+      expect(result.attempted).toBe(2);
+      expect(result.started).toBe(1);
+      expect(result.failed.map((f) => f.ruleId)).toEqual(["bad"]);
+
+      const badStatus = m.getStatus("bad");
+      expect(badStatus.running).toBe(false);
+      expect(badStatus.lastError).toBeTruthy();
+      expect(badStatus.health).toBe("error");
+      expect(m.getStatus("good").running).toBe(true);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("skips persisted duplicate-bound enabled rules, starts unrelated ones, and does not rewrite config", async () => {
+    const dupPort = await getFreeTcpPort();
+    const otherPort = await getFreeTcpPort();
+    const ruleA = tcpRule({ id: "dup-a", name: "A", listenPort: dupPort });
+    const other = tcpRule({ id: "other-b", name: "B", listenPort: otherPort });
+    const ruleC = tcpRule({ id: "dup-c", name: "C", listenPort: dupPort });
+
+    // Rule order A, B, C so we can assert conflict reporting is in rule order.
+    const store = new RecoveryStore({ rules: [ruleA, other, ruleC] });
+    const m = track(new ForwardManager(store, new ActivityStore()));
+
+    const result = await m.loadAndStartEnabled();
+    expect(result.attempted).toBe(3);
+    expect(result.started).toBe(1);
+    expect(result.skipped.map((s) => s.ruleId)).toEqual(["dup-a", "dup-c"]);
+
+    for (const id of ["dup-a", "dup-c"]) {
+      const status = m.getStatus(id);
+      expect(status.running).toBe(false);
+      expect(status.lastError).toBeTruthy();
+      expect(status.health).toBe("error");
+    }
+    expect(m.getStatus("other-b").running).toBe(true);
+    // Autostart must never persist.
+    expect(store.saveCallCount).toBe(0);
+  });
+
+  it("an enabled rule sharing a binding only with a disabled rule still autostarts", async () => {
+    const port = await getFreeTcpPort();
+    const enabled = tcpRule({ id: "en", name: "Enabled", listenPort: port, enabled: true });
+    const disabled = tcpRule({ id: "dis", name: "Disabled", listenPort: port, enabled: false });
+    const m = track(new ForwardManager(new MemoryStore([enabled, disabled])));
+
+    const result = await m.loadAndStartEnabled();
+    expect(result.started).toBe(1);
+    expect(result.skipped).toEqual([]);
+    expect(result.failed).toEqual([]);
+    expect(m.getStatus("en").running).toBe(true);
+  });
+
+  it("blocks writes while config-load recovery is active and never overwrites the bad config", async () => {
+    const store = new RecoveryStore({
+      rules: [],
+      recovery: {
+        reason: "malformed",
+        message: "bad config",
+        configPath: "/tmp/rules.json",
+        writesBlocked: true,
+        detectedAt: new Date(),
+      },
+    });
+    const m = track(new ForwardManager(store));
+    await m.loadAndStartEnabled();
+    expect(m.recoveryState()?.reason).toBe("malformed");
+
+    await expect(
+      m.addRule({
+        name: "x", protocol: "tcp", listenHost: "127.0.0.1", listenPort: await getFreeTcpPort(),
+        targetHost: "127.0.0.1", targetPort: 9000, enabled: false
+      })
+    ).rejects.toBeInstanceOf(RecoveryError);
+    expect(m.listRules()).toEqual([]);
+    // No persist happened (the bad config is never overwritten).
+    expect(store.saveCallCount).toBe(0);
+  });
+
+  it("normal load (no recovery) leaves writes enabled", async () => {
+    const m = track(new ForwardManager(new MemoryStore()));
+    await m.loadAndStartEnabled();
+    expect(m.recoveryState()).toBeUndefined();
+    const rule = await m.addRule({
+      name: "ok", protocol: "tcp", listenHost: "127.0.0.1", listenPort: await getFreeTcpPort(),
+      targetHost: "127.0.0.1", targetPort: 9000, enabled: false
+    });
+    expect(m.listRules().map((r) => r.id)).toContain(rule.id);
   });
 });
 

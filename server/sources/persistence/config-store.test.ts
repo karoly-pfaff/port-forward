@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -123,6 +123,41 @@ describe("ConfigStore", () => {
     await writeFile(filePath, JSON.stringify([{ name: "", protocol: "invalid" }]), "utf8");
     const store = new ConfigStore(filePath);
     await expect(store.load()).rejects.toThrow("Invalid rule at index 0");
+  });
+
+  it("rethrows a non-ENOENT read error from load (e.g. the path is a directory)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "portier-config-"));
+    tempDirs.push(dir);
+    const asDir = join(dir, "rules-as-dir.json");
+    await mkdir(asDir);
+    // Reading a directory fails with EISDIR (not ENOENT) on all platforms.
+    await expect(new ConfigStore(asDir).load()).rejects.toThrow();
+  });
+
+  it("loadWithRecovery recovers a malformed config (empty rules + recovery state + quarantine)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "portier-config-"));
+    tempDirs.push(dir);
+    const filePath = join(dir, "forwards.json");
+    await writeFile(filePath, "this is not json", "utf8");
+
+    const result = await new ConfigStore(filePath).loadWithRecovery();
+    expect(result.rules).toEqual([]);
+    expect(result.recovery?.reason).toBe("malformed");
+    expect(result.recovery?.writesBlocked).toBe(true);
+    expect(result.recovery?.quarantinePath).toBeDefined();
+    // Original moved to the quarantine path.
+    expect(await pathExists(filePath)).toBe(false);
+  });
+
+  it("loadWithRecovery returns no recovery state for a valid config", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "portier-config-"));
+    tempDirs.push(dir);
+    const filePath = join(dir, "forwards.json");
+    await writeFile(filePath, JSON.stringify(sampleRules), "utf8");
+
+    const result = await new ConfigStore(filePath).loadWithRecovery();
+    expect(result.recovery).toBeUndefined();
+    expect(result.rules).toEqual(sampleRules);
   });
 
   it("saves and loads rules", async () => {

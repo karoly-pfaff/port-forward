@@ -61,7 +61,30 @@ async function main(): Promise<void> {
   const store = new ConfigStore(options.configPath);
   const activity = new ActivityStore();
   const manager = new ForwardManager(store, activity);
-  const startedForwardRuleCount = await manager.loadAndStartEnabled();
+  // Autostart is non-fatal (R-1): a config-load failure, a persisted duplicate
+  // binding, or a per-rule bind failure never aborts startup — the management API
+  // still binds so the operator can fix the offending rule/config.
+  const startResult = await manager.loadAndStartEnabled();
+  const recovery = manager.recoveryState();
+  if (recovery) {
+    logger.warn(
+      `Started in configuration recovery mode (reason=${recovery.reason}, ` +
+        `configPath=${recovery.configPath}, quarantinePath=${recovery.quarantinePath ?? "-"}, ` +
+        `writesBlocked=${recovery.writesBlocked}): ${recovery.message}`
+    );
+  }
+  for (const failure of startResult.failed) {
+    logger.warn(
+      `Enabled rule failed to autostart; left enabled but stopped with an error ` +
+        `(ruleId=${failure.ruleId}, ruleName=${failure.ruleName}): ${failure.error}`
+    );
+  }
+  for (const skipped of startResult.skipped) {
+    logger.warn(
+      `Enabled rule skipped during autostart due to a duplicate listen binding ` +
+        `(ruleId=${skipped.ruleId}, ruleName=${skipped.ruleName}): ${skipped.error}`
+    );
+  }
 
   const runtimeInfo: RuntimeInfoOptions = {
     version: readServerVersion(),
@@ -106,7 +129,7 @@ async function main(): Promise<void> {
     `Portier server started on ${options.host}:${options.port} ` +
       `(service=${options.service}, config=${options.configPath}, ` +
       `static=${options.staticClientDir} [${options.staticClientDirSource}], ` +
-      `startedForwarders=${startedForwardRuleCount}).`
+      `startedForwarders=${startResult.started}).`
   );
   if (!hasStaticClient(options.staticClientDir)) {
     logger.warn(

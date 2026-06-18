@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { ForwardRule } from "@portier/shared";
-import { validateForwardRule } from "@portier/shared";
+import { parseConfig } from "./config-parse.js";
+import { loadConfigWithRecovery, type RecoveryLoadResult } from "../recovery/config-recovery.js";
 
 /**
  * Minimal file-operation seam used by {@link ConfigStore.save}. It exposes only
@@ -58,26 +59,27 @@ export class ConfigStore {
   ) {}
 
   async load(): Promise<ForwardRule[]> {
+    let raw: string;
     try {
-      const raw = await readFile(this.filePath, "utf8");
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) {
-        throw new Error("Config file must contain an array of forward rules.");
-      }
-
-      return parsed.map((item, index) => {
-        const result = validateForwardRule(item);
-        if (!result.valid || !result.value?.id) {
-          throw new Error(`Invalid rule at index ${index}: ${result.errors.join(" ")}`);
-        }
-        return result.value as ForwardRule;
-      });
+      raw = await readFile(this.filePath, "utf8");
     } catch (error) {
       if (isNodeError(error) && error.code === "ENOENT") {
         return [];
       }
       throw error;
     }
+    return parseConfig(raw);
+  }
+
+  /**
+   * Startup load that recovers from load failures instead of throwing (v1.17
+   * Slice 4, R-1): a malformed/schema-invalid/unreadable config returns empty
+   * rules plus a recovery state (and quarantines the bad file where safe) so the
+   * management API can still start. Delegates to the recovery module so the
+   * classification/quarantine policy stays in one place, parity-aligned with Go.
+   */
+  async loadWithRecovery(now: Date = new Date()): Promise<RecoveryLoadResult> {
+    return loadConfigWithRecovery(this.filePath, now);
   }
 
   /**

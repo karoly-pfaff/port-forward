@@ -8,10 +8,36 @@ import { UdpForwarder } from "./udp-forwarder.js";
 import type { ActivityStore } from "../activity/activity-store.js";
 import { TcpConnectionRegistry } from "../connections/tcp-connection-registry.js";
 import { UdpSessionRegistry } from "../connections/udp-session-registry.js";
+import type { RecoveryLoadResult, RecoveryState } from "../recovery/config-recovery.js";
 
 export interface RuleStore {
   load(): Promise<ForwardRule[]>;
   save(rules: ForwardRule[]): Promise<void>;
+  /**
+   * Optional startup load that recovers from load failures (config-load
+   * recovery). The real ConfigStore implements it; in-memory test stores omit it
+   * and the manager falls back to load(). When present, its recovery state is
+   * carried so writes can be blocked while recovery is active.
+   */
+  loadWithRecovery?(): Promise<RecoveryLoadResult>;
+}
+
+/** One enabled rule that did not autostart, with a concise operator-safe reason. */
+export interface RuleStartOutcome {
+  ruleId: string;
+  ruleName: string;
+  error: string;
+}
+
+/**
+ * Summary of a boot-time autostart pass. Informational (for logging); the pass
+ * is non-fatal, so there is no thrown error. Mirrors the Go StartEnabledResult.
+ */
+export interface LoadAndStartResult {
+  attempted: number;
+  started: number;
+  failed: RuleStartOutcome[];
+  skipped: RuleStartOutcome[];
 }
 
 /** Returns a human message for a thrown value (an `Error`'s message, else its string form). */
@@ -24,11 +50,25 @@ export class ForwardManager {
   private forwarders = new Map<string, Forwarder>();
   private readonly tcpRegistry = new TcpConnectionRegistry();
   private readonly udpRegistry = new UdpSessionRegistry();
+  // Last start failure per rule, for rules with no live forwarder (failed
+  // autostart or a skipped duplicate-binding conflict). Mirrors the Go manager's
+  // runtimeState.lastError so getStatus can report lastError + error health even
+  // when no forwarder is retained.
+  private readonly lastErrors = new Map<string, string>();
+  private recovery?: RecoveryState;
 
   constructor(
     private readonly store: RuleStore,
     private readonly activity?: ActivityStore
   ) {}
+
+  /**
+   * The active startup recovery state, or undefined when the config loaded
+   * normally. Internal accessor for later API/UI/CLI surfacing (Slice 5) and tests.
+   */
+  recoveryState(): RecoveryState | undefined {
+    return this.recovery;
+  }
 
   getLiveTcpConnections(): TcpConnectionInfo[] {
     return this.tcpRegistry.snapshot();
@@ -38,22 +78,106 @@ export class ForwardManager {
     return this.udpRegistry.snapshot();
   }
 
-  async loadAndStartEnabled(): Promise<number> {
-    const rules = await this.store.load();
-    for (const rule of rules) {
-      this.ensureNoDuplicate(rule);
+  /**
+   * Load persisted rules and autostart enabled ones. Non-fatal (v1.17 R-1): a
+   * config-load failure, a persisted duplicate binding, or a per-rule bind
+   * failure never throws to the bootstrap — the management API still comes up.
+   *
+   * - Config-load recovery (Slice 2/4): when the store supports it, load via
+   *   loadWithRecovery; a recovered load yields empty rules + a recovery state
+   *   (writes then blocked). Persisted duplicate bindings are NOT rejected at
+   *   load (create/update/import still reject NEW duplicates).
+   * - Autostart recovery (Slice 3/4): enabled rules that share a listen binding
+   *   with another enabled rule are skipped (no arbitrary winner); a rule whose
+   *   forwarder fails to bind is left enabled-but-stopped. Both are marked with a
+   *   lastError so getStatus reports error health. Every other enabled rule is
+   *   still attempted.
+   *
+   * Returns a summary for logging; rule status carries the authoritative truth.
+   */
+  async loadAndStartEnabled(): Promise<LoadAndStartResult> {
+    const loaded: RecoveryLoadResult = this.store.loadWithRecovery
+      ? await this.store.loadWithRecovery()
+      : { rules: await this.store.load() };
+    this.recovery = loaded.recovery;
+
+    for (const rule of loaded.rules) {
       this.rules.set(rule.id, rule);
     }
 
-    let startedCount = 0;
+    const result: LoadAndStartResult = { attempted: 0, started: 0, failed: [], skipped: [] };
+    const conflicts = this.conflictingEnabledBindings();
+
     for (const rule of this.rules.values()) {
-      if (rule.enabled) {
+      if (!rule.enabled) {
+        continue;
+      }
+      result.attempted += 1;
+
+      const conflict = conflicts.get(rule.id);
+      if (conflict) {
+        this.markRuleStartFailure(rule, conflict);
+        result.skipped.push({ ruleId: rule.id, ruleName: rule.name, error: conflict });
+        continue;
+      }
+
+      try {
         await this.startRule(rule.id);
-        startedCount += 1;
+        result.started += 1;
+      } catch (error) {
+        result.failed.push({ ruleId: rule.id, ruleName: rule.name, error: errorMessage(error) });
       }
     }
 
-    return startedCount;
+    return result;
+  }
+
+  /**
+   * For each enabled rule that shares a listen binding (protocol + listenHost +
+   * listenPort) with another enabled rule, a deterministic operator-safe message
+   * naming the conflict. Disabled rules never contribute (they will not bind), so
+   * an enabled rule that only shares its binding with disabled rules autostarts
+   * normally. Names are listed in stable rule order. Mirrors the Go
+   * conflictingEnabledBindings.
+   */
+  private conflictingEnabledBindings(): Map<string, string> {
+    const groups = new Map<string, ForwardRule[]>();
+    for (const rule of this.rules.values()) {
+      if (!rule.enabled) {
+        continue;
+      }
+      const key = listenKey(rule);
+      const group = groups.get(key) ?? [];
+      group.push(rule);
+      groups.set(key, group);
+    }
+
+    const messages = new Map<string, string>();
+    for (const group of groups.values()) {
+      if (group.length < 2) {
+        continue;
+      }
+      const names = group.map((rule) => `"${rule.name}"`).join(", ");
+      const first = group[0];
+      const message =
+        `Listen binding ${first.protocol.toUpperCase()} ${first.listenHost}:${first.listenPort} ` +
+        `is claimed by ${group.length} enabled rules (${names}); not autostarted to avoid a conflict.`;
+      for (const rule of group) {
+        messages.set(rule.id, message);
+      }
+    }
+    return messages;
+  }
+
+  /**
+   * Record an enabled rule as stopped/error with lastError WITHOUT attempting to
+   * bind, emitting the existing rule.error activity event. Used for autostart
+   * conflict-skips; bind failures take the startRule path (which already sets
+   * lastError and emits rule.error).
+   */
+  private markRuleStartFailure(rule: ForwardRule, message: string): void {
+    this.lastErrors.set(rule.id, message);
+    this.emitRuleEvent("rule.error", "error", rule, message);
   }
 
   listRules(): ForwardRule[] {
@@ -86,6 +210,15 @@ export class ForwardManager {
           packetsOut: isUdp ? 0 : undefined,
           activeUdpSessions: rule?.udpMode === "bidirectional-multi-client" ? 0 : undefined
         };
+    if (!forwarder) {
+      // No live forwarder: surface the last start failure (failed autostart or a
+      // skipped duplicate-binding conflict) so health derives to "error" — parity
+      // with the Go manager, which keeps lastError in runtime state.
+      const recorded = this.lastErrors.get(ruleId);
+      if (recorded) {
+        base.lastError = recorded;
+      }
+    }
     return {
       ...base,
       health: deriveRuleHealth({
@@ -200,6 +333,9 @@ export class ForwardManager {
       throw error;
     }
 
+    // Drop any retained start failure so a deleted id leaves no stale lastError
+    // (parity with Go manager.DeleteRule, which removes the runtime entry).
+    this.lastErrors.delete(ruleId);
     this.emitRuleEvent("rule.deleted", "warning", rule, `Rule "${rule.name}" deleted.`);
   }
 
@@ -221,11 +357,15 @@ export class ForwardManager {
 
     try {
       await forwarder.start();
+      this.lastErrors.delete(ruleId);
       this.emitRuleEvent("rule.started", "success", rule, `Rule "${rule.name}" started.`);
       return this.getStatus(ruleId);
     } catch (error) {
       this.forwarders.delete(ruleId);
       const message = errorMessage(error);
+      // Retain the failure so getStatus reports lastError + error health even
+      // though no forwarder is kept (parity with the Go manager).
+      this.lastErrors.set(ruleId, message);
       this.emitRuleEvent("rule.error", "error", rule, `Rule "${rule.name}" failed to start: ${message}`);
       throw error;
     }
@@ -237,6 +377,7 @@ export class ForwardManager {
     if (forwarder) {
       await forwarder.stop();
       this.forwarders.delete(ruleId);
+      this.lastErrors.delete(ruleId);
       this.emitRuleEvent("rule.stopped", "info", rule, `Rule "${rule.name}" stopped.`);
     }
     return this.getStatus(ruleId);
@@ -380,6 +521,10 @@ export class ForwardManager {
         this.rules = previousRules;
         throw error;
       }
+
+      // Fresh config: drop retained start failures (parity with Go's runtime
+      // reset on replace). The restart loop sets new ones for any that fail.
+      this.lastErrors.clear();
 
       // Restart enabled rules.
       for (const rule of this.rules.values()) {
@@ -540,6 +685,11 @@ export class ForwardManager {
   }
 
   private async persist(): Promise<void> {
+    if (this.recovery?.writesBlocked) {
+      throw new RecoveryError(
+        "Configuration is in recovery mode; rule changes are blocked until the configuration is repaired."
+      );
+    }
     await this.store.save(this.listRules());
   }
 }
@@ -582,5 +732,19 @@ export class ConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ConflictError";
+  }
+}
+
+/**
+ * Thrown when a mutating operation is refused because the runtime is in
+ * config-load recovery mode (writes blocked). It carries no API schema change:
+ * mapManagerError re-throws it so the error-envelope filter maps it to a generic
+ * 500 (parity with the Go manager.RecoveryError). Slice 5 will decide on a
+ * dedicated status / surfacing.
+ */
+export class RecoveryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RecoveryError";
   }
 }

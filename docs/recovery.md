@@ -395,9 +395,27 @@ is valid).
    contract change; reuses `rule.error` activity. (Reserved `recovery.State` reasons
    `duplicate-binding`/`unsupported-version` remain unused — duplicate conflicts are surfaced
    per-rule via `lastError`, not as a file-level recovery state.)
-4. **TypeScript / NestJS parity recovery:** align `loadAndStartEnabled` (per-rule catch) and
-   `main()` boot to the same load-recovery and autostart-recovery behavior; same quarantine
-   and write-block semantics where applicable. Parity tests.
+4. **TypeScript / NestJS parity recovery (done):** the reference runtime now follows the same
+   operator policy as Go (Slices 2+3). Implemented as:
+   - **Config-load recovery:** `parseConfig` extracted to `persistence/config-parse.ts` with
+     typed errors (`MalformedConfigError`/`SchemaInvalidConfigError`); new
+     `recovery/config-recovery.ts` (`loadConfigWithRecovery`) classifies unreadable/malformed/
+     schema-invalid, quarantines the bad file to the same-directory `rules.json.corrupt-<UTC>`
+     (with `-N` collision suffix; rename seam for the failure path), and returns empty rules +
+     a `RecoveryState`. `ConfigStore.loadWithRecovery()` delegates to it.
+   - **Non-fatal autostart:** `ForwardManager.loadAndStartEnabled()` returns an internal
+     `LoadAndStartResult` (attempted/started/failed/skipped) instead of throwing; persisted
+     duplicate bindings load (the load-time `ensureNoDuplicate` guard was removed; create/
+     update/import stay strict) and conflicting enabled rules are skipped via
+     `conflictingEnabledBindings` (same deterministic, rule-order, names-listed message as Go).
+   - **Status parity fix:** the manager now tracks a `lastErrors` map so a failed/skipped rule
+     reports `lastError` + `health:error` even with no live forwarder. Previously TS dropped the
+     forwarder on a failed start and surfaced no `lastError` (it showed `health:warning`) — this
+     aligns TS with Go's behavior.
+   - **Write-block:** `persist()` throws `RecoveryError` while recovery is active; `mapManagerError`
+     re-throws it to the generic-500 envelope (parity with Go; no schema change).
+   - **Bootstrap:** `index.ts` consumes the summary, logs recovery + per-rule warnings, and no
+     longer exits on these conditions. No public API/OpenAPI change.
 5. **API / diagnostics / UI / CLI surfacing:** add the additive `recovery` block to
    `GET /api/runtime` (both runtimes, contract + OpenAPI), recovery activity event(s), a
    `portier doctor` recovery check, support-bundle recovery state, and a clear UI operator

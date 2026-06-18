@@ -241,7 +241,10 @@ and recover.
    `lastError`/error health while other rules and the management API still start. Persisted
    duplicate bindings load and are skipped at autostart (not deleted/rewritten); create/
    update/import duplicate validation stays strict.
-4. TypeScript/NestJS parity recovery.
+4. **TypeScript/NestJS parity recovery (done):** the reference runtime mirrors the Go
+   config-load + autostart recovery (non-fatal `loadAndStartEnabled`, same-directory
+   quarantine, write-block, duplicate-binding skip). Also fixed a latent parity gap: TS now
+   surfaces `lastError`/error health for a failed-start rule (previously it did not).
 5. API/diagnostics/UI/CLI surfacing (additive `recovery` block, doctor check, UI banner).
 6. Config migration command and artifact versioning.
 
