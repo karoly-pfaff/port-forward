@@ -170,6 +170,37 @@ export type ForwardRuleResponse = ForwardRule & { advisories: PortAdvisory[] };
 
 export type ImportMode = "replace" | "merge";
 
+/**
+ * Stable, machine-readable reason a runtime entered config recovery mode
+ * (v1.17). Kebab-case to match the internal recovery state and the existing
+ * kebab API convention (e.g. `udpMode`). Only file-level config-load failures
+ * set global recovery; per-rule autostart/duplicate failures stay rule-level
+ * (`ForwardStatus.lastError` + `health: "error"`), never setting this.
+ */
+export type RuntimeRecoveryReason =
+  | "unreadable"
+  | "malformed"
+  | "schema-invalid"
+  | "unsupported-version";
+
+/**
+ * Runtime config-recovery state, exposed on `GET /api/runtime` (v1.17). Always
+ * present and backward-compatible: `{ active: false }` in normal operation; when
+ * active, the remaining fields describe the condition. Messages are operator-safe
+ * (no file contents); paths match the existing local-diagnostics posture
+ * (`configPath` is already reported). `quarantinePath` is "" when nothing was
+ * quarantined (e.g. an unreadable file is preserved in place).
+ */
+export interface RuntimeRecovery {
+  active: boolean;
+  reason?: RuntimeRecoveryReason;
+  message?: string;
+  configPath?: string;
+  quarantinePath?: string;
+  writesBlocked?: boolean;
+  detectedAt?: string;
+}
+
 export interface RuntimeInfo {
   name: string;
   version: string;
@@ -184,6 +215,7 @@ export interface RuntimeInfo {
   staticDir: string;
   serviceMode: boolean;
   pid: number;
+  recovery: RuntimeRecovery;
 }
 
 export interface ExportedConfig {

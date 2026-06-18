@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadConfigWithRecovery } from "./config-recovery.js";
+import { loadConfigWithRecovery, toRuntimeRecovery, type RecoveryState } from "./config-recovery.js";
 
 const VALID_CONFIG = JSON.stringify([
   {
@@ -149,5 +149,42 @@ describe("loadConfigWithRecovery", () => {
     expect(result.recovery?.quarantinePath).not.toBe(taken);
     // Prior quarantine untouched.
     expect(await readFile(taken, "utf8")).toBe("PRIOR");
+  });
+});
+
+describe("toRuntimeRecovery", () => {
+  it("maps no state to an inactive block", () => {
+    expect(toRuntimeRecovery(undefined)).toEqual({ active: false });
+  });
+
+  it("maps an active state to the API recovery block", () => {
+    const state: RecoveryState = {
+      reason: "malformed",
+      message: "bad config",
+      configPath: "/tmp/rules.json",
+      quarantinePath: "/tmp/rules.json.corrupt-x",
+      writesBlocked: true,
+      detectedAt: FIXED_NOW,
+    };
+    expect(toRuntimeRecovery(state)).toEqual({
+      active: true,
+      reason: "malformed",
+      message: "bad config",
+      configPath: "/tmp/rules.json",
+      quarantinePath: "/tmp/rules.json.corrupt-x",
+      writesBlocked: true,
+      detectedAt: FIXED_NOW.toISOString(),
+    });
+  });
+
+  it("defaults a missing quarantinePath to an empty string (e.g. unreadable)", () => {
+    const state: RecoveryState = {
+      reason: "unreadable",
+      message: "could not read",
+      configPath: "/tmp/rules.json",
+      writesBlocked: true,
+      detectedAt: FIXED_NOW,
+    };
+    expect(toRuntimeRecovery(state).quarantinePath).toBe("");
   });
 });

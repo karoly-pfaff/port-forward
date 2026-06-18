@@ -488,6 +488,7 @@ Reuses the same doctor report model as `config doctor` (Slice 1). Each finding i
 | `runtime.reachable` | info | The runtime responded (`GET /api/runtime`). |
 | `runtime.unreachable` | error | The runtime could not be reached. Short-circuits later checks. |
 | `runtime.version` | info / warning | Runtime version; **warning** (never failure) when it differs from the CLI version. |
+| `config.recovery_active` | warning | Emitted **only** when the runtime is in configuration recovery mode (v1.17 `recovery.active`): the API is up but the persisted config did not load and rule changes may be blocked. Details carry the safe reason and quarantine path. Absent in normal operation. |
 | `runtime.status_read` | info | Rule status was read (`GET /api/status`). |
 | `runtime.status_failed` | error | Rule status could not be read. |
 | `rules.none` | warning | No forwarding rules are configured. |

@@ -99,6 +99,14 @@ var explanations = map[string]explain.Explanation{
 		Severity: "info",
 		Related:  []string{checkRuntimeReachable},
 	},
+	checkConfigRecoveryActive: {
+		Code:     checkConfigRecoveryActive,
+		Title:    "Configuration recovery mode is active",
+		Meaning:  "The runtime started in config recovery mode: the persisted configuration could not be loaded (unreadable, malformed, or schema-invalid), so it is running with no active rules. The management API is reachable, but rule changes may be blocked until the configuration is repaired.",
+		Action:   "Review the quarantined config file (its path is in the recovery details), then import or save a valid configuration. See docs/recovery.md.",
+		Severity: "warning",
+		Related:  []string{checkConfigExportRead},
+	},
 	checkRuntimeStatusRead: {
 		Code:     checkRuntimeStatusRead,
 		Title:    "Rule status read",

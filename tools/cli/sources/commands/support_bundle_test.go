@@ -133,8 +133,8 @@ func TestSupportBundle_ExplanationsIncludeAllCodes(t *testing.T) {
 
 	var list []explain.Explanation
 	readJSONFile(t, filepath.Join(out, "explanations.json"), &list)
-	if len(list) != 20 {
-		t.Errorf("explanations.json has %d entries, want 20 (doctor-scoped bundle)", len(list))
+	if len(list) != 21 {
+		t.Errorf("explanations.json has %d entries, want 21 (doctor-scoped bundle)", len(list))
 	}
 }
 

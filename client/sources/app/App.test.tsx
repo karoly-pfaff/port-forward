@@ -16,7 +16,8 @@ vi.mock("../api/portierApi.js", () => ({
   fetchActivity: vi.fn().mockResolvedValue([]),
   diagnoseForwardRule: vi.fn(),
   exportConfig: vi.fn(),
-  importConfig: vi.fn()
+  importConfig: vi.fn(),
+  fetchRuntimeInfo: vi.fn().mockResolvedValue(null)
 }));
 
 describe("App", () => {

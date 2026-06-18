@@ -5,6 +5,8 @@ import (
 	"os"
 	"runtime"
 	"time"
+
+	"portier/service/sources/recovery"
 )
 
 // runtimeRoutes registers the runtime-info endpoint.
@@ -14,8 +16,9 @@ func (h *Handler) runtimeRoutes() []modularRoute {
 	}
 }
 
-// handleRuntime reports service runtime info. Dependencies come from the app
-// container (options, start time, version); the response shape is unchanged.
+// handleRuntime reports service runtime info, including the v1.17 config-recovery
+// block. Dependencies come from the app container (options, start time, version);
+// all pre-existing fields are unchanged.
 func (h *Handler) handleRuntime(w http.ResponseWriter, _ *http.Request) {
 	opts := h.app.Options
 	uptimeSeconds := int64(time.Since(h.app.StartedAt).Seconds())
@@ -33,7 +36,29 @@ func (h *Handler) handleRuntime(w http.ResponseWriter, _ *http.Request) {
 		"staticDir":      opts.StaticDir,
 		"serviceMode":    opts.Service,
 		"pid":            os.Getpid(),
+		"recovery":       recoveryResponse(h.app.Manager.RecoveryState()),
 	})
+}
+
+// recoveryResponse maps the internal startup recovery state to the additive
+// `recovery` block on GET /api/runtime. Always returns `{ "active": false }`
+// during normal operation; when active it exposes the operator-safe reason,
+// message, paths, write-block, and detection time (kebab reason + RFC3339 time,
+// matching `startedAt`). It is nil-safe. Only file-level config-load recovery
+// sets this; per-rule autostart/duplicate failures stay rule-level (lastError).
+func recoveryResponse(state *recovery.State) map[string]any {
+	if !state.Active() {
+		return map[string]any{"active": false}
+	}
+	return map[string]any{
+		"active":         true,
+		"reason":         string(state.Reason),
+		"message":        state.Message,
+		"configPath":     state.ConfigPath,
+		"quarantinePath": state.QuarantinePath,
+		"writesBlocked":  state.WritesBlocked,
+		"detectedAt":     state.DetectedAt.UTC().Format(time.RFC3339),
+	}
 }
 
 func normalizePlatform() string {

@@ -24,7 +24,8 @@ const testRuntime: RuntimeInfo = {
   configPath: "C:\\ProgramData\\Portier\\rules.json",
   staticDir: "C:\\Program Files\\Portier\\web",
   serviceMode: true,
-  pid: 999
+  pid: 999,
+  recovery: { active: false }
 };
 
 const testRule: ForwardRuleResponse = {

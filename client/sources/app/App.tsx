@@ -20,8 +20,10 @@ import { SettingsView } from "../features/settings/SettingsView.js";
 import { ApiDocsView } from "../features/apidocs/ApiDocsView.js";
 import { LiveConnectionsView } from "../features/connections/LiveConnectionsView.js";
 import { RuleSummaryCards } from "../components/RuleSummaryCards.js";
+import { useRuntimeInfo } from "../features/settings/useRuntimeInfo.js";
 import { Sidebar } from "./Sidebar.js";
 import { TopHeader } from "./TopHeader.js";
+import { RecoveryBanner } from "./RecoveryBanner.js";
 import { type AppView } from "./NavItem.js";
 
 export { type AppView };
@@ -44,6 +46,10 @@ export function App(): ReactElement {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activityRuleFilter, setActivityRuleFilter] = useState<string | null>(null);
   const [diagnosisMap, setDiagnosisMap] = useState<Map<string, DiagnosisEntry>>(new Map());
+
+  // Runtime info is fetched once for the config-recovery banner (Slice 5). The
+  // recovery state is fixed for the process lifetime, so a single fetch is enough.
+  const { runtimeInfo } = useRuntimeInfo();
 
   const refreshInFlightRef = useRef(false);
   const handleCancelRef = useRef<() => void>(() => {});
@@ -335,6 +341,8 @@ export function App(): ReactElement {
         />
 
         <main className="main-content">
+          <RecoveryBanner recovery={runtimeInfo?.recovery} />
+
           {serverUnavailable && (
             <section className="server-unavailable" role="alert">
               <p>

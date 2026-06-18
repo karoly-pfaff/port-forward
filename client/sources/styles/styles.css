@@ -426,6 +426,23 @@ button.danger:hover:not(:disabled) {
   margin-top: 6px;
 }
 
+/* Configuration recovery mode (v1.17): prominent but not alarming (amber, not
+   red) — the management API is up and the operator can recover from here. */
+.recovery-banner {
+  padding: 12px 16px;
+  border: 1px solid var(--amber-border);
+  border-radius: var(--radius-lg);
+  background: var(--amber-bg);
+}
+
+.recovery-banner p {
+  margin: 0;
+}
+
+.recovery-banner p + p {
+  margin-top: 6px;
+}
+
 /* ==============================================
    Stat Cards
    ============================================== */

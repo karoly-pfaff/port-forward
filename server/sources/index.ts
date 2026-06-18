@@ -6,6 +6,7 @@ import type { Socket } from "node:net";
 import { Logger } from "@nestjs/common";
 import { ConfigStore } from "./persistence/config-store.js";
 import { ForwardManager } from "./forwarders/forward-manager.js";
+import { toRuntimeRecovery } from "./recovery/config-recovery.js";
 import { ActivityStore } from "./activity/activity-store.js";
 import { resolveServerOptions } from "./app/server-options.js";
 import type { RuntimeInfoOptions } from "./runtime/runtime-info.js";
@@ -94,6 +95,7 @@ async function main(): Promise<void> {
     staticDir: options.staticClientDir,
     serviceMode: options.service,
     startedAt,
+    recovery: toRuntimeRecovery(recovery),
   };
 
   // The single live manager satisfies every reader/writer interface; the activity

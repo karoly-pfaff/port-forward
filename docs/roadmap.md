@@ -245,7 +245,10 @@ and recover.
    config-load + autostart recovery (non-fatal `loadAndStartEnabled`, same-directory
    quarantine, write-block, duplicate-binding skip). Also fixed a latent parity gap: TS now
    surfaces `lastError`/error health for a failed-start rule (previously it did not).
-5. API/diagnostics/UI/CLI surfacing (additive `recovery` block, doctor check, UI banner).
+5. **API/diagnostics/UI/CLI surfacing (done):** additive `recovery` block on `GET /api/runtime`
+   (both runtimes, OpenAPI + contract parity), a `portier doctor` `config.recovery_active`
+   warning check, support-bundle coverage (via `runtime.json`), and an amber UI recovery banner
+   shown only when recovery is active.
 6. Config migration command and artifact versioning.
 
 ### Acceptance Criteria

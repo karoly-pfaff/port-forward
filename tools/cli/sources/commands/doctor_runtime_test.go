@@ -20,6 +20,7 @@ type doctorServerConfig struct {
 	statuses       []map[string]any // body for /api/status (ignored if statusCode set)
 	exportCode     int              // non-zero overrides /api/config/export with this status code
 	exportRules    []map[string]any // rules for /api/config/export
+	recovery       map[string]any   // when set, the recovery block on /api/runtime
 }
 
 // makeDoctorServer returns an httptest server serving /api/runtime, /api/status,
@@ -34,12 +35,17 @@ func makeDoctorServer(t *testing.T, cfg doctorServerConfig) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/runtime":
+			recovery := cfg.recovery
+			if recovery == nil {
+				recovery = map[string]any{"active": false}
+			}
 			json.NewEncoder(w).Encode(map[string]any{
 				"name": "Portier", "version": rv, "runtime": "go",
 				"platform": "linux", "arch": "amd64", "uptimeSeconds": 10,
 				"startedAt": "2026-01-01T00:00:00Z", "managementHost": "127.0.0.1",
 				"managementPort": 47831, "configPath": "/tmp/rules.json",
 				"staticDir": "web", "serviceMode": false, "pid": 1234,
+				"recovery": recovery,
 			})
 		case "/api/status":
 			if cfg.statusCode != 0 {
@@ -174,6 +180,58 @@ func TestDoctor_VersionMatch_Info(t *testing.T) {
 
 	if sev := doctorSeverityOf(report, "runtime.version"); sev != "info" {
 		t.Errorf("runtime.version severity = %q, want info", sev)
+	}
+}
+
+func TestDoctor_RecoveryActive_Warns(t *testing.T) {
+	srv := makeDoctorServer(t, doctorServerConfig{
+		statuses: []map[string]any{statusEntry("r1", "healthy")},
+		recovery: map[string]any{
+			"active": true, "reason": "malformed",
+			"message": "bad config", "configPath": "/tmp/rules.json",
+			"quarantinePath": "/tmp/rules.json.corrupt-x", "writesBlocked": true,
+			"detectedAt": "2026-01-01T00:00:00Z",
+		},
+	})
+	defer srv.Close()
+	report, code := runDoctorJSON(t, client.New(srv.URL))
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0 (recovery is a warning)", code)
+	}
+	if !doctorHasCode(report, "config.recovery_active") {
+		t.Errorf("missing config.recovery_active; got %v", doctorCodes(report))
+	}
+	if doctorSeverityOf(report, "config.recovery_active") != "warning" {
+		t.Errorf("config.recovery_active should be a warning")
+	}
+}
+
+func TestDoctor_RecoveryActive_StrictExit1(t *testing.T) {
+	srv := makeDoctorServer(t, doctorServerConfig{
+		statuses: []map[string]any{statusEntry("r1", "healthy")},
+		recovery: map[string]any{"active": true, "reason": "unreadable", "writesBlocked": true},
+	})
+	defer srv.Close()
+	var out, errBuf strings.Builder
+	code := commands.RunDoctor(client.New(srv.URL), false, []string{"--strict"}, &out, &errBuf)
+	if code != 1 {
+		t.Errorf("strict exit = %d, want 1 (recovery warning fails under --strict)", code)
+	}
+}
+
+func TestDoctor_RecoveryInactive_NoCheck(t *testing.T) {
+	srv := makeDoctorServer(t, doctorServerConfig{
+		statuses: []map[string]any{statusEntry("r1", "healthy")},
+	})
+	defer srv.Close()
+	report, code := runDoctorJSON(t, client.New(srv.URL))
+
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+	if doctorHasCode(report, "config.recovery_active") {
+		t.Errorf("inactive recovery must not emit a check; got %v", doctorCodes(report))
 	}
 }
 

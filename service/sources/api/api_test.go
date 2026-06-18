@@ -1006,6 +1006,65 @@ func TestRuntimeEndpoint(t *testing.T) {
 	if _, ok := body["pid"].(float64); !ok {
 		t.Fatalf("pid should be a number, got %T", body["pid"])
 	}
+
+	recovery, ok := body["recovery"].(map[string]any)
+	if !ok {
+		t.Fatalf("recovery should be an object, got %T", body["recovery"])
+	}
+	if recovery["active"] != false {
+		t.Fatalf("recovery.active = %v, want false for a normal runtime", recovery["active"])
+	}
+	if _, present := recovery["reason"]; present {
+		t.Fatalf("inactive recovery should omit reason, got %v", recovery["reason"])
+	}
+}
+
+// TestRuntimeEndpointRecoveryActive verifies the recovery block reflects an
+// active config-load recovery (malformed rules.json): active, a safe reason,
+// writesBlocked, and a quarantine path — surfacing the Slice 2 state.
+func TestRuntimeEndpointRecoveryActive(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "rules.json")
+	if err := os.WriteFile(configPath, []byte("this is not json"), 0o600); err != nil {
+		t.Fatalf("write malformed config: %v", err)
+	}
+
+	server := httptest.NewServer(newTestHandler(t, "", configPath))
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/runtime")
+	if err != nil {
+		t.Fatalf("GET /api/runtime failed: %v", err)
+	}
+	defer response.Body.Close()
+
+	var body map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	recovery, ok := body["recovery"].(map[string]any)
+	if !ok {
+		t.Fatalf("recovery should be an object, got %T", body["recovery"])
+	}
+	if recovery["active"] != true {
+		t.Fatalf("recovery.active = %v, want true", recovery["active"])
+	}
+	if recovery["reason"] != "malformed" {
+		t.Fatalf("recovery.reason = %v, want malformed", recovery["reason"])
+	}
+	if recovery["writesBlocked"] != true {
+		t.Fatalf("recovery.writesBlocked = %v, want true", recovery["writesBlocked"])
+	}
+	if msg, _ := recovery["message"].(string); msg == "" {
+		t.Fatal("recovery.message should be a non-empty operator-safe string")
+	}
+	if qp, _ := recovery["quarantinePath"].(string); qp == "" {
+		t.Fatal("recovery.quarantinePath should be set for a malformed config")
+	}
+	if da, _ := recovery["detectedAt"].(string); da == "" {
+		t.Fatal("recovery.detectedAt should be set")
+	}
 }
 
 func TestActivityEndpointEventsAfterRuleCreate(t *testing.T) {

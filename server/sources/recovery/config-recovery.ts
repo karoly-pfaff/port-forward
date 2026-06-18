@@ -1,5 +1,5 @@
 import { readFile, rename, stat } from "node:fs/promises";
-import type { ForwardRule } from "@portier/shared";
+import type { ForwardRule, RuntimeRecovery } from "@portier/shared";
 import { parseConfig, SchemaInvalidConfigError } from "../persistence/config-parse.js";
 
 /**
@@ -55,6 +55,33 @@ export interface RecoveryFileOps {
 }
 
 export const defaultRecoveryFileOps: RecoveryFileOps = { rename };
+
+/**
+ * Map the internal recovery State to the additive `recovery` block on
+ * `GET /api/runtime` (Slice 5). Returns `{ active: false }` when not in recovery;
+ * when active, exposes the operator-safe reason/message/paths/write-block and the
+ * detection time as an ISO string. The reason union is identical to the internal
+ * `RecoveryReason`, so no value mapping is needed. Parity with the Go
+ * `recoveryResponse` (service/sources/api/runtime_routes.go).
+ */
+export function toRuntimeRecovery(state?: RecoveryState): RuntimeRecovery {
+  if (!state) {
+    return { active: false };
+  }
+  return {
+    active: true,
+    // Only file-level config-load reasons (unreadable/malformed/schema-invalid)
+    // ever reach a global recovery State; the reserved internal reasons
+    // (duplicate-binding) are rule-level and never set here. The cast narrows the
+    // internal union to the API union accordingly.
+    reason: state.reason as RuntimeRecovery["reason"],
+    message: state.message,
+    configPath: state.configPath,
+    quarantinePath: state.quarantinePath ?? "",
+    writesBlocked: state.writesBlocked,
+    detectedAt: state.detectedAt.toISOString(),
+  };
+}
 
 /**
  * Load the persisted config, recovering from load failures instead of throwing.

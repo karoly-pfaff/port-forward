@@ -2204,6 +2204,14 @@
           "pid": {
             "type": "number",
             "description": "Process id."
+          },
+          "recovery": {
+            "description": "Config-recovery state (v1.17); { active: false } in normal operation.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RuntimeRecoveryDto"
+              }
+            ]
           }
         },
         "required": [
@@ -2219,7 +2227,51 @@
           "configPath",
           "staticDir",
           "serviceMode",
-          "pid"
+          "pid",
+          "recovery"
+        ]
+      },
+      "RuntimeRecoveryDto": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "Whether the runtime is in config recovery mode."
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "unreadable",
+              "malformed",
+              "schema-invalid",
+              "unsupported-version"
+            ],
+            "description": "Why recovery is active (omitted when inactive)."
+          },
+          "message": {
+            "type": "string",
+            "description": "Operator-safe summary."
+          },
+          "configPath": {
+            "type": "string",
+            "description": "Config path Portier tried to load."
+          },
+          "quarantinePath": {
+            "type": "string",
+            "description": "Where the bad config was quarantined (empty when none)."
+          },
+          "writesBlocked": {
+            "type": "boolean",
+            "description": "Whether rule writes are blocked while recovery is active."
+          },
+          "detectedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the recovery condition was detected."
+          }
+        },
+        "required": [
+          "active"
         ]
       },
       "TcpConnectionInfoDto": {

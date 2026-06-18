@@ -16,6 +16,7 @@ const RUNTIME: RuntimeInfo = {
   staticDir: "/test/web",
   serviceMode: false,
   pid: 1234,
+  recovery: { active: false },
 };
 
 describe("toRuntimeInfoResponseDto", () => {

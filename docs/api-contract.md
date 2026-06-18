@@ -303,7 +303,25 @@ Response:
   "configPath": "/path/to/rules.json",
   "staticDir": "/path/to/web",
   "serviceMode": false,
-  "pid": 12345
+  "pid": 12345,
+  "recovery": { "active": false }
+}
+```
+
+When the service started in configuration recovery mode (v1.17 — see
+[recovery.md](recovery.md)), the `recovery` block is active:
+
+```json
+{
+  "recovery": {
+    "active": true,
+    "reason": "malformed",
+    "message": "Configuration file could not be parsed; started with no active rules. The original file was quarantined.",
+    "configPath": "/path/to/rules.json",
+    "quarantinePath": "/path/to/rules.json.corrupt-2026-06-18T142530Z",
+    "writesBlocked": true,
+    "detectedAt": "2026-06-18T14:25:30Z"
+  }
 }
 ```
 
@@ -315,6 +333,13 @@ Field notes:
 - `uptimeSeconds`: computed on each request from startup time.
 - `startedAt`: ISO 8601 / RFC 3339 string of service startup time.
 - `serviceMode`: reflects the `--service` flag / headless mode.
+- `recovery`: always present (v1.17). `{ "active": false }` in normal operation. When
+  active, `reason` is one of `unreadable` / `malformed` / `schema-invalid` /
+  `unsupported-version`; `message` is operator-safe (never file contents);
+  `quarantinePath` is `""` when nothing was quarantined (e.g. an unreadable file is
+  preserved in place); `writesBlocked` reports whether rule changes are refused while
+  recovery is active. Only file-level config-load failures set this — per-rule autostart
+  or duplicate-binding failures stay rule-level (`ForwardStatus.lastError` + `health: "error"`).
 
 ## `POST /api/forwards/:id/diagnose`
 

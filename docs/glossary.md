@@ -42,6 +42,14 @@ commands. Keep entries short. Put feature history in `docs/changelog.md` or
 - **Client** or **web UI**: The React app under `client/`, served from `web/`.
 - **Replay tool**: The offline `tools/replay` tool. It reads saved artifacts and never
   contacts the runtime, executes workflows, mutates inputs, or uploads data.
+- **Recovery mode** (or **configuration recovery mode**): A degraded startup state (v1.17)
+  the service enters when the persisted config cannot be loaded (unreadable, malformed, or
+  schema-invalid). The management API stays reachable with no active rules; the bad config
+  is preserved/quarantined; rule writes are blocked until it is repaired. Surfaced on
+  `GET /api/runtime` as the `recovery` block. See [recovery.md](recovery.md).
+- **Quarantine**: The preserved copy of a bad config file moved aside during recovery, kept
+  in the same directory with a timestamped `*.corrupt-<UTC>` name so the original data is
+  never lost or silently overwritten.
 
 ## Rule State
 

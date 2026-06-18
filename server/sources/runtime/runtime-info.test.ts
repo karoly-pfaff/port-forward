@@ -64,6 +64,7 @@ describe("buildRuntimeInfo", () => {
       staticDir: "/test/web",
       serviceMode: true,
       pid: 4242,
+      recovery: { active: false },
     });
   });
 
@@ -91,6 +92,7 @@ describe("buildRuntimeInfo", () => {
       staticDir: "",
       serviceMode: false,
       pid: 7,
+      recovery: { active: false },
     });
   });
 
@@ -141,6 +143,7 @@ describe("buildRuntimeInfo", () => {
       "staticDir",
       "serviceMode",
       "pid",
+      "recovery",
     ]);
   });
 });

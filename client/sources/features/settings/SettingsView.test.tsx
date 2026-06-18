@@ -30,7 +30,8 @@ const testRuntimeInfo: RuntimeInfo = {
   configPath: "C:\\ProgramData\\Portier\\rules.json",
   staticDir: "C:\\Program Files\\Portier\\web",
   serviceMode: true,
-  pid: 1234
+  pid: 1234,
+  recovery: { active: false }
 };
 
 describe("SettingsView", () => {

@@ -26,6 +26,7 @@ var allDoctorCodes = []string{
 	checkRuntimeReachable,
 	checkRuntimeUnreachable,
 	checkRuntimeVersion,
+	checkConfigRecoveryActive,
 	checkRuntimeStatusRead,
 	checkRuntimeStatusFailed,
 	checkRulesNone,

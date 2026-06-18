@@ -100,19 +100,32 @@ func (c *Client) get(path string, out any) error {
 
 // RuntimeInfo mirrors the response from GET /api/runtime.
 type RuntimeInfo struct {
-	Name           string `json:"name"`
-	Version        string `json:"version"`
-	Runtime        string `json:"runtime"`
-	Platform       string `json:"platform"`
-	Arch           string `json:"arch"`
-	UptimeSeconds  int64  `json:"uptimeSeconds"`
-	StartedAt      string `json:"startedAt"`
-	ManagementHost string `json:"managementHost"`
-	ManagementPort int    `json:"managementPort"`
-	ConfigPath     string `json:"configPath"`
-	StaticDir      string `json:"staticDir"`
-	ServiceMode    bool   `json:"serviceMode"`
-	PID            int    `json:"pid"`
+	Name           string           `json:"name"`
+	Version        string           `json:"version"`
+	Runtime        string           `json:"runtime"`
+	Platform       string           `json:"platform"`
+	Arch           string           `json:"arch"`
+	UptimeSeconds  int64            `json:"uptimeSeconds"`
+	StartedAt      string           `json:"startedAt"`
+	ManagementHost string           `json:"managementHost"`
+	ManagementPort int              `json:"managementPort"`
+	ConfigPath     string           `json:"configPath"`
+	StaticDir      string           `json:"staticDir"`
+	ServiceMode    bool             `json:"serviceMode"`
+	PID            int              `json:"pid"`
+	Recovery       *RuntimeRecovery `json:"recovery,omitempty"`
+}
+
+// RuntimeRecovery mirrors the v1.17 config-recovery block on GET /api/runtime.
+// A pointer on RuntimeInfo so an older runtime that omits it decodes as nil.
+type RuntimeRecovery struct {
+	Active         bool   `json:"active"`
+	Reason         string `json:"reason,omitempty"`
+	Message        string `json:"message,omitempty"`
+	ConfigPath     string `json:"configPath,omitempty"`
+	QuarantinePath string `json:"quarantinePath,omitempty"`
+	WritesBlocked  bool   `json:"writesBlocked,omitempty"`
+	DetectedAt     string `json:"detectedAt,omitempty"`
 }
 
 // GetRuntime calls GET /api/runtime and returns the runtime info.

@@ -12,18 +12,19 @@ import (
 // not rename them casually (they are a CLI/tool contract). They share the doctor
 // model and naming style with the offline config doctor.
 const (
-	checkRuntimeReachable    = "runtime.reachable"
-	checkRuntimeUnreachable  = "runtime.unreachable"
-	checkRuntimeVersion      = "runtime.version"
-	checkRuntimeStatusRead   = "runtime.status_read"
-	checkRuntimeStatusFailed = "runtime.status_failed"
-	checkRulesNone           = "rules.none"
-	checkRulesPresent        = "rules.present"
-	checkRulesHealthOK       = "rules.health_ok"
-	checkRulesHealthWarning  = "rules.health_warning"
-	checkRulesHealthError    = "rules.health_error"
-	checkConfigExportRead    = "config.export_read"
-	checkConfigExportFailed  = "config.export_failed"
+	checkRuntimeReachable     = "runtime.reachable"
+	checkRuntimeUnreachable   = "runtime.unreachable"
+	checkRuntimeVersion       = "runtime.version"
+	checkConfigRecoveryActive = "config.recovery_active"
+	checkRuntimeStatusRead    = "runtime.status_read"
+	checkRuntimeStatusFailed  = "runtime.status_failed"
+	checkRulesNone            = "rules.none"
+	checkRulesPresent         = "rules.present"
+	checkRulesHealthOK        = "rules.health_ok"
+	checkRulesHealthWarning   = "rules.health_warning"
+	checkRulesHealthError     = "rules.health_error"
+	checkConfigExportRead     = "config.export_read"
+	checkConfigExportFailed   = "config.export_failed"
 )
 
 // RunLiveChecks performs the live runtime analysis and returns a deterministic
@@ -42,6 +43,9 @@ func RunLiveChecks(c *client.Client) Report {
 	}
 	checks = append(checks, runtimeReachableCheck(baseURL))
 	checks = append(checks, runtimeVersionCheck(info))
+	if check, ok := recoveryActiveCheck(info); ok {
+		checks = append(checks, check)
+	}
 
 	if statuses, statusErr := c.GetStatus(); statusErr != nil {
 		checks = append(checks, statusFailedCheck(statusErr))
@@ -105,6 +109,38 @@ func runtimeVersionCheck(info *client.RuntimeInfo) CheckResult {
 		Message:  "The Portier runtime reported its version.",
 		Details:  details,
 	}
+}
+
+// recoveryActiveCheck reports an active config-recovery state (v1.17). It emits a
+// finding ONLY when recovery is active; a normal runtime adds no check (so the
+// doctor's healthy output is unchanged). Severity is Warning: the management API
+// is up and serving, but the persisted config did not load and writes may be
+// blocked until it is repaired. Details carry the safe reason and quarantine path
+// (already part of local diagnostics); no file contents are exposed.
+func recoveryActiveCheck(info *client.RuntimeInfo) (CheckResult, bool) {
+	if info.Recovery == nil || !info.Recovery.Active {
+		return CheckResult{}, false
+	}
+	r := info.Recovery
+	details := map[string]any{"reason": r.Reason, "writesBlocked": r.WritesBlocked}
+	if r.ConfigPath != "" {
+		details["configPath"] = r.ConfigPath
+	}
+	if r.QuarantinePath != "" {
+		details["quarantinePath"] = r.QuarantinePath
+	}
+	message := "Configuration recovery mode is active: the management API is available but the persisted configuration could not be loaded"
+	if r.WritesBlocked {
+		message += ", and rule changes are blocked until it is repaired"
+	}
+	message += ". Review the quarantined config and import/save a valid configuration (see docs/recovery.md)."
+	return CheckResult{
+		Code:     checkConfigRecoveryActive,
+		Severity: Warning,
+		Title:    "Configuration recovery mode is active",
+		Message:  message,
+		Details:  details,
+	}, true
 }
 
 func statusFailedCheck(err error) CheckResult {

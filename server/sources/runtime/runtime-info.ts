@@ -1,10 +1,11 @@
-import type { RuntimeInfo } from "@portier/shared";
+import type { RuntimeInfo, RuntimeRecovery } from "@portier/shared";
 import { PORTIER_DEFAULT_HOST, PORTIER_DEFAULT_PORT } from "@portier/shared";
 
 /**
  * Static runtime metadata the host process knows at startup. `startedAt` is the
  * process start time; everything else describes how the management server was
- * launched. Resolved once at app creation (not per request).
+ * launched. Resolved once at app creation (not per request). `recovery` is the
+ * config-recovery state captured at startup (Slice 5); absent → not in recovery.
  */
 export interface RuntimeInfoOptions {
   version: string;
@@ -14,6 +15,7 @@ export interface RuntimeInfoOptions {
   staticDir: string;
   serviceMode: boolean;
   startedAt: Date;
+  recovery?: RuntimeRecovery;
 }
 
 /**
@@ -74,5 +76,6 @@ export function buildRuntimeInfo(input: RuntimeInfoInput): RuntimeInfo {
     staticDir: info?.staticDir ?? "",
     serviceMode: info?.serviceMode ?? false,
     pid: input.pid,
+    recovery: info?.recovery ?? { active: false },
   };
 }

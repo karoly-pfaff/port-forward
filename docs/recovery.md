@@ -416,10 +416,22 @@ is valid).
      re-throws it to the generic-500 envelope (parity with Go; no schema change).
    - **Bootstrap:** `index.ts` consumes the summary, logs recovery + per-rule warnings, and no
      longer exits on these conditions. No public API/OpenAPI change.
-5. **API / diagnostics / UI / CLI surfacing:** add the additive `recovery` block to
-   `GET /api/runtime` (both runtimes, contract + OpenAPI), recovery activity event(s), a
-   `portier doctor` recovery check, support-bundle recovery state, and a clear UI operator
-   banner/message. This is the slice that carries the API-visible changes.
+5. **API / diagnostics / UI / CLI surfacing (done):** the recovery state is now observable.
+   - **API:** `GET /api/runtime` carries an additive, always-present `recovery` block
+     (`{ active: false }` normally; full block when active) in both runtimes, with identical
+     shape (kebab `reason`, RFC3339 `detectedAt` matching `startedAt`). Shared type
+     `RuntimeRecovery` / `RuntimeRecoveryReason`; mapped by Go `recoveryResponse` and TS
+     `toRuntimeRecovery`. OpenAPI documents it (`RuntimeRecoveryDto`); `validate:contract`
+     asserts the inactive shape + cross-runtime parity (active shape covered by unit tests).
+   - **CLI:** `portier doctor` emits a `config.recovery_active` **warning** check only when
+     recovery is active (with the safe reason + quarantine path in details); inactive adds no
+     check. The support bundle already includes `runtime.json` (now with the recovery block)
+     and the doctor report.
+   - **UI:** an amber `RecoveryBanner` renders at the top of the app only when
+     `runtime.recovery.active` — showing the message, the write-block note, and the quarantine
+     path. Per-rule autostart/duplicate failures do **not** trigger it (they stay in rule status).
+   - No recovery **activity event** was added (deferred — logging + the runtime block suffice;
+     a new activity type is a contract-guarded taxonomy change not needed here).
 6. **Docs / checklist / changelog:** finalize operator docs, add validation checklist
    entries, record the v1.17 changelog entry on release.
 7. **Full validation and v1.17 release prep:** run the complete matrix; only then consider a
