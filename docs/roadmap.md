@@ -226,6 +226,18 @@ and recover.
 - Version history, diagnostics, and replay artifact schemas; reject unsupported versions
   clearly.
 
+### Slices
+
+1. **Recovery policy/design (done):** `docs/recovery.md` defines startup/config/
+   autostart failure classes, recovery principles, the recommended-behavior table,
+   quarantine/preservation policy, the observability direction, and the implementation
+   slice sequence. Design-only; no code/API/version change. Addresses v1.16 Finding R-1.
+2. Go startup recovery foundation (non-fatal config load + quarantine + recovery state).
+3. Go autostart recovery (per-rule autostart failures non-fatal — the core R-1 fix).
+4. TypeScript/NestJS parity recovery.
+5. API/diagnostics/UI/CLI surfacing (additive `recovery` block, doctor check, UI banner).
+6. Config migration command and artifact versioning.
+
 ### Acceptance Criteria
 
 - Config migration is tested.

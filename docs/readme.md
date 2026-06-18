@@ -6,6 +6,7 @@ Project documentation index.
 
 - [architecture.md](architecture.md) — monorepo layout, server runtimes, package layout, forwarding internals, UDP modes, activity log, platform service support.
 - [api-contract.md](api-contract.md) — full REST API contract: endpoints, request/response shapes, static file serving, error format.
+- [recovery.md](recovery.md) — startup/config/autostart recovery policy (v1.17): failure classes, recovery principles, quarantine, observability direction.
 - [glossary.md](glossary.md) — canonical Portier terms and frozen public-name exceptions.
 - [service/readme.md](../service/readme.md) — native Go service (preferred packaged runtime): chi API router, route modules, `app.App` container.
 - [server/readme.md](../server/readme.md) — TypeScript NestJS server (reference/Node fallback runtime): modules, controllers, OpenAPI generation.
