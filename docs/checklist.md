@@ -102,6 +102,12 @@ npm run validate:config
 npm run validate:openapi:go
 ```
 
+> **`validate:contract` runs prebuilt artifacts** — the TypeScript server (`server/build/index.js`)
+> and the Go service binary (`build/portier/service.exe`, or the platform equivalent). After
+> changing `server/` or `service/` source, rebuild first or contract validation reads stale
+> runtime output. Rebuild with `npm run build:runtime` (full, also refreshes the package), or
+> targeted: `npm run build -w server` and `go -C service build -o build/portier/service.exe ./sources`.
+
 Coverage when tests, gates, core behavior, or release readiness changes:
 
 ```powershell
@@ -123,7 +129,10 @@ npm run test:e2e
 ```
 
 Runtime smoke when packaging, static serving, Go service startup, bundled server, or
-release layout changes:
+release layout changes. `validate:runtime:smoke` covers both normal startup and
+configuration-recovery startup (boots a packaged runtime against a corrupt `rules.json`
+and asserts `GET /api/runtime` reports `recovery.active`). To run only the recovery
+scenario, use `validate:runtime:recovery-smoke`.
 
 ```powershell
 npm run validate:runtime:smoke

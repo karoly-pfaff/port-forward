@@ -60,6 +60,7 @@
     "validate:runtime": "node scripts/validate-runtime.js",
     "validate:runtime:build": "node scripts/validate-runtime.js --build",
     "validate:runtime:smoke": "node scripts/validate-runtime.js --build --smoke",
+    "validate:runtime:recovery-smoke": "node scripts/validate-runtime.js --build --recovery-smoke",
     "validate:runtime:behavior": "npm run validate:binary",
     "validate:service:windows:user": "powershell -ExecutionPolicy Bypass -File ./scripts/windows/service/validate-user-install.ps1",
     "validate:service:windows:machine": "powershell -ExecutionPolicy Bypass -File ./scripts/windows/service/validate-machine-service.ps1",

@@ -249,7 +249,14 @@ and recover.
    (both runtimes, OpenAPI + contract parity), a `portier doctor` `config.recovery_active`
    warning check, support-bundle coverage (via `runtime.json`), and an amber UI recovery banner
    shown only when recovery is active.
-6. Config migration command and artifact versioning.
+6. **Recovery smoke + docs consolidation (done):** a packaged-runtime recovery smoke
+   (`validate:runtime:recovery-smoke`; `validate:runtime:smoke` now covers normal **and**
+   recovery startup) boots the Go runtime against a corrupt `rules.json` and asserts
+   `/api/runtime.recovery.active`. Docs/checklist consolidated, including the
+   rebuild-before-`validate:contract` gotcha. **R-1 is resolved** across both runtimes and all
+   operator surfaces.
+7. Config migration command and artifact versioning (the broader v1.17 scope below; not yet
+   started).
 
 ### Acceptance Criteria
 

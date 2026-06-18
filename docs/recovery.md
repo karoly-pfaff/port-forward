@@ -432,14 +432,34 @@ is valid).
      path. Per-rule autostart/duplicate failures do **not** trigger it (they stay in rule status).
    - No recovery **activity event** was added (deferred — logging + the runtime block suffice;
      a new activity type is a contract-guarded taxonomy change not needed here).
-6. **Docs / checklist / changelog:** finalize operator docs, add validation checklist
-   entries, record the v1.17 changelog entry on release.
-7. **Full validation and v1.17 release prep:** run the complete matrix; only then consider a
-   version bump (out of scope for the design slice).
+6. **Recovery smoke + docs consolidation + release-prep boundary (done):** a packaged-runtime
+   proof and the documentation/checklist finish.
+   - **Recovery smoke:** `scripts/validate-runtime.js` gained a `--recovery-smoke` scenario
+     (and `--smoke` now runs it too). It boots the **packaged** Go runtime against a corrupt
+     `rules.json` (free port, temp dir) and asserts `GET /api/runtime` returns `200` with
+     `recovery.active = true`, `reason = "malformed"`, `writesBlocked = true`, `configPath`
+     pointing at the temp config, a present `quarantinePath`, and the web UI still served —
+     then cleans up the process and temp dir. Exposed as `npm run validate:runtime:recovery-smoke`;
+     `npm run validate:runtime:smoke` covers normal **and** recovery startup.
+   - **Docs/checklist:** this document, `docs/api-contract.md`, `docs/glossary.md`,
+     `tools/cli/readme.md`, and `docs/checklist.md` describe recovery mode; the checklist also
+     documents the **rebuild-before-contract** gotcha (`validate:contract` runs prebuilt
+     `server/build/index.js` + `build/portier/service.exe`).
+   - **R-1 is resolved** across the Go service and the TypeScript/NestJS runtime: a corrupt or
+     unreadable `rules.json`, a persisted duplicate binding, or a per-rule autostart bind
+     failure no longer aborts startup; the management API stays reachable and the condition is
+     observable via `/api/runtime`, `portier doctor`, the support bundle, and the UI banner.
+   - **Scope reminders:** the global `recovery` block is **file-level config-load recovery
+     only**; per-rule autostart and duplicate-binding issues stay rule-level
+     (`ForwardStatus.lastError` + `health: "error"`). No recovery **activity type** was added
+     (runtime block + logging + doctor/banner suffice). The `unsupported-version` reason is
+     **reserved** until a versioned config format exists.
+7. **v1.17 release prep:** run the complete validation matrix; a version bump/tag is a separate,
+   explicit release step (not part of these slices).
 
 Sequencing rationale: slices 2–4 deliver the R-1 fix (no lockout) with **no contract
 change**, so the highest-value safety improvement can ship and be validated independently of
-the observability surface added in slice 5.
+the observability surface added in slice 5; slice 6 proves it end-to-end on a packaged runtime.
 
 ---
 
