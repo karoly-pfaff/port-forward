@@ -6,9 +6,9 @@ belong in `audits/`.
 
 ## Current Status
 
-- **v1.0-v1.15:** completed.
-- **v1.16:** in progress. Keep the active audit plan below current until release.
-- **v1.17-v1.19 and v2.0:** planned local-first path to a stable 2.0.
+- **v1.0-v1.16:** completed.
+- **v1.17:** completed — Migration & Recovery (ready for release/tag as v1.17.0).
+- **v1.18-v1.19 and v2.0:** planned local-first path to a stable 2.0.
 
 ## Completed Releases
 
@@ -214,65 +214,31 @@ versioned, release artifacts validate, and remote/team/auth is explicitly out of
 
 ## Portier v1.17 - Migration & Recovery
 
-**Core theme:** Make config, history, diagnostics, and tool artifacts safe to migrate
-and recover.
+**Status:** Completed — ready for release/tag as v1.17.0.
 
-### Scope
+**Core theme:** Make startup and configuration safe to recover and migrate.
 
-- Add explicit config schema versioning if needed.
-- Provide a local migration command, preferably in `tools/cli`, with dry-run/write modes.
-- Backup before destructive migration and leave the original intact on failure.
-- Harden snapshot restore through plan/apply safety and dry-run.
-- Version history, diagnostics, and replay artifact schemas; reject unsupported versions
-  clearly.
+**Delivered:**
 
-### Slices
+- Startup configuration recovery (resolves the v1.16 R-1 lockout) across the Go service and
+  TypeScript/NestJS: malformed, schema-invalid, unreadable, duplicate-bound, and
+  autostart-failing configs no longer abort startup — the management API stays reachable, bad
+  config is preserved/quarantined, and writes are blocked while recovery is active.
+- Recovery state is observable through `GET /api/runtime`, OpenAPI, the diagnostics/support
+  bundle, `portier doctor`, and a web UI banner.
+- A packaged-runtime recovery smoke validates corrupt-`rules.json` startup.
+- Offline `portier config migrate` with dry-run by default and a backup-first, atomic
+  `--write`; persisted `rules.json` stays a backward-compatible unversioned bare array and the
+  export/import envelope remains `version: "1"`.
 
-1. **Recovery policy/design (done):** `docs/recovery.md` defines startup/config/
-   autostart failure classes, recovery principles, the recommended-behavior table,
-   quarantine/preservation policy, the observability direction, and the implementation
-   slice sequence. Design-only; no code/API/version change. Addresses v1.16 Finding R-1.
-2. **Go startup recovery foundation (done):** non-fatal config load with classification,
-   same-directory quarantine of bad config, internal recovery state, and write-block so a
-   bad config is never silently overwritten (`service/sources/recovery`). Duplicate-binding
-   and autostart bind failures remain fatal until Slice 3.
-3. **Go autostart recovery — core R-1 fix (done):** `StartEnabled` is non-fatal (returns a
-   summary, not an error); a bind failure leaves that rule enabled-but-stopped with
-   `lastError`/error health while other rules and the management API still start. Persisted
-   duplicate bindings load and are skipped at autostart (not deleted/rewritten); create/
-   update/import duplicate validation stays strict.
-4. **TypeScript/NestJS parity recovery (done):** the reference runtime mirrors the Go
-   config-load + autostart recovery (non-fatal `loadAndStartEnabled`, same-directory
-   quarantine, write-block, duplicate-binding skip). Also fixed a latent parity gap: TS now
-   surfaces `lastError`/error health for a failed-start rule (previously it did not).
-5. **API/diagnostics/UI/CLI surfacing (done):** additive `recovery` block on `GET /api/runtime`
-   (both runtimes, OpenAPI + contract parity), a `portier doctor` `config.recovery_active`
-   warning check, support-bundle coverage (via `runtime.json`), and an amber UI recovery banner
-   shown only when recovery is active.
-6. **Recovery smoke + docs consolidation (done):** a packaged-runtime recovery smoke
-   (`validate:runtime:recovery-smoke`; `validate:runtime:smoke` now covers normal **and**
-   recovery startup) boots the Go runtime against a corrupt `rules.json` and asserts
-   `/api/runtime.recovery.active`. Docs/checklist consolidated, including the
-   rebuild-before-`validate:contract` gotcha. **R-1 is resolved** across both runtimes and all
-   operator surfaces.
-7. **Config migration command + versioning strategy (done):** offline `portier config migrate`
-   (dry-run by default; `--write` is backup-first + atomic) normalizes a valid config to the
-   canonical bare-array shape and refuses malformed/schema-invalid/unsupported-version files.
-   Persisted `rules.json` stays an unversioned bare array with no startup auto-migration; a
-   shared classifier (`config.Classify`) rejects unsupported envelope versions. Deferred: a
-   versioned *persisted* envelope + cross-version upgrade steps + `validate:config` migration
-   fixtures (future work; not needed at a single config version).
+See `docs/changelog.md` for the shipped detail and `docs/recovery.md` for the recovery policy.
 
-### Acceptance Criteria
+**Deferred:**
 
-- Config migration is tested.
-- Corrupt config recovery behavior is documented.
-- Backup-before-migration works.
-- Failed migration leaves the original config intact.
-- Snapshot restore is dry-runnable and safe.
-- Replay/diagnostics artifacts are versioned.
-- `validate:config` covers migration fixtures.
-- `validate:contract` and coverage gates remain green.
+- Native install / service / upgrade experience → v1.18.
+- RC hardening (generic-500 redaction, strict lint) → v1.19.
+- A versioned *persisted* config envelope and cross-version migration steps → future (not
+  needed while there is a single config version).
 
 ## Portier v1.18 - Install, Service & Upgrade Experience
 
