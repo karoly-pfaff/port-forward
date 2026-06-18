@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* global console, process, setTimeout, clearTimeout, URL, Buffer */
+/* global console, process, setTimeout, URL, Buffer */
 /**
  * Config compatibility tests.
  *
@@ -8,7 +8,9 @@
  *
  * Checks:
  *   - Valid fixtures load from a config file and import via the HTTP API
- *   - Invalid fixtures are rejected (config load fails or API returns 400/409)
+ *   - Invalid-field fixtures are rejected via the HTTP API (400/409)
+ *   - Startup-level invalid configs (malformed / duplicate binding) no longer
+ *     abort the runtime (v1.17 R-1): it starts in recovery/degraded mode
  *   - The {rules:[...]} wrapper shape is supported by the Go service
  *   - UDP rules without an explicit udpMode default to "one-way"
  *   - Duplicate listen bindings are rejected by both runtimes
@@ -122,13 +124,6 @@ function spawnServer(binary, args) {
   return spawn(binary, args, { stdio: ["ignore", "pipe", "pipe"], detached: false });
 }
 
-function waitForExit(proc, timeoutMs = 5000) {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), timeoutMs);
-    proc.on("exit", (code) => { clearTimeout(timer); resolve(code); });
-  });
-}
-
 function killProc(proc) {
   try { proc.kill(); } catch { /* best effort */ }
 }
@@ -185,8 +180,11 @@ function runStaticTests(expectations) {
 // ── Config file loading tests ────────────────────────────────────────────────
 //
 // Writes each fixture directly as the server's rules.json and starts the
-// server. Checks that valid fixtures result in the expected rule count and
-// that invalid fixtures cause the server to exit with a non-zero code.
+// server. Valid fixtures must load with the expected rule count. Startup-level
+// invalid fixtures (malformed JSON / duplicate binding) must NOT abort startup
+// (v1.17 R-1): the runtime starts with the management API reachable — malformed
+// config enters config-load recovery (recovery.active), and a duplicate binding
+// loads and is resolved at autostart.
 //
 // Wrapper shape (v1-wrapper-rules.json) is skipped for the TypeScript server
 // because ConfigStore.load() requires a raw JSON array; the Go service
@@ -226,22 +224,40 @@ async function runConfigLoadTests(binary, binaryArgs, runtime, expectations) {
     const serverUrl = `http://127.0.0.1:${port}`;
 
     if (!exp.valid) {
-      // Expect the server to reject the config and exit with a non-zero code.
-      const outcome = await Promise.race([
-        waitForExit(proc, 4000),
-        waitForReady(serverUrl, 4000).then(() => "ready"),
-      ]);
-
-      if (outcome === "ready") {
-        fail(`${name}: expected server to reject invalid config but it became ready`);
+      // v1.17 R-1: a bad persisted config no longer aborts startup. The runtime
+      // starts with the management API reachable so the operator can fix it —
+      // a malformed/unreadable file enters config-load recovery (empty active
+      // rules), while a schema-valid-but-conflicting config (duplicate binding)
+      // loads and resolves the conflict at autostart (rule-level, not a global
+      // recovery). Either way the server MUST become ready, never exit.
+      const ready = await waitForReady(serverUrl, 8000);
+      if (!ready) {
+        fail(`${name}: expected the runtime to start in recovery mode (R-1) but it did not become ready`);
         killProc(proc);
-      } else if (outcome !== null && outcome !== 0) {
-        pass(`${name}: server correctly rejected invalid config (exit ${outcome})`);
-      } else {
-        // Exited with code 0 or timed out without becoming ready — still counts as rejection.
-        pass(`${name}: server did not become ready with invalid config`);
+        cleanupDir(tempDir);
+        continue;
       }
-      cleanupDir(tempDir);
+
+      try {
+        if (exp.errorCategory === "malformed-json") {
+          // File-level config-load recovery → GET /api/runtime.recovery.active.
+          const res = await httpGet(`${serverUrl}/api/runtime`);
+          const recovery = res.status === 200 ? (res.json().recovery || {}) : {};
+          if (recovery.active === true) {
+            pass(`${name}: malformed config → runtime started in recovery mode (recovery.active)`);
+          } else {
+            fail(`${name}: malformed config → expected recovery.active, got ${JSON.stringify(recovery)}`);
+          }
+        } else {
+          // Schema-valid but conflicting (duplicate binding): the config loads and
+          // the API is reachable; the conflict is handled at autostart, so global
+          // config recovery is NOT active.
+          pass(`${name}: ${exp.errorCategory} config → runtime started, API reachable (non-fatal, R-1)`);
+        }
+      } finally {
+        killProc(proc);
+        cleanupDir(tempDir);
+      }
       continue;
     }
 

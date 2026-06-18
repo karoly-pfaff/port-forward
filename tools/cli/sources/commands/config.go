@@ -20,6 +20,7 @@ Manage Portier forwarding rule configuration.
 Subcommands:
   validate <file>                     Validate a local config file without importing it
   doctor <file>                       Run offline diagnostic checks on a local config file (read-only)
+  migrate <file> [--write]            Inspect/normalize a local config to the canonical shape (offline, dry-run by default)
   export --out <file>                 Export current rules to a file (omit --out to print to stdout)
   import <file> --mode merge|replace  Import rules from a file (--yes required for replace mode)
   plan <file>                         Compare a desired config file against the running config (read-only)
@@ -215,6 +216,8 @@ func RunConfig(c *client.Client, jsonOutput bool, args []string, stdout, stderr 
 		return RunConfigValidate(jsonOutput, args[1:], stdout, stderr)
 	case "doctor":
 		return RunConfigDoctor(jsonOutput, args[1:], stdout, stderr)
+	case "migrate":
+		return RunConfigMigrate(jsonOutput, args[1:], stdout, stderr)
 	case "plan":
 		return RunConfigPlan(c, jsonOutput, args[1:], stdout, stderr)
 	case "diff":

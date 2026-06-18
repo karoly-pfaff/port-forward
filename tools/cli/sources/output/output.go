@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -23,6 +24,43 @@ func WritePrettyJSON(path string, v any) error {
 		return fmt.Errorf("encoding JSON: %w", err)
 	}
 	return os.WriteFile(path, append(data, '\n'), 0644)
+}
+
+// WriteFileAtomic writes data to path atomically: it writes to a unique temp
+// file in the SAME directory, then renames it over the target, so a crash or
+// error cannot leave a truncated/partial file at path. Mirrors the runtime
+// config store's atomic-write intent. The temp file is removed on any pre-rename
+// failure.
+func WriteFileAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".portier-migrate-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	removeTemp := true
+	defer func() {
+		if removeTemp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	removeTemp = false
+	return nil
 }
 
 // PluralWord returns singular when n == 1, otherwise plural.

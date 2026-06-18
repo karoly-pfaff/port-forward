@@ -350,8 +350,31 @@ is valid).
 - **Current reality to preserve:** `rules.json` is an unversioned bare array (Go also accepts
   `{ "rules": [...] }`). Any future versioning must stay backward-compatible with the
   unversioned array, or provide a transparent one-way upgrade that is backed up first.
-- **Deferred:** the migration command implementation, the versioned envelope format, and any
-  schema-version negotiation are **not** part of the recovery foundation slices.
+- **Implemented (v1.17 Slice 7):** the offline `portier config migrate` command and the
+  versioning strategy below.
+
+### Versioning & migration strategy (v1.17 Slice 7, implemented)
+
+- **Persisted `rules.json` stays an unversioned bare array** — unchanged, backward-compatible.
+  There is **no startup auto-migration**: the runtime never rewrites the persisted config to a
+  new shape on boot. The version field lives only on the export/import envelope (`version: "1"`).
+- **`portier config migrate <file>`** is the explicit, operator-driven path (offline, in the
+  CLI's `config` domain alongside `validate`/`doctor`). It classifies the file
+  (`bare-array` / `wrapper-object` / `exported`), validates the rules, and **normalizes a valid
+  config to the canonical bare-array `rules.json` shape**. **Dry-run by default**; `--write` is
+  **backup-first** (`<file>.bak-<UTC>`, never overwriting a prior backup) and **atomic**
+  (same-directory temp + rename). A **malformed, schema-invalid, or unsupported-version** config
+  is **never written or overwritten** — it reports and exits non-zero.
+- **Unsupported/future versions:** the shared classifier (`config.Classify`) refuses any
+  envelope whose `version` is not the supported `"1"` (`ErrUnsupportedVersion`) — migrate will
+  not touch it. The runtime's future-version *recovery* (the reserved `unsupported-version`
+  reason) remains the boot-time counterpart for if/when a versioned persisted format exists.
+- **Migrate report** is a small, versioned, CLI-local artifact (`schemaVersion: 1`) — distinct
+  from persisted config, the export envelope, the diagnostics/support bundle, and the runtime
+  recovery block. No shared/API type or OpenAPI change.
+- **Deferred:** a versioned *persisted* config envelope, schema-version negotiation/upgrade
+  steps between versions, and `validate:config` migration fixtures remain future work — not
+  needed while there is a single config version.
 
 ---
 

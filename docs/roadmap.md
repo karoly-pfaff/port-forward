@@ -255,8 +255,13 @@ and recover.
    `/api/runtime.recovery.active`. Docs/checklist consolidated, including the
    rebuild-before-`validate:contract` gotcha. **R-1 is resolved** across both runtimes and all
    operator surfaces.
-7. Config migration command and artifact versioning (the broader v1.17 scope below; not yet
-   started).
+7. **Config migration command + versioning strategy (done):** offline `portier config migrate`
+   (dry-run by default; `--write` is backup-first + atomic) normalizes a valid config to the
+   canonical bare-array shape and refuses malformed/schema-invalid/unsupported-version files.
+   Persisted `rules.json` stays an unversioned bare array with no startup auto-migration; a
+   shared classifier (`config.Classify`) rejects unsupported envelope versions. Deferred: a
+   versioned *persisted* envelope + cross-version upgrade steps + `validate:config` migration
+   fixtures (future work; not needed at a single config version).
 
 ### Acceptance Criteria
 

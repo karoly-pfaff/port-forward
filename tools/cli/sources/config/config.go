@@ -9,6 +9,7 @@ package config
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -18,6 +19,149 @@ import (
 // GroupMaxLength mirrors the server-side rule group label limit (characters).
 // The CLI does a light local pre-check; the server is authoritative.
 const GroupMaxLength = 64
+
+// SupportedConfigVersion is the only config/export envelope version Portier
+// understands today. A persisted/exported object carrying a different version is
+// treated as unsupported (never auto-migrated or overwritten) — the offline
+// `config migrate` classifier surfaces it as ErrUnsupportedVersion. The persisted
+// `rules.json` remains an unversioned bare array; the version field only appears
+// on the export/import envelope.
+const SupportedConfigVersion = "1"
+
+// ConfigFormat is the detected on-disk shape of a config file.
+type ConfigFormat string
+
+const (
+	// FormatArray is the canonical persisted shape: a bare JSON array of rules.
+	FormatArray ConfigFormat = "bare-array"
+	// FormatWrapper is a { "rules": [...] } object with no version field.
+	FormatWrapper ConfigFormat = "wrapper-object"
+	// FormatExported is an exported envelope: { "version": "1", "exportedAt": ..., "rules": [...] }.
+	FormatExported ConfigFormat = "exported"
+)
+
+// Classification describes the structural shape of a config file (independent of
+// whether the rules inside are schema-valid — that is Validate's job).
+type Classification struct {
+	Format ConfigFormat `json:"format"`
+	// SourceVersion is the envelope version: "" for a bare array or wrapper
+	// object, "1" for an exported envelope.
+	SourceVersion string `json:"sourceVersion"`
+}
+
+// Structural classification errors. Callers (e.g. `config migrate`) use
+// errors.Is to branch and never write when one of these is returned.
+var (
+	// ErrEmptyConfig: the file held no JSON content.
+	ErrEmptyConfig = errors.New("config file is empty")
+	// ErrMalformedConfig: not valid JSON, or a JSON value that is neither a rules
+	// array nor a { "rules": [...] } object.
+	ErrMalformedConfig = errors.New("config is malformed")
+	// ErrUnsupportedVersion: a versioned envelope whose version is not supported.
+	// The detail (the actual version) is wrapped into the returned error.
+	ErrUnsupportedVersion = errors.New("unsupported config version")
+)
+
+// Classify determines the structural shape (and envelope version) of a config
+// file and returns the parsed rules. It is pure and offline. Structural problems
+// return a wrapped ErrEmptyConfig / ErrMalformedConfig / ErrUnsupportedVersion;
+// a future/unknown envelope version is NEVER treated as loadable (so migrate
+// cannot overwrite it). Rule-field validity is intentionally NOT checked here —
+// callers run Validate on the returned rules.
+func Classify(data []byte) (Classification, []Rule, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
+		return Classification{}, nil, ErrEmptyConfig
+	}
+
+	if trimmed[0] == '[' {
+		var rules []Rule
+		if err := json.Unmarshal(trimmed, &rules); err != nil {
+			return Classification{}, nil, fmt.Errorf("%w: not a valid JSON array: %v", ErrMalformedConfig, err)
+		}
+		if rules == nil {
+			rules = []Rule{}
+		}
+		return Classification{Format: FormatArray, SourceVersion: ""}, rules, nil
+	}
+
+	if trimmed[0] == '{' {
+		var obj struct {
+			Version *string         `json:"version"`
+			Rules   json.RawMessage `json:"rules"`
+		}
+		if err := json.Unmarshal(trimmed, &obj); err != nil {
+			return Classification{}, nil, fmt.Errorf("%w: not a valid JSON object: %v", ErrMalformedConfig, err)
+		}
+		if obj.Rules == nil {
+			return Classification{}, nil, fmt.Errorf("%w: config object is missing the required \"rules\" field", ErrMalformedConfig)
+		}
+		if obj.Version != nil && *obj.Version != SupportedConfigVersion {
+			return Classification{}, nil, fmt.Errorf("%w: %q (this Portier supports version %q)", ErrUnsupportedVersion, *obj.Version, SupportedConfigVersion)
+		}
+		var rules []Rule
+		if err := json.Unmarshal(obj.Rules, &rules); err != nil {
+			return Classification{}, nil, fmt.Errorf("%w: \"rules\" field is not a valid JSON array: %v", ErrMalformedConfig, err)
+		}
+		if rules == nil {
+			rules = []Rule{}
+		}
+		format := FormatWrapper
+		version := ""
+		if obj.Version != nil {
+			format = FormatExported
+			version = *obj.Version
+		}
+		return Classification{Format: format, SourceVersion: version}, rules, nil
+	}
+
+	return Classification{}, nil, fmt.Errorf("%w: expected a JSON array or an object with a \"rules\" field", ErrMalformedConfig)
+}
+
+// canonicalRule is the marshaling shape for the canonical persisted config: a
+// bare array of rules with optional fields omitted when empty, matching a clean
+// hand- or runtime-written rules.json. `enabled` is always emitted (a bool whose
+// false value is meaningful).
+type canonicalRule struct {
+	ID         string `json:"id,omitempty"`
+	Name       string `json:"name"`
+	Protocol   string `json:"protocol"`
+	ListenHost string `json:"listenHost"`
+	ListenPort int    `json:"listenPort"`
+	TargetHost string `json:"targetHost"`
+	TargetPort int    `json:"targetPort"`
+	Enabled    bool   `json:"enabled"`
+	UDPMode    string `json:"udpMode,omitempty"`
+	Group      string `json:"group,omitempty"`
+}
+
+// CanonicalRules serializes rules to the canonical persisted form: a 2-space
+// indented bare JSON array with a trailing newline (matching the runtime store's
+// output style), optional fields omitted when empty, and group labels trimmed.
+// This is the normalization target of `config migrate`. It does not assign ids
+// or mutate rule semantics — only the on-disk shape is canonicalized.
+func CanonicalRules(rules []Rule) ([]byte, error) {
+	out := make([]canonicalRule, len(rules))
+	for i, r := range rules {
+		out[i] = canonicalRule{
+			ID:         r.ID,
+			Name:       r.Name,
+			Protocol:   r.Protocol,
+			ListenHost: r.ListenHost,
+			ListenPort: r.ListenPort,
+			TargetHost: r.TargetHost,
+			TargetPort: r.TargetPort,
+			Enabled:    r.Enabled,
+			UDPMode:    r.UDPMode,
+			Group:      strings.TrimSpace(r.Group),
+		}
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
+}
 
 // DuplicateBindingErrPrefix is the leading text of the duplicate listen-binding
 // validation error. It is shared between Validate (the producer) and the config

@@ -50,6 +50,11 @@ commands. Keep entries short. Put feature history in `docs/changelog.md` or
 - **Quarantine**: The preserved copy of a bad config file moved aside during recovery, kept
   in the same directory with a timestamped `*.corrupt-<UTC>` name so the original data is
   never lost or silently overwritten.
+- **Config migrate**: The offline `portier config migrate` command (v1.17). It inspects a
+  local config file, classifies its format, and normalizes a valid config to the canonical
+  persisted bare-array shape. Dry-run by default; `--write` is backup-first
+  (`*.bak-<UTC>`) and atomic, and never writes a malformed/schema-invalid/unsupported config.
+  Portier does not auto-migrate the persisted config at startup.
 
 ## Rule State
 

@@ -293,8 +293,12 @@ Use these when the change touches the listed area.
 - [ ] Preserve duplicate-binding behavior.
 - [ ] Preserve dry-run and destructive-confirmation behavior.
 - [ ] Update fixtures if compatibility behavior changes.
-- [ ] Run `npm run validate:config`.
+- [ ] Run `npm run validate:config` (also asserts R-1 recovery startup: a malformed/
+  duplicate-binding config makes the runtime start in recovery mode, not abort —
+  rebuild the runtimes first, as for `validate:contract`).
 - [ ] Run `npm run validate:contract`.
+- [ ] For offline normalization, `portier config migrate` is dry-run by default and
+  backup-first on `--write`; never auto-migrate persisted config at startup.
 
 ### CLI
 

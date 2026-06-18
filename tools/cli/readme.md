@@ -227,6 +227,40 @@ Exit codes: `0` doctor completed with no error-severity checks (**warnings alone
 
 > Note: `config doctor` is read-only and offline. Warnings are derived from the file's contents only — they do **not** imply any runtime probing or target reachability check.
 
+### `portier config migrate <file> [--write] [--out <file>]`
+
+Inspect and normalize a local config file to the canonical persisted shape (a bare
+JSON array of rules). Offline — it never contacts the running service.
+
+```
+portier config migrate <file>                       # dry run (default): report only
+portier config migrate --write <file>               # normalize in place (backup-first)
+portier config migrate --write --out rules.json <file>  # write canonical output elsewhere
+portier --json config migrate <file>                # machine-readable migrate report
+```
+
+- **Dry-run by default** — it reports the detected format (`bare-array` / `wrapper-object`
+  / `exported`), rule counts, whether normalization is needed, and writes nothing.
+- **`--write`** applies the normalization: it **backs the target up first**
+  (`<file>.bak-<UTC>`, never overwriting an existing backup), then writes the canonical
+  bare-array form **atomically** (same-directory temp + rename).
+- A **malformed**, **schema-invalid**, or **unsupported-version** config is **never written
+  or overwritten** — migrate reports the problem and exits non-zero.
+- Place flags **before** the config file (e.g. `config migrate --write <file>`), consistent
+  with the other config subcommands.
+
+This is the explicit, operator-driven path for config normalization/migration. Portier never
+auto-migrates the persisted `rules.json` at startup; a future/unsupported envelope version is
+left intact and surfaced via recovery mode (see [recovery.md](../../docs/recovery.md)).
+
+Exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Config is valid (dry-run reported, or migration written) |
+| 1 | Config is malformed, schema-invalid, an unsupported version, unreadable, or a backup/write failure occurred |
+| 2 | Missing argument or usage error |
+
 ### `portier config export --out <file>`
 
 Export the current rules from the running service to a file.
