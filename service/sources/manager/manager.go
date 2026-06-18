@@ -38,10 +38,11 @@ func New(rules []domain.ForwardRule) (*Manager, error) {
 }
 
 func NewWithStore(store *config.Store, rules []domain.ForwardRule) (*Manager, error) {
-	if err := ensureNoDuplicateBindings(rules); err != nil {
-		return nil, err
-	}
-
+	// Persisted duplicate listen bindings are NOT rejected at construction
+	// (v1.17 Slice 3, R-1): a config that an older Portier accepted must still
+	// load so the management API can come up and the operator can fix it. The
+	// duplicate is handled at autostart (StartEnabled skips conflicting enabled
+	// rules), and create/update/import still reject NEW duplicates strictly.
 	copied := make([]domain.ForwardRule, len(rules))
 	copy(copied, rules)
 	return &Manager{
@@ -60,9 +61,10 @@ func NewWithStore(store *config.Store, rules []domain.ForwardRule) (*Manager, er
 // starts with no active rules, and RecoveryState() reports the condition while
 // blocking writes so the bad config cannot be silently overwritten.
 //
-// It can still return an error for non-recoverable construction failures (e.g. a
-// persisted duplicate listen binding in an otherwise-valid config); making that
-// path non-fatal is Slice 3 (autostart recovery).
+// A schema-valid config that contains semantic conflicts (e.g. persisted
+// duplicate listen bindings) also loads successfully now (v1.17 Slice 3): the
+// rules are preserved and the conflict is handled at autostart, not by failing
+// construction.
 func NewFromConfig(configPath string) (*Manager, error) {
 	store := config.NewStore(configPath)
 	rules, state := recovery.LoadConfig(configPath)
@@ -93,18 +95,111 @@ func (m *Manager) SetActivityStore(store *activity.Store) {
 	m.activity = store
 }
 
-func (m *Manager) StartEnabled() (int, error) {
-	started := 0
+// RuleStartOutcome describes one enabled rule that did not autostart, with a
+// concise operator-safe reason. Used for failed binds and skipped conflicts.
+type RuleStartOutcome struct {
+	RuleID   string
+	RuleName string
+	Error    string
+}
+
+// StartEnabledResult summarizes a boot-time autostart pass. It is informational
+// (for logging/diagnostics); StartEnabled is non-fatal, so there is no error.
+type StartEnabledResult struct {
+	// Attempted is the number of enabled rules considered for autostart.
+	Attempted int
+	// Started is the number that started successfully.
+	Started int
+	// Failed lists enabled rules whose forwarder failed to bind/start.
+	Failed []RuleStartOutcome
+	// Skipped lists enabled rules not started because they share a listen
+	// binding with another enabled rule (persisted duplicate conflict).
+	Skipped []RuleStartOutcome
+}
+
+// StartEnabled autostarts enabled rules and is non-fatal (v1.17 Slice 3, R-1):
+// one rule's bind failure, or a persisted duplicate binding, never aborts the
+// boot pass — every other enabled rule is still attempted and the management API
+// still comes up. A rule that fails to bind is left enabled-but-stopped with its
+// `lastError` (via StartRule); enabled rules that share a listen binding are
+// skipped (not autostarted) and marked enabled-but-stopped with a conflict
+// `lastError`. The returned summary is for logging; rule state carries the truth.
+func (m *Manager) StartEnabled() StartEnabledResult {
+	result := StartEnabledResult{}
+	conflicts := m.conflictingEnabledBindings()
 	for _, rule := range m.rules {
 		if !rule.Enabled {
 			continue
 		}
-		if _, err := m.StartRule(rule.ID); err != nil {
-			return started, err
+		result.Attempted++
+
+		if message, isConflict := conflicts[rule.ID]; isConflict {
+			m.markRuleStartFailure(rule, message)
+			result.Skipped = append(result.Skipped, RuleStartOutcome{RuleID: rule.ID, RuleName: rule.Name, Error: message})
+			continue
 		}
-		started++
+
+		if _, err := m.StartRule(rule.ID); err != nil {
+			result.Failed = append(result.Failed, RuleStartOutcome{RuleID: rule.ID, RuleName: rule.Name, Error: err.Error()})
+			continue
+		}
+		result.Started++
 	}
-	return started, nil
+	return result
+}
+
+// conflictingEnabledBindings returns, for each enabled rule that shares a listen
+// binding (protocol + listenHost + listenPort) with another enabled rule, a
+// deterministic operator-safe message naming the conflict. Disabled rules never
+// contribute a conflict (they will not bind), so an enabled rule that only
+// shares its binding with disabled rules autostarts normally. The message lists
+// the conflicting rule names in stable rule order.
+func (m *Manager) conflictingEnabledBindings() map[string]string {
+	groups := make(map[string][]domain.ForwardRule)
+	for _, rule := range m.rules {
+		if rule.Enabled {
+			key := listenKey(rule)
+			groups[key] = append(groups[key], rule)
+		}
+	}
+
+	messages := make(map[string]string)
+	for _, group := range groups {
+		if len(group) < 2 {
+			continue
+		}
+		names := make([]string, 0, len(group))
+		for _, rule := range group {
+			names = append(names, fmt.Sprintf("%q", rule.Name))
+		}
+		first := group[0]
+		message := fmt.Sprintf(
+			"Listen binding %s %s:%d is claimed by %d enabled rules (%s); not autostarted to avoid a conflict.",
+			strings.ToUpper(string(first.Protocol)),
+			first.ListenHost,
+			first.ListenPort,
+			len(group),
+			strings.Join(names, ", "),
+		)
+		for _, rule := range group {
+			messages[rule.ID] = message
+		}
+	}
+	return messages
+}
+
+// markRuleStartFailure records an enabled rule as stopped/error with lastError
+// WITHOUT attempting to bind, and emits the existing rule.error activity event.
+// Used for autostart conflict-skips; bind failures take the StartRule path,
+// which already sets lastError and emits rule.error.
+func (m *Manager) markRuleStartFailure(rule domain.ForwardRule, message string) {
+	state := m.runtime[rule.ID]
+	state.running = false
+	state.startedAt = ""
+	state.lastError = message
+	state.forwarder = nil
+	m.runtime[rule.ID] = state
+	m.emitRuleEvent(activity.EventRuleError, activity.SeverityError, rule, message)
 }
 
 func (m *Manager) StopAll() {

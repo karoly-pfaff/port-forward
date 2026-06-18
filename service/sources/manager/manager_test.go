@@ -92,14 +92,22 @@ func TestExportsConfigWithRules(t *testing.T) {
 	}
 }
 
-func TestRejectsDuplicateBindings(t *testing.T) {
+// TestConstructionToleratesDuplicateBindings asserts that persisted duplicate
+// listen bindings no longer fail construction (v1.17 Slice 3): the rules load so
+// the management API can come up; the conflict is handled at autostart and new
+// duplicates are still rejected by create/update/import.
+func TestConstructionToleratesDuplicateBindings(t *testing.T) {
 	ruleA := tcpRule()
 	ruleB := tcpRule()
 	ruleB.ID = "tcp-2"
 	ruleB.Name = "Duplicate"
 
-	if _, err := New([]domain.ForwardRule{ruleA, ruleB}); err == nil {
-		t.Fatal("expected duplicate binding error")
+	manager, err := New([]domain.ForwardRule{ruleA, ruleB})
+	if err != nil {
+		t.Fatalf("construction must tolerate duplicate bindings: %v", err)
+	}
+	if len(manager.ListRules()) != 2 {
+		t.Fatalf("rules = %#v, want both preserved", manager.ListRules())
 	}
 }
 
@@ -522,12 +530,12 @@ func TestStartEnabledAutostartsTCPRule(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	started, err := manager.StartEnabled()
-	if err != nil {
-		t.Fatalf("StartEnabled returned error: %v", err)
+	result := manager.StartEnabled()
+	if result.Started != 1 {
+		t.Fatalf("started = %d, want 1", result.Started)
 	}
-	if started != 1 {
-		t.Fatalf("started = %d, want 1", started)
+	if len(result.Failed) != 0 || len(result.Skipped) != 0 {
+		t.Fatalf("unexpected failures/skips: %+v", result)
 	}
 	if got := requestThroughForwarder(t, rule.ListenPort, "boot"); got != "auto:boot\n" {
 		t.Fatalf("autostart response = %q", got)
@@ -800,12 +808,9 @@ func TestStartEnabledAutostartsUDPRule(t *testing.T) {
 	manager := testManager(t, []domain.ForwardRule{rule})
 	defer manager.StopAll()
 
-	started, err := manager.StartEnabled()
-	if err != nil {
-		t.Fatalf("StartEnabled returned error: %v", err)
-	}
-	if started != 1 {
-		t.Fatalf("started = %d, want 1", started)
+	result := manager.StartEnabled()
+	if result.Started != 1 {
+		t.Fatalf("started = %d, want 1", result.Started)
 	}
 
 	s := statusByRuleID(manager.ListStatus(), rule.ID)
@@ -835,7 +840,9 @@ func TestStartEnabledAutostartsUDPRule(t *testing.T) {
 	}
 }
 
-func TestDuplicateUDPListenBindingRejected(t *testing.T) {
+// TestConstructionToleratesDuplicateUDPBindings asserts persisted duplicate UDP
+// bindings load rather than failing construction (v1.17 Slice 3).
+func TestConstructionToleratesDuplicateUDPBindings(t *testing.T) {
 	mode := domain.UdpModeOneWay
 	port := freeUDPPort(t)
 	ruleA := domain.ForwardRule{
@@ -848,8 +855,12 @@ func TestDuplicateUDPListenBindingRejected(t *testing.T) {
 	ruleB.ID = "udp-b"
 	ruleB.Name = "B"
 
-	if _, err := New([]domain.ForwardRule{ruleA, ruleB}); err == nil {
-		t.Fatal("expected duplicate binding error")
+	manager, err := New([]domain.ForwardRule{ruleA, ruleB})
+	if err != nil {
+		t.Fatalf("construction must tolerate duplicate bindings: %v", err)
+	}
+	if len(manager.ListRules()) != 2 {
+		t.Fatalf("rules = %#v, want both preserved", manager.ListRules())
 	}
 }
 
@@ -1669,8 +1680,10 @@ func TestNewFromConfigLoadRecovers(t *testing.T) {
 
 // ── StartEnabled failure path ─────────────────────────────────────────────────
 
-// TestStartEnabledWithFailingRule asserts that StartEnabled returns an error and
-// the started count when one of the enabled rules fails to start.
+// TestStartEnabledWithFailingRule asserts that a single enabled rule that cannot
+// bind is non-fatal (v1.17 Slice 3, R-1): StartEnabled returns a summary (no
+// error), the failed rule is reported in Failed, and it is left enabled but
+// stopped with a lastError / error health.
 func TestStartEnabledWithFailingRule(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -1684,11 +1697,28 @@ func TestStartEnabledWithFailingRule(t *testing.T) {
 	rule.Enabled = true
 	m := testManager(t, []domain.ForwardRule{rule})
 
-	started, err := m.StartEnabled()
-	if err == nil {
-		t.Fatal("expected error from bind failure")
+	result := m.StartEnabled()
+	if result.Attempted != 1 {
+		t.Fatalf("attempted = %d, want 1", result.Attempted)
 	}
-	if started != 0 {
-		t.Fatalf("started = %d, want 0", started)
+	if result.Started != 0 {
+		t.Fatalf("started = %d, want 0", result.Started)
+	}
+	if len(result.Failed) != 1 || result.Failed[0].RuleID != rule.ID {
+		t.Fatalf("failed = %+v, want one entry for %s", result.Failed, rule.ID)
+	}
+	if result.Failed[0].Error == "" {
+		t.Fatal("expected a failure message")
+	}
+
+	s := statusByRuleID(m.ListStatus(), rule.ID)
+	if s.Running {
+		t.Fatal("failed rule must not report running")
+	}
+	if s.LastError == "" {
+		t.Fatal("failed rule must carry lastError")
+	}
+	if s.Health != domain.HealthError {
+		t.Fatalf("health = %q, want error", s.Health)
 	}
 }

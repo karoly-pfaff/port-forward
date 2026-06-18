@@ -236,7 +236,11 @@ and recover.
    same-directory quarantine of bad config, internal recovery state, and write-block so a
    bad config is never silently overwritten (`service/sources/recovery`). Duplicate-binding
    and autostart bind failures remain fatal until Slice 3.
-3. Go autostart recovery (per-rule autostart failures non-fatal — the core R-1 fix).
+3. **Go autostart recovery — core R-1 fix (done):** `StartEnabled` is non-fatal (returns a
+   summary, not an error); a bind failure leaves that rule enabled-but-stopped with
+   `lastError`/error health while other rules and the management API still start. Persisted
+   duplicate bindings load and are skipped at autostart (not deleted/rewritten); create/
+   update/import duplicate validation stays strict.
 4. TypeScript/NestJS parity recovery.
 5. API/diagnostics/UI/CLI surfacing (additive `recovery` block, doctor check, UI banner).
 6. Config migration command and artifact versioning.

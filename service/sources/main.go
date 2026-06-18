@@ -94,11 +94,25 @@ func runPortier(ctx context.Context, opts options.Options, log *slog.Logger) err
 	})
 	activityStore := &activity.Store{}
 	forwardManager.SetActivityStore(activityStore)
-	startedCount, err := forwardManager.StartEnabled()
-	if err != nil {
-		return fmt.Errorf("Failed to start enabled forwarding rules: %w", err)
+	// Autostart is non-fatal (R-1): a rule that fails to bind, or a persisted
+	// duplicate binding, never aborts startup — the management API still binds so
+	// the operator can fix the offending rule.
+	startResult := forwardManager.StartEnabled()
+	log.Info("Loaded forwarding rules",
+		"count", len(forwardManager.ListRules()),
+		"attempted", startResult.Attempted,
+		"started", startResult.Started,
+		"failed", len(startResult.Failed),
+		"skippedConflicts", len(startResult.Skipped),
+	)
+	for _, failure := range startResult.Failed {
+		log.Warn("Enabled rule failed to autostart; left enabled but stopped with an error",
+			"ruleId", failure.RuleID, "ruleName", failure.RuleName, "error", failure.Error)
 	}
-	log.Info("Loaded forwarding rules", "count", len(forwardManager.ListRules()), "started", startedCount)
+	for _, skipped := range startResult.Skipped {
+		log.Warn("Enabled rule skipped during autostart due to a duplicate listen binding",
+			"ruleId", skipped.RuleID, "ruleName", skipped.RuleName, "detail", skipped.Error)
+	}
 
 	application := app.New(forwardManager, opts, startedAt, version.Version)
 	server := &http.Server{

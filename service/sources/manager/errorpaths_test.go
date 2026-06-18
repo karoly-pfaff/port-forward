@@ -19,12 +19,12 @@ func TestStartEnabledSkipsDisabledRules(t *testing.T) {
 	ruleB.ListenPort = 48050
 
 	m := testManager(t, []domain.ForwardRule{ruleA, ruleB})
-	started, err := m.StartEnabled()
-	if err != nil {
-		t.Fatalf("StartEnabled: %v", err)
+	result := m.StartEnabled()
+	if result.Attempted != 0 {
+		t.Fatalf("attempted = %d, want 0 (all rules disabled)", result.Attempted)
 	}
-	if started != 0 {
-		t.Fatalf("started = %d, want 0 (all rules disabled)", started)
+	if result.Started != 0 {
+		t.Fatalf("started = %d, want 0 (all rules disabled)", result.Started)
 	}
 	for _, s := range m.ListStatus() {
 		if s.Running {

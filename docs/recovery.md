@@ -380,9 +380,21 @@ is valid).
      dedicated status/surface is Slice 5.
    - **Deferred to Slice 3:** the persisted duplicate-binding guard (class 5) and per-rule
      autostart failures (class 6) are still fatal at boot; this slice covers config-load only.
-3. **Go autostart recovery (core R-1 fix):** make the `StartEnabled` boot loop catch
-   per-rule failures (class 6) so other enabled rules continue and the API always starts;
-   confirm `lastError`/`health`/`rule.error` coverage. Tests. No API contract change.
+3. **Go autostart recovery — core R-1 fix (done):** autostart is non-fatal. `StartEnabled`
+   now returns an internal `StartEnabledResult` (attempted/started/failed/skipped) instead of
+   aborting on the first failure, so one rule's bind failure (class 6) leaves it
+   enabled-but-stopped with `lastError`/`health=error` (via `StartRule`, which already emits
+   `rule.error`) while every other enabled rule still starts and the API always binds.
+   Persisted duplicate listen bindings (class 5) are soft-recovered: `NewWithStore` no longer
+   rejects them at construction (rules load), and `StartEnabled` skips every enabled rule that
+   shares a binding with another enabled rule (deterministic, rule-order reporting), marking
+   each stopped/error with a conflict `lastError` — it does not pick an arbitrary winner,
+   mutate `enabled`, delete, or rewrite the config. An enabled rule that shares a binding only
+   with *disabled* rules still autostarts (no runtime conflict). `main.go` logs a per-rule
+   `Warn` for failures/skips. Create/update/import duplicate validation stays strict. No API
+   contract change; reuses `rule.error` activity. (Reserved `recovery.State` reasons
+   `duplicate-binding`/`unsupported-version` remain unused — duplicate conflicts are surfaced
+   per-rule via `lastError`, not as a file-level recovery state.)
 4. **TypeScript / NestJS parity recovery:** align `loadAndStartEnabled` (per-rule catch) and
    `main()` boot to the same load-recovery and autostart-recovery behavior; same quarantine
    and write-block semantics where applicable. Parity tests.
