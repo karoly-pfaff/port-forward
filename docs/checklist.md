@@ -221,14 +221,21 @@ readme.txt
   `1.18`). Packaged CLI/service version reporting is asserted by `validate:runtime:smoke`.
 - [ ] `build:release` writes a `SHA256SUMS` file (GNU coreutils format, sorted, lowercase
   hex) next to the artifacts, covering every produced release artifact for the version
-  (portable archives and installer artifacts alike). `validate:release` requires it and
-  verifies every listed hash matches, every listed file exists, and every produced
-  artifact is listed — failing on a missing/malformed/duplicate entry or a hash mismatch.
-  To verify checksums only:
+  (portable archives and installer artifacts alike, including the Windows `.msi`).
+  `validate:release` requires it and verifies every listed hash matches, every listed file
+  exists, and every produced artifact is listed — failing on a missing/malformed/duplicate
+  entry or a hash mismatch. To verify checksums only:
 
 ```powershell
 npm run validate:release:checksums
 ```
+
+- [ ] Windows MSI (WiX): when WiX 7 is available, `build:release` also builds
+  `Portier-<version>.msi` (non-fatal if WiX is absent), and `validate:release` reports its
+  presence and verifies its checksum. The MSI is the enterprise/admin track; Inno remains the
+  default consumer installer. The current MSI is a file-install spike (bundles the canonical
+  service scripts, no Windows Service auto-install yet, never touches user config). A
+  non-interactive MSI install smoke is a follow-up gate. See `scripts/windows/wix/readme.md`.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp

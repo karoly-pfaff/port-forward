@@ -126,7 +126,7 @@ This guarantee is validated on the current platform by an upgrade-preservation s
 against an external data dir, replaces the install directory with a fresh extraction, and
 asserts config, the configured rules, and recovery side files survive while the runtime
 restarts healthy at the expected version. This is the safety gate that native installer
-upgrades (including the planned/under-evaluation Windows WiX/MSI and macOS `.pkg`) must
+upgrades (including the in-progress Windows WiX/MSI track and the planned macOS `.pkg`) must
 satisfy.
 
 ## Release Artifacts
@@ -144,7 +144,8 @@ Expected artifact names:
 
 ```text
 build/releases/windows/
-  Portier-Setup-<version>.exe
+  Portier-Setup-<version>.exe   (Inno Setup — default consumer installer)
+  Portier-<version>.msi         (WiX — enterprise/admin track)
   portier-<version>-windows-portable.zip
   SHA256SUMS
 
@@ -157,8 +158,14 @@ build/releases/linux/
   SHA256SUMS
 ```
 
-The Windows installer depends on Inno Setup when building on Windows. If Inno Setup is
-unavailable, the portable archive can still be produced and should be reported clearly.
+The Windows Inno installer depends on Inno Setup; the Windows MSI depends on the WiX
+Toolset v7 (`scripts/windows/wix/`). Both installer builds are non-fatal: if the
+respective tool is absent, the portable archive is still produced. The MSI is an additive
+enterprise/admin track (silent install, Group Policy/SCCM/Intune, Add/Remove Programs +
+repair); Inno remains the default consumer installer. The current MSI is a file-install
+spike — it bundles the canonical service scripts but does not auto-install the Windows
+Service yet, and never touches `rules.json` or `%ProgramData%\Portier`. See
+`scripts/windows/wix/readme.md`.
 
 Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
 format, sorted, lowercase hex) covering every produced release artifact for that version —
@@ -218,7 +225,7 @@ They use isolated temp paths, test-specific service names, and non-production po
 - Do not add telemetry, cloud sync, or auto-update behavior.
 - Preserve `rules.json` on uninstall unless the user explicitly requests purge.
 - Keep config and logs outside the packaged runtime directory.
-- A Windows MSI/WiX installer and a native macOS `.pkg` installer are planned/under evaluation
-  for the v1.18 install-experience work, alongside the existing Inno Setup installer and the
-  portable archives. Do not add other platform package managers (`deb`, `rpm`, Homebrew,
+- The Windows MSI (WiX) is in progress for v1.18 as the enterprise/admin track alongside the
+  Inno installer and portable archives; a native macOS `.pkg` installer remains planned/under
+  evaluation for v1.18. Do not add other platform package managers (`deb`, `rpm`, Homebrew,
   winget, Chocolatey) without a deliberate product decision.

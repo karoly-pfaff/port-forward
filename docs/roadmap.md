@@ -248,7 +248,8 @@ uninstall.
 
 ### Scope
 
-- Polish the Windows installer and portable package; evaluate a Windows WiX/MSI installer.
+- Polish the Windows installer and portable package; build a Windows WiX/MSI installer
+  (enterprise track) alongside Inno (in progress).
 - Evaluate/build a native macOS `.pkg` installer alongside the portable archive.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.

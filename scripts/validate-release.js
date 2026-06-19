@@ -421,6 +421,20 @@ function checkArchiveAndInstaller() {
       pass(`${installerName} (${(iStat.size / 1024 / 1024).toFixed(1)} MB)`);
     }
   }
+
+  // MSI artifact (Windows enterprise track, WiX). Optional/non-fatal: present only
+  // when WiX built it. Its integrity is verified by the SHA256SUMS check below.
+  if (!portableOnly && platformLabel === "windows") {
+    const msiName = `Portier-${version}.msi`;
+    const msiPath = join(releasesDir, msiName);
+    console.log("\nMSI artifact (WiX, enterprise track):");
+    if (existsSync(msiPath)) {
+      const mStat = statSync(msiPath);
+      pass(`${msiName} (${(mStat.size / 1024 / 1024).toFixed(1)} MB)`);
+    } else {
+      warn(`${msiName} not found — build with WiX 7 (npm run build:release:current). MSI is optional for now.`);
+    }
+  }
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────

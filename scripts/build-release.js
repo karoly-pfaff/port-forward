@@ -146,6 +146,7 @@ for (const target of targets) {
   if (target === "win32") {
     buildWindowsPortable(releasesDir, version);
     if (!portableOnly) buildWindowsInstaller(releasesDir, version);
+    if (!portableOnly) buildWindowsMsi(releasesDir, version);
   } else if (target === "darwin") {
     buildMacosPortable(version);
     if (!portableOnly) {
@@ -211,6 +212,31 @@ function buildWindowsInstaller(releasesDir, version) {
     );
   } else {
     log(`  Created : build/releases/windows/Portier-Setup-${version}.exe`);
+  }
+}
+
+function buildWindowsMsi(releasesDir, version) {
+  const msiScript = join(repoRoot, "scripts", "windows", "wix", "build-msi.ps1");
+  log("  Installer: WiX MSI (enterprise track)...");
+
+  // build-msi.ps1 resolves the wix tool (PATH or dotnet global tools) and exits
+  // non-zero if WiX is unavailable. Like the Inno step, MSI failure is non-fatal:
+  // the portable zip and Inno installer are unaffected.
+  const result = spawnSync(
+    "powershell",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", msiScript, "-Version", version, "-OutputDir", releasesDir],
+    { stdio: "inherit", cwd: repoRoot, shell: isWindows }
+  );
+
+  if ((result.status ?? 1) !== 0) {
+    console.warn(
+      "[build-release]   WARNING: WiX MSI build failed (WiX Toolset unavailable or errored)."
+    );
+    console.warn(
+      "[build-release]   Portable zip and Inno installer are unaffected. Install WiX 7 (dotnet tool install --global wix) to build the MSI."
+    );
+  } else {
+    log(`  Created : build/releases/windows/Portier-${version}.msi`);
   }
 }
 

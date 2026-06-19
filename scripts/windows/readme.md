@@ -99,6 +99,27 @@ npm run build:release:current -- --no-build
 
 ---
 
+## WiX MSI Installer (enterprise track)
+
+In addition to the Inno installer, Portier builds a Windows **MSI** via the WiX Toolset for
+enterprise/admin deployment (silent install, Group Policy/SCCM/Intune, standard Add/Remove
+Programs + repair). Inno remains the default consumer installer.
+
+```powershell
+npm run build:release:current   # builds the MSI too, when WiX 7 is available
+```
+
+Output: `build\releases\windows\Portier-<version>.msi` (included in `SHA256SUMS`).
+
+Current status (v1.18 spike): the MSI is a **file-install** package — it installs the same
+layout as the portable archive into `%ProgramFiles%\Portier` and bundles the canonical
+service scripts under `%ProgramFiles%\Portier\service\`, but does **not** auto-install the
+Windows Service yet (run the bundled `service\install-service.ps1`). It never touches
+`%ProgramData%\Portier` or `rules.json`. MSI build requires WiX 7 and is non-fatal if WiX is
+absent. See [`scripts/windows/wix/readme.md`](wix/readme.md).
+
+---
+
 ## Manual Test
 
 Go service:

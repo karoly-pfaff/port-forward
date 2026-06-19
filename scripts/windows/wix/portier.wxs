@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Portier Windows MSI (WiX 7 / WiX v4 schema).
+
+  v1.18 enterprise/admin installer track. This is the initial MSI spike: it is a
+  FILE-INSTALL MSI. It packages the same layout as the portable archive into
+  %ProgramFiles%\Portier and bundles the canonical Windows service scripts under
+  %ProgramFiles%\Portier\service. It does NOT auto-install/start the Windows
+  Service yet — admins run the bundled canonical install-service.ps1. Wiring the
+  service through that canonical script is a follow-up; this MSI deliberately adds
+  no service custom actions.
+
+  It does NOT touch %ProgramData%\Portier or rules.json — user config/data stay
+  external and are never created, overwritten, or migrated by this MSI.
+
+  The Inno Setup installer remains the default consumer installer.
+
+  Build via scripts/windows/wix/build-msi.ps1, which passes:
+    -d Version=<x.y.z>  -d PackageDir=<build\portier>  -d RepoRoot=<repo>
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="Portier"
+      Manufacturer="Portier"
+      Version="$(Version)"
+      UpgradeCode="B2E7C9A4-3F61-4D8E-9A2B-7C5D1E0F4A88"
+      Scope="perMachine"
+      Compressed="yes">
+
+    <!-- Clean major-upgrade behavior; block downgrades. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Install to %ProgramFiles%\Portier (64-bit; service.exe is amd64). -->
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="Portier">
+        <Directory Id="ServiceFolder" Name="service" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Portier" Level="1">
+      <ComponentGroupRef Id="PortierFiles" />
+      <ComponentGroupRef Id="ServiceScripts" />
+    </Feature>
+
+    <!--
+      Harvest the entire packaged runtime layout (portier.exe, service.exe,
+      server.js, web\**, api\openapi.json, readme.txt), preserving subdirectories.
+      Matches the portable archive / Slice-2 release contract exactly.
+    -->
+    <ComponentGroup Id="PortierFiles" Directory="INSTALLFOLDER">
+      <Files Include="$(PackageDir)\**" />
+    </ComponentGroup>
+
+    <!--
+      Bundle the canonical Windows service scripts so an admin can register the
+      Windows Service / Scheduled Task using the single canonical definition in
+      scripts/windows/service/install-service.ps1 (no duplicated service metadata
+      in the MSI).
+    -->
+    <ComponentGroup Id="ServiceScripts" Directory="ServiceFolder">
+      <Files Include="$(RepoRoot)\scripts\windows\service\*.ps1" />
+    </ComponentGroup>
+  </Package>
+</Wix>
