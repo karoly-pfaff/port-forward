@@ -8,7 +8,7 @@ unified cross-platform generator (`scripts/build-portable.js`, via
 `npm run build:release:current` / `build:release:portable:all`), so this script is kept
 only as a reference.
 
-The canonical Linux release scripts now live one level up in
+The canonical Linux release scripts now live in the sibling
 `scripts/linux/release/build-release.sh`, which builds the native **`.deb`**
 (`portier_<version>_amd64.deb`). That is the Linux counterpart to the macOS
 `build-release.sh` `.pkg` step and the Windows WiX MSI.
