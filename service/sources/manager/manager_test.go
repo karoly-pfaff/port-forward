@@ -753,6 +753,12 @@ func TestUDPUpdateForwardingFieldRestartsForwarder(t *testing.T) {
 	secondTarget, stopSecond := startUDPEchoServer(t, "second")
 	defer stopSecond()
 
+	// StartedAt is a millisecond-precision timestamp string. On a fast host the
+	// restart can complete within the same millisecond as the initial start, making
+	// the two timestamps identical even though a real restart occurred. Wait past a
+	// millisecond boundary so the restart's StartedAt is observably newer.
+	time.Sleep(5 * time.Millisecond)
+
 	if _, err := manager.UpdateRule(rule.ID, validation.ForwardRulePatch{TargetPort: &secondTarget}); err != nil {
 		t.Fatalf("UpdateRule returned error: %v", err)
 	}

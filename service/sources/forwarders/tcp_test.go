@@ -318,7 +318,11 @@ func dialTestTCP(t *testing.T, port int) net.Conn {
 
 func waitForTestCondition(t *testing.T, condition func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	// 15s headroom: the forwarder force-closes both connections to guarantee the
+	// close-event path runs, so the only way to exceed the deadline is a loaded-CI
+	// scheduling stall (observed on hosted macOS runners). Generous on purpose;
+	// the loop returns as soon as the condition holds.
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		if condition() {
 			return
