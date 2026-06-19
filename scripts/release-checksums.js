@@ -5,7 +5,7 @@
  * and reused by both scripts/build-release.js (generation) and
  * scripts/validate-release.js (verification).
  *
- * Checksums live in a single `SHA256SUMS` file next to the release artifacts,
+ * Checksums live in a single `checksums.sha256` file next to the release artifacts,
  * in GNU coreutils text format ("<sha256>  <filename>"), one line per artifact,
  * lowercase hex, sorted by filename, LF line endings.
  */
@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
-export const SHA256SUMS_NAME = "SHA256SUMS";
+export const CHECKSUMS_NAME = "checksums.sha256";
 
 // Release artifact extensions. .msi/.pkg/.deb/.rpm are listed so future installer
 // artifacts are checksummed automatically once those slices land — this slice does
@@ -22,10 +22,10 @@ export const SHA256SUMS_NAME = "SHA256SUMS";
 const ARTIFACT_EXTENSIONS = [".zip", ".exe", ".tar.gz", ".msi", ".pkg", ".deb", ".rpm"];
 
 // isReleaseArtifactName reports whether a filename is a release artifact (and not
-// the SHA256SUMS file itself or a per-file .sha256 sidecar).
+// the checksums.sha256 file itself or a per-file .sha256 sidecar).
 export function isReleaseArtifactName(name) {
   const lower = name.toLowerCase();
-  if (lower === SHA256SUMS_NAME.toLowerCase()) return false;
+  if (lower === CHECKSUMS_NAME.toLowerCase()) return false;
   if (lower.endsWith(".sha256")) return false;
   return ARTIFACT_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
@@ -66,17 +66,17 @@ export function formatSha256Sums(entries) {
 }
 
 // generateChecksums computes SHA-256 for every version-scoped release artifact in
-// `dir` and writes SHA256SUMS. Returns the written entries.
+// `dir` and writes checksums.sha256. Returns the written entries.
 export function generateChecksums(dir, version) {
   const entries = findReleaseArtifacts(dir, version).map((name) => ({
     name,
     hash: sha256File(join(dir, name)),
   }));
-  writeFileSync(join(dir, SHA256SUMS_NAME), formatSha256Sums(entries));
+  writeFileSync(join(dir, CHECKSUMS_NAME), formatSha256Sums(entries));
   return entries;
 }
 
-// parseSha256Sums parses SHA256SUMS text into [{ hash, name }]. Throws on malformed
+// parseSha256Sums parses checksums.sha256 text into [{ hash, name }]. Throws on malformed
 // lines, path separators in filenames, or duplicate filenames. Blank lines (e.g. a
 // trailing newline) are ignored.
 export function parseSha256Sums(text) {

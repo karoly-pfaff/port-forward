@@ -7,7 +7,7 @@
  * Reads zips with adm-zip and tarballs with tar-stream (Node's direct `tar` spawn is
  * unreliable on Windows). Checks layout, platform binary naming + (for tar.gz) Unix
  * executable bits, api/openapi.json validity + version, forbidden content, and
- * SHA256SUMS coverage.
+ * checksums.sha256 coverage.
  *
  * STRUCTURAL only — it does NOT run a runtime smoke against foreign binaries. Native
  * runtime validation must run on each OS.
@@ -22,7 +22,7 @@ import { createGunzip } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import AdmZip from "adm-zip";
 import tar from "tar-stream";
-import { SHA256SUMS_NAME, parseSha256Sums, sha256File } from "./release-checksums.js";
+import { CHECKSUMS_NAME, parseSha256Sums, sha256File } from "./release-checksums.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -236,23 +236,23 @@ async function validateTarget(t) {
   checkChecksum(releasesDir, archiveName, archivePath);
 }
 
-// checkChecksum verifies the archive is listed in SHA256SUMS with a matching hash.
+// checkChecksum verifies the archive is listed in checksums.sha256 with a matching hash.
 function checkChecksum(releasesDir, archiveName, archivePath) {
-  console.log("Checksums (SHA256SUMS):");
-  const sumsPath = join(releasesDir, SHA256SUMS_NAME);
+  console.log("Checksums (checksums.sha256):");
+  const sumsPath = join(releasesDir, CHECKSUMS_NAME);
   if (!existsSync(sumsPath)) {
-    fail(`${SHA256SUMS_NAME} not found`);
+    fail(`${CHECKSUMS_NAME} not found`);
     return;
   }
   let sums;
   try {
     sums = parseSha256Sums(readFileSync(sumsPath, "utf8"));
   } catch (err) {
-    fail(`${SHA256SUMS_NAME} ${err.message}`);
+    fail(`${CHECKSUMS_NAME} ${err.message}`);
     return;
   }
   const entry = sums.find((s) => s.name === archiveName);
-  if (!entry) fail(`${archiveName} not listed in ${SHA256SUMS_NAME}`);
+  if (!entry) fail(`${archiveName} not listed in ${CHECKSUMS_NAME}`);
   else if (sha256File(archivePath) === entry.hash) pass(`${archiveName} sha256 OK`);
   else fail(`${archiveName} sha256 mismatch`);
 }

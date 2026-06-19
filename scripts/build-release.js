@@ -28,7 +28,7 @@ import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { generateChecksums, SHA256SUMS_NAME } from "./release-checksums.js";
+import { generateChecksums, CHECKSUMS_NAME } from "./release-checksums.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -165,7 +165,7 @@ for (const target of targets) {
   // archives and installer artifacts alike). Regenerated each run so it always
   // reflects the current artifacts on disk.
   const sums = generateChecksums(releasesDir, version);
-  log(`  Checksums: wrote ${SHA256SUMS_NAME} (${sums.length} artifact${sums.length === 1 ? "" : "s"})`);
+  log(`  Checksums: wrote ${CHECKSUMS_NAME} (${sums.length} artifact${sums.length === 1 ? "" : "s"})`);
   for (const e of sums) log(`    ${e.hash.slice(0, 12)}…  ${e.name}`);
 
   log("");
@@ -180,7 +180,7 @@ function buildPortableArtifact(label, version) {
   log("  Portable: delegating to scripts/build-portable.js...");
   // build-portable.js cross-compiles the binaries (pure Go) and packages the full
   // runtime layout (Windows .zip / Unix .tar.gz with exec bits). It reuses the
-  // neutral assets from build/portier/ and regenerates this platform's SHA256SUMS.
+  // neutral assets from build/portier/ and regenerates this platform's checksums.sha256.
   run("node", ["scripts/build-portable.js", `--${label}`, "--version", version], { shell: isWindows });
 }
 

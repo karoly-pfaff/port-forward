@@ -45,7 +45,7 @@ npm run build:release:current
 
 The MSI is the canonical Windows installer, so a full Windows `build:release` **fails** if
 WiX is unavailable (use `--portable-only` to build just the portable zip).
-Output: `build\releases\windows\Portier-<version>.msi`. It is included in `SHA256SUMS` and
+Output: `build\releases\windows\Portier-<version>.msi`. It is included in `checksums.sha256` and
 verified by `npm run validate:release:current`.
 
 Build the MSI directly:
@@ -81,7 +81,7 @@ Flags: `--msi <path>`, `--data-dir <dir>`, `--full-install`, `--keep-temp`.
 
 ## Validation gates the MSI must satisfy
 
-Layout parity (incl. `api\openapi.json`), version reporting, `SHA256SUMS` checksum
+Layout parity (incl. `api\openapi.json`), version reporting, `checksums.sha256` checksum
 coverage, the MSI install smoke above, upgrade preservation
 (`npm run validate:upgrade:current`), and — once service custom actions are wired — service
 lifecycle.

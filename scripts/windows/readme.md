@@ -59,7 +59,7 @@ npm run build:release:current
 
 A full Windows release **fails if WiX 7 is unavailable** — use `--portable-only` to build
 just the portable zip. Output: `build\releases\windows\Portier-<version>.msi` (included in
-`SHA256SUMS`).
+`checksums.sha256`).
 
 **What the MSI installs (file-install):**
 

@@ -230,7 +230,7 @@ macOS native installer track. Current status — a **file-install** package:
   distribution (see below). Install requires admin (`sudo installer -pkg Portier-<version>.pkg
   -target /`).
 
-The `.pkg` is included in `SHA256SUMS` and reported by `npm run validate:release:current` on
+The `.pkg` is included in `checksums.sha256` and reported by `npm run validate:release:current` on
 macOS. Payload introspection (`pkgutil --payload-files`) and a `.pkg` install smoke are the
 next macOS validation follow-ups.
 

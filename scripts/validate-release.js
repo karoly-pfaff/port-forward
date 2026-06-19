@@ -14,7 +14,7 @@
  *   --version <v>                   Version string (default: reads from package.json).
  *   --platform current|windows|macos|linux   Target platform (default: current).
  *   --portable-only                 Only check the portable archive; skip the installer check.
- *   --checksums-only                Only verify SHA256SUMS (skip archive/installer checks).
+ *   --checksums-only                Only verify checksums.sha256 (skip archive/installer checks).
  *
  * The canonical installer (the WiX MSI on Windows) is required unless --portable-only.
  */
@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import AdmZip from "adm-zip";
 import {
-  SHA256SUMS_NAME,
+  CHECKSUMS_NAME,
   parseSha256Sums,
   sha256File,
   findReleaseArtifacts,
@@ -309,25 +309,25 @@ function checkReadmeContent(archivePath, rawEntries) {
   }
 }
 
-// ── SHA256SUMS verification ───────────────────────────────────────────────────
+// ── checksums.sha256 verification ───────────────────────────────────────────────────
 
 function checkChecksums(dir) {
-  const sumsPath = join(dir, SHA256SUMS_NAME);
+  const sumsPath = join(dir, CHECKSUMS_NAME);
   if (!existsSync(sumsPath)) {
-    fail(`${SHA256SUMS_NAME} not found — run: npm run build:release:current`);
+    fail(`${CHECKSUMS_NAME} not found — run: npm run build:release:current`);
     return;
   }
-  pass(`${SHA256SUMS_NAME} present`);
+  pass(`${CHECKSUMS_NAME} present`);
 
   let entries;
   try {
     entries = parseSha256Sums(readFileSync(sumsPath, "utf8"));
   } catch (err) {
-    fail(`${SHA256SUMS_NAME} ${err.message}`);
+    fail(`${CHECKSUMS_NAME} ${err.message}`);
     return;
   }
   if (entries.length === 0) {
-    fail(`${SHA256SUMS_NAME} contains no entries`);
+    fail(`${CHECKSUMS_NAME} contains no entries`);
     return;
   }
 
@@ -335,11 +335,11 @@ function checkChecksums(dir) {
   const listed = new Set(entries.map((e) => e.name));
   const produced = findReleaseArtifacts(dir, version);
   if (produced.length === 0) {
-    warn("No release artifacts found on disk to cross-check against SHA256SUMS");
+    warn("No release artifacts found on disk to cross-check against checksums.sha256");
   }
   for (const name of produced) {
     if (!listed.has(name)) {
-      fail(`Produced artifact not listed in ${SHA256SUMS_NAME}: ${name}`);
+      fail(`Produced artifact not listed in ${CHECKSUMS_NAME}: ${name}`);
     }
   }
 
@@ -347,7 +347,7 @@ function checkChecksums(dir) {
   for (const e of entries) {
     const full = join(dir, e.name);
     if (!existsSync(full)) {
-      fail(`${SHA256SUMS_NAME} references a missing file: ${e.name}`);
+      fail(`${CHECKSUMS_NAME} references a missing file: ${e.name}`);
       continue;
     }
     const actual = sha256File(full);
@@ -422,7 +422,7 @@ function checkArchiveAndInstaller() {
 
   // Native installer artifact. The Windows WiX MSI is canonical (required); the
   // macOS .pkg track is in progress (reported, not fatal yet). When present, the
-  // installer's integrity is also verified by the SHA256SUMS check. Platforms
+  // installer's integrity is also verified by the checksums.sha256 check. Platforms
   // without a native installer (Linux today) have no installer expectation.
   if (!portableOnly && installerName) {
     const required = installerIsRequired(platformLabel);
@@ -475,8 +475,8 @@ if (checksumsOnly) {
   checkArchiveAndInstaller();
 }
 
-// Checksums (SHA256SUMS) — verified in every mode
-console.log("\nChecksums (SHA256SUMS):");
+// Checksums (checksums.sha256) — verified in every mode
+console.log("\nChecksums (checksums.sha256):");
 checkChecksums(releasesDir);
 
 // Summary

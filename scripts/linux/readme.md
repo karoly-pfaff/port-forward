@@ -42,10 +42,10 @@ bash scripts/linux/build-runtime.sh
 ## Release Artifact
 
 The **portable tar.gz is the v1.18 Linux release artifact** (versioned, checksummed in
-`SHA256SUMS`, GitHub-Release-ready). Systemd (below) is the canonical service layer.
+`checksums.sha256`, GitHub-Release-ready). Systemd (below) is the canonical service layer.
 
 ```bash
-npm run build:release:current            # builds the tar.gz + SHA256SUMS
+npm run build:release:current            # builds the tar.gz + checksums.sha256
 npm run build:release:current -- --no-build   # reuse an existing build/portier/
 npm run validate:release:current         # validate layout/OpenAPI/version + checksum
 ```
@@ -96,7 +96,7 @@ must run on Linux.
 portable tar.gz:
 
 ```bash
-npm run build:release:current     # tar.gz + portier_<version>_amd64.deb + SHA256SUMS
+npm run build:release:current     # tar.gz + portier_<version>_amd64.deb + checksums.sha256
 # or directly (reuses an existing build/portier/):
 bash scripts/linux/release/build-release.sh --version <version>
 ```

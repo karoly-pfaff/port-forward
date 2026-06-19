@@ -219,7 +219,7 @@ readme.txt
 - [ ] `validate:release` asserts the bundled `api/openapi.json` is present, non-empty,
   valid JSON, and its `info.version` matches the package major.minor (e.g. `1.18.0` →
   `1.18`). Packaged CLI/service version reporting is asserted by `validate:runtime:smoke`.
-- [ ] `build:release` writes a `SHA256SUMS` file (GNU coreutils format, sorted, lowercase
+- [ ] `build:release` writes a `checksums.sha256` file (GNU coreutils format, sorted, lowercase
   hex) next to the artifacts, covering every produced release artifact for the version
   (portable archives and installer artifacts alike, including the Windows `.msi`).
   `validate:release` requires it and verifies every listed hash matches, every listed file
@@ -233,7 +233,7 @@ npm run validate:release:checksums
 - [ ] Windows MSI (WiX) is the **canonical Windows installer**. A full Windows
   `build:release` builds `Portier-<version>.msi` and **fails if WiX 7 is unavailable**
   (use `--portable-only` to build just the portable zip). Windows release output is the
-  MSI + portable zip + `SHA256SUMS`. `validate:release` requires the MSI on Windows and
+  MSI + portable zip + `checksums.sha256`. `validate:release` requires the MSI on Windows and
   verifies its checksum. The current MSI is a file-install package (bundles the canonical
   service scripts, no Windows Service auto-install yet, never touches user config). The
   retired Inno installer lives in `scripts/windows/legacy/` (manual-only; not built or
@@ -252,7 +252,7 @@ npm run validate:msi:install
   release matrix. See `scripts/windows/release/readme.md`.
 - [ ] macOS `.pkg` (native installer track, **macOS-only**). On macOS, `build:release`
   also builds `Portier-<version>.pkg` via `pkgbuild` (skipped non-fatally if `pkgbuild` is
-  absent). macOS release output is the `.pkg` + portable tar.gz + `SHA256SUMS`.
+  absent). macOS release output is the `.pkg` + portable tar.gz + `checksums.sha256`.
   `validate:release` reports `.pkg` presence on macOS (not fatal yet — the track is in
   progress) and verifies its checksum. The current `.pkg` is a file-install package
   (installs to `/usr/local/portier`, bundles the canonical LaunchAgent scripts, no
@@ -262,7 +262,7 @@ npm run validate:msi:install
 - [ ] Linux release (Linux-only). `build:release` produces the portable
   `portier-<version>-linux.tar.gz` (full runtime layout, incl. `api/openapi.json`) **and**
   the native `portier_<version>_amd64.deb` (dpkg-deb; built on Debian/Ubuntu, skipped with a
-  notice elsewhere) + `SHA256SUMS`. `validate:release` checks the tar.gz
+  notice elsewhere) + `checksums.sha256`. `validate:release` checks the tar.gz
   layout/OpenAPI/version, confirms the `.deb` is present, and verifies every checksum; the
   artifacts are versioned and GitHub-Release-ready. The `.deb` is a **file-install**: it lays
   the runtime under `/opt/portier` and installs a **disabled** systemd unit — it never
@@ -284,7 +284,7 @@ npm run validate:release:portable:all
 
   `build:release:portable:all` cross-compiles `portier`/`service` for `windows`, `linux`, and
   `darwin` (amd64), packages the full runtime layout (Unix tarballs get **0755 exec bits** on
-  the binaries; the Windows zip uses `.exe`), and writes per-platform `SHA256SUMS`.
+  the binaries; the Windows zip uses `.exe`), and writes per-platform `checksums.sha256`.
   `validate:release:portable:all` validates each artifact **structurally** (layout, platform
   binary names, tar exec bits, `api/openapi.json` JSON + version, forbidden content incl.
   `docs/private`, checksum) using adm-zip / tar-stream — it does **NOT** run a runtime smoke

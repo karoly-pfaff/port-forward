@@ -34,7 +34,7 @@ import { createGzip } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import AdmZip from "adm-zip";
 import tar from "tar-stream";
-import { generateChecksums, SHA256SUMS_NAME } from "./release-checksums.js";
+import { generateChecksums, CHECKSUMS_NAME } from "./release-checksums.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageDir = join(repoRoot, "build", "portier");
@@ -236,10 +236,10 @@ async function buildTarget(t, version) {
     }
     log(`  Created : ${outPath}`);
 
-    // Regenerate this platform's SHA256SUMS (covers all version artifacts present,
+    // Regenerate this platform's checksums.sha256 (covers all version artifacts present,
     // e.g. a Windows MSI alongside the portable zip).
     const sums = generateChecksums(releasesDir, version);
-    log(`  Checksums: wrote ${SHA256SUMS_NAME} (${sums.length} artifact${sums.length === 1 ? "" : "s"})`);
+    log(`  Checksums: wrote ${CHECKSUMS_NAME} (${sums.length} artifact${sums.length === 1 ? "" : "s"})`);
   } finally {
     rmSync(stage, { recursive: true, force: true });
   }

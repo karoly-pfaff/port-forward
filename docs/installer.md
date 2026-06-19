@@ -145,16 +145,16 @@ Expected artifact names:
 build/releases/windows/
   Portier-<version>.msi         (WiX — canonical Windows installer)
   portier-<version>-windows-portable.zip
-  SHA256SUMS
+  checksums.sha256
 
 build/releases/macos/
   Portier-<version>.pkg         (native installer — built on macOS, in progress)
   portier-portable-macos-<version>.tar.gz
-  SHA256SUMS
+  checksums.sha256
 
 build/releases/linux/
   portier-<version>-linux.tar.gz
-  SHA256SUMS
+  checksums.sha256
 ```
 
 The **WiX MSI is the canonical Windows installer** (silent install, Group Policy/SCCM/Intune,
@@ -184,7 +184,7 @@ On **Linux**, the v1.18 release artifact is the **portable tar.gz**
 (`portier-<version>-linux.tar.gz`, built by `scripts/build-portable.js`), with
 the **systemd** scripts under `scripts/linux/service/` as the canonical service layer. The
 tar.gz contains the full runtime layout (incl. `api/openapi.json`); it is versioned,
-checksummed in `SHA256SUMS`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
+checksummed in `checksums.sha256`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
 (binaries + `web/`), config at `/etc/portier/rules.json`, logs via journald, and the unit at
 `/etc/systemd/system/portier.service`. A native **`.deb`** (`portier_<version>_amd64.deb`,
 built by `scripts/linux/release/build-release.sh` via dpkg-deb and validated on the `ubuntu-latest`
@@ -197,7 +197,7 @@ or touches user config. `.rpm` is a **planned package track for a later slice**.
 three portable artifacts — Windows `.zip`, Linux `.tar.gz`, macOS `.tar.gz` — can be
 **cross-built from any host (including Windows)** with `npm run build:release:portable:all`
 (cross-compiles `windows`/`linux`/`darwin` amd64, packages the full runtime layout — Unix
-tarballs with correct exec bits, the Windows zip with `.exe` — and writes `SHA256SUMS`).
+tarballs with correct exec bits, the Windows zip with `.exe` — and writes `checksums.sha256`).
 `npm run validate:release:portable:all` validates them **structurally** (layout, platform
 binary names, tar exec bits, `api/openapi.json`, checksums). This is for GitHub-Release
 readiness only — it does **not** run a runtime smoke against foreign binaries; native runtime
@@ -205,7 +205,7 @@ validation (`validate:runtime:smoke`) must still run on each OS. amd64 only for 
 follow-up. `build:release:current` still owns the current-platform release (portable + native
 installer); the Windows installer (MSI) and macOS `.pkg` remain native-built.
 
-Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
+Each platform's release directory includes a `checksums.sha256` file (GNU coreutils text
 format, sorted, lowercase hex) covering every produced release artifact for that version —
 portable archives and installer artifacts alike. `build:release` regenerates it after the
 artifacts are built, and `validate:release` verifies it (every hash matches, every listed
