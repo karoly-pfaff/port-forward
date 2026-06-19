@@ -145,7 +145,8 @@ for (const target of targets) {
 
   if (target === "win32") {
     buildWindowsPortable(releasesDir, version);
-    if (!portableOnly) buildWindowsInstaller(releasesDir, version);
+    // The WiX MSI is the canonical Windows installer. (Inno Setup has been retired
+    // to scripts/windows/legacy/ and is not built by the release flow.)
     if (!portableOnly) buildWindowsMsi(releasesDir, version);
   } else if (target === "darwin") {
     buildMacosPortable(version);
@@ -189,39 +190,14 @@ function buildWindowsPortable(releasesDir, version) {
   log(`  Created : ${zipPath}`);
 }
 
-function buildWindowsInstaller(releasesDir, version) {
-  const installerScript = join(
-    repoRoot, "scripts", "windows", "release", "build-release.ps1"
-  );
-  log("  Installer: Inno Setup...");
-
-  // build-release.ps1 handles ISCC.exe detection and exits 1 if unavailable.
-  // We treat installer failure as non-fatal: the portable zip is still valid.
-  const result = spawnSync(
-    "powershell",
-    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", installerScript, "-NoPackage", "-Version", version],
-    { stdio: "inherit", cwd: repoRoot, shell: isWindows }
-  );
-
-  if ((result.status ?? 1) !== 0) {
-    console.warn(
-      "[build-release]   WARNING: Windows installer build failed (Inno Setup unavailable or errored)."
-    );
-    console.warn(
-      "[build-release]   Portable zip is still valid. Install Inno Setup 6 to build the installer."
-    );
-  } else {
-    log(`  Created : build/releases/windows/Portier-Setup-${version}.exe`);
-  }
-}
-
 function buildWindowsMsi(releasesDir, version) {
-  const msiScript = join(repoRoot, "scripts", "windows", "wix", "build-msi.ps1");
-  log("  Installer: WiX MSI (enterprise track)...");
+  const msiScript = join(repoRoot, "scripts", "windows", "release", "build-release.ps1");
+  log("  Installer: WiX MSI (canonical Windows installer)...");
 
-  // build-msi.ps1 resolves the wix tool (PATH or dotnet global tools) and exits
-  // non-zero if WiX is unavailable. Like the Inno step, MSI failure is non-fatal:
-  // the portable zip and Inno installer are unaffected.
+  // build-release.ps1 resolves the wix tool (PATH or dotnet global tools) and exits
+  // non-zero if WiX is unavailable. The MSI is the canonical Windows installer, so
+  // a build failure is FATAL for a full Windows release. Use --portable-only to
+  // build just the portable zip when WiX is not available.
   const result = spawnSync(
     "powershell",
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", msiScript, "-Version", version, "-OutputDir", releasesDir],
@@ -229,15 +205,18 @@ function buildWindowsMsi(releasesDir, version) {
   );
 
   if ((result.status ?? 1) !== 0) {
-    console.warn(
-      "[build-release]   WARNING: WiX MSI build failed (WiX Toolset unavailable or errored)."
+    console.error(
+      "[build-release]   ERROR: WiX MSI build failed (WiX Toolset unavailable or errored)."
     );
-    console.warn(
-      "[build-release]   Portable zip and Inno installer are unaffected. Install WiX 7 (dotnet tool install --global wix) to build the MSI."
+    console.error(
+      "[build-release]   The MSI is the canonical Windows installer. Install WiX 7 (dotnet tool install --global wix),"
     );
-  } else {
-    log(`  Created : build/releases/windows/Portier-${version}.msi`);
+    console.error(
+      "[build-release]   or run with --portable-only to produce just the portable zip."
+    );
+    process.exit(result.status ?? 1);
   }
+  log(`  Created : build/releases/windows/Portier-${version}.msi`);
 }
 
 // ── macOS ─────────────────────────────────────────────────────────────────────

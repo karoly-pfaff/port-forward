@@ -142,7 +142,7 @@ Portier Windows Portable Package
 =================================
 
 This portable archive contains the Portier runtime files only. It does not
-install OS services. Use the Inno Setup installer or the install scripts from
+install OS services. Use the Windows MSI installer or the install scripts from
 the Portier repository to set up a Windows Service or scheduled task.
 
 Files in this package:
@@ -182,9 +182,9 @@ Default management URL:
 Config (rules.json) is external and must be provided. A new empty rules.json is
 created automatically if the path does not exist when the service starts.
 
-Machine-wide install (Inno Setup installer, requires Inno Setup 6):
-  npm run build:release:current    (from the Portier repository)
-  Installs to %ProgramFiles%\Portier\ with config at %ProgramData%\Portier\rules.json.
+Machine-wide install (Windows MSI):
+  msiexec /i Portier-<version>.msi
+  Installs to %ProgramFiles%\Portier\. Config stays at %ProgramData%\Portier\rules.json.
 
 Manual install scripts in the repository:
   scripts\windows\service\install-service.ps1 -Scope Machine  (Administrator required)

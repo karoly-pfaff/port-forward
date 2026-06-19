@@ -13,8 +13,10 @@
  * Options:
  *   --version <v>                   Version string (default: reads from package.json).
  *   --platform current|windows|macos|linux   Target platform (default: current).
- *   --portable-only                 Only check portable archive; skip installer check.
- *   --installer-required            Fail if the platform installer artifact is missing.
+ *   --portable-only                 Only check the portable archive; skip the installer check.
+ *   --checksums-only                Only verify SHA256SUMS (skip archive/installer checks).
+ *
+ * The canonical installer (the WiX MSI on Windows) is required unless --portable-only.
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -44,7 +46,6 @@ const flagValue = (f) => {
 const versionArg = flagValue("--version");
 const platformArg = flagValue("--platform") || "current";
 const portableOnly = hasFlag("--portable-only");
-const installerRequired = hasFlag("--installer-required");
 const checksumsOnly = hasFlag("--checksums-only");
 
 // ── Resolve version ───────────────────────────────────────────────────────────
@@ -100,8 +101,9 @@ function getArchiveName(platform, ver) {
 }
 
 function getInstallerName(platform, ver) {
-  if (platform === "windows") return `Portier-Setup-${ver}.exe`;
-  return null; // macOS .pkg and Linux .deb/.rpm not in v1.1
+  // The WiX MSI is the canonical Windows installer (Inno Setup retired).
+  if (platform === "windows") return `Portier-${ver}.msi`;
+  return null; // macOS .pkg / Linux .deb/.rpm not built yet
 }
 
 // ── Result tracking ───────────────────────────────────────────────────────────
@@ -407,32 +409,17 @@ function checkArchiveAndInstaller() {
     checkReadmeContent(archivePath, rawEntries);
   }
 
-  // Installer artifact (optional unless --installer-required)
+  // Canonical installer artifact. On Windows this is the WiX MSI and it is
+  // required (the MSI is the canonical Windows installer); its checksum is also
+  // verified by the SHA256SUMS check. Platforms without a native installer
+  // (macOS/Linux today) have no installer expectation.
   if (!portableOnly && installerName) {
-    console.log("\nInstaller artifact:");
+    console.log("\nInstaller artifact (canonical):");
     if (!existsSync(installerPath)) {
-      if (installerRequired) {
-        fail(`Installer not found: ${installerName} (--installer-required)`);
-      } else {
-        warn(`Installer not found: ${installerName} — build with: npm run build:release:current`);
-      }
+      fail(`Installer not found: ${installerName} — build with: npm run build:release:current (Windows requires WiX 7)`);
     } else {
       const iStat = statSync(installerPath);
       pass(`${installerName} (${(iStat.size / 1024 / 1024).toFixed(1)} MB)`);
-    }
-  }
-
-  // MSI artifact (Windows enterprise track, WiX). Optional/non-fatal: present only
-  // when WiX built it. Its integrity is verified by the SHA256SUMS check below.
-  if (!portableOnly && platformLabel === "windows") {
-    const msiName = `Portier-${version}.msi`;
-    const msiPath = join(releasesDir, msiName);
-    console.log("\nMSI artifact (WiX, enterprise track):");
-    if (existsSync(msiPath)) {
-      const mStat = statSync(msiPath);
-      pass(`${msiName} (${(mStat.size / 1024 / 1024).toFixed(1)} MB)`);
-    } else {
-      warn(`${msiName} not found — build with WiX 7 (npm run build:release:current). MSI is optional for now.`);
     }
   }
 }

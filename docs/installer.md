@@ -126,8 +126,7 @@ This guarantee is validated on the current platform by an upgrade-preservation s
 against an external data dir, replaces the install directory with a fresh extraction, and
 asserts config, the configured rules, and recovery side files survive while the runtime
 restarts healthy at the expected version. This is the safety gate that native installer
-upgrades (including the in-progress Windows WiX/MSI track and the planned macOS `.pkg`) must
-satisfy.
+upgrades (the canonical Windows WiX/MSI and the planned macOS `.pkg`) must satisfy.
 
 ## Release Artifacts
 
@@ -144,8 +143,7 @@ Expected artifact names:
 
 ```text
 build/releases/windows/
-  Portier-Setup-<version>.exe   (Inno Setup — default consumer installer)
-  Portier-<version>.msi         (WiX — enterprise/admin track)
+  Portier-<version>.msi         (WiX — canonical Windows installer)
   portier-<version>-windows-portable.zip
   SHA256SUMS
 
@@ -158,16 +156,19 @@ build/releases/linux/
   SHA256SUMS
 ```
 
-The Windows Inno installer depends on Inno Setup; the Windows MSI depends on the WiX
-Toolset v7 (`scripts/windows/wix/`). Both installer builds are non-fatal: if the
-respective tool is absent, the portable archive is still produced. The MSI is an additive
-enterprise/admin track (silent install, Group Policy/SCCM/Intune, Add/Remove Programs +
-repair); Inno remains the default consumer installer. The current MSI is a file-install
-spike — it bundles the canonical service scripts but does not auto-install the Windows
-Service yet, and never touches `rules.json` or `%ProgramData%\Portier`. Its install layout
-and config/data boundary are validated by `npm run validate:msi:install` (a non-interactive
-`msiexec` smoke; no admin required — it extracts via `msiexec /a` when not elevated, and does
-a full silent install/uninstall when elevated). See `scripts/windows/wix/readme.md`.
+The **WiX MSI is the canonical Windows installer** (silent install, Group Policy/SCCM/Intune,
+standard Add/Remove Programs + repair). It depends on the WiX Toolset v7
+(`scripts/windows/release/`); a full Windows release build fails if WiX is unavailable (use
+`--portable-only` to build just the portable zip). The previous Inno Setup installer has been
+retired from the release flow — its scripts are kept, manual-only, under
+`scripts/windows/legacy/`.
+
+The current MSI is a file-install package — it bundles the canonical service scripts but does
+not auto-install the Windows Service yet, and never touches `rules.json` or
+`%ProgramData%\Portier`. Its install layout and config/data boundary are validated by
+`npm run validate:msi:install` (a non-interactive `msiexec` smoke; no admin required — it
+extracts via `msiexec /a` when not elevated, and does a full silent install/uninstall when
+elevated). See `scripts/windows/release/readme.md`.
 
 Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
 format, sorted, lowercase hex) covering every produced release artifact for that version —
@@ -227,7 +228,7 @@ They use isolated temp paths, test-specific service names, and non-production po
 - Do not add telemetry, cloud sync, or auto-update behavior.
 - Preserve `rules.json` on uninstall unless the user explicitly requests purge.
 - Keep config and logs outside the packaged runtime directory.
-- The Windows MSI (WiX) is in progress for v1.18 as the enterprise/admin track alongside the
-  Inno installer and portable archives; a native macOS `.pkg` installer remains planned/under
-  evaluation for v1.18. Do not add other platform package managers (`deb`, `rpm`, Homebrew,
-  winget, Chocolatey) without a deliberate product decision.
+- The Windows MSI (WiX) is the canonical Windows installer (Inno Setup is retired to
+  `scripts/windows/legacy/`, manual-only). A native macOS `.pkg` installer remains
+  planned/under evaluation for v1.18. Do not add other platform package managers (`deb`,
+  `rpm`, Homebrew, winget, Chocolatey) without a deliberate product decision.

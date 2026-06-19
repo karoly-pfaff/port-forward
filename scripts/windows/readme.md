@@ -48,75 +48,37 @@ npm run build:runtime:windows
 
 ---
 
-## Inno Setup Installer (v1.1)
+## Windows Installer (WiX MSI)
 
-The `scripts/windows/release/` directory contains an Inno Setup 6 script and a build wrapper.
-
-**Prerequisites:**
-
-1. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php).
-2. Ensure Go is installed (for `service.exe` compilation).
-
-**Build the installer (and portable archive):**
+The **WiX MSI is the canonical Windows installer**, built by the WiX Toolset v7
+(`scripts/windows/release/`) as part of the Windows release:
 
 ```powershell
 npm run build:release:current
 ```
 
-This runs `npm run build:runtime` first, produces the portable `.zip`, then calls ISCC.exe. The installer step is non-fatal if Inno Setup is absent — the portable zip is still produced.
+A full Windows release **fails if WiX 7 is unavailable** — use `--portable-only` to build
+just the portable zip. Output: `build\releases\windows\Portier-<version>.msi` (included in
+`SHA256SUMS`).
 
-To skip the package step and reuse an existing `build/portier/`:
-
-```powershell
-npm run build:release:current -- --no-build
-```
-
-**Output:** `build/releases/windows/Portier-Setup-<version>.exe`
-
-**What the installer does:**
+**What the MSI installs (file-install):**
 
 | Location | Contents |
 |----------|----------|
-| `%ProgramFiles%\Portier\` | `service.exe`, `server.js`, `web\`, `readme.txt` |
-| `%ProgramData%\Portier\` | `rules.json` (created empty if absent), `logs\` |
+| `%ProgramFiles%\Portier\` | `portier.exe`, `service.exe`, `server.js`, `web\`, `api\openapi.json`, `readme.txt` |
+| `%ProgramFiles%\Portier\service\` | canonical Windows service scripts (`install-service.ps1`, …) |
 
-- The installer offers an optional **Windows Service** task (checked by default): registers `Portier` as an automatic Windows Service and starts it immediately.
-- The service command line is: `"%ProgramFiles%\Portier\service.exe" --service --config "%ProgramData%\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir "%ProgramFiles%\Portier\web"`
-- On upgrade (reinstall over an existing installation), the running service is stopped before files are overwritten.
-- Uninstall stops and removes the Windows Service. `rules.json` and `%ProgramData%\Portier\` are preserved by default. The `logs\` directory is removed.
+- The current MSI is **file-install only**: it does **not** auto-install or start the Windows
+  Service. Register the service with the bundled `service\install-service.ps1` (machine =
+  Windows Service, user = Scheduled Task). Service auto-install via an MSI custom action is a
+  follow-up.
+- The MSI **never** creates, overwrites, or migrates `rules.json`, and does not touch
+  `%ProgramData%\Portier`. Config/data stay external.
+- Per-machine install requires admin/UAC; supports silent install
+  (`msiexec /i Portier-<version>.msi /qn`) and standard Add/Remove Programs + repair.
 
-**SmartScreen note:** The installer is unsigned. Windows SmartScreen may warn before running it. For public distribution, sign `service.exe` and `Portier-Setup-<version>.exe` with an EV certificate.
-
-**Build script options (`scripts/windows/release/build-release.ps1`):**
-
-| Parameter | Description |
-|-----------|-------------|
-| `-Version 1.1.0` | Override version (default: reads from `package.json`) |
-| `-NoPackage` | Skip `npm run build:runtime` |
-| `-InnoPath "C:\..."` | Full path to `ISCC.exe` if not on PATH |
-
-**Firewall:** The installer does not create Windows Firewall rules. Forwarded ports listening on `0.0.0.0` may trigger Windows Firewall prompts or require manual inbound rules.
-
----
-
-## WiX MSI Installer (enterprise track)
-
-In addition to the Inno installer, Portier builds a Windows **MSI** via the WiX Toolset for
-enterprise/admin deployment (silent install, Group Policy/SCCM/Intune, standard Add/Remove
-Programs + repair). Inno remains the default consumer installer.
-
-```powershell
-npm run build:release:current   # builds the MSI too, when WiX 7 is available
-```
-
-Output: `build\releases\windows\Portier-<version>.msi` (included in `SHA256SUMS`).
-
-Current status (v1.18 spike): the MSI is a **file-install** package — it installs the same
-layout as the portable archive into `%ProgramFiles%\Portier` and bundles the canonical
-service scripts under `%ProgramFiles%\Portier\service\`, but does **not** auto-install the
-Windows Service yet (run the bundled `service\install-service.ps1`). It never touches
-`%ProgramData%\Portier` or `rules.json`. MSI build requires WiX 7 and is non-fatal if WiX is
-absent. See [`scripts/windows/wix/readme.md`](wix/readme.md).
+**SmartScreen / signing:** the MSI is unsigned. For public distribution, sign it (and
+`service.exe`) with an EV certificate.
 
 Validate the MSI install layout and config/data boundary (no admin needed; uses
 `msiexec /a` extraction non-elevated, full `/i`+`/x` when elevated):
@@ -124,6 +86,12 @@ Validate the MSI install layout and config/data boundary (no admin needed; uses
 ```powershell
 npm run validate:msi:install
 ```
+
+See [`scripts/windows/release/readme.md`](release/readme.md) for the WiX source and install smoke.
+
+> **Legacy:** the previous Inno Setup installer has been retired from the release flow. Its
+> scripts are kept, manual-only, under `scripts/windows/legacy/` and are not built or
+> validated. New Windows installer work belongs in the WiX MSI.
 
 ---
 

@@ -53,7 +53,7 @@ function readPackageVersion() {
   return JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
 }
 
-// msiName is the MSI filename for a version (matches build-msi.ps1 output).
+// msiName is the MSI filename for a version (matches build-release.ps1 output).
 export function msiName(version) {
   return `Portier-${version}.msi`;
 }

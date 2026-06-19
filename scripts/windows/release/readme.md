@@ -1,13 +1,12 @@
 # Portier Windows MSI (WiX)
 
-WiX Toolset source for the Portier Windows **MSI** — the enterprise/admin installer
-track (silent install, Group Policy/SCCM/Intune, standard Add/Remove Programs + repair).
+WiX Toolset source for the Portier Windows **MSI** — the **canonical Windows installer**
+(silent install, Group Policy/SCCM/Intune, standard Add/Remove Programs + repair).
 
-The Inno Setup installer (`scripts/windows/release/`) remains the **default consumer
-installer**. The portable zip remains the universal baseline. The MSI is additive and does
-not replace either.
+The portable zip remains the universal baseline. The legacy Inno Setup installer has been
+retired to `scripts/windows/legacy/` (manual-only; not built by the release flow).
 
-## Status (v1.18 spike)
+## Status
 
 - **File-install MSI.** Packages the same layout as the portable archive
   (`portier.exe`, `service.exe`, `server.js`, `web\`, `api\openapi.json`, `readme.txt`)
@@ -24,7 +23,7 @@ not replace either.
 
 - `portier.wxs` — WiX 7 (v4 schema) source. `Files` elements harvest the packaged runtime
   and the service scripts. `UpgradeCode` is fixed — do not change it.
-- `build-msi.ps1` — resolves the `wix` tool (PATH, then `%USERPROFILE%\.dotnet\tools`),
+- `build-release.ps1` — resolves the `wix` tool (PATH, then `%USERPROFILE%\.dotnet\tools`),
   accepts the OSMF EULA, and builds `Portier-<version>.msi`.
 
 ## Prerequisites
@@ -33,7 +32,7 @@ not replace either.
 - The packaged runtime at `build\portier\` (`npm run build:runtime`).
 
 WiX v7 requires accepting FireGiant's Open Source Maintenance Fee (OSMF) EULA (free for
-open-source use). `build-msi.ps1` passes `-acceptEula wix7` so the build runs
+open-source use). `build-release.ps1` passes `-acceptEula wix7` so the build runs
 non-interactively. See https://docs.firegiant.com/wix/osmf/.
 
 ## Build
@@ -44,14 +43,15 @@ The MSI is built automatically as part of the Windows release when WiX is availa
 npm run build:release:current
 ```
 
-MSI build failure is **non-fatal** — the portable zip and Inno installer are unaffected.
+The MSI is the canonical Windows installer, so a full Windows `build:release` **fails** if
+WiX is unavailable (use `--portable-only` to build just the portable zip).
 Output: `build\releases\windows\Portier-<version>.msi`. It is included in `SHA256SUMS` and
 verified by `npm run validate:release:current`.
 
 Build the MSI directly:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\windows\wix\build-msi.ps1
+powershell -ExecutionPolicy Bypass -File scripts\windows\release\build-release.ps1
 ```
 
 ## MSI install smoke

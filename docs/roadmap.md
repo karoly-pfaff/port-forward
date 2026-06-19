@@ -248,8 +248,8 @@ uninstall.
 
 ### Scope
 
-- Polish the Windows installer and portable package; build a Windows WiX/MSI installer
-  (enterprise track) alongside Inno (in progress).
+- Make the Windows WiX/MSI installer the canonical Windows installer (replacing Inno);
+  keep the portable zip.
 - Evaluate/build a native macOS `.pkg` installer alongside the portable archive.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.

@@ -13,9 +13,10 @@
   It does NOT touch %ProgramData%\Portier or rules.json — user config/data stay
   external and are never created, overwritten, or migrated by this MSI.
 
-  The Inno Setup installer remains the default consumer installer.
+  This MSI is the canonical Windows installer. (The legacy Inno Setup installer is
+  retired to scripts/windows/legacy/ and is not built by the release flow.)
 
-  Build via scripts/windows/wix/build-msi.ps1, which passes:
+  Build via scripts/windows/release/build-release.ps1, which passes:
     -d Version=<x.y.z>  -d PackageDir=<build\portier>  -d RepoRoot=<repo>
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">

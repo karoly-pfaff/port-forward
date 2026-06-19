@@ -1,162 +1,96 @@
 <#
 .SYNOPSIS
-  Builds the Portier Windows installer using Inno Setup.
+  Build the Portier Windows MSI with the WiX Toolset (WiX 7 / v4 schema).
 
 .DESCRIPTION
-  Reads the version from package.json (or accepts -Version), runs
-  npm run build:runtime to produce build/portier/, then calls ISCC.exe
-  to produce build/releases/windows/Portier-Setup-<version>.exe.
+  Builds the canonical Windows installer (the MSI). Packages build\portier\ into
+  %ProgramFiles%\Portier and bundles the canonical service scripts. Does not touch
+  user config/data. (The legacy Inno installer is retired to
+  scripts\windows\legacy\ and is not built by the release flow.)
 
-  Inno Setup 6 must be installed before running this script.
-  Download: https://jrsoftware.org/isinfo.php
+  Resolves the `wix` tool from PATH, then from the dotnet global tools location
+  (%USERPROFILE%\.dotnet\tools\wix.exe). Exits non-zero (and prints the exact
+  error) if WiX is unavailable — callers treat that as a non-fatal skip.
 
 .PARAMETER Version
-  Installer version string (e.g., "1.1.0"). Defaults to the version in
-  package.json.
+  Version string for the MSI (default: root package.json version).
 
-.PARAMETER NoPackage
-  Skip npm run build:runtime and use the existing build/portier/ directory.
-  Useful when build/portier/ is already up to date.
+.PARAMETER SourceDir
+  Packaged runtime dir to harvest (default: <repo>\build\portier).
 
-.PARAMETER InnoPath
-  Full path to ISCC.exe. If omitted, the script searches PATH and the
-  default Inno Setup 6 install location.
+.PARAMETER OutputDir
+  Output dir for the MSI (default: <repo>\build\releases\windows).
 
-.EXAMPLE
-  # Full build with version from package.json
-  powershell -ExecutionPolicy Bypass -File build-release.ps1
-
-.EXAMPLE
-  # Skip package step, use existing build/portier/
-  powershell -ExecutionPolicy Bypass -File build-release.ps1 -NoPackage
-
-.EXAMPLE
-  # Explicit version and Inno Setup path
-  powershell -ExecutionPolicy Bypass -File build-release.ps1 -Version 1.1.0 -InnoPath "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+.PARAMETER WixPath
+  Explicit path to wix(.exe) if not on PATH or in the dotnet tools dir.
 #>
 param(
   [string]$Version,
-  [switch]$NoPackage,
-  [string]$InnoPath
+  [string]$SourceDir,
+  [string]$OutputDir,
+  [string]$WixPath
 )
 
 $ErrorActionPreference = "Stop"
 
-function Log   { param([string]$m) Write-Host "[release:windows] $m" }
-function Fail  { param([string]$m) Write-Error "[release:windows] $m"; exit 1 }
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
 
-# ── Locate the repo root (two directories above this script) ──────────────────
-$ScriptDir = $PSScriptRoot
-$RepoRoot  = Split-Path (Split-Path (Split-Path $ScriptDir -Parent) -Parent) -Parent
-
-# ── Resolve version ───────────────────────────────────────────────────────────
 if (-not $Version) {
-  $pkgJsonPath = Join-Path $RepoRoot "package.json"
-  if (-not (Test-Path $pkgJsonPath)) { Fail "package.json not found at $pkgJsonPath" }
-  $pkg     = Get-Content $pkgJsonPath -Raw | ConvertFrom-Json
+  $pkg = Get-Content (Join-Path $repoRoot "package.json") -Raw | ConvertFrom-Json
   $Version = $pkg.version
-  if (-not $Version) { Fail "version field missing in package.json" }
+}
+if (-not $SourceDir) { $SourceDir = Join-Path $repoRoot "build\portier" }
+if (-not $OutputDir) { $OutputDir = Join-Path $repoRoot "build\releases\windows" }
+
+function Resolve-Wix {
+  param([string]$Explicit)
+  if ($Explicit) { return $Explicit }
+  $cmd = Get-Command wix -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  $candidate = Join-Path $env:USERPROFILE ".dotnet\tools\wix.exe"
+  if (Test-Path $candidate) { return $candidate }
+  return $null
 }
 
-# ── Locate ISCC.exe ───────────────────────────────────────────────────────────
-$iscc = $null
-if ($InnoPath) {
-  if (-not (Test-Path $InnoPath)) { Fail "ISCC.exe not found at: $InnoPath" }
-  $iscc = $InnoPath
-} else {
-  # Check PATH first
-  $cmd = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
-  if ($cmd) {
-    $iscc = $cmd.Source
-  } else {
-    # Common Inno Setup 6 install locations
-    foreach ($candidate in @(
-      "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-      "C:\Program Files\Inno Setup 6\ISCC.exe"
-    )) {
-      if (Test-Path $candidate) { $iscc = $candidate; break }
-    }
-  }
-}
-
-if (-not $iscc) {
-  Write-Host ""
-  Write-Host "[release:windows] Inno Setup (ISCC.exe) not found." -ForegroundColor Yellow
-  Write-Host "  Install Inno Setup 6 from https://jrsoftware.org/isinfo.php"
-  Write-Host "  Then re-run, or pass -InnoPath 'C:\path\to\ISCC.exe'"
-  Write-Host ""
+$wix = Resolve-Wix -Explicit $WixPath
+if (-not $wix) {
+  Write-Error "WiX Toolset 'wix' not found on PATH or in %USERPROFILE%\.dotnet\tools. Install with: dotnet tool install --global wix"
   exit 1
 }
 
-Log "Inno Setup : $iscc"
-Log "Version    : $Version"
-Log "Repo root  : $RepoRoot"
-Log ""
-
-# ── Build package (unless skipped) ───────────────────────────────────────────
-if (-not $NoPackage) {
-  Log "Running npm run build:runtime..."
-  $npm = if (Get-Command "npm.cmd" -ErrorAction SilentlyContinue) { "npm.cmd" } else { "npm" }
-  Push-Location $RepoRoot
-  try {
-    & $npm run build:runtime
-    if ($LASTEXITCODE -ne 0) { Fail "npm run build:runtime failed (exit $LASTEXITCODE)." }
-  } finally {
-    Pop-Location
-  }
-  Log ""
-} else {
-  Log "Skipping package build (-NoPackage)."
+if (-not (Test-Path $SourceDir)) {
+  Write-Error "Packaged runtime dir not found: $SourceDir. Run 'npm run build:runtime' first."
+  exit 1
 }
 
-# ── Verify package contents ───────────────────────────────────────────────────
-$PackageDir = Join-Path $RepoRoot "build\portier"
-
-foreach ($rel in @("service.exe", "server.js", "web\index.html", "readme.txt")) {
-  $p = Join-Path $PackageDir $rel
-  if (-not (Test-Path $p)) {
-    Write-Host ""
-    Write-Host "[release:windows] Required file missing from build/portier/: $rel" -ForegroundColor Red
-    Write-Host "  Run: npm run build:runtime"
-    Write-Host "  Or pass -NoPackage if the directory is already built."
-    exit 1
-  }
-}
-
-Log "Package verified: build/portier/"
-
-# ── Prepare output directory ──────────────────────────────────────────────────
-$OutputDir = Join-Path $RepoRoot "build\releases\windows"
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+$wxs = Join-Path $scriptDir "portier.wxs"
+$msi = Join-Path $OutputDir "Portier-$Version.msi"
 
-# ── Run ISCC.exe ──────────────────────────────────────────────────────────────
-$IssFile = Join-Path $ScriptDir "portier.iss"
+Write-Host "[wix] Tool    : $wix"
+Write-Host "[wix] Version : $Version"
+Write-Host "[wix] Source  : $SourceDir"
+Write-Host "[wix] Output  : $msi"
 
-Log "Building installer (ISCC)..."
-Log ""
-
-& $iscc $IssFile `
-  "/DAppVersion=$Version" `
-  "/DSourceDir=$PackageDir" `
-  "/DOutputDir=$OutputDir"
+# "-acceptEula wix7" accepts FireGiant's WiX v7 Open Source Maintenance Fee (OSMF)
+# EULA (free for open-source use) so `wix build` runs non-interactively (error
+# WIX7015 otherwise). The value is the EULA major-version id. See
+# https://docs.firegiant.com/wix/osmf/.
+& $wix build $wxs -arch x64 -acceptEula wix7 `
+  -d "Version=$Version" `
+  -d "PackageDir=$SourceDir" `
+  -d "RepoRoot=$repoRoot" `
+  -o $msi
 
 if ($LASTEXITCODE -ne 0) {
-  Write-Host ""
-  Write-Host "[release:windows] ISCC.exe failed (exit $LASTEXITCODE)." -ForegroundColor Red
-  exit 1
+  Write-Error "wix build failed with exit code $LASTEXITCODE"
+  exit $LASTEXITCODE
 }
 
-# ── Report ────────────────────────────────────────────────────────────────────
-$installerPath = Join-Path $OutputDir "Portier-Setup-$Version.exe"
+# wix build emits a .wixpdb (debug symbols) next to the MSI; it is not a release
+# artifact. Remove it so it does not clutter the release dir or SHA256SUMS scanning.
+$pdb = [System.IO.Path]::ChangeExtension($msi, ".wixpdb")
+if (Test-Path $pdb) { Remove-Item -Force $pdb }
 
-Write-Host ""
-Log "Installer built: $installerPath"
-Write-Host ""
-Write-Host "  NOTE: This installer is unsigned and may trigger Windows SmartScreen." -ForegroundColor Yellow
-Write-Host "  For public distribution, sign with an EV certificate before releasing." -ForegroundColor Yellow
-Write-Host ""
-Write-Host "  Install layout:"
-Write-Host "    Binaries : %ProgramFiles%\Portier\"
-Write-Host "    Config   : %ProgramData%\Portier\rules.json"
-Write-Host "    Logs     : %ProgramData%\Portier\logs\"
-Write-Host ""
+Write-Host "[wix] MSI built: $msi"

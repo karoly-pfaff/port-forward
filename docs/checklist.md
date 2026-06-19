@@ -230,11 +230,14 @@ readme.txt
 npm run validate:release:checksums
 ```
 
-- [ ] Windows MSI (WiX): when WiX 7 is available, `build:release` also builds
-  `Portier-<version>.msi` (non-fatal if WiX is absent), and `validate:release` reports its
-  presence and verifies its checksum. The MSI is the enterprise/admin track; Inno remains the
-  default consumer installer. The current MSI is a file-install spike (bundles the canonical
-  service scripts, no Windows Service auto-install yet, never touches user config).
+- [ ] Windows MSI (WiX) is the **canonical Windows installer**. A full Windows
+  `build:release` builds `Portier-<version>.msi` and **fails if WiX 7 is unavailable**
+  (use `--portable-only` to build just the portable zip). Windows release output is the
+  MSI + portable zip + `SHA256SUMS`. `validate:release` requires the MSI on Windows and
+  verifies its checksum. The current MSI is a file-install package (bundles the canonical
+  service scripts, no Windows Service auto-install yet, never touches user config). The
+  retired Inno installer lives in `scripts/windows/legacy/` (manual-only; not built or
+  validated).
 - [ ] Windows MSI install smoke (Windows-only; **no admin required**):
 
 ```powershell
@@ -246,7 +249,7 @@ npm run validate:msi:install
   `rules.json` inside the install dir; a seeded external data dir is untouched). It uses
   `msiexec /a` extraction when non-elevated and a full silent `msiexec /i`+`/x`
   install/uninstall when elevated (or `--full-install`). Not part of the cross-platform
-  release matrix. See `scripts/windows/wix/readme.md`.
+  release matrix. See `scripts/windows/release/readme.md`.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp
