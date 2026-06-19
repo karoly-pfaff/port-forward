@@ -5,9 +5,11 @@
 # and does NOT create tags. Manual trigger only (workflow_dispatch).
 #
 # Artifacts (package first, portable second, checksums last):
-#   1. portier_<version>_amd64.deb       (file-install dpkg-deb package, disabled unit)
-#   2. portier-<version>-linux.tar.gz
-#   3. checksums.sha256
+#   1. portier_<version>_amd64.deb            (file-install dpkg-deb package, disabled unit)
+#   2. portier-<version>-linux-amd64.tar.gz   (portable, x86-64)
+#   3. portier-<version>-linux-arm64.tar.gz   (portable, ARM64)
+#   4. checksums.sha256
+# build:release:current cross-builds both Linux arches; only the host arch is runtime-smoked.
 #
 # Privacy: only build/releases/linux/** is uploaded. docs/private/** is never staged
 # into release output; validate-artifacts.js logs the upload set and hard-fails on any
@@ -66,6 +68,12 @@ jobs:
 
       - name: Validate checksums (checksums.sha256)
         run: npm run validate:release:checksums
+
+      # Structural validation of BOTH Linux portable arches (amd64 + arm64), incl. a binary
+      # machine-type check. Foreign-arch binaries are not executed — only the host arch is
+      # runtime-smoked below.
+      - name: Validate portable artifacts (amd64 + arm64, structural)
+        run: npm run validate:release:portable:linux
 
       - name: Runtime smoke (packaged runtime)
         run: npm run validate:runtime:smoke

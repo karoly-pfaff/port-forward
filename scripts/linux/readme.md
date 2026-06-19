@@ -41,18 +41,20 @@ bash scripts/linux/build-runtime.sh
 
 ## Release Artifact
 
-The **portable tar.gz is the v1.18 Linux release artifact** (versioned, checksummed in
-`checksums.sha256`, GitHub-Release-ready). Systemd (below) is the canonical service layer.
+The **portable tar.gz artifacts (amd64 + arm64)** are versioned, checksummed in
+`checksums.sha256`, and GitHub-Release-ready. The native `.deb` (below) is the package; systemd
+is the canonical service layer.
 
 ```bash
-npm run build:release:current            # builds the tar.gz + checksums.sha256
+npm run build:release:current            # builds both portable arches + .deb + checksums.sha256
 npm run build:release:current -- --no-build   # reuse an existing build/portier/
-npm run validate:release:current         # validate layout/OpenAPI/version + checksum
+npm run validate:release:current         # validate host-arch layout/OpenAPI/version + checksum
 ```
 
-Output: `build/releases/linux/portier-<version>-linux.tar.gz`
+Output: `build/releases/linux/portier-<version>-linux-amd64.tar.gz` and
+`build/releases/linux/portier-<version>-linux-arm64.tar.gz` (architecture in the name).
 
-The archive contains the full runtime layout:
+Each archive contains the full runtime layout:
 
 ```text
 portier
@@ -69,7 +71,8 @@ readme.txt
 Extract and install from the archive on a target machine:
 
 ```bash
-tar -xzf portier-<version>-linux.tar.gz -C /opt/portier/
+# x86-64: use the amd64 archive (ARM64: the arm64 archive).
+tar -xzf portier-<version>-linux-amd64.tar.gz -C /opt/portier/
 sudo bash scripts/linux/service/install-service.sh --source-dir /opt/portier
 ```
 
@@ -79,16 +82,17 @@ Preview the systemd install plan without root (paths, `ExecStart`, unit location
 bash scripts/linux/service/install-service.sh --dry-run
 ```
 
-The Linux tar.gz can also be **cross-built from another host** (e.g. Windows), since the Go
-binaries are pure Go:
+The Linux tar.gz artifacts can also be **cross-built from another host** (e.g. Windows), since
+the Go binaries are pure Go:
 
 ```bash
-npm run build:release:linux            # cross-compile linux/amd64 + package tar.gz
-npm run validate:release:portable:all  # structural validation (no native runtime smoke)
+npm run build:release:linux               # cross-compile linux/amd64 + linux/arm64 tar.gz
+npm run validate:release:portable:linux   # structural validation of both arches (no native smoke)
 ```
 
-Cross-built validation is structural only — the native runtime smoke (`validate:runtime:smoke`)
-must run on Linux.
+Cross-built validation is structural only (it does verify each binary's machine type matches
+the named arch) — the native runtime smoke (`validate:runtime:smoke`) must run on Linux, and
+arm64 binaries are not executed on an amd64 host.
 
 ## Native `.deb` package
 

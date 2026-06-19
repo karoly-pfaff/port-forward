@@ -271,8 +271,9 @@ npm run validate:pkg:install
   elsewhere). See `scripts/macos/readme.md`.
 - [ ] Linux release (Linux-only). `build:release` produces the native
   `portier_<version>_amd64.deb` (dpkg-deb; built on Debian/Ubuntu, skipped with a notice
-  elsewhere) then the portable `portier-<version>-linux.tar.gz` (full runtime layout, incl.
-  `api/openapi.json`) + `checksums.sha256`. `validate:release` confirms the `.deb` is present,
+  elsewhere) then the portable `portier-<version>-linux-amd64.tar.gz` and
+  `portier-<version>-linux-arm64.tar.gz` (full runtime layout, incl. `api/openapi.json`) +
+  `checksums.sha256`. `validate:release` confirms the `.deb` is present,
   checks the tar.gz layout/OpenAPI/version, and verifies every checksum; the artifacts are
   versioned and GitHub-Release-ready. The `.deb` is a **file-install**: it lays
   the runtime under `/opt/portier` and installs a **disabled** systemd unit — it never
@@ -296,26 +297,31 @@ npm run validate:deb:install
   needs `sudo`/systemd PID 1) stays a separate manual/native check. See
   `scripts/linux/readme.md`.
 - [ ] Cross-platform portable artifact generation (from any host, incl. Windows). The Go
-  binaries are pure Go (CGO disabled), so all three portable artifacts — Windows `.zip`,
-  Linux `.tar.gz`, macOS `.tar.gz` — can be cross-built and structurally validated without a
-  native runner:
+  binaries are pure Go (CGO disabled), so all five portable artifacts can be cross-built and
+  structurally validated without a native runner:
+  - `portier-<version>-windows-amd64.zip`
+  - `portier-<version>-linux-amd64.tar.gz`, `portier-<version>-linux-arm64.tar.gz`
+  - `portier-<version>-macos-amd64.tar.gz`, `portier-<version>-macos-arm64.tar.gz`
 
 ```powershell
 npm run build:runtime               # produce build/portier/ (neutral assets) once
-npm run build:release:portable:all  # cross-build windows zip + linux/macos tar.gz (amd64)
+npm run build:release:portable:all  # cross-build windows amd64 + linux/macos amd64+arm64
 npm run validate:release:portable:all
 ```
 
-  `build:release:portable:all` cross-compiles `portier`/`service` for `windows`, `linux`, and
-  `darwin` (amd64), packages the full runtime layout (Unix tarballs get **0755 exec bits** on
-  the binaries; the Windows zip uses `.exe`), and writes per-platform `checksums.sha256`.
-  `validate:release:portable:all` validates each artifact **structurally** (layout, platform
-  binary names, tar exec bits, `api/openapi.json` JSON + version, forbidden content incl.
-  `docs/private`, checksum) using adm-zip / tar-stream — it does **NOT** run a runtime smoke
-  against foreign binaries. **Native runtime smoke must still run on each OS**
-  (`validate:runtime:smoke`); structural validation does not replace it. `build:release:current`
-  still owns the current-platform release (portable + native installer, e.g. the MSI). arm64 is
-  a documented follow-up. See `scripts/build-portable.js`.
+  `build:release:portable:all` cross-compiles `portier`/`service` for `windows/amd64`,
+  `linux/amd64`, `linux/arm64`, `darwin/amd64`, and `darwin/arm64`, packages the full runtime
+  layout (Unix tarballs get **0755 exec bits** on the binaries; the Windows zip uses `.exe`),
+  and writes per-platform `checksums.sha256`. `validate:release:portable:all` validates each
+  artifact **structurally** (layout, platform binary names, tar exec bits, **binary
+  machine-type matches the named arch** (ELF/Mach-O/PE), `api/openapi.json` JSON + version,
+  forbidden content incl. `docs/private`, checksum) — it does **NOT** run a runtime smoke
+  against foreign binaries. **Native runtime smoke must still run on each OS/arch**
+  (`validate:runtime:smoke`); structural validation does not replace it. Per-platform variants
+  (`validate:release:portable:{windows,macos,linux}`) validate just that platform's arches.
+  `build:release:current` builds the host platform's portables (both arches on macOS/Linux) +
+  the native installer; only the host arch is runtime-smoked. arm64 binaries are not executed
+  on amd64 runners (and vice versa). See `scripts/build-portable.js`.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp
@@ -343,21 +349,24 @@ then `checksums.sha256`).
 
 - [ ] **Release Windows** (`.github/workflows/release-windows.yml`, `windows-latest`):
   installs WiX 7 (dotnet global tool); builds/validates `Portier-<version>.msi` (canonical)
-  → `portier-<version>-windows-portable.zip` → `checksums.sha256`; runs the non-elevated
-  MSI install smoke (`msiexec /a`; the `/i` + `/x` half is an honest skip without admin)
-  plus runtime + upgrade smoke. Uploads `build/releases/windows/**` as
-  `portier-release-windows`.
+  → `portier-<version>-windows-amd64.zip` → `checksums.sha256` (incl. structural portable
+  validation); runs the non-elevated MSI install smoke (`msiexec /a`; the `/i` + `/x` half is
+  an honest skip without admin) plus runtime + upgrade smoke. Uploads
+  `build/releases/windows/**` as `portier-release-windows`. (Windows is amd64-only.)
 - [ ] **Release MacOS** (`.github/workflows/release-macos.yml`, `macos-latest`):
   builds/validates `Portier-<version>.pkg` (pkgbuild, unsigned) →
-  `portier-portable-macos-<version>.tar.gz` → `checksums.sha256`; runs runtime + upgrade
-  smoke, `.pkg` payload introspection (`pkgutil --payload-files`), and the `.pkg`
+  `portier-<version>-macos-amd64.tar.gz` + `portier-<version>-macos-arm64.tar.gz` →
+  `checksums.sha256` (incl. structural validation of both arches); runs runtime + upgrade
+  smoke (host arch), `.pkg` payload introspection (`pkgutil --payload-files`), and the `.pkg`
   install/uninstall smoke (`validate:pkg:install`). Uploads `build/releases/macos/**` as
   `portier-release-macos`.
 - [ ] **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
   builds/validates `portier_<version>_amd64.deb` (file-install, disabled unit) →
-  `portier-<version>-linux.tar.gz` → `checksums.sha256`; runs runtime + upgrade smoke,
-  `.deb` payload introspection (`dpkg-deb --contents`), and the `.deb` install/remove smoke
-  (`validate:deb:install`, which asserts disabled+inactive unit and config preservation).
+  `portier-<version>-linux-amd64.tar.gz` + `portier-<version>-linux-arm64.tar.gz` →
+  `checksums.sha256` (incl. structural validation of both arches); runs runtime + upgrade
+  smoke (host arch), `.deb` payload introspection (`dpkg-deb --contents`), and the `.deb`
+  install/remove smoke (`validate:deb:install`, which asserts disabled+inactive unit and
+  config preservation).
   Uploads `build/releases/linux/**` as `portier-release-linux`. Full systemd service
   validation (`validate:service:linux`) needs root/systemd and is **not** run in CI — it
   stays a manual/native check.

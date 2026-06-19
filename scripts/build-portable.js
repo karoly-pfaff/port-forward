@@ -3,22 +3,24 @@
 /**
  * Cross-platform portable artifact generation.
  *
- * Produces the Windows (.zip), Linux (.tar.gz), and macOS (.tar.gz) portable
- * artifacts from any host by cross-compiling the Go CLI/service binaries (pure Go,
- * CGO_ENABLED=0) and packaging them with the platform-neutral runtime assets
- * (server.js, web/, api/openapi.json) plus a generated readme. Unix tarballs get
- * correct exec bits (0755 binaries); the Windows zip uses .exe binaries.
+ * Produces the Windows (.zip) and Linux/macOS (.tar.gz) portable artifacts from any host
+ * by cross-compiling the Go CLI/service binaries (pure Go, CGO_ENABLED=0) and packaging
+ * them with the platform-neutral runtime assets (server.js, web/, api/openapi.json) plus a
+ * generated readme. Unix tarballs get correct exec bits (0755 binaries); the Windows zip
+ * uses .exe binaries.
  *
- * This produces RELEASE-READY portable artifacts. It does NOT run a runtime smoke
- * against foreign binaries — native runtime validation must run on each OS.
+ * Targets (amd64 + arm64 where useful):
+ *   windows/amd64 → portier-<v>-windows-amd64.zip
+ *   linux/amd64   → portier-<v>-linux-amd64.tar.gz
+ *   linux/arm64   → portier-<v>-linux-arm64.tar.gz
+ *   macos/amd64   → portier-<v>-macos-amd64.tar.gz
+ *   macos/arm64   → portier-<v>-macos-arm64.tar.gz
+ * Artifact names always carry the arch (no ambiguous single-name portables).
  *
- * Targets are amd64 only in this slice (documented). The neutral assets come from
- * build/portier/, so `npm run build:runtime` (current platform) must have produced
+ * This produces RELEASE-READY portable artifacts. It does NOT run a runtime smoke against
+ * foreign binaries — native runtime validation must run on each OS/arch. The neutral assets
+ * come from build/portier/, so `npm run build:runtime` (current platform) must have produced
  * it; this script never rebuilds the web/server assets.
- *
- * Note: `build:release:current` still owns the current-platform release (portable
- * artifact bundled with the native installer, e.g. the Windows MSI). This script is
- * the host-agnostic generator of the portable artifacts across all OSes.
  *
  * Usage:
  *   node scripts/build-portable.js [--windows] [--linux] [--macos] [--all] [--version <v>]
@@ -39,43 +41,31 @@ import { generateChecksums, CHECKSUMS_NAME } from "./release-checksums.js";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageDir = join(repoRoot, "build", "portier");
 
-// Supported cross targets. amd64 only for this slice; arm64 is a follow-up.
-const TARGETS = {
-  windows: {
-    label: "windows",
-    goos: "windows",
-    goarch: "amd64",
-    title: "Windows",
-    format: "zip",
-    binExt: ".exe",
-    archiveName: (v) => `portier-${v}-windows-portable.zip`,
-    installHint:
-      "  Use the Windows MSI installer, or:\n" +
-      "  powershell -ExecutionPolicy Bypass -File scripts\\windows\\service\\install-service.ps1",
-  },
-  linux: {
-    label: "linux",
-    goos: "linux",
-    goarch: "amd64",
-    title: "Linux",
-    format: "tar",
-    binExt: "",
-    archiveName: (v) => `portier-${v}-linux.tar.gz`,
-    installHint:
-      "  sudo bash scripts/linux/service/install-service.sh --source-dir <install-dir>",
-  },
-  macos: {
-    label: "macos",
-    goos: "darwin",
-    goarch: "amd64",
-    title: "macOS",
-    format: "tar",
-    binExt: "",
-    archiveName: (v) => `portier-portable-macos-${v}.tar.gz`,
-    installHint:
-      "  bash scripts/macos/service/install-launch-agent.sh --source-dir <install-dir>",
-  },
-};
+const WIN_HINT =
+  "  Use the Windows MSI installer, or:\n" +
+  "  powershell -ExecutionPolicy Bypass -File scripts\\windows\\service\\install-service.ps1";
+const LINUX_HINT =
+  "  sudo bash scripts/linux/service/install-service.sh --source-dir <install-dir>";
+const MAC_HINT =
+  "  bash scripts/macos/service/install-launch-agent.sh --source-dir <install-dir>";
+
+// One target per OS/arch. `platform` is the build/releases/<platform>/ directory; `goarch`
+// is the artifact's architecture suffix.
+function mkTarget(platform, goos, goarch, title, format, binExt, installHint) {
+  const ext = format === "zip" ? "zip" : "tar.gz";
+  return {
+    platform, goos, goarch, title, format, binExt, installHint,
+    archiveName: (v) => `portier-${v}-${platform}-${goarch}.${ext}`,
+  };
+}
+
+const TARGETS = [
+  mkTarget("windows", "windows", "amd64", "Windows", "zip", ".exe", WIN_HINT),
+  mkTarget("linux", "linux", "amd64", "Linux", "tar", "", LINUX_HINT),
+  mkTarget("linux", "linux", "arm64", "Linux", "tar", "", LINUX_HINT),
+  mkTarget("macos", "darwin", "amd64", "macOS", "tar", "", MAC_HINT),
+  mkTarget("macos", "darwin", "arm64", "macOS", "tar", "", MAC_HINT),
+];
 
 // ── Arguments ─────────────────────────────────────────────────────────────────
 
@@ -87,11 +77,13 @@ const flagValue = (f) => {
 };
 
 const all = hasFlag("--all");
-const selected = [];
-if (all || hasFlag("--windows")) selected.push("windows");
-if (all || hasFlag("--linux")) selected.push("linux");
-if (all || hasFlag("--macos")) selected.push("macos");
-if (selected.length === 0) selected.push("windows", "linux", "macos"); // default: all
+const wantPlatforms = new Set();
+if (all || hasFlag("--windows")) wantPlatforms.add("windows");
+if (all || hasFlag("--linux")) wantPlatforms.add("linux");
+if (all || hasFlag("--macos")) wantPlatforms.add("macos");
+if (wantPlatforms.size === 0) ["windows", "linux", "macos"].forEach((p) => wantPlatforms.add(p));
+
+const selectedTargets = TARGETS.filter((t) => wantPlatforms.has(t.platform));
 
 function readVersion() {
   return flagValue("--version") || JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
@@ -113,17 +105,17 @@ function crossBuildGo(subdir, goos, goarch, outFile) {
   }
 }
 
-// ── Generated portable readme (platform-aware binary names + install hint) ─────
+// ── Generated portable readme (platform/arch-aware binary names + install hint) ─
 
 function generateReadme(t) {
   const portier = `portier${t.binExt}`;
   const service = `service${t.binExt}`;
   const run = t.format === "zip" ? "" : "./";
-  return `Portier ${t.title} Portable Package
+  return `Portier ${t.title} (${t.goarch}) Portable Package
 ================================
 
-This portable archive contains the Portier runtime files only. It is portable and
-does not install OS services. Use the install option (below) to set up a service.
+This portable archive contains the Portier runtime files only (${t.title}/${t.goarch}). It is
+portable and does not install OS services. Use the install option (below) to set up a service.
 
 Files:
   ${portier}${" ".repeat(Math.max(1, 12 - portier.length))}CLI — control a running Portier service from the terminal
@@ -201,9 +193,9 @@ function createTarGz(stageDir, outPath, isExec) {
 // ── Build one target ──────────────────────────────────────────────────────────
 
 async function buildTarget(t, version) {
-  log(`--- ${t.label} (${t.goos}/${t.goarch}) ---`);
+  log(`--- ${t.platform}/${t.goarch} (${t.goos}/${t.goarch}) ---`);
 
-  const stage = join(repoRoot, "build", `_portable-${t.label}-${process.pid}`);
+  const stage = join(repoRoot, "build", `_portable-${t.platform}-${t.goarch}-${process.pid}`);
   rmSync(stage, { recursive: true, force: true });
   mkdirSync(stage, { recursive: true });
 
@@ -220,7 +212,7 @@ async function buildTarget(t, version) {
 
     writeFileSync(join(stage, "readme.txt"), generateReadme(t));
 
-    const releasesDir = join(repoRoot, "build", "releases", t.label);
+    const releasesDir = join(repoRoot, "build", "releases", t.platform);
     mkdirSync(releasesDir, { recursive: true });
     const outPath = join(releasesDir, t.archiveName(version));
 
@@ -236,8 +228,8 @@ async function buildTarget(t, version) {
     }
     log(`  Created : ${outPath}`);
 
-    // Regenerate this platform's checksums.sha256 (covers all version artifacts present,
-    // e.g. a Windows MSI alongside the portable zip).
+    // Regenerate this platform's checksums.sha256 (covers all version artifacts present in
+    // the platform dir — the native installer plus every arch portable).
     const sums = generateChecksums(releasesDir, version);
     log(`  Checksums: wrote ${CHECKSUMS_NAME} (${sums.length} artifact${sums.length === 1 ? "" : "s"})`);
   } finally {
@@ -262,16 +254,16 @@ async function main() {
   }
 
   log(`Version : ${version}`);
-  log(`Targets : ${selected.join(", ")} (amd64)`);
+  log(`Targets : ${selectedTargets.map((t) => `${t.platform}/${t.goarch}`).join(", ")}`);
   log("");
 
-  for (const key of selected) {
-    await buildTarget(TARGETS[key], version);
+  for (const t of selectedTargets) {
+    await buildTarget(t, version);
     log("");
   }
 
   log("Cross-platform portable build complete.");
-  log("Note: native runtime smoke for each OS must run on that OS.");
+  log("Note: native runtime smoke for each OS/arch must run on that OS/arch.");
 }
 
 main().catch((err) => {

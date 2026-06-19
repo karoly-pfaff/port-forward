@@ -262,6 +262,9 @@ uninstall.
 - Add native package install/uninstall smokes (macOS `.pkg`, Linux `.deb`) that prove the
   package installs the expected layout, never silently enables/starts a service, preserves
   user config, and removes cleanly.
+- Produce arch-suffixed portable artifacts incl. arm64 (`linux-arm64`, `macos-arm64`
+  alongside amd64; Windows amd64-only), structurally validated with a binary machine-type
+  check; native runtime smoke remains host-arch only.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.
 - Validate service startup, web UI serving, and CLI connectivity after install.

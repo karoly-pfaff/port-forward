@@ -94,10 +94,17 @@ if (!platformLabel) {
 
 // ── Archive and installer name patterns ──────────────────────────────────────
 
+// Host architecture as a Go GOARCH label (artifact names carry the arch).
+function hostGoarch() {
+  return process.arch === "arm64" ? "arm64" : "amd64";
+}
+
+// The portable archive deep-checked here is the HOST-arch one (the artifact that can be
+// runtime-smoked natively). Every produced arch portable is still covered by the
+// checksums.sha256 verification below, and structurally by validate-portable.js.
 function getArchiveName(platform, ver) {
-  if (platform === "windows") return `portier-${ver}-windows-portable.zip`;
-  if (platform === "macos")   return `portier-portable-macos-${ver}.tar.gz`;
-  return                              `portier-${ver}-linux.tar.gz`;
+  const ext = platform === "windows" ? "zip" : "tar.gz";
+  return `portier-${ver}-${platform}-${hostGoarch()}.${ext}`;
 }
 
 function getInstallerName(platform, ver) {

@@ -26,11 +26,18 @@ import { CHECKSUMS_NAME, parseSha256Sums, sha256File } from "./release-checksums
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const TARGETS = {
-  windows: { label: "windows", format: "zip", binExt: ".exe", archiveName: (v) => `portier-${v}-windows-portable.zip` },
-  linux: { label: "linux", format: "tar", binExt: "", archiveName: (v) => `portier-${v}-linux.tar.gz` },
-  macos: { label: "macos", format: "tar", binExt: "", archiveName: (v) => `portier-portable-macos-${v}.tar.gz` },
-};
+// One structural-validation target per OS/arch. Names always carry the arch.
+function mkTarget(platform, goarch, format, binExt) {
+  const ext = format === "zip" ? "zip" : "tar.gz";
+  return { platform, goarch, format, binExt, archiveName: (v) => `portier-${v}-${platform}-${goarch}.${ext}` };
+}
+const TARGETS = [
+  mkTarget("windows", "amd64", "zip", ".exe"),
+  mkTarget("linux", "amd64", "tar", ""),
+  mkTarget("linux", "arm64", "tar", ""),
+  mkTarget("macos", "amd64", "tar", ""),
+  mkTarget("macos", "arm64", "tar", ""),
+];
 
 // ── Arguments ─────────────────────────────────────────────────────────────────
 
@@ -42,11 +49,12 @@ const flagValue = (f) => {
 };
 
 const all = hasFlag("--all");
-const selected = [];
-if (all || hasFlag("--windows")) selected.push("windows");
-if (all || hasFlag("--linux")) selected.push("linux");
-if (all || hasFlag("--macos")) selected.push("macos");
-if (selected.length === 0) selected.push("windows", "linux", "macos");
+const wantPlatforms = new Set();
+if (all || hasFlag("--windows")) wantPlatforms.add("windows");
+if (all || hasFlag("--linux")) wantPlatforms.add("linux");
+if (all || hasFlag("--macos")) wantPlatforms.add("macos");
+if (wantPlatforms.size === 0) ["windows", "linux", "macos"].forEach((p) => wantPlatforms.add(p));
+const selectedTargets = TARGETS.filter((t) => wantPlatforms.has(t.platform));
 
 const version =
   flagValue("--version") ||
@@ -114,6 +122,29 @@ function readTarGzFile(archivePath, name) {
   });
 }
 
+function readTarGzBytes(archivePath, name) {
+  return new Promise((resolvePromise, reject) => {
+    let found = null;
+    const extract = tar.extract();
+    extract.on("entry", (header, stream, next) => {
+      const entryName = header.name.replace(/\\/g, "/").replace(/^\.\//, "");
+      if (entryName === name && found === null) {
+        const chunks = [];
+        stream.on("data", (c) => chunks.push(c));
+        stream.on("end", () => { found = Buffer.concat(chunks); next(); });
+      } else {
+        stream.on("end", next);
+        stream.resume();
+      }
+    });
+    extract.on("finish", () => resolvePromise(found));
+    extract.on("error", reject);
+    const gunzip = createGunzip();
+    gunzip.on("error", reject);
+    createReadStream(archivePath).on("error", reject).pipe(gunzip).pipe(extract);
+  });
+}
+
 // ── Archive reading (zip via adm-zip, tar.gz via tar-stream) ───────────────────
 
 async function readArchive(format, archivePath) {
@@ -121,13 +152,12 @@ async function readArchive(format, archivePath) {
     const zip = new AdmZip(archivePath);
     const entries = zip.getEntries();
     const names = new Set(entries.map((e) => e.entryName.replace(/\\/g, "/")));
+    const find = (name) => entries.find((x) => x.entryName.replace(/\\/g, "/") === name);
     return {
       names,
       modeByName: null, // zip carries no Unix mode to assert
-      readFile: async (name) => {
-        const e = entries.find((x) => x.entryName.replace(/\\/g, "/") === name);
-        return e ? zip.readAsText(e) : null;
-      },
+      readFile: async (name) => { const e = find(name); return e ? zip.readAsText(e) : null; },
+      readBytes: async (name) => { const e = find(name); return e ? zip.readFile(e) : null; },
     };
   }
   const list = await readTarGz(archivePath);
@@ -135,6 +165,7 @@ async function readArchive(format, archivePath) {
     names: new Set(list.map((e) => e.name)),
     modeByName: new Map(list.map((e) => [e.name, e.mode])),
     readFile: (name) => readTarGzFile(archivePath, name),
+    readBytes: (name) => readTarGzBytes(archivePath, name),
   };
 }
 
@@ -142,14 +173,45 @@ async function safeRead(archive, name) {
   try { return await archive.readFile(name); } catch { return null; }
 }
 
+// machineArch reads an executable's header and returns "amd64"/"arm64" (or a debug token).
+// Supports ELF (Linux), Mach-O 64-bit LE (macOS), and PE (Windows).
+function machineArch(buf) {
+  if (!buf || buf.length < 8) return "empty";
+  // ELF: 0x7F 'E' 'L' 'F'; e_machine is a LE uint16 at offset 18.
+  if (buf[0] === 0x7f && buf[1] === 0x45 && buf[2] === 0x4c && buf[3] === 0x46) {
+    const m = buf.readUInt16LE(18);
+    if (m === 0x3e) return "amd64";
+    if (m === 0xb7) return "arm64";
+    return `elf-0x${m.toString(16)}`;
+  }
+  // Mach-O 64-bit little-endian: magic CF FA ED FE; cputype is a LE uint32 at offset 4.
+  if (buf[0] === 0xcf && buf[1] === 0xfa && buf[2] === 0xed && buf[3] === 0xfe) {
+    const cpu = buf.readUInt32LE(4);
+    if (cpu === 0x01000007) return "amd64"; // CPU_TYPE_X86_64
+    if (cpu === 0x0100000c) return "arm64"; // CPU_TYPE_ARM64
+    return `macho-0x${cpu.toString(16)}`;
+  }
+  // PE: 'MZ' … COFF machine is a LE uint16 at the PE header + 4.
+  if (buf[0] === 0x4d && buf[1] === 0x5a && buf.length >= 0x40) {
+    const peOff = buf.readUInt32LE(0x3c);
+    if (buf.length >= peOff + 6 && buf.readUInt32LE(peOff) === 0x00004550) {
+      const machine = buf.readUInt16LE(peOff + 4);
+      if (machine === 0x8664) return "amd64";
+      if (machine === 0xaa64) return "arm64";
+      return `pe-0x${machine.toString(16)}`;
+    }
+  }
+  return "unknown";
+}
+
 async function validateTarget(t) {
-  console.log(`\n=== ${t.label} (${t.format}) ===`);
-  const releasesDir = join(repoRoot, "build", "releases", t.label);
+  console.log(`\n=== ${t.platform}/${t.goarch} (${t.format}) ===`);
+  const releasesDir = join(repoRoot, "build", "releases", t.platform);
   const archiveName = t.archiveName(version);
   const archivePath = join(releasesDir, archiveName);
 
   if (!existsSync(archivePath)) {
-    fail(`archive not found: ${archiveName} — build with: npm run build:release:${t.label}`);
+    fail(`archive not found: ${archiveName} — build with: npm run build:release:${t.platform}`);
     return;
   }
   pass(`${archiveName} (${(statSync(archivePath).size / 1024).toFixed(1)} KB)`);
@@ -195,6 +257,20 @@ async function validateTarget(t) {
       else if ((mode & 0o777) === 0o755) pass(`${bin} mode 0755 (executable)`);
       else fail(`${bin} mode ${(mode & 0o777).toString(8)} (expected 0755)`);
     }
+  }
+
+  // Binary architecture: prove the artifact actually contains the named arch (a wrong
+  // GOARCH would otherwise pass every structural check above).
+  console.log(`Binary architecture (expect ${t.goarch}):`);
+  for (const bin of [service, portier]) {
+    let bytes = null;
+    try { bytes = await archive.readBytes(bin); } catch { bytes = null; }
+    if (!bytes) { fail(`${bin}: could not read for arch check`); continue; }
+    // Enough bytes to cover the PE header (located via the LE offset at 0x3c); ELF/Mach-O
+    // machine fields are in the first 20 bytes.
+    const arch = machineArch(bytes.subarray(0, 8192));
+    if (arch === t.goarch) pass(`${bin} is ${arch}`);
+    else fail(`${bin} is ${arch}, expected ${t.goarch}`);
   }
 
   // OpenAPI content + version.
@@ -259,10 +335,10 @@ function checkChecksum(releasesDir, archiveName, archivePath) {
 
 async function main() {
   console.log(`[validate-portable] Version : ${version}`);
-  console.log(`[validate-portable] Targets : ${selected.join(", ")}`);
-  console.log("[validate-portable] Structural only — native runtime smoke must run on each OS.");
+  console.log(`[validate-portable] Targets : ${selectedTargets.map((t) => `${t.platform}/${t.goarch}`).join(", ")}`);
+  console.log("[validate-portable] Structural only — native runtime smoke must run on each OS/arch.");
 
-  for (const key of selected) await validateTarget(TARGETS[key]);
+  for (const t of selectedTargets) await validateTarget(t);
 
   console.log(`\n[validate-portable] ${passed} passed, ${failed} failed.`);
   if (failed > 0) {

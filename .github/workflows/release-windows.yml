@@ -5,9 +5,10 @@
 # Release and does NOT create tags. Manual trigger only (workflow_dispatch).
 #
 # Artifacts (package first, portable second, checksums last):
-#   1. Portier-<version>.msi             (canonical WiX installer)
-#   2. portier-<version>-windows-portable.zip
+#   1. Portier-<version>.msi                  (canonical WiX installer)
+#   2. portier-<version>-windows-amd64.zip    (portable)
 #   3. checksums.sha256
+# Windows is amd64-only (no arm64 portable in this slice).
 #
 # Privacy: only build/releases/windows/** is uploaded. docs/private/** is never staged
 # into release output; validate-artifacts.js logs the upload set and hard-fails on any
@@ -81,6 +82,11 @@ jobs:
 
       - name: Validate checksums (checksums.sha256)
         run: npm run validate:release:checksums
+
+      # Structural validation of the Windows portable zip (amd64-only), incl. a binary
+      # machine-type check.
+      - name: Validate portable artifact (amd64, structural)
+        run: npm run validate:release:portable:windows
 
       - name: Runtime smoke (packaged runtime)
         run: npm run validate:runtime:smoke

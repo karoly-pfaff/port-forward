@@ -258,12 +258,19 @@ npm run validate:release:current
 ```text
 build/releases/
   windows/
-    portier-<version>-windows-portable.zip   (from Compress-Archive)
-    Portier-Setup-<version>.exe              (Inno Setup installer, if available)
+    Portier-<version>.msi                  (canonical WiX installer)
+    portier-<version>-windows-amd64.zip    (portable)
+    checksums.sha256
   macos/
-    portier-portable-macos-<version>.tar.gz
+    Portier-<version>.pkg                  (native pkgbuild installer, unsigned)
+    portier-<version>-macos-amd64.tar.gz   (portable, Intel)
+    portier-<version>-macos-arm64.tar.gz   (portable, Apple Silicon)
+    checksums.sha256
   linux/
-    portier-<version>-linux.tar.gz
+    portier_<version>_amd64.deb            (native dpkg-deb installer, disabled unit)
+    portier-<version>-linux-amd64.tar.gz   (portable)
+    portier-<version>-linux-arm64.tar.gz   (portable)
+    checksums.sha256
 ```
 
 Each portable archive contains the clean runtime layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`). Config (`rules.json`) is never bundled.

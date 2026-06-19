@@ -65,10 +65,11 @@ function readPackageVersion() {
 }
 
 // portableArchiveName returns the portable archive filename for a platform/version.
-export function portableArchiveName(label, version) {
-  if (label === "windows") return `portier-${version}-windows-portable.zip`;
-  if (label === "macos") return `portier-portable-macos-${version}.tar.gz`;
-  return `portier-${version}-linux.tar.gz`;
+// Portable artifacts carry the architecture; the upgrade smoke runs the host-native
+// binaries, so it defaults to the host GOARCH (x64 -> amd64, arm64 -> arm64).
+export function portableArchiveName(label, version, arch = process.arch === "arm64" ? "arm64" : "amd64") {
+  const ext = label === "windows" ? "zip" : "tar.gz";
+  return `portier-${version}-${label}-${arch}.${ext}`;
 }
 
 // buildSentinelConfig returns a persisted rules array (bare array, current schema)

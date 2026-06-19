@@ -185,19 +185,24 @@ To change the bind address or port, pass `--host` and `--port` to `install-launc
 
 ## Release Artifacts
 
-macOS release builds two artifacts under `build/releases/macos/`:
+macOS release builds these artifacts under `build/releases/macos/` (package first, then the
+portable archives, then checksums):
 
-- `portier-portable-macos-<version>.tar.gz` — the portable archive (universal baseline).
-- `Portier-<version>.pkg` — the native installer (built on macOS when `pkgbuild` is
-  available).
+- `Portier-<version>.pkg` — the native installer (built on macOS when `pkgbuild` is available).
+- `portier-<version>-macos-amd64.tar.gz` — portable archive, Intel.
+- `portier-<version>-macos-arm64.tar.gz` — portable archive, Apple Silicon.
+- `checksums.sha256`
+
+Portable artifacts carry the architecture in their name. The unified generator
+(`scripts/build-portable.js`) cross-builds both macOS arches from any host.
 
 ```bash
-npm run build:release:current            # tar.gz + .pkg (on macOS)
-npm run build:release:portable           # tar.gz only (skip the .pkg)
+npm run build:release:current            # .pkg + both macOS portable arches (on macOS)
+npm run build:release:macos              # both macOS portable tar.gz (any host; no .pkg)
 npm run build:release:current -- --no-build   # reuse an existing build/portier/
 ```
 
-Both contain the full runtime layout:
+Each portable archive contains the full runtime layout:
 
 ```text
 portier
@@ -214,7 +219,8 @@ readme.txt
 Extract and install from the portable archive on a target machine:
 
 ```bash
-tar -xzf portier-portable-macos-<version>.tar.gz -C ~/Applications/Portier/
+# Apple Silicon: use the arm64 archive (Intel: the amd64 archive).
+tar -xzf portier-<version>-macos-arm64.tar.gz -C ~/Applications/Portier/
 bash scripts/macos/service/install-launch-agent.sh --source-dir ~/Applications/Portier
 ```
 

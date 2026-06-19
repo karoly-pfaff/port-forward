@@ -5,9 +5,11 @@
 # and does NOT create tags. Manual trigger only (workflow_dispatch).
 #
 # Artifacts (package first, portable second, checksums last):
-#   1. Portier-<version>.pkg             (native pkgbuild installer, unsigned)
-#   2. portier-portable-macos-<version>.tar.gz
-#   3. checksums.sha256
+#   1. Portier-<version>.pkg                  (native pkgbuild installer, unsigned)
+#   2. portier-<version>-macos-amd64.tar.gz   (portable, Intel)
+#   3. portier-<version>-macos-arm64.tar.gz   (portable, Apple Silicon)
+#   4. checksums.sha256
+# build:release:current cross-builds both macOS arches; only the host arch is runtime-smoked.
 #
 # Privacy: only build/releases/macos/** is uploaded. docs/private/** is never staged
 # into release output; validate-artifacts.js logs the upload set and hard-fails on any
@@ -67,6 +69,12 @@ jobs:
 
       - name: Validate checksums (checksums.sha256)
         run: npm run validate:release:checksums
+
+      # Structural validation of BOTH macOS portable arches (amd64 + arm64), incl. a binary
+      # machine-type check. Foreign-arch binaries are not executed — only the host arch is
+      # runtime-smoked below.
+      - name: Validate portable artifacts (amd64 + arm64, structural)
+        run: npm run validate:release:portable:macos
 
       - name: Runtime smoke (packaged runtime)
         run: npm run validate:runtime:smoke

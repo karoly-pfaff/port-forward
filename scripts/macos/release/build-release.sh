@@ -99,7 +99,14 @@ chmod +x "$RUNTIME_STAGE/portier" "$RUNTIME_STAGE/service"
 # ── Portable tar.gz (skipped with --pkg-only; the unified generator
 #    scripts/build-portable.js owns the portable artifact in the release flow) ──
 if [ -z "$PKG_ONLY" ]; then
-  ARCHIVE_NAME="portier-portable-macos-${VERSION}.tar.gz"
+  # Host arch as a Go GOARCH label (the staged binaries are host-native here). The unified
+  # generator (scripts/build-portable.js) is canonical and builds both arches; this
+  # standalone path produces only the host arch, named with the arch to avoid ambiguity.
+  case "$(uname -m)" in
+    arm64|aarch64) ARCH="arm64" ;;
+    *)             ARCH="amd64" ;;
+  esac
+  ARCHIVE_NAME="portier-${VERSION}-macos-${ARCH}.tar.gz"
   (cd "$RUNTIME_STAGE" && tar -czf "$OUTPUT_DIR/$ARCHIVE_NAME" .)
   echo ""
   echo "Created: $OUTPUT_DIR/$ARCHIVE_NAME"

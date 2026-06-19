@@ -143,23 +143,26 @@ Expected artifact names:
 
 ```text
 build/releases/windows/
-  Portier-<version>.msi         (WiX — canonical Windows installer)
-  portier-<version>-windows-portable.zip
+  Portier-<version>.msi               (WiX — canonical Windows installer)
+  portier-<version>-windows-amd64.zip
   checksums.sha256
 
 build/releases/macos/
-  Portier-<version>.pkg         (native installer — built on macOS, in progress)
-  portier-portable-macos-<version>.tar.gz
+  Portier-<version>.pkg               (native installer — built on macOS, in progress)
+  portier-<version>-macos-amd64.tar.gz   (Intel)
+  portier-<version>-macos-arm64.tar.gz   (Apple Silicon)
   checksums.sha256
 
 build/releases/linux/
-  portier_<version>_amd64.deb   (native dpkg-deb installer — file-install, disabled unit)
-  portier-<version>-linux.tar.gz
+  portier_<version>_amd64.deb         (native dpkg-deb installer — file-install, disabled unit)
+  portier-<version>-linux-amd64.tar.gz
+  portier-<version>-linux-arm64.tar.gz
   checksums.sha256
 ```
 
-Each platform lists its native installer/package first, the portable archive second, and
-`checksums.sha256` last.
+Portable artifacts carry the architecture in their name (no ambiguous single-name portable).
+Each platform lists its native installer/package first, then the portable archive(s)
+(amd64 before arm64), then `checksums.sha256`. Windows is amd64-only.
 
 The **WiX MSI is the canonical Windows installer** (silent install, Group Policy/SCCM/Intune,
 standard Add/Remove Programs + repair). It depends on the WiX Toolset v7
@@ -187,9 +190,10 @@ and runs a native install/uninstall smoke (`npm run validate:pkg:install`) that 
 `.pkg`, asserts the layout/version and that no LaunchAgent is loaded/started, then removes it
 and confirms user config is preserved. See `scripts/macos/readme.md`.
 
-On **Linux**, the v1.18 release artifact is the **portable tar.gz**
-(`portier-<version>-linux.tar.gz`, built by `scripts/build-portable.js`), with
-the **systemd** scripts under `scripts/linux/service/` as the canonical service layer. The
+On **Linux**, the v1.18 portable release artifacts are the **amd64 + arm64 tar.gz**
+(`portier-<version>-linux-amd64.tar.gz`, `portier-<version>-linux-arm64.tar.gz`, built by
+`scripts/build-portable.js`), with the **systemd** scripts under `scripts/linux/service/` as
+the canonical service layer. The
 tar.gz contains the full runtime layout (incl. `api/openapi.json`); it is versioned,
 checksummed in `checksums.sha256`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
 (binaries + `web/`), config at `/etc/portier/rules.json`, logs via journald, and the unit at
@@ -201,16 +205,19 @@ or touches user config. `.rpm` is a **planned package track for a later slice**.
 `scripts/linux/readme.md`.
 
 **Cross-platform portable generation.** The Go CLI/service are pure Go (CGO disabled), so all
-three portable artifacts — Windows `.zip`, Linux `.tar.gz`, macOS `.tar.gz` — can be
-**cross-built from any host (including Windows)** with `npm run build:release:portable:all`
-(cross-compiles `windows`/`linux`/`darwin` amd64, packages the full runtime layout — Unix
-tarballs with correct exec bits, the Windows zip with `.exe` — and writes `checksums.sha256`).
-`npm run validate:release:portable:all` validates them **structurally** (layout, platform
-binary names, tar exec bits, `api/openapi.json`, checksums). This is for GitHub-Release
-readiness only — it does **not** run a runtime smoke against foreign binaries; native runtime
-validation (`validate:runtime:smoke`) must still run on each OS. amd64 only for now; arm64 is a
-follow-up. `build:release:current` still owns the current-platform release (portable + native
-installer); the Windows installer (MSI) and macOS `.pkg` remain native-built.
+five portable artifacts — `windows-amd64.zip`, `linux-amd64.tar.gz`, `linux-arm64.tar.gz`,
+`macos-amd64.tar.gz`, `macos-arm64.tar.gz` — can be **cross-built from any host (including
+Windows)** with `npm run build:release:portable:all` (cross-compiles `windows/amd64`,
+`linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, packages the full runtime layout
+— Unix tarballs with correct exec bits, the Windows zip with `.exe` — and writes
+`checksums.sha256`). `npm run validate:release:portable:all` validates them **structurally**
+(layout, platform binary names, tar exec bits, **binary machine-type matches the named arch**,
+`api/openapi.json`, checksums); `validate:release:portable:{windows,macos,linux}` scope to one
+platform. This is for GitHub-Release readiness only — it does **not** run a runtime smoke
+against foreign binaries; native runtime validation (`validate:runtime:smoke`) must still run
+on each OS/arch (arm64 binaries are not executed on amd64 runners). `build:release:current`
+builds the host platform's portables (both arches on macOS/Linux) + the native installer; the
+Windows installer (MSI) and macOS `.pkg` remain native-built.
 
 Each platform's release directory includes a `checksums.sha256` file (GNU coreutils text
 format `<sha256>  <filename>`, lowercase hex, native installer/package first then portable
