@@ -195,7 +195,7 @@ tar -xzf portier-portable-macos-<version>.tar.gz -C ~/Applications/Portier/
 bash scripts/macos/service/install-launch-agent.sh --source-dir ~/Applications/Portier
 ```
 
-> **Note:** `.pkg` installer support (via `pkgbuild`/`productbuild`) is not yet implemented. The portable tar.gz is the v1.1 macOS release artifact. `.pkg` is planned as a follow-up. See `docs/installer.md`.
+> **Note:** `.pkg` installer support (via `pkgbuild`/`productbuild`) is not yet implemented. The portable tar.gz is the current macOS release artifact. A native `.pkg` is planned/under evaluation for the v1.18 install-experience work. See `docs/installer.md`.
 
 ---
 
@@ -288,4 +288,6 @@ Pass `--port <number>` to override the auto-detected free port.
 - Homebrew formula — deferred to a future release
 - System-level LaunchDaemon — documented as future work; requires `sudo` and a dedicated service user
 - Auto-update
-- `.pkg` installer — planned follow-up; requires macOS tooling (`pkgbuild`/`productbuild`)
+
+`.pkg` installer support (`pkgbuild`/`productbuild`) is **planned/under evaluation for v1.18**,
+not deferred — see `docs/installer.md`.

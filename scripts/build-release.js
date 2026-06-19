@@ -147,7 +147,7 @@ for (const target of targets) {
   } else if (target === "darwin") {
     buildMacosPortable(version);
     if (!portableOnly) {
-      log("  macOS .pkg: deferred (pkgbuild required on macOS). See docs/installer-strategy.md.");
+      log("  macOS .pkg: planned/under evaluation for v1.18 (pkgbuild required on macOS); not built yet.");
     }
   } else if (target === "linux") {
     buildLinuxPortable(version);

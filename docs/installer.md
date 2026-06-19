@@ -188,5 +188,7 @@ They use isolated temp paths, test-specific service names, and non-production po
 - Do not add telemetry, cloud sync, or auto-update behavior.
 - Preserve `rules.json` on uninstall unless the user explicitly requests purge.
 - Keep config and logs outside the packaged runtime directory.
-- Do not add platform package managers (`deb`, `rpm`, Homebrew, winget, Chocolatey) or
-  an MSI/WiX path without a deliberate product decision.
+- A Windows MSI/WiX installer and a native macOS `.pkg` installer are planned/under evaluation
+  for the v1.18 install-experience work, alongside the existing Inno Setup installer and the
+  portable archives. Do not add other platform package managers (`deb`, `rpm`, Homebrew,
+  winget, Chocolatey) without a deliberate product decision.

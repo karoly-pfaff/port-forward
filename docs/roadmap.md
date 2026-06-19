@@ -248,11 +248,12 @@ uninstall.
 
 ### Scope
 
-- Polish the Windows installer and portable package.
+- Polish the Windows installer and portable package; evaluate a Windows WiX/MSI installer.
+- Evaluate/build a native macOS `.pkg` installer alongside the portable archive.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.
 - Validate service startup, web UI serving, and CLI connectivity after install.
-- Improve macOS and Linux install guidance.
+- Improve macOS and Linux install experience and guidance.
 - Make version reporting consistent across CLI, runtimes, UI, diagnostics, artifacts,
   and installer metadata where practical.
 - Strengthen release artifact validation and generate checksums.
