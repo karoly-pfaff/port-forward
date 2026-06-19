@@ -47,5 +47,8 @@ audits/*.tmp
 audits/*.raw.md
 audits/*.draft.md
 
+# Private/internal docs (not for public distribution)
+docs/private/
+
 # Personal scratch files
 todo.md

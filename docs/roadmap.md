@@ -8,7 +8,8 @@ belong in `audits/`.
 
 - **v1.0-v1.16:** completed.
 - **v1.17:** completed — Migration & Recovery (ready for release/tag as v1.17.0).
-- **v1.18-v1.19 and v2.0:** planned local-first path to a stable 2.0.
+- **v1.18:** current — Install, Service & Upgrade Experience.
+- **v1.19 and v2.0:** planned local-first path to a stable 2.0.
 
 ## Completed Releases
 
