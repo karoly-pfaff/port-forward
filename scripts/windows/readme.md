@@ -118,6 +118,13 @@ Windows Service yet (run the bundled `service\install-service.ps1`). It never to
 `%ProgramData%\Portier` or `rules.json`. MSI build requires WiX 7 and is non-fatal if WiX is
 absent. See [`scripts/windows/wix/readme.md`](wix/readme.md).
 
+Validate the MSI install layout and config/data boundary (no admin needed; uses
+`msiexec /a` extraction non-elevated, full `/i`+`/x` when elevated):
+
+```powershell
+npm run validate:msi:install
+```
+
 ---
 
 ## Manual Test

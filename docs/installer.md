@@ -164,8 +164,10 @@ respective tool is absent, the portable archive is still produced. The MSI is an
 enterprise/admin track (silent install, Group Policy/SCCM/Intune, Add/Remove Programs +
 repair); Inno remains the default consumer installer. The current MSI is a file-install
 spike — it bundles the canonical service scripts but does not auto-install the Windows
-Service yet, and never touches `rules.json` or `%ProgramData%\Portier`. See
-`scripts/windows/wix/readme.md`.
+Service yet, and never touches `rules.json` or `%ProgramData%\Portier`. Its install layout
+and config/data boundary are validated by `npm run validate:msi:install` (a non-interactive
+`msiexec` smoke; no admin required — it extracts via `msiexec /a` when not elevated, and does
+a full silent install/uninstall when elevated). See `scripts/windows/wix/readme.md`.
 
 Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
 format, sorted, lowercase hex) covering every produced release artifact for that version —

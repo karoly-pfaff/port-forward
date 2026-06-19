@@ -54,9 +54,34 @@ Build the MSI directly:
 powershell -ExecutionPolicy Bypass -File scripts\windows\wix\build-msi.ps1
 ```
 
+## MSI install smoke
+
+A non-interactive MSI install/layout smoke validates that the MSI installs the expected
+layout and keeps user config/data outside the install dir:
+
+```powershell
+npm run validate:msi:install
+```
+
+It auto-selects a mode by privilege:
+
+- **Elevated** (or `--full-install`): real per-machine install to a temp `INSTALLFOLDER`
+  via `msiexec /i ... /qn`, layout assertions, then `msiexec /x ... /qn` uninstall, asserting
+  the install dir is removed.
+- **Non-elevated** (default in CI/dev shells): `msiexec /a ... /qn TARGETDIR=<temp>`
+  (administrative-install extraction) lays out the exact payload without admin and without
+  touching the system; the register/uninstall half is reported as an honest skip.
+
+Either mode asserts the installed layout (`portier.exe`, `service.exe`, `server.js`, `web\`,
+`api\openapi.json`, `readme.txt`, bundled `service\*.ps1`), that `api\openapi.json` is valid
+JSON whose `info.version` matches the package major.minor, that the installed `portier.exe`
+reports the package version, that no `rules.json` is created inside the install dir, and that
+a seeded external data dir (`rules.json` + backup/quarantine sentinels) is untouched.
+Flags: `--msi <path>`, `--data-dir <dir>`, `--full-install`, `--keep-temp`.
+
 ## Validation gates the MSI must satisfy
 
 Layout parity (incl. `api\openapi.json`), version reporting, `SHA256SUMS` checksum
-coverage, upgrade preservation (`npm run validate:upgrade:current`), and service lifecycle.
-A non-interactive MSI install smoke (silent `msiexec` install into a temp prefix, asserting
-layout + uninstall) is the next gate to add.
+coverage, the MSI install smoke above, upgrade preservation
+(`npm run validate:upgrade:current`), and — once service custom actions are wired — service
+lifecycle.

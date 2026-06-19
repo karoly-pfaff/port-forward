@@ -234,8 +234,19 @@ npm run validate:release:checksums
   `Portier-<version>.msi` (non-fatal if WiX is absent), and `validate:release` reports its
   presence and verifies its checksum. The MSI is the enterprise/admin track; Inno remains the
   default consumer installer. The current MSI is a file-install spike (bundles the canonical
-  service scripts, no Windows Service auto-install yet, never touches user config). A
-  non-interactive MSI install smoke is a follow-up gate. See `scripts/windows/wix/readme.md`.
+  service scripts, no Windows Service auto-install yet, never touches user config).
+- [ ] Windows MSI install smoke (Windows-only; **no admin required**):
+
+```powershell
+npm run validate:msi:install
+```
+
+  Validates the MSI's installed layout, bundled service scripts, `api/openapi.json`
+  (valid JSON + version), installed CLI version, and the config/data boundary (no
+  `rules.json` inside the install dir; a seeded external data dir is untouched). It uses
+  `msiexec /a` extraction when non-elevated and a full silent `msiexec /i`+`/x`
+  install/uninstall when elevated (or `--full-install`). Not part of the cross-platform
+  release matrix. See `scripts/windows/wix/readme.md`.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp
