@@ -186,9 +186,12 @@ the **systemd** scripts under `scripts/linux/service/` as the canonical service 
 tar.gz contains the full runtime layout (incl. `api/openapi.json`); it is versioned,
 checksummed in `SHA256SUMS`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
 (binaries + `web/`), config at `/etc/portier/rules.json`, logs via journald, and the unit at
-`/etc/systemd/system/portier.service`. `.deb`/`.rpm` packages are a **planned package-manager
-track for a later v1.18 slice** (built/validated on native `ubuntu`/`fedora` runners once the
-release CI lands) — not shipped in this slice. See `scripts/linux/readme.md`.
+`/etc/systemd/system/portier.service`. A native **`.deb`** (`portier_<version>_amd64.deb`,
+built by `scripts/linux/release/build-deb.sh` via dpkg-deb and validated on the `ubuntu-latest`
+release-CI runner) is also produced: a file-install package that lays the runtime under
+`/opt/portier` and installs a **disabled** systemd unit — it never enables/starts the service
+or touches user config. `.rpm` is a **planned package track for a later slice**. See
+`scripts/linux/readme.md`.
 
 **Cross-platform portable generation.** The Go CLI/service are pure Go (CGO disabled), so all
 three portable artifacts — Windows `.zip`, Linux `.tar.gz`, macOS `.tar.gz` — can be
@@ -253,13 +256,15 @@ runners — `windows-latest`, `macos-latest`, and `ubuntu-latest` — and upload
 resulting `build/releases/**` as workflow artifacts for inspection. It does not publish
 a GitHub Release or create tags.
 
-- Windows: installs WiX 7, builds/validates the canonical MSI + portable zip, runs the
-  non-elevated MSI install smoke, and cross-builds/validates all three portable
-  artifacts.
+Each job builds only its own platform's artifacts.
+
+- Windows: installs WiX 7, builds/validates the canonical MSI + portable zip, and runs
+  the non-elevated MSI install smoke.
 - macOS: builds/validates the native `.pkg` (pkgbuild) + portable tar.gz and introspects
   the `.pkg` payload. The `.pkg` is unsigned (see Signing And Notarization).
-- Linux: builds/validates the portable tar.gz and runs the native runtime smoke. Full
-  systemd service validation needs root and stays a manual/native check.
+- Linux: builds/validates the native `.deb` (dpkg-deb) + portable tar.gz, runs the native
+  runtime smoke, and introspects the `.deb` payload. Full systemd service validation needs
+  root and stays a manual/native check.
 
 Only `build/releases/**` is uploaded; `docs/private/**` is never staged into release
 output and a privacy guard fails the run before upload if any private path appears.

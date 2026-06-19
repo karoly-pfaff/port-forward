@@ -90,18 +90,46 @@ npm run validate:release:portable:all  # structural validation (no native runtim
 Cross-built validation is structural only — the native runtime smoke (`validate:runtime:smoke`)
 must run on Linux.
 
+## Native `.deb` package
+
+`build:release:current` on Linux also builds a native Debian package alongside the
+portable tar.gz:
+
+```bash
+npm run build:release:current     # tar.gz + portier_<version>_amd64.deb + SHA256SUMS
+# or directly (reuses an existing build/portier/):
+bash scripts/linux/release/build-deb.sh --version <version>
+```
+
+Output: `build/releases/linux/portier_<version>_amd64.deb`
+
+It is a **file-install** package (`dpkg-deb`): it lays the runtime under `/opt/portier`
+and installs a systemd unit at `/lib/systemd/system/portier.service` that is left
+**disabled**. The maintainer scripts only run `systemctl daemon-reload` (so the unit is
+visible) and print how to opt in; on package removal they stop/disable the unit. The
+package **never enables or starts the service** and never creates, overwrites, or
+migrates user config (`/etc/portier/rules.json`). The Go service binary is static (CGO
+disabled), so the package has no shared-library dependency. Opt in with:
+
+```bash
+sudo apt install ./portier_<version>_amd64.deb
+sudo systemctl enable --now portier
+```
+
+`build-deb.sh` requires `dpkg-deb` (Debian/Ubuntu); on other hosts the `.deb` step is
+skipped with a notice and the portable tar.gz remains the baseline.
+
 The `linux-release` job in `.github/workflows/release-matrix.yml` (manual
 `workflow_dispatch`) runs the native path on `ubuntu-latest`: `build:release:current`,
-`validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`, and
-`validate:upgrade:current`, then uploads `build/releases/linux/**` as the
-`portier-release-linux` workflow artifact. Full systemd service validation
-(`validate:service:linux`) needs root/systemd and is **not** run in CI — it stays a
-manual/native check. No GitHub Release or tag is created.
+`validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`,
+`validate:upgrade:current`, and a `.deb` payload introspection (`dpkg-deb --contents`),
+then uploads `build/releases/linux/**` as the `portier-release-linux` workflow artifact.
+Full systemd service validation (`validate:service:linux`) needs root/systemd and is
+**not** run in CI — it stays a manual/native check. No GitHub Release or tag is created.
 
-> **`.deb` / `.rpm`:** these native packages are a **planned package-manager track for a
-> later v1.18 slice** (built and validated on native `ubuntu`/`fedora` runners once the
-> release CI lands), not shipped in this slice. The portable tar.gz + systemd scripts are the
-> complete v1.18 Linux install story.
+> **`.rpm`:** still a **planned package-manager track for a later slice** (built and
+> validated on a native `fedora`/RHEL-family runner). The portable tar.gz + `.deb` +
+> systemd scripts are the current Linux install story.
 
 ## Helper Scripts (Recommended)
 

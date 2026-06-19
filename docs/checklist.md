@@ -259,14 +259,18 @@ npm run validate:msi:install
   LaunchAgent auto-install yet, unsigned, never touches user config). Payload introspection
   (`pkgutil --payload-files`) and a `.pkg` install smoke are follow-ups. See
   `scripts/macos/readme.md`.
-- [ ] Linux release (Linux-only). `build:release` produces
-  `portier-<version>-linux.tar.gz` (full runtime layout, incl. `api/openapi.json`) +
-  `SHA256SUMS`. `validate:release` checks the tar.gz layout/OpenAPI/version and verifies its
-  checksum; the artifact is versioned and GitHub-Release-ready. Systemd is the canonical
-  service layer (`scripts/linux/service/`); `install-service.sh --dry-run` prints the install
-  plan (paths, `ExecStart`) without root. Full systemd install validation
-  (`validate:service:linux`) requires `sudo` and runs on a Linux host. `.deb`/`.rpm` are a
-  planned package track for a later slice. See `scripts/linux/readme.md`.
+- [ ] Linux release (Linux-only). `build:release` produces the portable
+  `portier-<version>-linux.tar.gz` (full runtime layout, incl. `api/openapi.json`) **and**
+  the native `portier_<version>_amd64.deb` (dpkg-deb; built on Debian/Ubuntu, skipped with a
+  notice elsewhere) + `SHA256SUMS`. `validate:release` checks the tar.gz
+  layout/OpenAPI/version, confirms the `.deb` is present, and verifies every checksum; the
+  artifacts are versioned and GitHub-Release-ready. The `.deb` is a **file-install**: it lays
+  the runtime under `/opt/portier` and installs a **disabled** systemd unit — it never
+  enables/starts the service or touches user config (`scripts/linux/release/build-deb.sh`).
+  Systemd is the canonical service layer (`scripts/linux/service/`); `install-service.sh
+  --dry-run` prints the install plan without root. Full systemd install validation
+  (`validate:service:linux`) requires `sudo`/a Linux host. `.rpm` is a planned later track.
+  See `scripts/linux/readme.md`.
 - [ ] Cross-platform portable artifact generation (from any host, incl. Windows). The Go
   binaries are pure Go (CGO disabled), so all three portable artifacts — Windows `.zip`,
   Linux `.tar.gz`, macOS `.tar.gz` — can be cross-built and structurally validated without a
@@ -314,18 +318,19 @@ hosted runners and uploads them as **workflow artifacts** for inspection. It doe
 
 - [ ] Trigger it from the Actions tab ("release-matrix" → "Run workflow"). It has no
   push/PR triggers — manual only, so first-run issues stay controlled.
+  Each job builds only its own platform's artifacts.
 - [ ] `windows-release` (`windows-latest`): installs WiX 7 (dotnet global tool),
   builds/validates the canonical MSI + Windows portable zip, runs the non-elevated
   MSI install smoke (`msiexec /a` extraction; the `/i` + `/x` half is an honest skip
-  without admin), runs runtime + upgrade smoke, then cross-builds and structurally
-  validates all three portable artifacts. Uploads `build/releases/**` as
-  `portier-release-windows`.
+  without admin), and runs runtime + upgrade smoke. Uploads
+  `build/releases/windows/**` as `portier-release-windows`.
 - [ ] `macos-release` (`macos-latest`): builds/validates the native `.pkg` (pkgbuild)
   + macOS portable tar.gz, runs runtime + upgrade smoke, and introspects the `.pkg`
   payload (`pkgutil --payload-files`). Uploads `build/releases/macos/**` as
   `portier-release-macos`. The `.pkg` is unsigned (Gatekeeper warnings expected).
-- [ ] `linux-release` (`ubuntu-latest`): builds/validates the Linux portable tar.gz
-  and runs the native runtime smoke. Uploads `build/releases/linux/**` as
+- [ ] `linux-release` (`ubuntu-latest`): builds/validates the native `.deb` (dpkg-deb)
+  + Linux portable tar.gz, runs runtime + upgrade smoke, and introspects the `.deb`
+  payload (`dpkg-deb --contents`). Uploads `build/releases/linux/**` as
   `portier-release-linux`. Full systemd service validation (`validate:service:linux`)
   needs root/systemd and is **not** run in CI — it stays a manual/native check.
 - [ ] Privacy: only `build/releases/**` is uploaded. `validate:artifacts` logs the

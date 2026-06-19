@@ -251,12 +251,13 @@ uninstall.
 - Make the Windows WiX/MSI installer the canonical Windows installer (replacing Inno);
   keep the portable zip.
 - Build a native macOS `.pkg` installer alongside the portable archive (in progress).
-- Ready the Linux portable tar.gz + systemd story for release; `.deb`/`.rpm` planned later.
+- Ready the Linux release: portable tar.gz + a native `.deb` (file-install, disabled unit)
+  + the systemd story; `.rpm` planned later.
 - Cross-build Linux/macOS portable `.tar.gz` artifacts from any host (release-readiness
   infrastructure); native runtime validation still runs on each OS.
 - Provide a manual GitHub Actions native release matrix (Windows MSI + portable, macOS
-  `.pkg` + portable, Linux portable + native smoke) that builds, validates, and uploads
-  release artifacts for inspection — no GitHub Release or tags.
+  `.pkg` + portable, Linux `.deb` + portable + native smoke) that builds, validates, and
+  uploads release artifacts for inspection — no GitHub Release or tags.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.
 - Validate service startup, web UI serving, and CLI connectivity after install.

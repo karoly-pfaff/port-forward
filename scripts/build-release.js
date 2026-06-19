@@ -155,9 +155,9 @@ for (const target of targets) {
       // Native macOS .pkg (built on macOS by pkgbuild; v1.18 installer track).
       buildMacosPkg(version);
     } else if (target === "linux") {
-      // v1.18 Linux ships the portable tar.gz; .deb/.rpm are a planned package
-      // track for a later slice (built/validated on native runners).
-      log("  Linux: portable tar.gz is the v1.18 release artifact (.deb/.rpm: planned, later slice).");
+      // Native Linux installer: a file-install .deb (dpkg-deb). The portable tar.gz is
+      // still produced above; .rpm is a planned later track.
+      buildLinuxDeb(version);
     }
   }
 
@@ -224,4 +224,13 @@ function buildMacosPkg(version) {
   run("bash", ["scripts/macos/release/build-release.sh", "--no-package", "--pkg-only", "--version", version], {
     shell: false,
   });
+}
+
+// ── Linux ─────────────────────────────────────────────────────────────────────
+
+function buildLinuxDeb(version) {
+  log("  Installer: Linux .deb: delegating to scripts/linux/release/build-deb.sh...");
+  // File-install .deb via dpkg-deb (Linux only). build-deb.sh skips gracefully (exit
+  // 0) on a host without dpkg-deb, so the portable tar.gz remains the baseline.
+  run("bash", ["scripts/linux/release/build-deb.sh", "--version", version], { shell: false });
 }

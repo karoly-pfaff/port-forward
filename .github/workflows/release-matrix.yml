@@ -8,11 +8,11 @@
 # Manual trigger only (workflow_dispatch) so first-run issues are controlled. No push/PR
 # triggers in this slice.
 #
-# Coverage:
+# Coverage (each job builds only its own platform's artifacts):
 #   - windows-release : WiX 7 MSI (canonical) + Windows portable .zip + non-elevated MSI
-#                       install smoke + cross-built Linux/macOS portable .tar.gz (structural).
+#                       install smoke.
 #   - macos-release   : native .pkg (pkgbuild) + macOS portable .tar.gz + payload introspection.
-#   - linux-release   : Linux portable .tar.gz + native runtime smoke.
+#   - linux-release   : native .deb (dpkg-deb) + Linux portable .tar.gz + native runtime smoke.
 #
 # Privacy: only build/releases/** is uploaded. docs/private/** is never staged into release
 # output; validate-artifacts.js logs the upload set and hard-fails on any `private`
@@ -31,9 +31,9 @@ env:
   GO_VERSION: "1.25"
 
 jobs:
-  # ── Windows: canonical WiX/MSI + Windows portable zip + cross-built portables ──
+  # ── Windows: canonical WiX/MSI + Windows portable zip ──
   windows-release:
-    name: Windows release (MSI + portable + cross-portable)
+    name: Windows release (MSI + portable)
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -100,12 +100,6 @@ jobs:
       - name: MSI install smoke (non-elevated extraction)
         run: npm run validate:msi:install
 
-      - name: Cross-build portable artifacts (windows/linux/macos)
-        run: npm run build:release:portable:all
-
-      - name: Validate cross-built portable artifacts (structural)
-        run: npm run validate:release:portable:all
-
       - name: List release artifacts + privacy guard
         run: npm run validate:artifacts
 
@@ -113,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: portier-release-windows
-          path: build/releases/**
+          path: build/releases/windows/**
           if-no-files-found: error
 
   # ── macOS: native .pkg + macOS portable tar.gz ──
@@ -196,7 +190,7 @@ jobs:
 
   # ── Linux: portable tar.gz + native runtime smoke ──
   linux-release:
-    name: Linux release (portable + native smoke)
+    name: Linux release (.deb + portable + native smoke)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -226,7 +220,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Build current-platform release (portable tar.gz)
+      - name: Build current-platform release (.deb + portable tar.gz)
         run: npm run build:release:current
 
       - name: Validate current-platform release
@@ -240,6 +234,33 @@ jobs:
 
       - name: Upgrade-preservation smoke
         run: npm run validate:upgrade:current
+
+      # .deb payload introspection: confirm the package carries the runtime binaries,
+      # the OpenAPI artifact, and the (disabled) systemd unit. The package is a
+      # file-install: it does not enable/start the service (verified by build-deb.sh).
+      - name: Inspect .deb payload
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          DEB="build/releases/linux/portier_${VERSION}_amd64.deb"
+          echo "Inspecting ${DEB}"
+          dpkg-deb --info "${DEB}"
+          dpkg-deb --contents "${DEB}" | awk '{print $NF}' | sort > deb-paths.txt
+          cat deb-paths.txt
+          for f in ./opt/portier/portier ./opt/portier/service ./opt/portier/server.js \
+                   ./opt/portier/api/openapi.json ./opt/portier/web/index.html \
+                   ./lib/systemd/system/portier.service; do
+            if grep -qxF "$f" deb-paths.txt; then
+              echo "  ok: ${f}"
+            else
+              echo "  MISSING from .deb payload: ${f}" >&2
+              exit 1
+            fi
+          done
+          # The package must NOT ship user config.
+          if grep -qE 'rules\.json$' deb-paths.txt; then
+            echo "  ERROR: .deb must not contain rules.json" >&2
+            exit 1
+          fi
 
       # NOTE: full systemd service validation (npm run validate:service:linux) requires
       # root/sudo and a systemd PID 1, so it is NOT run here. It stays a manual/native

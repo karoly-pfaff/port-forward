@@ -105,7 +105,9 @@ function getInstallerName(platform, ver) {
   if (platform === "windows") return `Portier-${ver}.msi`;
   // The macOS native .pkg installer track is in progress (built on macOS).
   if (platform === "macos") return `Portier-${ver}.pkg`;
-  return null; // Linux .deb/.rpm not built yet
+  // The Linux native .deb is built by dpkg-deb on Linux (.rpm is a later track).
+  if (platform === "linux") return `portier_${ver}_amd64.deb`;
+  return null;
 }
 
 // Whether a missing installer is a hard failure. The Windows MSI is the canonical
@@ -427,8 +429,12 @@ function checkArchiveAndInstaller() {
     console.log(`\nInstaller artifact (${required ? "canonical" : "native, in progress"}):`);
     if (!existsSync(installerPath)) {
       const msg = `Installer not found: ${installerName} — build with: npm run build:release:current`;
-      if (required) fail(`${msg} (Windows requires WiX 7)`);
-      else warn(`${msg} (macOS .pkg requires pkgbuild; built on macOS)`);
+      const hint =
+        platformLabel === "windows" ? "Windows requires WiX 7"
+        : platformLabel === "linux" ? "Linux .deb requires dpkg-deb (Debian/Ubuntu)"
+        : "macOS .pkg requires pkgbuild; built on macOS";
+      if (required) fail(`${msg} (${hint})`);
+      else warn(`${msg} (${hint})`);
     } else {
       const iStat = statSync(installerPath);
       pass(`${installerName} (${(iStat.size / 1024 / 1024).toFixed(1)} MB)`);
