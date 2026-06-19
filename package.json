@@ -79,7 +79,8 @@
     "build:release:portable": "node scripts/build-release.js --current-platform --portable-only",
     "validate:release": "node scripts/validate-release.js --platform current",
     "validate:release:current": "node scripts/validate-release.js --platform current",
-    "validate:release:portable": "node scripts/validate-release.js --platform current --portable-only"
+    "validate:release:portable": "node scripts/validate-release.js --platform current --portable-only",
+    "validate:release:checksums": "node scripts/validate-release.js --platform current --checksums-only"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

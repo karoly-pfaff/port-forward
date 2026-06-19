@@ -29,6 +29,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import AdmZip from "adm-zip";
+import { generateChecksums, SHA256SUMS_NAME } from "./release-checksums.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -156,6 +157,13 @@ for (const target of targets) {
       log("  Linux installer: no .deb/.rpm in v1.1. Portable tar.gz only.");
     }
   }
+
+  // Checksums: cover every release artifact present for this version (portable
+  // archives and installer artifacts alike). Regenerated each run so it always
+  // reflects the current artifacts on disk.
+  const sums = generateChecksums(releasesDir, version);
+  log(`  Checksums: wrote ${SHA256SUMS_NAME} (${sums.length} artifact${sums.length === 1 ? "" : "s"})`);
+  for (const e of sums) log(`    ${e.hash.slice(0, 12)}…  ${e.name}`);
 
   log("");
 }

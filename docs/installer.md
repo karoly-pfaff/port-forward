@@ -127,16 +127,27 @@ Expected artifact names:
 build/releases/windows/
   Portier-Setup-<version>.exe
   portier-<version>-windows-portable.zip
+  SHA256SUMS
 
 build/releases/macos/
   portier-portable-macos-<version>.tar.gz
+  SHA256SUMS
 
 build/releases/linux/
   portier-<version>-linux.tar.gz
+  SHA256SUMS
 ```
 
 The Windows installer depends on Inno Setup when building on Windows. If Inno Setup is
 unavailable, the portable archive can still be produced and should be reported clearly.
+
+Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
+format, sorted, lowercase hex) covering every produced release artifact for that version —
+portable archives and installer artifacts alike. `build:release` regenerates it after the
+artifacts are built, and `validate:release` verifies it (every hash matches, every listed
+file exists, and every produced artifact is listed). These checksums are the integrity
+story for the currently unsigned artifacts; signing/notarization remain separate (see
+below).
 
 ## Validation
 

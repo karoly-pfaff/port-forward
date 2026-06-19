@@ -22,6 +22,12 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import AdmZip from "adm-zip";
+import {
+  SHA256SUMS_NAME,
+  parseSha256Sums,
+  sha256File,
+  findReleaseArtifacts,
+} from "./release-checksums.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -39,6 +45,7 @@ const versionArg = flagValue("--version");
 const platformArg = flagValue("--platform") || "current";
 const portableOnly = hasFlag("--portable-only");
 const installerRequired = hasFlag("--installer-required");
+const checksumsOnly = hasFlag("--checksums-only");
 
 // ── Resolve version ───────────────────────────────────────────────────────────
 
@@ -289,6 +296,133 @@ function checkReadmeContent(archivePath, rawEntries) {
   }
 }
 
+// ── SHA256SUMS verification ───────────────────────────────────────────────────
+
+function checkChecksums(dir) {
+  const sumsPath = join(dir, SHA256SUMS_NAME);
+  if (!existsSync(sumsPath)) {
+    fail(`${SHA256SUMS_NAME} not found — run: npm run build:release:current`);
+    return;
+  }
+  pass(`${SHA256SUMS_NAME} present`);
+
+  let entries;
+  try {
+    entries = parseSha256Sums(readFileSync(sumsPath, "utf8"));
+  } catch (err) {
+    fail(`${SHA256SUMS_NAME} ${err.message}`);
+    return;
+  }
+  if (entries.length === 0) {
+    fail(`${SHA256SUMS_NAME} contains no entries`);
+    return;
+  }
+
+  // Every produced (version-scoped) artifact on disk must be listed.
+  const listed = new Set(entries.map((e) => e.name));
+  const produced = findReleaseArtifacts(dir, version);
+  if (produced.length === 0) {
+    warn("No release artifacts found on disk to cross-check against SHA256SUMS");
+  }
+  for (const name of produced) {
+    if (!listed.has(name)) {
+      fail(`Produced artifact not listed in ${SHA256SUMS_NAME}: ${name}`);
+    }
+  }
+
+  // Every listed entry must exist and match its recorded hash.
+  for (const e of entries) {
+    const full = join(dir, e.name);
+    if (!existsSync(full)) {
+      fail(`${SHA256SUMS_NAME} references a missing file: ${e.name}`);
+      continue;
+    }
+    const actual = sha256File(full);
+    if (actual === e.hash) {
+      pass(`${e.name} sha256 OK`);
+    } else {
+      fail(
+        `${e.name} sha256 mismatch (expected ${e.hash.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`
+      );
+    }
+  }
+}
+
+// ── Portable archive + installer checks ───────────────────────────────────────
+
+function checkArchiveAndInstaller() {
+  // Portable archive
+  console.log("\nPortable archive:");
+  if (!existsSync(archivePath)) {
+    fail(`Archive not found: ${archiveName}`);
+    console.error("[validate-release] FAILED: archive missing.\n");
+    process.exit(1);
+  }
+  const archiveStat = statSync(archivePath);
+  if (archiveStat.size === 0) {
+    fail(`Archive is empty: ${archiveName}`);
+  } else {
+    pass(`${archiveName} (${(archiveStat.size / 1024).toFixed(1)} KB)`);
+  }
+
+  // Archive contents
+  console.log("\nArchive contents:");
+  const rawEntries = listArchiveContents(archivePath);
+  if (!rawEntries) {
+    warn(`Could not list archive contents — skipping content checks.`);
+  } else {
+    const entries = normalizeEntries(rawEntries);
+    const serviceBin = platformLabel === "windows" ? "service.exe" : "service";
+    const cliBin = platformLabel === "windows" ? "portier.exe" : "portier";
+
+    checkRequired(entries, cliBin, `${cliBin} (CLI binary)`);
+    checkRequired(entries, serviceBin, `${serviceBin} (native Go service binary)`);
+    checkRequired(entries, "server.js", "server.js (Node/TypeScript fallback)");
+    checkRequired(entries, "readme.txt", "readme.txt");
+    checkRequired(entries, "api/openapi.json", "api/openapi.json (OpenAPI document)");
+    checkRequired(entries, "web/index.html", "web/index.html");
+    checkHasPrefix(entries, "web/assets", "web/assets/ (at least one asset file)");
+
+    console.log("\nForbidden content:");
+    checkAbsent(entries, "node_modules", "node_modules/");
+    checkAbsent(entries, "rules.json", "rules.json");
+    checkAbsent(entries, ".env", ".env");
+    checkAbsent(entries, "sources", "sources/");
+    checkAbsent(entries, "client", "client/ directory");
+    // Note: 'server' directory check — entries are normalized to forward slashes;
+    // must not match 'server.js' (which doesn't start with "server/")
+    const hasServerDir = [...entries].some(
+      (e) => e === "server" || e.startsWith("server/")
+    );
+    if (hasServerDir) {
+      fail("Archive must not contain: server/ directory");
+    } else {
+      pass("Absent (correct): server/ directory");
+    }
+
+    console.log("\napi/openapi.json content:");
+    checkOpenApiContent(archivePath, rawEntries);
+
+    console.log("\nreadme.txt content:");
+    checkReadmeContent(archivePath, rawEntries);
+  }
+
+  // Installer artifact (optional unless --installer-required)
+  if (!portableOnly && installerName) {
+    console.log("\nInstaller artifact:");
+    if (!existsSync(installerPath)) {
+      if (installerRequired) {
+        fail(`Installer not found: ${installerName} (--installer-required)`);
+      } else {
+        warn(`Installer not found: ${installerName} — build with: npm run build:release:current`);
+      }
+    } else {
+      const iStat = statSync(installerPath);
+      pass(`${installerName} (${(iStat.size / 1024 / 1024).toFixed(1)} MB)`);
+    }
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const releasesDir = join(repoRoot, "build", "releases", platformLabel);
@@ -310,76 +444,21 @@ if (!existsSync(releasesDir)) {
 }
 pass(`build/releases/${platformLabel}/ exists`);
 
-// Portable archive
-console.log("\nPortable archive:");
-if (!existsSync(archivePath)) {
-  fail(`Archive not found: ${archiveName}`);
-  console.error("[validate-release] FAILED: archive missing.\n");
-  process.exit(1);
-}
-const archiveStat = statSync(archivePath);
-if (archiveStat.size === 0) {
-  fail(`Archive is empty: ${archiveName}`);
-} else {
-  pass(`${archiveName} (${(archiveStat.size / 1024).toFixed(1)} KB)`);
-}
-
-// Archive contents
-console.log("\nArchive contents:");
-const rawEntries = listArchiveContents(archivePath);
-if (!rawEntries) {
-  warn(`Could not list archive contents — skipping content checks.`);
-} else {
-  const entries = normalizeEntries(rawEntries);
-  const serviceBin = platformLabel === "windows" ? "service.exe" : "service";
-  const cliBin = platformLabel === "windows" ? "portier.exe" : "portier";
-
-  checkRequired(entries, cliBin, `${cliBin} (CLI binary)`);
-  checkRequired(entries, serviceBin, `${serviceBin} (native Go service binary)`);
-  checkRequired(entries, "server.js", "server.js (Node/TypeScript fallback)");
-  checkRequired(entries, "readme.txt", "readme.txt");
-  checkRequired(entries, "api/openapi.json", "api/openapi.json (OpenAPI document)");
-  checkRequired(entries, "web/index.html", "web/index.html");
-  checkHasPrefix(entries, "web/assets", "web/assets/ (at least one asset file)");
-
-  console.log("\nForbidden content:");
-  checkAbsent(entries, "node_modules", "node_modules/");
-  checkAbsent(entries, "rules.json", "rules.json");
-  checkAbsent(entries, ".env", ".env");
-  checkAbsent(entries, "sources", "sources/");
-  checkAbsent(entries, "client", "client/ directory");
-  // Note: 'server' directory check — entries are normalized to forward slashes;
-  // must not match 'server.js' (which doesn't start with "server/")
-  const hasServerDir = [...entries].some(
-    (e) => e === "server" || e.startsWith("server/")
-  );
-  if (hasServerDir) {
-    fail("Archive must not contain: server/ directory");
+if (checksumsOnly) {
+  console.log("\nArtifacts found:");
+  const found = findReleaseArtifacts(releasesDir, version);
+  if (found.length === 0) {
+    warn("No release artifacts found for this version");
   } else {
-    pass("Absent (correct): server/ directory");
+    for (const name of found) pass(name);
   }
-
-  console.log("\napi/openapi.json content:");
-  checkOpenApiContent(archivePath, rawEntries);
-
-  console.log("\nreadme.txt content:");
-  checkReadmeContent(archivePath, rawEntries);
+} else {
+  checkArchiveAndInstaller();
 }
 
-// Installer artifact (optional unless --installer-required)
-if (!portableOnly && installerName) {
-  console.log("\nInstaller artifact:");
-  if (!existsSync(installerPath)) {
-    if (installerRequired) {
-      fail(`Installer not found: ${installerName} (--installer-required)`);
-    } else {
-      warn(`Installer not found: ${installerName} — build with: npm run build:release:current`);
-    }
-  } else {
-    const iStat = statSync(installerPath);
-    pass(`${installerName} (${(iStat.size / 1024 / 1024).toFixed(1)} MB)`);
-  }
-}
+// Checksums (SHA256SUMS) — verified in every mode
+console.log("\nChecksums (SHA256SUMS):");
+checkChecksums(releasesDir);
 
 // Summary
 console.log(

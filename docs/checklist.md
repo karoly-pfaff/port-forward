@@ -218,6 +218,17 @@ readme.txt
 - [ ] `validate:release` asserts the bundled `api/openapi.json` is present, non-empty,
   valid JSON, and its `info.version` matches the package major.minor (e.g. `1.18.0` →
   `1.18`). Packaged CLI/service version reporting is asserted by `validate:runtime:smoke`.
+- [ ] `build:release` writes a `SHA256SUMS` file (GNU coreutils format, sorted, lowercase
+  hex) next to the artifacts, covering every produced release artifact for the version
+  (portable archives and installer artifacts alike). `validate:release` requires it and
+  verifies every listed hash matches, every listed file exists, and every produced
+  artifact is listed — failing on a missing/malformed/duplicate entry or a hash mismatch.
+  To verify checksums only:
+
+```powershell
+npm run validate:release:checksums
+```
+
 - [ ] Confirm version numbers and release notes are correct.
 - [ ] Confirm checksums/signing/notarization status is documented if applicable.
 
