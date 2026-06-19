@@ -75,8 +75,15 @@ describe("resolveServerOptions", () => {
   });
 
   it("defaults static files relative to the packaged executable", () => {
-    expect(resolveServerOptions([], {}, "C:\\work", "C:\\Tools\\Portier\\portier-server.exe")).toMatchObject({
-      staticClientDir: resolve("C:\\Tools\\Portier", "client", "build"),
+    // Build the executable path with the host's path separators so the
+    // implementation's dirname() derives the install dir consistently on
+    // Windows and POSIX (a literal "C:\\..." only round-trips through dirname
+    // on Windows).
+    const executableDir = resolve("Tools", "Portier");
+    const executablePath = resolve(executableDir, "portier-server.exe");
+
+    expect(resolveServerOptions([], {}, resolve("work"), executablePath)).toMatchObject({
+      staticClientDir: resolve(executableDir, "client", "build"),
       staticClientDirSource: "default"
     });
   });
