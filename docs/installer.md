@@ -221,10 +221,17 @@ Windows)** with `npm run build:release:portable:all` (cross-compiles `windows/am
 (layout, platform binary names, tar exec bits, **binary machine-type matches the named arch**,
 `api/openapi.json`, checksums); `validate:release:portable:{windows,macos,linux}` scope to one
 platform. This is for GitHub-Release readiness only — it does **not** run a runtime smoke
-against foreign binaries; native runtime validation (`validate:runtime:smoke`) must still run
-on each OS/arch (arm64 binaries are not executed on amd64 runners). `build:release:current`
-builds the host platform's portables (both arches on macOS/Linux) + the native installer; the
-Windows installer (MSI) and macOS `.pkg` remain native-built.
+against foreign binaries; native runtime validation must run on each OS/arch.
+`build:release:current` builds the host platform's portables (both arches on macOS/Linux) + the
+native installer; the Windows installer (MSI) and macOS `.pkg` remain native-built.
+
+**Native arm64 runtime smoke.** `darwin/arm64` and `linux/arm64` portables are runtime-smoked on
+**real arm64 runners** (not emulation) by two manual workflows — `Smoke macOS arm64`
+(`macos-14`/Apple Silicon) and `Smoke Linux arm64` (`ubuntu-24.04-arm`). Each extracts the
+shipped arm64 portable and runs it (`npm run validate:portable:smoke`): `portier version`, GET
+`/api/health`, GET `/api/runtime` version, plus a Mach-O/ELF machine-type + `uname -m` check (the
+smoke fails rather than claim arm64 on non-arm64 hardware). amd64 portables are runtime-smoked on
+the amd64 release runners. Windows arm64 is not built. Emulation is never counted as native.
 
 Each platform's release directory includes a `checksums.sha256` file (GNU coreutils text
 format `<sha256>  <filename>`, lowercase hex, native installer/package first then portable

@@ -1,0 +1,68 @@
+# Portier Linux arm64 native runtime smoke.
+#
+# Runs on a real arm64 Linux runner (ubuntu-24.04-arm) — NOT emulation — to prove the shipped
+# linux-arm64 portable artifact actually runs natively: `portier version` + GET /api/health
+# + GET /api/runtime version. Structural validation (incl. ELF machine-type) also runs.
+#
+# Manual trigger only (workflow_dispatch). Builds the portable on the runner; does NOT build
+# the .deb/.rpm, enable/start the systemd unit, publish a release, or upload artifacts.
+# Separate from the canonical Release Linux workflow so arm64-runner availability can't block
+# amd64 releases.
+
+name: Smoke Linux arm64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  GO_VERSION: "1.25"
+
+jobs:
+  linux-arm64-smoke:
+    name: Linux arm64 portable runtime smoke
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Report runner architecture
+        run: |
+          echo "runner: ubuntu-24.04-arm"
+          echo "uname -m: $(uname -m)"   # expect aarch64 on arm64 Linux
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Produce build/portier/ (native arm64 binaries + neutral assets).
+      - name: Build runtime
+        run: npm run build:runtime
+
+      # Cross-build the Linux portable artifacts (amd64 + arm64). The arm64 one is native here.
+      - name: Build Linux portable artifacts
+        run: npm run build:release:linux
+
+      # Structural validation of both arches (layout, exec bits, ELF machine type, OpenAPI,
+      # forbidden content, checksum).
+      - name: Validate portable artifacts (structural)
+        run: npm run validate:release:portable:linux
+
+      # NATIVE arm64 runtime smoke: extract the linux-arm64 portable and run it
+      # (portier version, /api/health, /api/runtime). Fails if the host is not arm64.
+      - name: Native arm64 runtime smoke
+        run: npm run validate:portable:smoke

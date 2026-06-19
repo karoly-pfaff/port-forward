@@ -1,0 +1,67 @@
+# Portier macOS arm64 (Apple Silicon) native runtime smoke.
+#
+# Runs on a real Apple Silicon runner (macos-14) — NOT emulation — to prove the shipped
+# macos-arm64 portable artifact actually runs natively: `portier version` + GET /api/health
+# + GET /api/runtime version. Structural validation (incl. Mach-O machine-type) also runs.
+#
+# Manual trigger only (workflow_dispatch). Builds the portable on the runner; does NOT build
+# the .pkg, load a LaunchAgent, publish a release, or upload artifacts. Separate from the
+# canonical Release MacOS workflow so arm64-runner availability can't block amd64 releases.
+
+name: Smoke macOS arm64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  GO_VERSION: "1.25"
+
+jobs:
+  macos-arm64-smoke:
+    name: macOS arm64 portable runtime smoke
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Report runner architecture
+        run: |
+          echo "runner: macos-14"
+          echo "uname -m: $(uname -m)"   # expect arm64 on Apple Silicon
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Produce build/portier/ (native arm64 binaries + neutral assets).
+      - name: Build runtime
+        run: npm run build:runtime
+
+      # Cross-build the macOS portable artifacts (amd64 + arm64). The arm64 one is native here.
+      - name: Build macOS portable artifacts
+        run: npm run build:release:macos
+
+      # Structural validation of both arches (layout, exec bits, Mach-O machine type, OpenAPI,
+      # forbidden content, checksum).
+      - name: Validate portable artifacts (structural)
+        run: npm run validate:release:portable:macos
+
+      # NATIVE arm64 runtime smoke: extract the macos-arm64 portable and run it
+      # (portier version, /api/health, /api/runtime). Fails if the host is not arm64.
+      - name: Native arm64 runtime smoke
+        run: npm run validate:portable:smoke

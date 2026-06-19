@@ -264,7 +264,8 @@ uninstall.
   service or scheduled task, preserves user config, and removes cleanly.
 - Produce arch-suffixed portable artifacts incl. arm64 (`linux-arm64`, `macos-arm64`
   alongside amd64; Windows amd64-only), structurally validated with a binary machine-type
-  check; native runtime smoke remains host-arch only.
+  check, and **runtime-smoked on real arm64 runners** (`macos-14`, `ubuntu-24.04-arm`) — not
+  emulation — via dedicated manual smoke workflows.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.
 - Validate service startup, web UI serving, and CLI connectivity after install.

@@ -224,15 +224,19 @@ tar -xzf portier-<version>-macos-arm64.tar.gz -C ~/Applications/Portier/
 bash scripts/macos/service/install-launch-agent.sh --source-dir ~/Applications/Portier
 ```
 
-The macOS **portable tar.gz** can be **cross-built from another host** (e.g. Windows), since
-the Go binaries are pure Go (`darwin/amd64`):
+The macOS **portable tar.gz** artifacts (amd64 + arm64) can be **cross-built from another host**
+(e.g. Windows), since the Go binaries are pure Go:
 
 ```bash
-npm run build:release:macos            # cross-compile darwin/amd64 + package tar.gz
-npm run validate:release:portable:all  # structural validation (no native runtime smoke)
+npm run build:release:macos              # cross-compile darwin/amd64 + darwin/arm64 tar.gz
+npm run validate:release:portable:macos  # structural validation of both arches (no native smoke)
 ```
 
-Cross-built validation is structural only — native runtime smoke must run on macOS. The
+Cross-built validation is structural only. Native runtime smoke runs on macOS:
+`validate:runtime:smoke` covers the host arch, and the **Smoke macOS arm64** workflow
+(`.github/workflows/smoke-macos-arm64.yml`, `macos-14` / Apple Silicon, manual
+`workflow_dispatch`) extracts and runs the `macos-arm64` portable natively
+(`npm run validate:portable:smoke`: `portier version` + `/api/health` + `/api/runtime`). The
 native **`.pkg`** still requires macOS (`pkgbuild`).
 
 ### Native .pkg installer

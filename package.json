@@ -88,6 +88,7 @@
     "validate:release:portable:windows": "node scripts/validate-portable.js --windows",
     "validate:release:portable:linux": "node scripts/validate-portable.js --linux",
     "validate:release:portable:macos": "node scripts/validate-portable.js --macos",
+    "validate:portable:smoke": "node scripts/validate-portable-smoke.js",
     "validate:release:checksums": "node scripts/validate-release.js --platform current --checksums-only",
     "validate:upgrade:current": "node scripts/validate-upgrade.js",
     "validate:install:msi": "node scripts/validate-install-msi.js --extract",

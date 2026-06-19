@@ -91,8 +91,11 @@ npm run validate:release:portable:linux   # structural validation of both arches
 ```
 
 Cross-built validation is structural only (it does verify each binary's machine type matches
-the named arch) — the native runtime smoke (`validate:runtime:smoke`) must run on Linux, and
-arm64 binaries are not executed on an amd64 host.
+the named arch). Native runtime smoke runs on Linux: `validate:runtime:smoke` covers the host
+arch (amd64 on the `ubuntu-latest` release runner), and the **Smoke Linux arm64** workflow
+(`.github/workflows/smoke-linux-arm64.yml`, `ubuntu-24.04-arm`, manual `workflow_dispatch`)
+extracts and runs the `linux-arm64` portable natively (`npm run validate:portable:smoke`:
+`portier version` + `/api/health` + `/api/runtime`). Emulation is never counted as native.
 
 ## Native `.deb` package
 

@@ -332,8 +332,21 @@ npm run validate:release:portable:all
   (`validate:runtime:smoke`); structural validation does not replace it. Per-platform variants
   (`validate:release:portable:{windows,macos,linux}`) validate just that platform's arches.
   `build:release:current` builds the host platform's portables (both arches on macOS/Linux) +
-  the native installer; only the host arch is runtime-smoked. arm64 binaries are not executed
-  on amd64 runners (and vice versa). See `scripts/build-portable.js`.
+  the native installer; only the host arch is runtime-smoked. See `scripts/build-portable.js`.
+- [ ] Native arm64 portable runtime smoke (real arm64 runners — not emulation). Two manual
+  workflows run the shipped arm64 portable natively and assert `portier version`, `/api/health`,
+  and `/api/runtime` version, plus the Mach-O/ELF machine type and `uname -m` (the smoke
+  refuses to call itself arm64 unless the host really is):
+  - **Smoke macOS arm64** (`.github/workflows/smoke-macos-arm64.yml`, `macos-14` / Apple Silicon)
+  - **Smoke Linux arm64** (`.github/workflows/smoke-linux-arm64.yml`, `ubuntu-24.04-arm`)
+
+```bash
+npm run validate:portable:smoke   # extracts + runs the HOST-arch portable (native arch only)
+```
+
+  This replaces "structural-only" confidence for `linux/arm64` and `darwin/arm64` with real
+  native runtime coverage. amd64 portables remain runtime-smoked on the amd64 release runners;
+  Windows arm64 is not built. Emulation is never counted as native.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp
