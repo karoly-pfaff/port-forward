@@ -79,6 +79,17 @@ Preview the systemd install plan without root (paths, `ExecStart`, unit location
 bash scripts/linux/service/install-service.sh --dry-run
 ```
 
+The Linux tar.gz can also be **cross-built from another host** (e.g. Windows), since the Go
+binaries are pure Go:
+
+```bash
+npm run build:release:linux            # cross-compile linux/amd64 + package tar.gz
+npm run validate:release:portable:all  # structural validation (no native runtime smoke)
+```
+
+Cross-built validation is structural only — the native runtime smoke (`validate:runtime:smoke`)
+must run on Linux.
+
 > **`.deb` / `.rpm`:** these native packages are a **planned package-manager track for a
 > later v1.18 slice** (built and validated on native `ubuntu`/`fedora` runners once the
 > release CI lands), not shipped in this slice. The portable tar.gz + systemd scripts are the

@@ -6,11 +6,13 @@
 #   build/releases/macos/Portier-<version>.pkg          (when pkgbuild is available)
 #
 # Usage:
-#   bash scripts/macos/release/build-release.sh [--no-package] [--portable-only] [--version V]
+#   bash scripts/macos/release/build-release.sh [--no-package] [--portable-only] [--pkg-only] [--version V]
 #
 # Options:
 #   --no-package     Skip `npm run build:runtime`; use the existing build/portier/.
 #   --portable-only  Build only the portable tar.gz; skip the .pkg.
+#   --pkg-only       Build only the .pkg; skip the portable tar.gz. (The release flow
+#                    uses this — the portable tar.gz is built by scripts/build-portable.js.)
 #   --version V      Override version string (default: reads from package.json).
 #
 # The .pkg is a FILE-INSTALL package (pkgbuild) that lays the runtime layout under
@@ -32,11 +34,13 @@ PKG_IDENTIFIER="com.portier.portier"
 VERSION=""
 NO_PACKAGE=""
 PORTABLE_ONLY=""
+PKG_ONLY=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-package)    NO_PACKAGE=1;     shift ;;
     --portable-only) PORTABLE_ONLY=1;  shift ;;
+    --pkg-only)      PKG_ONLY=1;       shift ;;
     --version)       VERSION="$2";     shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -92,11 +96,14 @@ trap cleanup EXIT
 cp -R "$PACKAGE_DIR/." "$RUNTIME_STAGE/"
 chmod +x "$RUNTIME_STAGE/portier" "$RUNTIME_STAGE/service"
 
-# ── Portable tar.gz ──
-ARCHIVE_NAME="portier-portable-macos-${VERSION}.tar.gz"
-(cd "$RUNTIME_STAGE" && tar -czf "$OUTPUT_DIR/$ARCHIVE_NAME" .)
-echo ""
-echo "Created: $OUTPUT_DIR/$ARCHIVE_NAME"
+# ── Portable tar.gz (skipped with --pkg-only; the unified generator
+#    scripts/build-portable.js owns the portable artifact in the release flow) ──
+if [ -z "$PKG_ONLY" ]; then
+  ARCHIVE_NAME="portier-portable-macos-${VERSION}.tar.gz"
+  (cd "$RUNTIME_STAGE" && tar -czf "$OUTPUT_DIR/$ARCHIVE_NAME" .)
+  echo ""
+  echo "Created: $OUTPUT_DIR/$ARCHIVE_NAME"
+fi
 
 # ── Native .pkg (macOS only) ──
 PKG_NAME="Portier-${VERSION}.pkg"

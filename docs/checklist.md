@@ -267,6 +267,27 @@ npm run validate:msi:install
   plan (paths, `ExecStart`) without root. Full systemd install validation
   (`validate:service:linux`) requires `sudo` and runs on a Linux host. `.deb`/`.rpm` are a
   planned package track for a later slice. See `scripts/linux/readme.md`.
+- [ ] Cross-platform portable artifact generation (from any host, incl. Windows). The Go
+  binaries are pure Go (CGO disabled), so all three portable artifacts — Windows `.zip`,
+  Linux `.tar.gz`, macOS `.tar.gz` — can be cross-built and structurally validated without a
+  native runner:
+
+```powershell
+npm run build:runtime               # produce build/portier/ (neutral assets) once
+npm run build:release:portable:all  # cross-build windows zip + linux/macos tar.gz (amd64)
+npm run validate:release:portable:all
+```
+
+  `build:release:portable:all` cross-compiles `portier`/`service` for `windows`, `linux`, and
+  `darwin` (amd64), packages the full runtime layout (Unix tarballs get **0755 exec bits** on
+  the binaries; the Windows zip uses `.exe`), and writes per-platform `SHA256SUMS`.
+  `validate:release:portable:all` validates each artifact **structurally** (layout, platform
+  binary names, tar exec bits, `api/openapi.json` JSON + version, forbidden content incl.
+  `docs/private`, checksum) using adm-zip / tar-stream — it does **NOT** run a runtime smoke
+  against foreign binaries. **Native runtime smoke must still run on each OS**
+  (`validate:runtime:smoke`); structural validation does not replace it. `build:release:current`
+  still owns the current-platform release (portable + native installer, e.g. the MSI). arm64 is
+  a documented follow-up. See `scripts/build-portable.js`.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp

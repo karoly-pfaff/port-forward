@@ -28,7 +28,6 @@ import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import AdmZip from "adm-zip";
 import { generateChecksums, SHA256SUMS_NAME } from "./release-checksums.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -143,21 +142,21 @@ for (const target of targets) {
 
   log(`--- ${platformLabel} ---`);
 
-  if (target === "win32") {
-    buildWindowsPortable(releasesDir, version);
-    // The WiX MSI is the canonical Windows installer. (Inno Setup has been retired
-    // to scripts/windows/legacy/ and is not built by the release flow.)
-    if (!portableOnly) buildWindowsMsi(releasesDir, version);
-  } else if (target === "darwin") {
-    // The macOS script builds the portable tar.gz and, on macOS with pkgbuild, the
-    // native .pkg (the v1.18 macOS installer track). --portable-only skips the .pkg.
-    buildMacosRelease(version, portableOnly);
-  } else if (target === "linux") {
-    buildLinuxPortable(version);
-    if (!portableOnly) {
-      // v1.18 Linux ships the portable tar.gz (with systemd scripts as the
-      // canonical service layer). .deb/.rpm are a planned package track for a
-      // later slice (built/validated on native runners). See docs/installer.md.
+  // Portable artifact: delegate to the single portable generator (build-portable.js)
+  // so the zip/tar.gz is produced one way across every OS and release path.
+  buildPortableArtifact(platformLabel, version);
+
+  // Native installer (current platform only; not in --portable-only mode).
+  if (!portableOnly) {
+    if (target === "win32") {
+      // The WiX MSI is the canonical Windows installer (Inno retired to legacy/).
+      buildWindowsMsi(releasesDir, version);
+    } else if (target === "darwin") {
+      // Native macOS .pkg (built on macOS by pkgbuild; v1.18 installer track).
+      buildMacosPkg(version);
+    } else if (target === "linux") {
+      // v1.18 Linux ships the portable tar.gz; .deb/.rpm are a planned package
+      // track for a later slice (built/validated on native runners).
       log("  Linux: portable tar.gz is the v1.18 release artifact (.deb/.rpm: planned, later slice).");
     }
   }
@@ -175,22 +174,17 @@ for (const target of targets) {
 log("Release packaging complete.");
 log(`Artifacts: ${join(repoRoot, "build", "releases")}`);
 
-// ── Windows ───────────────────────────────────────────────────────────────────
+// ── Portable artifact (one method for all OSes) ────────────────────────────────
 
-function buildWindowsPortable(releasesDir, version) {
-  const zipName = `portier-${version}-windows-portable.zip`;
-  const zipPath = join(releasesDir, zipName);
-  log(`  Portable: ${zipName}`);
-
-  // Add the contents of packageDir at the zip root, preserving subdirectories
-  // (web/, api/, etc.) without an outer wrapper directory. writeZip overwrites
-  // any existing archive. adm-zip is used instead of PowerShell Compress-Archive
-  // so creation is OS-agnostic and matches the adm-zip reader in validate-release.
-  const zip = new AdmZip();
-  zip.addLocalFolder(packageDir);
-  zip.writeZip(zipPath);
-  log(`  Created : ${zipPath}`);
+function buildPortableArtifact(label, version) {
+  log("  Portable: delegating to scripts/build-portable.js...");
+  // build-portable.js cross-compiles the binaries (pure Go) and packages the full
+  // runtime layout (Windows .zip / Unix .tar.gz with exec bits). It reuses the
+  // neutral assets from build/portier/ and regenerates this platform's SHA256SUMS.
+  run("node", ["scripts/build-portable.js", `--${label}`, "--version", version], { shell: isWindows });
 }
+
+// ── Windows ───────────────────────────────────────────────────────────────────
 
 function buildWindowsMsi(releasesDir, version) {
   const msiScript = join(repoRoot, "scripts", "windows", "release", "build-release.ps1");
@@ -223,18 +217,11 @@ function buildWindowsMsi(releasesDir, version) {
 
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
-function buildMacosRelease(version, portableOnly) {
-  log("  Portable tar.gz + .pkg: delegating to scripts/macos/release/build-release.sh...");
-  const args = ["scripts/macos/release/build-release.sh", "--no-package", "--version", version];
-  if (portableOnly) args.push("--portable-only");
-  run("bash", args, { shell: false });
-}
-
-// ── Linux ─────────────────────────────────────────────────────────────────────
-
-function buildLinuxPortable(version) {
-  log("  Portable: delegating to scripts/linux/release/build-release.sh...");
-  run("bash", ["scripts/linux/release/build-release.sh", "--no-package", "--version", version], {
+function buildMacosPkg(version) {
+  log("  Installer: macOS .pkg: delegating to scripts/macos/release/build-release.sh --pkg-only...");
+  // The portable tar.gz is built by build-portable.js; here we build only the
+  // native .pkg (pkgbuild; macOS only — non-fatal if pkgbuild is unavailable).
+  run("bash", ["scripts/macos/release/build-release.sh", "--no-package", "--pkg-only", "--version", version], {
     shell: false,
   });
 }

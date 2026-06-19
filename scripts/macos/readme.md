@@ -196,6 +196,17 @@ tar -xzf portier-portable-macos-<version>.tar.gz -C ~/Applications/Portier/
 bash scripts/macos/service/install-launch-agent.sh --source-dir ~/Applications/Portier
 ```
 
+The macOS **portable tar.gz** can be **cross-built from another host** (e.g. Windows), since
+the Go binaries are pure Go (`darwin/amd64`):
+
+```bash
+npm run build:release:macos            # cross-compile darwin/amd64 + package tar.gz
+npm run validate:release:portable:all  # structural validation (no native runtime smoke)
+```
+
+Cross-built validation is structural only — native runtime smoke must run on macOS. The
+native **`.pkg`** still requires macOS (`pkgbuild`).
+
 ### Native .pkg installer
 
 The `.pkg` (built by `scripts/macos/release/build-release.sh` via `pkgbuild`) is the v1.18

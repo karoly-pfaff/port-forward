@@ -93,6 +93,19 @@ See [`scripts/windows/release/readme.md`](release/readme.md) for the WiX source 
 > scripts are kept, manual-only, under `scripts/windows/legacy/` and are not built or
 > validated. New Windows installer work belongs in the WiX MSI.
 
+### Portable zip (cross-buildable)
+
+The Windows portable `.zip` is built by `build:release:current` (bundled with the MSI). It can
+also be produced from **any host** (since the Go binaries are pure Go) via the host-agnostic
+portable generator:
+
+```bash
+npm run build:release:windows          # cross-compile windows/amd64 + package the zip
+npm run validate:release:portable:all  # structural validation (no native runtime smoke)
+```
+
+Native runtime smoke must run on Windows (`npm run validate:runtime:smoke`).
+
 ---
 
 ## Manual Test

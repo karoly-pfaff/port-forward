@@ -190,6 +190,18 @@ checksummed in `SHA256SUMS`, and GitHub-Release-ready. Installed mode lives at `
 track for a later v1.18 slice** (built/validated on native `ubuntu`/`fedora` runners once the
 release CI lands) — not shipped in this slice. See `scripts/linux/readme.md`.
 
+**Cross-platform portable generation.** The Go CLI/service are pure Go (CGO disabled), so all
+three portable artifacts — Windows `.zip`, Linux `.tar.gz`, macOS `.tar.gz` — can be
+**cross-built from any host (including Windows)** with `npm run build:release:portable:all`
+(cross-compiles `windows`/`linux`/`darwin` amd64, packages the full runtime layout — Unix
+tarballs with correct exec bits, the Windows zip with `.exe` — and writes `SHA256SUMS`).
+`npm run validate:release:portable:all` validates them **structurally** (layout, platform
+binary names, tar exec bits, `api/openapi.json`, checksums). This is for GitHub-Release
+readiness only — it does **not** run a runtime smoke against foreign binaries; native runtime
+validation (`validate:runtime:smoke`) must still run on each OS. amd64 only for now; arm64 is a
+follow-up. `build:release:current` still owns the current-platform release (portable + native
+installer); the Windows installer (MSI) and macOS `.pkg` remain native-built.
+
 Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
 format, sorted, lowercase hex) covering every produced release artifact for that version —
 portable archives and installer artifacts alike. `build:release` regenerates it after the

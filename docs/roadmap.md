@@ -252,6 +252,8 @@ uninstall.
   keep the portable zip.
 - Build a native macOS `.pkg` installer alongside the portable archive (in progress).
 - Ready the Linux portable tar.gz + systemd story for release; `.deb`/`.rpm` planned later.
+- Cross-build Linux/macOS portable `.tar.gz` artifacts from any host (release-readiness
+  infrastructure); native runtime validation still runs on each OS.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.
 - Validate service startup, web UI serving, and CLI connectivity after install.
