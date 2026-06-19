@@ -229,8 +229,8 @@ function buildMacosPkg(version) {
 // ── Linux ─────────────────────────────────────────────────────────────────────
 
 function buildLinuxDeb(version) {
-  log("  Installer: Linux .deb: delegating to scripts/linux/release/build-deb.sh...");
-  // File-install .deb via dpkg-deb (Linux only). build-deb.sh skips gracefully (exit
-  // 0) on a host without dpkg-deb, so the portable tar.gz remains the baseline.
-  run("bash", ["scripts/linux/release/build-deb.sh", "--version", version], { shell: false });
+  log("  Installer: Linux .deb: delegating to scripts/linux/release/build-release.sh...");
+  // File-install .deb via dpkg-deb (Linux only). The script skips gracefully (exit 0)
+  // on a host without dpkg-deb, so the portable tar.gz remains the baseline.
+  run("bash", ["scripts/linux/release/build-release.sh", "--version", version], { shell: false });
 }

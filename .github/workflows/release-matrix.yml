@@ -237,7 +237,7 @@ jobs:
 
       # .deb payload introspection: confirm the package carries the runtime binaries,
       # the OpenAPI artifact, and the (disabled) systemd unit. The package is a
-      # file-install: it does not enable/start the service (verified by build-deb.sh).
+      # file-install: it does not enable/start the service (see build-release.sh).
       - name: Inspect .deb payload
         run: |
           VERSION="$(node -p "require('./package.json').version")"

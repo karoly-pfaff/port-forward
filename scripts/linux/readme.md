@@ -98,7 +98,7 @@ portable tar.gz:
 ```bash
 npm run build:release:current     # tar.gz + portier_<version>_amd64.deb + SHA256SUMS
 # or directly (reuses an existing build/portier/):
-bash scripts/linux/release/build-deb.sh --version <version>
+bash scripts/linux/release/build-release.sh --version <version>
 ```
 
 Output: `build/releases/linux/portier_<version>_amd64.deb`
@@ -116,7 +116,7 @@ sudo apt install ./portier_<version>_amd64.deb
 sudo systemctl enable --now portier
 ```
 
-`build-deb.sh` requires `dpkg-deb` (Debian/Ubuntu); on other hosts the `.deb` step is
+`build-release.sh` requires `dpkg-deb` (Debian/Ubuntu); on other hosts the `.deb` step is
 skipped with a notice and the portable tar.gz remains the baseline.
 
 The `linux-release` job in `.github/workflows/release-matrix.yml` (manual

@@ -181,13 +181,13 @@ warn). `validate:release` reports `.pkg` presence on macOS (not fatal yet) and v
 checksum; a `.pkg` payload/install smoke is a follow-up. See `scripts/macos/readme.md`.
 
 On **Linux**, the v1.18 release artifact is the **portable tar.gz**
-(`portier-<version>-linux.tar.gz`, built by `scripts/linux/release/build-release.sh`), with
+(`portier-<version>-linux.tar.gz`, built by `scripts/build-portable.js`), with
 the **systemd** scripts under `scripts/linux/service/` as the canonical service layer. The
 tar.gz contains the full runtime layout (incl. `api/openapi.json`); it is versioned,
 checksummed in `SHA256SUMS`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
 (binaries + `web/`), config at `/etc/portier/rules.json`, logs via journald, and the unit at
 `/etc/systemd/system/portier.service`. A native **`.deb`** (`portier_<version>_amd64.deb`,
-built by `scripts/linux/release/build-deb.sh` via dpkg-deb and validated on the `ubuntu-latest`
+built by `scripts/linux/release/build-release.sh` via dpkg-deb and validated on the `ubuntu-latest`
 release-CI runner) is also produced: a file-install package that lays the runtime under
 `/opt/portier` and installs a **disabled** systemd unit — it never enables/starts the service
 or touches user config. `.rpm` is a **planned package track for a later slice**. See

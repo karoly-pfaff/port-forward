@@ -266,7 +266,7 @@ npm run validate:msi:install
   layout/OpenAPI/version, confirms the `.deb` is present, and verifies every checksum; the
   artifacts are versioned and GitHub-Release-ready. The `.deb` is a **file-install**: it lays
   the runtime under `/opt/portier` and installs a **disabled** systemd unit — it never
-  enables/starts the service or touches user config (`scripts/linux/release/build-deb.sh`).
+  enables/starts the service or touches user config (`scripts/linux/release/build-release.sh`).
   Systemd is the canonical service layer (`scripts/linux/service/`); `install-service.sh
   --dry-run` prints the install plan without root. Full systemd install validation
   (`validate:service:linux`) requires `sudo`/a Linux host. `.rpm` is a planned later track.

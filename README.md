@@ -614,7 +614,8 @@ bash scripts/macos/service/uninstall-launch-agent.sh
 Linux service scripts (run as root on Linux):
 
 ```bash
-bash scripts/linux/release/build-release.sh    # portable tar.gz → build/releases/linux/
+npm run build:release:current                  # portable tar.gz + native .deb → build/releases/linux/
+bash scripts/linux/release/build-release.sh    # native .deb only (reuses build/portier/)
 sudo bash scripts/linux/service/install-service.sh [--runtime node] [--source-dir PATH] [--install-dir PATH] [--config-path PATH] [--no-enable]
 sudo bash scripts/linux/service/status-service.sh
 sudo bash scripts/linux/service/start-service.sh
