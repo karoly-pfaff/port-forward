@@ -698,8 +698,13 @@ func TestUDPForwarderWithRegistryOneWayTracksSession(t *testing.T) {
 	client := sendUDPPacket(t, forwarder.rule.ListenPort, []byte("hello"))
 	defer client.Close()
 
+	// Wait for the asserted state, not just session existence: the session is
+	// registered slightly before its first packet is counted, so a snapshot taken
+	// the instant the session appears can still show PacketsIn == 0 (observed as an
+	// intermittent failure on CI). Waiting for PacketsIn > 0 makes it deterministic.
 	waitForUDPCondition(t, func() bool {
-		return len(reg.Snapshot(time.Now())) >= 1
+		snap := reg.Snapshot(time.Now())
+		return len(snap) >= 1 && snap[0].PacketsIn > 0
 	})
 
 	snap := reg.Snapshot(time.Now())
