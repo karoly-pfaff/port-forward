@@ -62,7 +62,10 @@ echo "Generating OpenAPI document..."
 npm --prefix "$REPO_ROOT" run apidoc:generate
 
 echo "Copying OpenAPI document into package..."
-npm --prefix "$REPO_ROOT" run apidoc:release -w server -- "$OUTPUT_DIR"
+# Pass an ABSOLUTE release dir: apidoc:release runs via `npm -w server`, whose cwd is
+# the server workspace, so a relative path (e.g. ./build/portier) would resolve under
+# server/ instead of the repo root. (The Windows build script resolves to absolute too.)
+npm --prefix "$REPO_ROOT" run apidoc:release -w server -- "$(cd "$OUTPUT_DIR" && pwd)"
 
 echo "Building Go service for Linux (linux/amd64)..."
 pushd "$REPO_ROOT/service" > /dev/null
