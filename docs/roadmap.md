@@ -259,6 +259,9 @@ uninstall.
   portable), Release MacOS (`.pkg` + portable), Release Linux (`.deb` + portable + native
   smoke) — that build, validate, and upload each platform's release artifacts (package
   first, portable second, `checksums.sha256` last) for inspection — no GitHub Release or tags.
+- Add native package install/uninstall smokes (macOS `.pkg`, Linux `.deb`) that prove the
+  package installs the expected layout, never silently enables/starts a service, preserves
+  user config, and removes cleanly.
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.
 - Validate service startup, web UI serving, and CLI connectivity after install.

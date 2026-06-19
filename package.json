@@ -88,6 +88,8 @@
     "validate:release:checksums": "node scripts/validate-release.js --platform current --checksums-only",
     "validate:upgrade:current": "node scripts/validate-upgrade.js",
     "validate:msi:install": "node scripts/validate-msi-install.js",
+    "validate:pkg:install": "node scripts/validate-pkg-install.js",
+    "validate:deb:install": "node scripts/validate-deb-install.js",
     "validate:artifacts": "node scripts/validate-artifacts.js"
   },
   "devDependencies": {

@@ -27,7 +27,7 @@ env:
 
 jobs:
   linux-release:
-    name: Linux release (.deb + portable + native smoke)
+    name: Linux release (deb + portable)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -100,9 +100,15 @@ jobs:
             exit 1
           fi
 
-      # NOTE: full systemd service validation (npm run validate:service:linux) requires
-      # root/sudo and a systemd PID 1, so it is NOT run here. It stays a manual/native
-      # check (and a future package-manager-gate concern). See docs/checklist.md.
+      # Native install/remove smoke: installs the .deb with apt-get (passwordless sudo on
+      # hosted runners), asserts the installed layout + version, that the systemd unit is
+      # DISABLED + inactive (package never enables/starts it) and a seeded
+      # /etc/portier/rules.json is untouched, then removes the package and asserts clean
+      # removal with user config preserved. This is a package-lifecycle smoke; full
+      # systemd service install validation (npm run validate:service:linux) stays a
+      # separate manual/native check. See docs/checklist.md.
+      - name: Install/remove smoke (.deb)
+        run: npm run validate:deb:install
 
       - name: List release artifacts + privacy guard
         run: npm run validate:artifacts

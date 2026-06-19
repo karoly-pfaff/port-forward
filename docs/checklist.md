@@ -256,9 +256,19 @@ npm run validate:msi:install
   `validate:release` reports `.pkg` presence on macOS (not fatal yet — the track is in
   progress) and verifies its checksum. The current `.pkg` is a file-install package
   (installs to `/usr/local/portier`, bundles the canonical LaunchAgent scripts, no
-  LaunchAgent auto-install yet, unsigned, never touches user config). Payload introspection
-  (`pkgutil --payload-files`) and a `.pkg` install smoke are follow-ups. See
-  `scripts/macos/readme.md`.
+  LaunchAgent auto-install yet, unsigned, never touches user config).
+- [ ] macOS `.pkg` install/uninstall smoke (macOS-only; needs sudo):
+
+```bash
+npm run validate:pkg:install
+```
+
+  Installs the `.pkg` with `installer -pkg … -target /`, asserts the installed layout
+  (`/usr/local/portier/...` incl. bundled LaunchAgent scripts) and CLI version, that **no
+  LaunchAgent is loaded/started** and a seeded `~/Library/Application Support/Portier`
+  sentinel is untouched, then removes it (delete install dir + `pkgutil --forget`) and
+  asserts clean removal with user data preserved. macOS-only (exits 0 with a skip notice
+  elsewhere). See `scripts/macos/readme.md`.
 - [ ] Linux release (Linux-only). `build:release` produces the native
   `portier_<version>_amd64.deb` (dpkg-deb; built on Debian/Ubuntu, skipped with a notice
   elsewhere) then the portable `portier-<version>-linux.tar.gz` (full runtime layout, incl.
@@ -268,9 +278,23 @@ npm run validate:msi:install
   the runtime under `/opt/portier` and installs a **disabled** systemd unit — it never
   enables/starts the service or touches user config (`scripts/linux/release/build-release.sh`).
   Systemd is the canonical service layer (`scripts/linux/service/`); `install-service.sh
-  --dry-run` prints the install plan without root. Full systemd install validation
-  (`validate:service:linux`) requires `sudo`/a Linux host. `.rpm` is a planned later track.
+  --dry-run` prints the install plan without root. `.rpm` is a planned later track.
   See `scripts/linux/readme.md`.
+- [ ] Linux `.deb` install/remove smoke (Linux-only; needs sudo):
+
+```bash
+npm run validate:deb:install
+```
+
+  Installs the `.deb` with `apt-get install`, asserts the installed layout
+  (`/opt/portier/...` + `/lib/systemd/system/portier.service`) and CLI version, that the
+  systemd unit is **disabled and inactive** (the package never enables/starts it) and a
+  seeded `/etc/portier/rules.json` sentinel is untouched, then `apt-get remove`s the package
+  and asserts the runtime files + unit are gone, the service is not running, and user config
+  is preserved. Linux-only (exits 0 with a skip notice elsewhere). This is a
+  package-lifecycle smoke; full systemd service install validation (`validate:service:linux`,
+  needs `sudo`/systemd PID 1) stays a separate manual/native check. See
+  `scripts/linux/readme.md`.
 - [ ] Cross-platform portable artifact generation (from any host, incl. Windows). The Go
   binaries are pure Go (CGO disabled), so all three portable artifacts — Windows `.zip`,
   Linux `.tar.gz`, macOS `.tar.gz` — can be cross-built and structurally validated without a
@@ -326,14 +350,17 @@ then `checksums.sha256`).
 - [ ] **Release MacOS** (`.github/workflows/release-macos.yml`, `macos-latest`):
   builds/validates `Portier-<version>.pkg` (pkgbuild, unsigned) →
   `portier-portable-macos-<version>.tar.gz` → `checksums.sha256`; runs runtime + upgrade
-  smoke and `.pkg` payload introspection (`pkgutil --payload-files`). Uploads
-  `build/releases/macos/**` as `portier-release-macos`.
+  smoke, `.pkg` payload introspection (`pkgutil --payload-files`), and the `.pkg`
+  install/uninstall smoke (`validate:pkg:install`). Uploads `build/releases/macos/**` as
+  `portier-release-macos`.
 - [ ] **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
   builds/validates `portier_<version>_amd64.deb` (file-install, disabled unit) →
-  `portier-<version>-linux.tar.gz` → `checksums.sha256`; runs runtime + upgrade smoke and
-  `.deb` payload introspection (`dpkg-deb --contents`). Uploads `build/releases/linux/**`
-  as `portier-release-linux`. Full systemd service validation (`validate:service:linux`)
-  needs root/systemd and is **not** run in CI — it stays a manual/native check.
+  `portier-<version>-linux.tar.gz` → `checksums.sha256`; runs runtime + upgrade smoke,
+  `.deb` payload introspection (`dpkg-deb --contents`), and the `.deb` install/remove smoke
+  (`validate:deb:install`, which asserts disabled+inactive unit and config preservation).
+  Uploads `build/releases/linux/**` as `portier-release-linux`. Full systemd service
+  validation (`validate:service:linux`) needs root/systemd and is **not** run in CI — it
+  stays a manual/native check.
 - [ ] Privacy: each workflow uploads only its own `build/releases/<platform>/**`.
   `validate:artifacts` logs the exact upload set (package-first, `checksums.sha256` last)
   and hard-fails on any `private` path segment before upload; `docs/private/**` is never

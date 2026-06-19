@@ -46,9 +46,24 @@ npm run build:service   # cross-compiles Go for current platform
 The native `.pkg` (pkgbuild) and portable tar.gz are built and validated on a
 `macos-latest` runner by the **Release MacOS** workflow
 (`.github/workflows/release-macos.yml`, manual `workflow_dispatch`), which also
-introspects the `.pkg` payload with `pkgutil --payload-files` and uploads
-`build/releases/macos/**` (`.pkg`, portable tar.gz, `checksums.sha256`) as a workflow
-artifact. The `.pkg` is unsigned. No GitHub Release or tag is created.
+introspects the `.pkg` payload with `pkgutil --payload-files`, runs the install/uninstall
+smoke (below), and uploads `build/releases/macos/**` (`.pkg`, portable tar.gz,
+`checksums.sha256`) as a workflow artifact. The `.pkg` is unsigned. No GitHub Release or
+tag is created.
+
+### `.pkg` install/uninstall smoke
+
+```bash
+npm run validate:pkg:install     # macOS only; needs sudo (passwordless on hosted runners)
+```
+
+Installs `build/releases/macos/Portier-<version>.pkg` with `installer -pkg … -target /`,
+asserts the installed layout under `/usr/local/portier` (incl. the bundled, **not loaded**
+LaunchAgent scripts under `service-scripts/`) and the CLI version, that **no LaunchAgent is
+loaded or started**, and that a seeded `~/Library/Application Support/Portier` sentinel is
+untouched. It then removes the package (delete the install dir + `pkgutil --forget
+com.portier.portier`) and asserts clean removal with user data preserved. Runs on macOS
+only (exits 0 with a skip notice on other platforms).
 
 ---
 

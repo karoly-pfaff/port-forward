@@ -182,7 +182,10 @@ and bundles the canonical LaunchAgent scripts under `/usr/local/portier/service-
 does not auto-install the LaunchAgent yet and never touches `rules.json`,
 `~/Library/Application Support/Portier`, or logs. It is unsigned/not notarized (Gatekeeper will
 warn). `validate:release` reports `.pkg` presence on macOS (not fatal yet) and verifies its
-checksum; a `.pkg` payload/install smoke is a follow-up. See `scripts/macos/readme.md`.
+checksum. The `Release MacOS` workflow also introspects the payload (`pkgutil --payload-files`)
+and runs a native install/uninstall smoke (`npm run validate:pkg:install`) that installs the
+`.pkg`, asserts the layout/version and that no LaunchAgent is loaded/started, then removes it
+and confirms user config is preserved. See `scripts/macos/readme.md`.
 
 On **Linux**, the v1.18 release artifact is the **portable tar.gz**
 (`portier-<version>-linux.tar.gz`, built by `scripts/build-portable.js`), with
@@ -265,12 +268,16 @@ workflow builds only its own platform's artifacts, package-first then portable t
   WiX 7, builds/validates the canonical MSI → portable zip → `checksums.sha256`, and runs
   the non-elevated MSI install smoke.
 - **Release MacOS** (`.github/workflows/release-macos.yml`, `macos-latest`):
-  builds/validates the native `.pkg` (pkgbuild) → portable tar.gz → `checksums.sha256` and
-  introspects the `.pkg` payload. The `.pkg` is unsigned (see Signing And Notarization).
+  builds/validates the native `.pkg` (pkgbuild) → portable tar.gz → `checksums.sha256`,
+  introspects the `.pkg` payload, and runs a native `.pkg` install/uninstall smoke
+  (`installer -pkg` then remove; asserts layout, version, **no LaunchAgent loaded/started**,
+  and user-config preservation). The `.pkg` is unsigned (see Signing And Notarization).
 - **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
   builds/validates the native `.deb` (dpkg-deb) → portable tar.gz → `checksums.sha256`, runs
-  the native runtime smoke, and introspects the `.deb` payload. Full systemd service
-  validation needs root and stays a manual/native check.
+  the native runtime smoke, introspects the `.deb` payload, and runs a native `.deb`
+  install/remove smoke (`apt-get install` then remove; asserts layout, version, the systemd
+  unit is **disabled + inactive**, and `/etc/portier/rules.json` preservation). Full systemd
+  service validation needs root and stays a manual/native check.
 
 Each workflow uploads only its own `build/releases/<platform>/**`; `docs/private/**` is never
 staged into release output and a privacy guard fails the run before upload if any private

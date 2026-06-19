@@ -122,9 +122,24 @@ skipped with a notice and the portable tar.gz remains the baseline.
 The **Release Linux** workflow (`.github/workflows/release-linux.yml`, manual
 `workflow_dispatch`) runs the native path on `ubuntu-latest`: `build:release:current`,
 `validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`,
-`validate:upgrade:current`, and a `.deb` payload introspection (`dpkg-deb --contents`),
-then uploads `build/releases/linux/**` (`.deb`, portable tar.gz, `checksums.sha256`) as the
-`portier-release-linux` workflow artifact.
+`validate:upgrade:current`, a `.deb` payload introspection (`dpkg-deb --contents`), and the
+`.deb` install/remove smoke (below), then uploads `build/releases/linux/**` (`.deb`, portable
+tar.gz, `checksums.sha256`) as the `portier-release-linux` workflow artifact.
+
+### `.deb` install/remove smoke
+
+```bash
+npm run validate:deb:install     # Linux only; needs sudo (passwordless on hosted runners)
+```
+
+Installs `build/releases/linux/portier_<version>_amd64.deb` with `apt-get install`, asserts
+the installed layout (`/opt/portier/...` + `/lib/systemd/system/portier.service`) and the CLI
+version, that the systemd unit is **disabled and inactive** (the package never enables or
+starts it), and that a seeded `/etc/portier/rules.json` sentinel is untouched. It then
+`apt-get remove`s the package and asserts the runtime files + unit are gone, the service is
+not running, and user config is preserved. Runs on Linux only (exits 0 with a skip notice on
+other platforms). This is a package-lifecycle smoke; full systemd service-install validation
+(`validate:service:linux`) stays a separate manual/native check.
 Full systemd service validation (`validate:service:linux`) needs root/systemd and is
 **not** run in CI — it stays a manual/native check. No GitHub Release or tag is created.
 

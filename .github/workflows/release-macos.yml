@@ -27,7 +27,7 @@ env:
 
 jobs:
   macos-release:
-    name: macOS release (.pkg + portable)
+    name: MacOS release (pkg + portable)
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
@@ -93,10 +93,17 @@ jobs:
             fi
           done
 
+      # Native install/uninstall smoke: installs the .pkg with installer(8) (passwordless
+      # sudo on hosted runners), asserts the installed layout + version, that NO LaunchAgent
+      # is loaded/started and user config is untouched, then removes it (rm install dir +
+      # pkgutil --forget) and asserts clean removal with user config preserved.
+      - name: Install/uninstall smoke (.pkg)
+        run: npm run validate:pkg:install
+
       - name: List release artifacts + privacy guard
         run: npm run validate:artifacts
 
-      - name: Upload macOS release artifacts
+      - name: Upload MacOS release artifacts
         uses: actions/upload-artifact@v6
         with:
           name: portier-release-macos

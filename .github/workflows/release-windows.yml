@@ -73,7 +73,7 @@ jobs:
         run: npm run typecheck
 
       # Builds the canonical MSI + the Windows portable zip + checksums.sha256.
-      - name: Build current-platform release (MSI + portable zip)
+      - name: Build current-platform release (.msi + portable zip)
         run: npm run build:release:current
 
       - name: Validate current-platform release
