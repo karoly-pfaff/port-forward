@@ -259,6 +259,14 @@ npm run validate:msi:install
   LaunchAgent auto-install yet, unsigned, never touches user config). Payload introspection
   (`pkgutil --payload-files`) and a `.pkg` install smoke are follow-ups. See
   `scripts/macos/readme.md`.
+- [ ] Linux release (Linux-only). `build:release` produces
+  `portier-<version>-linux.tar.gz` (full runtime layout, incl. `api/openapi.json`) +
+  `SHA256SUMS`. `validate:release` checks the tar.gz layout/OpenAPI/version and verifies its
+  checksum; the artifact is versioned and GitHub-Release-ready. Systemd is the canonical
+  service layer (`scripts/linux/service/`); `install-service.sh --dry-run` prints the install
+  plan (paths, `ExecStart`) without root. Full systemd install validation
+  (`validate:service:linux`) requires `sudo` and runs on a Linux host. `.deb`/`.rpm` are a
+  planned package track for a later slice. See `scripts/linux/readme.md`.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp

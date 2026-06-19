@@ -39,30 +39,30 @@ Linux-specific package (produces build/linux/ with linux/amd64 binary):
 bash scripts/linux/build-runtime.sh
 ```
 
-## Release Archive (v1.1)
+## Release Artifact
 
-Build a portable tar.gz for distribution:
-
-```bash
-npm run build:release:portable
-```
-
-To skip the `build:runtime` step and reuse an existing `build/portier/`:
+The **portable tar.gz is the v1.18 Linux release artifact** (versioned, checksummed in
+`SHA256SUMS`, GitHub-Release-ready). Systemd (below) is the canonical service layer.
 
 ```bash
-npm run build:release:portable -- --no-build
+npm run build:release:current            # builds the tar.gz + SHA256SUMS
+npm run build:release:current -- --no-build   # reuse an existing build/portier/
+npm run validate:release:current         # validate layout/OpenAPI/version + checksum
 ```
 
 Output: `build/releases/linux/portier-<version>-linux.tar.gz`
 
-The archive contains the clean runtime layout:
+The archive contains the full runtime layout:
 
 ```text
+portier
 service
 server.js
 web/
   index.html
   assets/
+api/
+  openapi.json
 readme.txt
 ```
 
@@ -73,7 +73,16 @@ tar -xzf portier-<version>-linux.tar.gz -C /opt/portier/
 sudo bash scripts/linux/service/install-service.sh --source-dir /opt/portier
 ```
 
-> **Note:** `.deb` and `.rpm` packages are not yet implemented. The portable tar.gz is the v1.1 Linux release artifact. Packages are planned as a follow-up.
+Preview the systemd install plan without root (paths, `ExecStart`, unit location):
+
+```bash
+bash scripts/linux/service/install-service.sh --dry-run
+```
+
+> **`.deb` / `.rpm`:** these native packages are a **planned package-manager track for a
+> later v1.18 slice** (built and validated on native `ubuntu`/`fedora` runners once the
+> release CI lands), not shipped in this slice. The portable tar.gz + systemd scripts are the
+> complete v1.18 Linux install story.
 
 ## Helper Scripts (Recommended)
 

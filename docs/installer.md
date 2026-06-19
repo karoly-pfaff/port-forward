@@ -180,6 +180,16 @@ does not auto-install the LaunchAgent yet and never touches `rules.json`,
 warn). `validate:release` reports `.pkg` presence on macOS (not fatal yet) and verifies its
 checksum; a `.pkg` payload/install smoke is a follow-up. See `scripts/macos/readme.md`.
 
+On **Linux**, the v1.18 release artifact is the **portable tar.gz**
+(`portier-<version>-linux.tar.gz`, built by `scripts/linux/release/build-release.sh`), with
+the **systemd** scripts under `scripts/linux/service/` as the canonical service layer. The
+tar.gz contains the full runtime layout (incl. `api/openapi.json`); it is versioned,
+checksummed in `SHA256SUMS`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
+(binaries + `web/`), config at `/etc/portier/rules.json`, logs via journald, and the unit at
+`/etc/systemd/system/portier.service`. `.deb`/`.rpm` packages are a **planned package-manager
+track for a later v1.18 slice** (built/validated on native `ubuntu`/`fedora` runners once the
+release CI lands) — not shipped in this slice. See `scripts/linux/readme.md`.
+
 Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
 format, sorted, lowercase hex) covering every produced release artifact for that version —
 portable archives and installer artifacts alike. `build:release` regenerates it after the
@@ -240,5 +250,7 @@ They use isolated temp paths, test-specific service names, and non-production po
 - Keep config and logs outside the packaged runtime directory.
 - The Windows MSI (WiX) is the canonical Windows installer (Inno Setup is retired to
   `scripts/windows/legacy/`, manual-only). The native macOS `.pkg` installer track is in
-  progress for v1.18 (file-install; built on macOS). Do not add other platform package
-  managers (`deb`, `rpm`, Homebrew, winget, Chocolatey) without a deliberate product decision.
+  progress for v1.18 (file-install; built on macOS). Linux ships the portable tar.gz in
+  v1.18, with `.deb`/`.rpm` as a planned package track for a later slice. Do not add other
+  platform package managers (Homebrew, winget, Chocolatey) without a deliberate product
+  decision.

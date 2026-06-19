@@ -155,7 +155,10 @@ for (const target of targets) {
   } else if (target === "linux") {
     buildLinuxPortable(version);
     if (!portableOnly) {
-      log("  Linux installer: no .deb/.rpm in v1.1. Portable tar.gz only.");
+      // v1.18 Linux ships the portable tar.gz (with systemd scripts as the
+      // canonical service layer). .deb/.rpm are a planned package track for a
+      // later slice (built/validated on native runners). See docs/installer.md.
+      log("  Linux: portable tar.gz is the v1.18 release artifact (.deb/.rpm: planned, later slice).");
     }
   }
 

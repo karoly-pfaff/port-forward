@@ -51,8 +51,8 @@ else
   echo ""
 fi
 
-# Verify required files
-for f in "service" "server.js" "web/index.html" "readme.txt"; do
+# Verify the full release layout (matches the Slice-2 contract).
+for f in "portier" "service" "server.js" "web/index.html" "api/openapi.json" "readme.txt"; do
   if [ ! -e "$PACKAGE_DIR/$f" ]; then
     echo "Error: Required file missing from $PACKAGE_DIR: $f" >&2
     echo "  Run: npm run build:runtime" >&2
@@ -60,12 +60,13 @@ for f in "service" "server.js" "web/index.html" "readme.txt"; do
   fi
 done
 
-# Stage the archive contents
+# Stage the archive contents (the whole runtime layout: portier, service,
+# server.js, web/, api/openapi.json, readme.txt). User config/data is never here.
 TMP_STAGE="$(mktemp -d)"
 trap 'rm -rf "$TMP_STAGE"' EXIT
 
 cp -r "$PACKAGE_DIR/." "$TMP_STAGE/"
-chmod +x "$TMP_STAGE/service"
+chmod +x "$TMP_STAGE/portier" "$TMP_STAGE/service"
 
 # Create output directory and archive
 mkdir -p "$OUTPUT_DIR"
