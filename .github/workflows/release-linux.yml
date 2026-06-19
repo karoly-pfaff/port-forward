@@ -123,19 +123,19 @@ jobs:
       # systemd service install validation (npm run validate:service:linux) stays a
       # separate manual/native check. See docs/checklist.md.
       - name: Install/remove smoke (.deb)
-        run: npm run validate:deb:install
+        run: npm run validate:install:deb
 
       # .rpm payload introspection (rpm -qlp): same layout assertions as the .deb, plus
       # forbidden-content (no rules.json, no docs/private).
       - name: Inspect .rpm payload
-        run: npm run validate:rpm:payload
+        run: npm run validate:install:rpm:payload
 
       # Native .rpm install/remove smoke: `rpm -i` then `rpm -e` (the rpm db is independent
       # of dpkg). Asserts the installed layout + version, that the systemd unit is DISABLED +
       # inactive (package never enables/starts it) and a seeded /etc/portier/rules.json is
       # untouched, then removes and asserts clean removal with user config preserved.
       - name: Install/remove smoke (.rpm)
-        run: npm run validate:rpm:install
+        run: npm run validate:install:rpm
 
       - name: List release artifacts + privacy guard
         run: npm run validate:artifacts

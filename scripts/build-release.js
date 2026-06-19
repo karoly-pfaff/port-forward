@@ -229,16 +229,13 @@ function buildMacosPkg(version) {
 
 // ── Linux ─────────────────────────────────────────────────────────────────────
 
-function buildLinuxDeb(version) {
-  log("  Installer: Linux .deb: delegating to scripts/linux/release/build-release.sh...");
-  // File-install .deb via dpkg-deb (Linux only). The script skips gracefully (exit 0)
-  // on a host without dpkg-deb, so the portable tar.gz remains the baseline.
-  run("bash", ["scripts/linux/release/build-release.sh", "--version", version], { shell: false });
+// build-release.sh builds one native Linux package per --format (deb|rpm). Both skip
+// gracefully (exit 0) when their tool (dpkg-deb / rpmbuild) is absent, so the portable
+// tar.gz remains the baseline.
+function buildLinuxPackage(version, format) {
+  log(`  Installer: Linux .${format}: delegating to scripts/linux/release/build-release.sh --format ${format}...`);
+  run("bash", ["scripts/linux/release/build-release.sh", "--format", format, "--version", version], { shell: false });
 }
 
-function buildLinuxRpm(version) {
-  log("  Installer: Linux .rpm: delegating to scripts/linux/release/build-rpm.sh...");
-  // File-install .rpm via rpmbuild (Linux only; mirrors the .deb). Skips gracefully
-  // (exit 0) on a host without rpmbuild, so the .deb + portable tar.gz remain.
-  run("bash", ["scripts/linux/release/build-rpm.sh", "--version", version], { shell: false });
-}
+function buildLinuxDeb(version) { buildLinuxPackage(version, "deb"); }
+function buildLinuxRpm(version) { buildLinuxPackage(version, "rpm"); }

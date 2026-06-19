@@ -175,8 +175,8 @@ retired from the release flow — its scripts are kept, manual-only, under
 The current MSI is a file-install package — it bundles the canonical service scripts but does
 not auto-install the Windows Service yet, and never touches `rules.json` or
 `%ProgramData%\Portier`. It is validated by two smokes (both non-interactive `msiexec`):
-`npm run validate:msi:install` (extraction via `msiexec /a`, no admin — validates layout,
-version, config boundary) and `npm run validate:msi:install:full` (a full elevated per-machine
+`npm run validate:install:msi` (extraction via `msiexec /a`, no admin — validates layout,
+version, config boundary) and `npm run validate:install:msi:full` (a full elevated per-machine
 `msiexec /i` then `/x`). The full smoke additionally asserts that **no Windows service and no
 scheduled task is created**, that `%ProgramData%\Portier\rules.json` is preserved across install
 and uninstall, and that uninstall removes the install dir; it runs elevated on the `Release
@@ -191,7 +191,7 @@ does not auto-install the LaunchAgent yet and never touches `rules.json`,
 `~/Library/Application Support/Portier`, or logs. It is unsigned/not notarized (Gatekeeper will
 warn). `validate:release` reports `.pkg` presence on macOS (not fatal yet) and verifies its
 checksum. The `Release MacOS` workflow also introspects the payload (`pkgutil --payload-files`)
-and runs a native install/uninstall smoke (`npm run validate:pkg:install`) that installs the
+and runs a native install/uninstall smoke (`npm run validate:install:pkg`) that installs the
 `.pkg`, asserts the layout/version and that no LaunchAgent is loaded/started, then removes it
 and confirms user config is preserved. See `scripts/macos/readme.md`.
 
@@ -203,13 +203,13 @@ tar.gz contains the full runtime layout (incl. `api/openapi.json`); it is versio
 checksummed in `checksums.sha256`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
 (binaries + `web/`), config at `/etc/portier/rules.json`, logs via journald, and the unit at
 `/etc/systemd/system/portier.service`. Two native packages are also produced and validated on
-the `ubuntu-latest` release-CI runner: a **`.deb`** (`portier_<version>_amd64.deb`, dpkg-deb,
-`scripts/linux/release/build-release.sh`) and a **`.rpm`** (`portier-<version>-1.x86_64.rpm`,
-rpmbuild, `scripts/linux/release/build-rpm.sh`). Both are file-install packages that mirror each
-other: they lay the runtime under `/opt/portier` and install a **disabled** systemd unit — they
-never enable/start the service or touch user config. Each has a payload + install/remove smoke
-(`validate:deb:install`, `validate:rpm:payload`, `validate:rpm:install`). See
-`scripts/linux/readme.md`.
+the `ubuntu-latest` release-CI runner: a **`.deb`** (`portier_<version>_amd64.deb`, dpkg-deb)
+and a **`.rpm`** (`portier-<version>-1.x86_64.rpm`, rpmbuild), both built by one unified script
+(`scripts/linux/release/build-release.sh --format deb|rpm`). They are file-install packages that
+mirror each other: they lay the runtime under `/opt/portier` and install a **disabled** systemd
+unit — they never enable/start the service or touch user config. Each has a payload +
+install/remove smoke (`validate:install:deb`, `validate:install:rpm:payload`,
+`validate:install:rpm`). See `scripts/linux/readme.md`.
 
 **Cross-platform portable generation.** The Go CLI/service are pure Go (CGO disabled), so all
 five portable artifacts — `windows-amd64.zip`, `linux-amd64.tar.gz`, `linux-arm64.tar.gz`,

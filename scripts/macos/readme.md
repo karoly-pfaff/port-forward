@@ -54,7 +54,7 @@ tag is created.
 ### `.pkg` install/uninstall smoke
 
 ```bash
-npm run validate:pkg:install     # macOS only; needs sudo (passwordless on hosted runners)
+npm run validate:install:pkg     # macOS only; needs sudo (passwordless on hosted runners)
 ```
 
 Installs `build/releases/macos/Portier-<version>.pkg` with `installer -pkg … -target /`,

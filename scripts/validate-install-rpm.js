@@ -1,21 +1,25 @@
 #!/usr/bin/env node
 /* global console, process */
 /**
- * Linux .rpm install/remove smoke for the Portier RPM (mirrors validate-install-deb.js).
+ * Linux .rpm validation for the Portier RPM (mirrors validate-install-deb.js). Two modes:
  *
- * Proves the file-install .rpm installs the expected layout under /opt/portier with a
- * DISABLED systemd unit, never enables/starts the service, never overwrites user config
- * (/etc/portier/rules.json), and removes cleanly while preserving user config.
+ *   --payload  Structural-only: list the payload (`rpm -qlp`) and assert the file-install
+ *              layout under /opt/portier + the systemd unit, the package metadata version,
+ *              and that no user config (rules.json) or private/dev material is shipped. No
+ *              install, no sudo.
+ *   --install  (default) Install/remove smoke: `rpm -i` then `rpm -e` (the rpm database is
+ *              independent of dpkg, so this is safe on an Ubuntu runner with systemd as PID 1,
+ *              giving real disabled/inactive assertions). Proves the package installs the
+ *              expected layout with a DISABLED unit, never enables/starts the service, never
+ *              overwrites user config (/etc/portier/rules.json), and removes cleanly. Needs
+ *              the `rpm` CLI + sudo (passwordless on GitHub-hosted runners).
  *
- * Linux-only and needs the `rpm` CLI + sudo (passwordless on GitHub-hosted runners). Uses
- * `rpm -i` / `rpm -e` (the rpm database is independent of dpkg, so this is safe to run on an
- * Ubuntu runner that has systemd as PID 1, giving real disabled/inactive assertions). On
- * other platforms it exits 0 with a skip notice. All mutated paths are exact, Portier-specific
- * constants; package files are removed by rpm, and the only file this script deletes is the
- * config sentinel it created (guarded).
+ * Linux-only — on other platforms it exits 0 with a skip notice. All mutated paths are exact,
+ * Portier-specific constants; package files are removed by rpm, and the only file this script
+ * deletes is the config sentinel it created (guarded).
  *
  * Usage:
- *   node scripts/validate-install-rpm.js [--rpm <path>] [--keep]
+ *   node scripts/validate-install-rpm.js [--payload | --install] [--rpm <path>] [--keep]
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -41,6 +45,7 @@ const flagValue = (f) => {
 };
 const rpmArg = flagValue("--rpm");
 const keep = rawArgs.includes("--keep");
+const mode = rawArgs.includes("--payload") ? "payload" : "install";
 
 let passed = 0;
 let failed = 0;
@@ -84,6 +89,57 @@ function assertExact(actual, expected) {
   }
 }
 
+function summarize() {
+  console.log(`\n[rpm-smoke] ${passed} passed, ${failed} failed.`);
+  if (failed > 0) {
+    console.error("[rpm-smoke] .rpm validation FAILED.\n");
+    process.exit(1);
+  }
+  console.log("[rpm-smoke] .rpm validation passed.\n");
+}
+
+// payloadCheck: structural --payload mode. Lists the package (rpm -qlp) and asserts the
+// layout, metadata version, and forbidden content WITHOUT installing.
+function payloadCheck(rpmPath, version) {
+  const v = sh("rpm", ["-qp", "--queryformat", "%{VERSION}", rpmPath]);
+  const metaVersion = (v.stdout || "").trim();
+  if (metaVersion === version) pass(`rpm metadata version = ${metaVersion}`);
+  else fail(`rpm metadata version = "${metaVersion}", expected ${version}`);
+
+  const ql = sh("rpm", ["-qlp", rpmPath]);
+  if ((ql.status ?? 1) !== 0) {
+    fail(`rpm -qlp failed: ${(ql.stderr || "").trim()}`);
+    return;
+  }
+  const files = (ql.stdout || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+
+  console.log("Payload layout:");
+  for (const req of [
+    "/opt/portier/portier",
+    "/opt/portier/service",
+    "/opt/portier/server.js",
+    "/opt/portier/api/openapi.json",
+    "/opt/portier/web/index.html",
+    "/opt/portier/readme.txt",
+    "/lib/systemd/system/portier.service",
+  ]) {
+    if (files.includes(req)) pass(req);
+    else fail(`missing from payload: ${req}`);
+  }
+
+  console.log("Forbidden content:");
+  const forbidden = [
+    [/rules\.json$/, "rules.json (user config must not be shipped)"],
+    [/(^|\/)\.env$/, ".env"],
+    [/docs\/private/, "docs/private"],
+    [/(^|\/)sources(\/|$)/, "sources/"],
+  ];
+  for (const [re, label] of forbidden) {
+    if (files.some((f) => re.test(f))) fail(`must not contain: ${label}`);
+    else pass(`absent: ${label}`);
+  }
+}
+
 async function main() {
   if (!isLinux) {
     console.log(`[rpm-smoke] Linux-only; skipping on ${process.platform}.`);
@@ -106,6 +162,13 @@ async function main() {
     process.exit(1);
   }
   pass(`.rpm present (${(statSync(rpmPath).size / 1024 / 1024).toFixed(1)} MB)`);
+
+  // --payload: structural-only checks, no install/sudo.
+  if (mode === "payload") {
+    payloadCheck(rpmPath, version);
+    summarize();
+    return;
+  }
 
   const haveSystemctl = (sh("systemctl", ["--version"]).status ?? 1) === 0;
   console.log(`[rpm-smoke] systemctl available: ${haveSystemctl}`);
@@ -220,12 +283,7 @@ async function main() {
     }
   }
 
-  console.log(`\n[rpm-smoke] ${passed} passed, ${failed} failed.`);
-  if (failed > 0) {
-    console.error("[rpm-smoke] .rpm install/remove smoke FAILED.\n");
-    process.exit(1);
-  }
-  console.log("[rpm-smoke] .rpm install/remove smoke passed.\n");
+  summarize();
 }
 
 main().catch((err) => {

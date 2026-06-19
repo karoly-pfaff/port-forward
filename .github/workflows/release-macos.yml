@@ -106,7 +106,7 @@ jobs:
       # is loaded/started and user config is untouched, then removes it (rm install dir +
       # pkgutil --forget) and asserts clean removal with user config preserved.
       - name: Install/uninstall smoke (.pkg)
-        run: npm run validate:pkg:install
+        run: npm run validate:install:pkg
 
       - name: List release artifacts + privacy guard
         run: npm run validate:artifacts

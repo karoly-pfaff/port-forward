@@ -90,12 +90,12 @@
     "validate:release:portable:macos": "node scripts/validate-portable.js --macos",
     "validate:release:checksums": "node scripts/validate-release.js --platform current --checksums-only",
     "validate:upgrade:current": "node scripts/validate-upgrade.js",
-    "validate:msi:install": "node scripts/validate-install-msi.js --extract",
-    "validate:msi:install:full": "node scripts/validate-install-msi.js --full",
-    "validate:pkg:install": "node scripts/validate-install-pkg.js",
-    "validate:deb:install": "node scripts/validate-install-deb.js",
-    "validate:rpm:payload": "node scripts/validate-rpm-payload.js",
-    "validate:rpm:install": "node scripts/validate-install-rpm.js",
+    "validate:install:msi": "node scripts/validate-install-msi.js --extract",
+    "validate:install:msi:full": "node scripts/validate-install-msi.js --full",
+    "validate:install:pkg": "node scripts/validate-install-pkg.js",
+    "validate:install:deb": "node scripts/validate-install-deb.js",
+    "validate:install:rpm": "node scripts/validate-install-rpm.js",
+    "validate:install:rpm:payload": "node scripts/validate-install-rpm.js --payload",
     "validate:artifacts": "node scripts/validate-artifacts.js"
   },
   "devDependencies": {

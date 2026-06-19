@@ -241,7 +241,7 @@ npm run validate:release:checksums
 - [ ] Windows MSI extraction smoke (Windows-only; **no admin required**):
 
 ```powershell
-npm run validate:msi:install
+npm run validate:install:msi
 ```
 
   `msiexec /a` lays out the exact payload without admin and validates the installed
@@ -251,7 +251,7 @@ npm run validate:msi:install
 - [ ] Windows MSI full install/uninstall smoke (Windows-only; **needs an elevated shell**):
 
 ```powershell
-npm run validate:msi:install:full
+npm run validate:install:msi:full
 ```
 
   Real per-machine `msiexec /i` then `/x`. Asserts the installed layout + CLI version,
@@ -271,7 +271,7 @@ npm run validate:msi:install:full
 - [ ] macOS `.pkg` install/uninstall smoke (macOS-only; needs sudo):
 
 ```bash
-npm run validate:pkg:install
+npm run validate:install:pkg
 ```
 
   Installs the `.pkg` with `installer -pkg … -target /`, asserts the installed layout
@@ -289,15 +289,15 @@ npm run validate:pkg:install
   (covering the `.rpm` too); the artifacts are versioned and GitHub-Release-ready. Both
   packages are **file-install**, mirror each other: they lay the runtime under `/opt/portier`
   and install a **disabled** systemd unit — never enabling/starting the service or touching
-  user config (`scripts/linux/release/build-release.sh` = `.deb`, `build-rpm.sh` = `.rpm`).
+  user config (one builder: `scripts/linux/release/build-release.sh --format deb|rpm`).
   Systemd is the canonical service layer (`scripts/linux/service/`); `install-service.sh
   --dry-run` prints the install plan without root. See `scripts/linux/readme.md`.
 - [ ] Linux `.deb` / `.rpm` install/remove smoke (Linux-only; needs sudo):
 
 ```bash
-npm run validate:deb:install   # apt-get install ./*.deb → assert → apt-get remove
-npm run validate:rpm:payload   # rpm -qlp layout/forbidden-content check (needs the rpm CLI)
-npm run validate:rpm:install   # rpm -i ./*.rpm → assert → rpm -e
+npm run validate:install:deb   # apt-get install ./*.deb → assert → apt-get remove
+npm run validate:install:rpm:payload   # rpm -qlp layout/forbidden-content check (needs the rpm CLI)
+npm run validate:install:rpm   # rpm -i ./*.rpm → assert → rpm -e
 ```
 
   Each install smoke asserts the installed layout (`/opt/portier/...` +
@@ -371,15 +371,15 @@ then `checksums.sha256`).
   `portier-<version>-macos-amd64.tar.gz` + `portier-<version>-macos-arm64.tar.gz` →
   `checksums.sha256` (incl. structural validation of both arches); runs runtime + upgrade
   smoke (host arch), `.pkg` payload introspection (`pkgutil --payload-files`), and the `.pkg`
-  install/uninstall smoke (`validate:pkg:install`). Uploads `build/releases/macos/**` as
+  install/uninstall smoke (`validate:install:pkg`). Uploads `build/releases/macos/**` as
   `portier-release-macos`.
 - [ ] **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
   installs `rpm` tooling, then builds/validates `portier_<version>_amd64.deb` (file-install,
   disabled unit) → `portier-<version>-1.x86_64.rpm` (file-install, disabled unit) →
   `portier-<version>-linux-amd64.tar.gz` + `portier-<version>-linux-arm64.tar.gz` →
   `checksums.sha256` (incl. structural validation of both arches); runs runtime + upgrade
-  smoke (host arch), `.deb` + `.rpm` payload introspection, and the `.deb` (`validate:deb:install`)
-  and `.rpm` (`validate:rpm:install`) install/remove smokes (each asserts disabled+inactive
+  smoke (host arch), `.deb` + `.rpm` payload introspection, and the `.deb` (`validate:install:deb`)
+  and `.rpm` (`validate:install:rpm`) install/remove smokes (each asserts disabled+inactive
   unit and config preservation).
   Uploads `build/releases/linux/**` as `portier-release-linux`. Full systemd service
   validation (`validate:service:linux`) needs root/systemd and is **not** run in CI — it

@@ -84,7 +84,7 @@ Validate the MSI install layout and config/data boundary (no admin needed; uses
 `msiexec /a` extraction non-elevated, full `/i`+`/x` when elevated):
 
 ```powershell
-npm run validate:msi:install
+npm run validate:install:msi
 ```
 
 See [`scripts/windows/release/readme.md`](release/readme.md) for the WiX source and install smoke.

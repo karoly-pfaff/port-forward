@@ -134,7 +134,7 @@ workflow artifact.
 ### `.deb` install/remove smoke
 
 ```bash
-npm run validate:deb:install     # Linux only; needs sudo (passwordless on hosted runners)
+npm run validate:install:deb     # Linux only; needs sudo (passwordless on hosted runners)
 ```
 
 Installs `build/releases/linux/portier_<version>_amd64.deb` with `apt-get install`, asserts
@@ -152,8 +152,8 @@ other platforms). This is a package-lifecycle smoke; full systemd service-instal
 
 ```bash
 npm run build:release:current     # also builds portier-<version>-1.x86_64.rpm
-# or directly (reuses an existing build/portier/):
-bash scripts/linux/release/build-rpm.sh --version <version>
+# or directly (reuses an existing build/portier/) — same builder as the .deb, --format rpm:
+bash scripts/linux/release/build-release.sh --format rpm --version <version>
 ```
 
 Output: `build/releases/linux/portier-<version>-1.x86_64.rpm`
@@ -161,8 +161,8 @@ Output: `build/releases/linux/portier-<version>-1.x86_64.rpm`
 Same **file-install** behavior as the `.deb`: runtime under `/opt/portier`, a **disabled**
 systemd unit, scriptlets that only `systemctl daemon-reload` + print opt-in guidance (and
 stop/disable on erasure), no service enable/start, no config creation/overwrite. `AutoReqProv`
-is off (the Go binary is static), so the package declares no dependencies. `build-rpm.sh`
-requires `rpmbuild` (the `rpm` package on Debian/Ubuntu, native on Fedora/RHEL); on a host
+is off (the Go binary is static), so the package declares no dependencies. The `--format rpm`
+path requires `rpmbuild` (the `rpm` package on Debian/Ubuntu, native on Fedora/RHEL); on a host
 without it the `.rpm` step is skipped with a notice. Opt in with:
 
 ```bash
@@ -173,13 +173,13 @@ sudo systemctl enable --now portier
 ### `.rpm` payload + install/remove smoke
 
 ```bash
-npm run validate:rpm:payload     # rpm -qlp layout + forbidden-content check (needs the rpm CLI)
-npm run validate:rpm:install     # rpm -i → assert → rpm -e (Linux only; needs sudo + rpm)
+npm run validate:install:rpm:payload     # rpm -qlp layout + forbidden-content check (needs the rpm CLI)
+npm run validate:install:rpm     # rpm -i → assert → rpm -e (Linux only; needs sudo + rpm)
 ```
 
-`validate:rpm:payload` lists the package (`rpm -qlp`) and asserts the `/opt/portier` layout +
+`validate:install:rpm:payload` lists the package (`rpm -qlp`) and asserts the `/opt/portier` layout +
 systemd unit, the package metadata version, and that no `rules.json`/`docs/private` is shipped.
-`validate:rpm:install` installs with `rpm -i`, asserts the layout + CLI version, the unit is
+`validate:install:rpm` installs with `rpm -i`, asserts the layout + CLI version, the unit is
 **disabled and inactive**, and a seeded `/etc/portier/rules.json` is untouched, then `rpm -e`s
 and asserts clean removal with user config preserved. The rpm database is independent of dpkg,
 so this runs on the Ubuntu CI runner (systemd is PID 1 there, giving real disabled/inactive

@@ -59,8 +59,8 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\release\build-release.p
 Two non-interactive MSI smokes validate the MSI:
 
 ```powershell
-npm run validate:msi:install        # extraction smoke — msiexec /a, no admin
-npm run validate:msi:install:full   # full install/uninstall — msiexec /i + /x, needs elevation
+npm run validate:install:msi        # extraction smoke — msiexec /a, no admin
+npm run validate:install:msi:full   # full install/uninstall — msiexec /i + /x, needs elevation
 ```
 
 - **Extraction** (`--extract`, no admin): `msiexec /a ... /qn TARGETDIR=<temp>`
@@ -96,8 +96,8 @@ The **Release Windows** workflow (`.github/workflows/release-windows.yml`, manua
 (`dotnet tool install --global wix --version 7.*`, adding `%USERPROFILE%\.dotnet\tools`
 to `PATH`), then runs `build:release:current` (MSI + portable zip),
 `validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`,
-`validate:upgrade:current`, the `validate:msi:install` extraction smoke (`msiexec /a`), and
-the `validate:msi:install:full` elevated install/uninstall smoke (`msiexec /i` + `/x`; the
+`validate:upgrade:current`, the `validate:install:msi` extraction smoke (`msiexec /a`), and
+the `validate:install:msi:full` elevated install/uninstall smoke (`msiexec /i` + `/x`; the
 runner is elevated). It uploads `build/releases/windows/**` (MSI, portable zip,
 `checksums.sha256`) as the `portier-release-windows` workflow artifact. It does not build
 cross-platform portables, publish a GitHub Release, or create tags.
