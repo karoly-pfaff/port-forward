@@ -21,6 +21,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import AdmZip from "adm-zip";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -56,6 +57,15 @@ function readVersion() {
 }
 
 const version = versionArg || readVersion();
+
+// The packaged OpenAPI doc version follows the major.minor of the package version
+// (e.g. package 1.18.0 -> OpenAPI "1.18"). Mirrors OPENAPI_DOC_VERSION in
+// server/sources/openapi/openapi.ts.
+function openApiVersionForPackage(ver) {
+  const parts = ver.split(".");
+  return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : ver;
+}
+const expectedOpenApi = openApiVersionForPackage(version);
 
 // ── Resolve platform ──────────────────────────────────────────────────────────
 
@@ -106,20 +116,11 @@ function listTarGzContents(archivePath) {
 }
 
 function listZipContents(archivePath) {
-  const escaped = archivePath.replace(/'/g, "''");
-  const psCmd = [
-    `Add-Type -AssemblyName System.IO.Compression.FileSystem`,
-    `$z = [System.IO.Compression.ZipFile]::OpenRead('${escaped}')`,
-    `$z.Entries.FullName`,
-    `$z.Dispose()`,
-  ].join("; ");
-  const r = spawnSync(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-Command", psCmd],
-    { encoding: "utf8" }
-  );
-  if (r.status !== 0 || !r.stdout) return null;
-  return r.stdout.split("\n").map((s) => s.trim()).filter(Boolean);
+  try {
+    return new AdmZip(archivePath).getEntries().map((e) => e.entryName);
+  } catch {
+    return null;
+  }
 }
 
 function listArchiveContents(archivePath) {
@@ -170,38 +171,81 @@ function checkAbsent(entries, name, label) {
   }
 }
 
-// ── readme.txt content extraction ─────────────────────────────────────────────
+// ── Generic archive entry extraction (by normalized relative path) ────────────
 
-function extractReadmeFromTarGz(archivePath, rawEntries) {
-  const entry = rawEntries.find(
-    (e) => e.replace(/^\.\//, "").replace(/\/$/, "") === "readme.txt"
-  );
+function normalizeRel(entry) {
+  return entry.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "");
+}
+
+function extractTarGzEntry(archivePath, rawEntries, relPath) {
+  const entry = rawEntries.find((e) => normalizeRel(e) === relPath);
   if (!entry) return null;
   const r = spawnSync("tar", ["-xOzf", archivePath, entry], { encoding: "utf8" });
   return r.status === 0 && r.stdout ? r.stdout : null;
 }
 
-function extractReadmeFromZip(archivePath) {
-  const escaped = archivePath.replace(/'/g, "''");
-  const psCmd = [
-    `Add-Type -AssemblyName System.IO.Compression.FileSystem`,
-    `$z = [System.IO.Compression.ZipFile]::OpenRead('${escaped}')`,
-    `$e = $z.Entries | Where-Object { $_.Name -eq 'readme.txt' } | Select-Object -First 1`,
-    `if ($e) { $r = New-Object System.IO.StreamReader($e.Open()); $r.ReadToEnd(); $r.Dispose() }`,
-    `$z.Dispose()`,
-  ].join("; ");
-  const r = spawnSync(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-Command", psCmd],
-    { encoding: "utf8" }
-  );
-  return r.status === 0 && r.stdout ? r.stdout : null;
+function extractZipEntry(archivePath, relPath) {
+  try {
+    const zip = new AdmZip(archivePath);
+    const entry = zip
+      .getEntries()
+      .find((e) => normalizeRel(e.entryName) === relPath);
+    return entry ? zip.readAsText(entry) : null;
+  } catch {
+    return null;
+  }
 }
 
+function extractArchiveEntry(archivePath, rawEntries, relPath) {
+  return archivePath.endsWith(".zip")
+    ? extractZipEntry(archivePath, relPath)
+    : extractTarGzEntry(archivePath, rawEntries, relPath);
+}
+
+// ── api/openapi.json content check ────────────────────────────────────────────
+
+function checkOpenApiContent(archivePath, rawEntries) {
+  const content = extractArchiveEntry(archivePath, rawEntries, "api/openapi.json");
+  if (!content || content.trim() === "") {
+    fail("api/openapi.json is missing or empty in the archive");
+    return;
+  }
+  pass("api/openapi.json is non-empty");
+
+  // Defensively strip a leading UTF-8 BOM and surrounding whitespace before parsing.
+  const jsonText = content.replace(/^\uFEFF/, "").trim();
+
+  let doc;
+  try {
+    doc = JSON.parse(jsonText);
+  } catch {
+    fail("api/openapi.json is not valid JSON");
+    return;
+  }
+  pass("api/openapi.json is valid JSON");
+
+  if (typeof doc.openapi === "string" && doc.openapi.length > 0) {
+    pass(`api/openapi.json has openapi field (${doc.openapi})`);
+  } else {
+    fail("api/openapi.json missing openapi field");
+  }
+
+  const infoVer = doc.info && doc.info.version;
+  if (typeof infoVer !== "string" || infoVer.length === 0) {
+    fail("api/openapi.json missing info.version");
+  } else if (infoVer === expectedOpenApi) {
+    pass(`api/openapi.json info.version = ${infoVer} (matches package ${version})`);
+  } else {
+    fail(
+      `api/openapi.json info.version = ${infoVer}, expected ${expectedOpenApi} (from package ${version})`
+    );
+  }
+}
+
+// ── readme.txt content extraction ─────────────────────────────────────────────
+
 function checkReadmeContent(archivePath, rawEntries) {
-  const content = archivePath.endsWith(".zip")
-    ? extractReadmeFromZip(archivePath)
-    : extractReadmeFromTarGz(archivePath, rawEntries);
+  const content = extractArchiveEntry(archivePath, rawEntries, "readme.txt");
 
   if (!content) {
     warn("Could not extract readme.txt content for validation.");
@@ -294,6 +338,7 @@ if (!rawEntries) {
   checkRequired(entries, serviceBin, `${serviceBin} (native Go service binary)`);
   checkRequired(entries, "server.js", "server.js (Node/TypeScript fallback)");
   checkRequired(entries, "readme.txt", "readme.txt");
+  checkRequired(entries, "api/openapi.json", "api/openapi.json (OpenAPI document)");
   checkRequired(entries, "web/index.html", "web/index.html");
   checkHasPrefix(entries, "web/assets", "web/assets/ (at least one asset file)");
 
@@ -313,6 +358,9 @@ if (!rawEntries) {
   } else {
     pass("Absent (correct): server/ directory");
   }
+
+  console.log("\napi/openapi.json content:");
+  checkOpenApiContent(archivePath, rawEntries);
 
   console.log("\nreadme.txt content:");
   checkReadmeContent(archivePath, rawEntries);

@@ -134,6 +134,11 @@ configuration-recovery startup (boots a packaged runtime against a corrupt `rule
 and asserts `GET /api/runtime` reports `recovery.active`). To run only the recovery
 scenario, use `validate:runtime:recovery-smoke`.
 
+`validate:runtime` also asserts packaged version reporting: the bundled
+`api/openapi.json` is valid JSON whose `info.version` matches the package major.minor,
+the packaged CLI reports the package version (`portier version`), and the smoke run
+asserts `GET /api/runtime` reports `version` equal to the package version.
+
 ```powershell
 npm run validate:runtime:smoke
 ```
@@ -210,6 +215,9 @@ readme.txt
 
 - [ ] Confirm artifacts do not contain `node_modules`, source trees, `rules.json`,
   coverage output, Playwright reports, local logs, or secrets.
+- [ ] `validate:release` asserts the bundled `api/openapi.json` is present, non-empty,
+  valid JSON, and its `info.version` matches the package major.minor (e.g. `1.18.0` →
+  `1.18`). Packaged CLI/service version reporting is asserted by `validate:runtime:smoke`.
 - [ ] Confirm version numbers and release notes are correct.
 - [ ] Confirm checksums/signing/notarization status is documented if applicable.
 

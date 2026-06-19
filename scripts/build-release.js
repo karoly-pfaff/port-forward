@@ -28,6 +28,7 @@ import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import AdmZip from "adm-zip";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -169,14 +170,13 @@ function buildWindowsPortable(releasesDir, version) {
   const zipPath = join(releasesDir, zipName);
   log(`  Portable: ${zipName}`);
 
-  // Compress-Archive -Path 'dir\*' includes all items from packageDir at the
-  // zip root, preserving subdirectories (web\, etc.) without an outer wrapper dir.
-  const src = packageDir + "\\*";
-  const srcEsc = src.replace(/'/g, "''");
-  const dstEsc = zipPath.replace(/'/g, "''");
-  const psCmd = `Compress-Archive -Path '${srcEsc}' -DestinationPath '${dstEsc}' -Force`;
-
-  run("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCmd]);
+  // Add the contents of packageDir at the zip root, preserving subdirectories
+  // (web/, api/, etc.) without an outer wrapper directory. writeZip overwrites
+  // any existing archive. adm-zip is used instead of PowerShell Compress-Archive
+  // so creation is OS-agnostic and matches the adm-zip reader in validate-release.
+  const zip = new AdmZip();
+  zip.addLocalFolder(packageDir);
+  zip.writeZip(zipPath);
   log(`  Created : ${zipPath}`);
 }
 

@@ -34,6 +34,18 @@ const shouldBuild = args.includes("--build");
 const shouldSmoke = args.includes("--smoke");
 const shouldRecoverySmoke = args.includes("--recovery-smoke");
 
+function readPackageVersion() {
+  const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
+  return pkg.version;
+}
+const packageVersion = readPackageVersion();
+// The packaged OpenAPI doc version is the major.minor of the package version
+// (e.g. 1.18.0 -> "1.18"). Mirrors OPENAPI_DOC_VERSION in server/sources/openapi/openapi.ts.
+const expectedOpenApiVersion = (() => {
+  const parts = packageVersion.split(".");
+  return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : packageVersion;
+})();
+
 let passed = 0;
 let failed = 0;
 let warned = 0;
@@ -93,6 +105,54 @@ function checkAbsent(rel) {
   }
   pass(`Absent (correct): ${rel}`);
   return true;
+}
+
+// checkCliVersion runs the packaged CLI binary directly (offline, no network) and
+// asserts it reports the root package.json version.
+function checkCliVersion() {
+  const cliPath = join(packageDir, cliBinary);
+  if (!existsSync(cliPath)) {
+    fail(`CLI version: binary not found: ${cliBinary}`);
+    return;
+  }
+  const r = spawnSync(cliPath, ["version"], { encoding: "utf8" });
+  if ((r.status ?? 1) !== 0) {
+    fail(`CLI version: '${cliBinary} version' exited with ${r.status ?? "unknown"}`);
+    return;
+  }
+  const out = (r.stdout || "").trim();
+  if (out.includes(packageVersion)) {
+    pass(`CLI reports package version ${packageVersion} ("${out}")`);
+  } else {
+    fail(`CLI version mismatch: got "${out}", expected to include ${packageVersion}`);
+  }
+}
+
+// checkOpenApiVersion validates the bundled OpenAPI document's structure and that
+// info.version matches the major.minor convention derived from the package version.
+function checkOpenApiVersion() {
+  const apiPath = join(packageDir, "api", "openapi.json");
+  if (!existsSync(apiPath)) return; // already reported by checkFile
+  let doc;
+  try {
+    doc = JSON.parse(readFileSync(apiPath, "utf8"));
+  } catch {
+    fail("api/openapi.json is not valid JSON");
+    return;
+  }
+  if (typeof doc.openapi === "string" && doc.openapi.length > 0) {
+    pass(`api/openapi.json openapi = ${doc.openapi}`);
+  } else {
+    fail("api/openapi.json missing openapi field");
+  }
+  const infoVer = doc.info && doc.info.version;
+  if (infoVer === expectedOpenApiVersion) {
+    pass(`api/openapi.json info.version = ${infoVer} (matches package ${packageVersion})`);
+  } else {
+    fail(
+      `api/openapi.json info.version = ${JSON.stringify(infoVer)}, expected ${expectedOpenApiVersion}`
+    );
+  }
 }
 
 function getFreePort() {
@@ -179,6 +239,30 @@ async function runSmoke() {
         pass("Smoke test: web UI served at /");
       } else {
         fail(`Smoke test: web UI not served at / (status=${uiRes.status})`);
+      }
+
+      // Packaged Go service version check (the canonical packaged runtime). The
+      // TypeScript fallback (server.js) version is not started here; its version
+      // surface is covered by the runtime schema test and by the OpenAPI
+      // info.version assertion above (the OpenAPI doc is generated from the
+      // TypeScript server).
+      const rtRes = await httpGet(`http://${host}:${smokePort}/api/runtime`);
+      if (rtRes.status !== 200) {
+        fail(`Smoke test: GET /api/runtime expected 200, got ${rtRes.status}`);
+      } else {
+        let rt;
+        try {
+          rt = JSON.parse(rtRes.body);
+        } catch {
+          rt = null;
+        }
+        if (rt && rt.version === packageVersion) {
+          pass(`Smoke test: /api/runtime reports version ${packageVersion}`);
+        } else {
+          fail(
+            `Smoke test: /api/runtime version = ${JSON.stringify(rt && rt.version)}, expected ${packageVersion}`
+          );
+        }
       }
     }
   } finally {
@@ -344,6 +428,10 @@ async function main() {
 
   console.log("\nOpenAPI artifact:");
   checkFile("api/openapi.json");
+  checkOpenApiVersion();
+
+  console.log("\nPackaged version reporting:");
+  checkCliVersion();
 
   console.log("\nreadme.txt content:");
   const readmePath = join(packageDir, "readme.txt");
