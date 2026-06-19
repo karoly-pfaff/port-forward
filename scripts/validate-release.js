@@ -103,7 +103,16 @@ function getArchiveName(platform, ver) {
 function getInstallerName(platform, ver) {
   // The WiX MSI is the canonical Windows installer (Inno Setup retired).
   if (platform === "windows") return `Portier-${ver}.msi`;
-  return null; // macOS .pkg / Linux .deb/.rpm not built yet
+  // The macOS native .pkg installer track is in progress (built on macOS).
+  if (platform === "macos") return `Portier-${ver}.pkg`;
+  return null; // Linux .deb/.rpm not built yet
+}
+
+// Whether a missing installer is a hard failure. The Windows MSI is the canonical
+// installer (required). The macOS .pkg track is still being introduced, so a
+// missing .pkg is reported but not fatal yet.
+function installerIsRequired(platform) {
+  return platform === "windows";
 }
 
 // ── Result tracking ───────────────────────────────────────────────────────────
@@ -409,14 +418,17 @@ function checkArchiveAndInstaller() {
     checkReadmeContent(archivePath, rawEntries);
   }
 
-  // Canonical installer artifact. On Windows this is the WiX MSI and it is
-  // required (the MSI is the canonical Windows installer); its checksum is also
-  // verified by the SHA256SUMS check. Platforms without a native installer
-  // (macOS/Linux today) have no installer expectation.
+  // Native installer artifact. The Windows WiX MSI is canonical (required); the
+  // macOS .pkg track is in progress (reported, not fatal yet). When present, the
+  // installer's integrity is also verified by the SHA256SUMS check. Platforms
+  // without a native installer (Linux today) have no installer expectation.
   if (!portableOnly && installerName) {
-    console.log("\nInstaller artifact (canonical):");
+    const required = installerIsRequired(platformLabel);
+    console.log(`\nInstaller artifact (${required ? "canonical" : "native, in progress"}):`);
     if (!existsSync(installerPath)) {
-      fail(`Installer not found: ${installerName} — build with: npm run build:release:current (Windows requires WiX 7)`);
+      const msg = `Installer not found: ${installerName} — build with: npm run build:release:current`;
+      if (required) fail(`${msg} (Windows requires WiX 7)`);
+      else warn(`${msg} (macOS .pkg requires pkgbuild; built on macOS)`);
     } else {
       const iStat = statSync(installerPath);
       pass(`${installerName} (${(iStat.size / 1024 / 1024).toFixed(1)} MB)`);

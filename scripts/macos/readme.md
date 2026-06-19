@@ -161,41 +161,60 @@ To change the bind address or port, pass `--host` and `--port` to `install-launc
 
 ---
 
-## Release Archive (v1.1)
+## Release Artifacts
 
-Build a portable tar.gz for distribution:
+macOS release builds two artifacts under `build/releases/macos/`:
 
-```bash
-npm run build:release:portable
-```
-
-To skip the `build:runtime` step and reuse an existing `build/portier/`:
+- `portier-portable-macos-<version>.tar.gz` — the portable archive (universal baseline).
+- `Portier-<version>.pkg` — the native installer (built on macOS when `pkgbuild` is
+  available).
 
 ```bash
-npm run build:release:portable -- --no-build
+npm run build:release:current            # tar.gz + .pkg (on macOS)
+npm run build:release:portable           # tar.gz only (skip the .pkg)
+npm run build:release:current -- --no-build   # reuse an existing build/portier/
 ```
 
-Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
-
-The archive contains the clean runtime layout:
+Both contain the full runtime layout:
 
 ```text
+portier
 service
 server.js
 web/
   index.html
   assets/
+api/
+  openapi.json
 readme.txt
 ```
 
-Extract and install from the archive on a target machine:
+Extract and install from the portable archive on a target machine:
 
 ```bash
 tar -xzf portier-portable-macos-<version>.tar.gz -C ~/Applications/Portier/
 bash scripts/macos/service/install-launch-agent.sh --source-dir ~/Applications/Portier
 ```
 
-> **Note:** `.pkg` installer support (via `pkgbuild`/`productbuild`) is not yet implemented. The portable tar.gz is the current macOS release artifact. A native `.pkg` is planned/under evaluation for the v1.18 install-experience work. See `docs/installer.md`.
+### Native .pkg installer
+
+The `.pkg` (built by `scripts/macos/release/build-release.sh` via `pkgbuild`) is the v1.18
+macOS native installer track. Current status — a **file-install** package:
+
+- Installs the runtime layout to **`/usr/local/portier`** and bundles the canonical
+  LaunchAgent scripts under `/usr/local/portier/service-scripts/` (the runtime binary is
+  named `service`, so the scripts use a `service-scripts/` subdir).
+- Does **not** auto-install or start the LaunchAgent yet — run
+  `service-scripts/install-launch-agent.sh` (LaunchAgent setup via the `.pkg` is a follow-up).
+- **Never** creates, overwrites, or migrates `rules.json`, and does not touch
+  `~/Library/Application Support/Portier` or logs. Config/data stay external.
+- **Unsigned / not notarized.** Gatekeeper will warn on download; sign + notarize for public
+  distribution (see below). Install requires admin (`sudo installer -pkg Portier-<version>.pkg
+  -target /`).
+
+The `.pkg` is included in `SHA256SUMS` and reported by `npm run validate:release:current` on
+macOS. Payload introspection (`pkgutil --payload-files`) and a `.pkg` install smoke are the
+next macOS validation follow-ups.
 
 ---
 
@@ -289,5 +308,6 @@ Pass `--port <number>` to override the auto-detected free port.
 - System-level LaunchDaemon — documented as future work; requires `sudo` and a dedicated service user
 - Auto-update
 
-`.pkg` installer support (`pkgbuild`/`productbuild`) is **planned/under evaluation for v1.18**,
-not deferred — see `docs/installer.md`.
+The native `.pkg` installer track has started (see "Native .pkg installer" above): a
+file-install `.pkg` is built on macOS. LaunchAgent auto-install from the `.pkg`, signing/
+notarization, and a `.pkg` install smoke are follow-ups.

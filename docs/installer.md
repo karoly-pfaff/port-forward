@@ -148,6 +148,7 @@ build/releases/windows/
   SHA256SUMS
 
 build/releases/macos/
+  Portier-<version>.pkg         (native installer — built on macOS, in progress)
   portier-portable-macos-<version>.tar.gz
   SHA256SUMS
 
@@ -169,6 +170,15 @@ not auto-install the Windows Service yet, and never touches `rules.json` or
 `npm run validate:msi:install` (a non-interactive `msiexec` smoke; no admin required — it
 extracts via `msiexec /a` when not elevated, and does a full silent install/uninstall when
 elevated). See `scripts/windows/release/readme.md`.
+
+On **macOS**, a native **`.pkg`** is the v1.18 installer track, built on macOS by `pkgbuild`
+(`scripts/macos/release/build-release.sh`); the portable tar.gz remains the baseline. The
+current `.pkg` is a file-install package: it installs the runtime layout to `/usr/local/portier`
+and bundles the canonical LaunchAgent scripts under `/usr/local/portier/service-scripts/`, but
+does not auto-install the LaunchAgent yet and never touches `rules.json`,
+`~/Library/Application Support/Portier`, or logs. It is unsigned/not notarized (Gatekeeper will
+warn). `validate:release` reports `.pkg` presence on macOS (not fatal yet) and verifies its
+checksum; a `.pkg` payload/install smoke is a follow-up. See `scripts/macos/readme.md`.
 
 Each platform's release directory includes a `SHA256SUMS` file (GNU coreutils text
 format, sorted, lowercase hex) covering every produced release artifact for that version —
@@ -229,6 +239,6 @@ They use isolated temp paths, test-specific service names, and non-production po
 - Preserve `rules.json` on uninstall unless the user explicitly requests purge.
 - Keep config and logs outside the packaged runtime directory.
 - The Windows MSI (WiX) is the canonical Windows installer (Inno Setup is retired to
-  `scripts/windows/legacy/`, manual-only). A native macOS `.pkg` installer remains
-  planned/under evaluation for v1.18. Do not add other platform package managers (`deb`,
-  `rpm`, Homebrew, winget, Chocolatey) without a deliberate product decision.
+  `scripts/windows/legacy/`, manual-only). The native macOS `.pkg` installer track is in
+  progress for v1.18 (file-install; built on macOS). Do not add other platform package
+  managers (`deb`, `rpm`, Homebrew, winget, Chocolatey) without a deliberate product decision.

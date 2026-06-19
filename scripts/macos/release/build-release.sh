@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
-# Build a portable macOS release archive.
-# Output: build/releases/macos/portier-portable-macos-<version>.tar.gz
+# Build macOS release artifacts: a portable tar.gz and (on macOS) a native .pkg.
+#
+# Output:
+#   build/releases/macos/portier-portable-macos-<version>.tar.gz
+#   build/releases/macos/Portier-<version>.pkg          (when pkgbuild is available)
 #
 # Usage:
-#   bash scripts/macos/release/build-release.sh [--no-package] [--version VERSION]
+#   bash scripts/macos/release/build-release.sh [--no-package] [--portable-only] [--version V]
 #
 # Options:
-#   --no-package     Skip npm run build:runtime; use existing build/portier/.
+#   --no-package     Skip `npm run build:runtime`; use the existing build/portier/.
+#   --portable-only  Build only the portable tar.gz; skip the .pkg.
 #   --version V      Override version string (default: reads from package.json).
 #
-# Note: .pkg creation (pkgbuild/productbuild) requires macOS with Xcode Command
-# Line Tools. This script produces a portable tar.gz on any platform. If
-# pkgbuild is available, a .pkg can be added in a future release.
-# See docs/installer-strategy.md for the full macOS distribution plan.
+# The .pkg is a FILE-INSTALL package (pkgbuild) that lays the runtime layout under
+# /usr/local/portier and bundles the canonical macOS LaunchAgent scripts under
+# /usr/local/portier/service-scripts. It does NOT auto-install the LaunchAgent and
+# never creates, overwrites, or migrates user config/data (rules.json, logs). It is
+# unsigned. pkgbuild requires macOS with the Xcode Command Line Tools; on other
+# platforms the .pkg step is skipped (the portable tar.gz is still produced).
 
 set -euo pipefail
 
@@ -20,14 +26,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 PACKAGE_DIR="$REPO_ROOT/build/portier"
 OUTPUT_DIR="$REPO_ROOT/build/releases/macos"
+PKG_INSTALL_LOCATION="/usr/local/portier"
+PKG_IDENTIFIER="com.portier.portier"
 
 VERSION=""
 NO_PACKAGE=""
+PORTABLE_ONLY=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --no-package) NO_PACKAGE=1;  shift ;;
-    --version)    VERSION="$2";  shift 2 ;;
+    --no-package)    NO_PACKAGE=1;     shift ;;
+    --portable-only) PORTABLE_ONLY=1;  shift ;;
+    --version)       VERSION="$2";     shift 2 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
 done
@@ -63,8 +73,8 @@ else
   echo "Skipping runtime build (--no-package)."
 fi
 
-# Verify required files in build/portier/
-for req in service server.js "web/index.html" readme.txt; do
+# Verify the full release layout in build/portier/ (matches the Slice-2 contract).
+for req in portier service server.js "web/index.html" "api/openapi.json" readme.txt; do
   if [ ! -e "$PACKAGE_DIR/$req" ]; then
     echo "Error: Required file not found in build/portier/: $req" >&2
     echo "  Run: npm run build:runtime" >&2
@@ -74,34 +84,50 @@ done
 
 mkdir -p "$OUTPUT_DIR"
 
+# ── Stage the full runtime layout (portier, service, server.js, web/, api/, readme) ──
+RUNTIME_STAGE="$(mktemp -d "$OUTPUT_DIR/_stage-runtime.XXXXXX")"
+cleanup() { rm -rf "$RUNTIME_STAGE" "${PKG_STAGE:-}"; }
+trap cleanup EXIT
+
+cp -R "$PACKAGE_DIR/." "$RUNTIME_STAGE/"
+chmod +x "$RUNTIME_STAGE/portier" "$RUNTIME_STAGE/service"
+
+# ── Portable tar.gz ──
 ARCHIVE_NAME="portier-portable-macos-${VERSION}.tar.gz"
-ARCHIVE_PATH="$OUTPUT_DIR/$ARCHIVE_NAME"
-TMP_STAGE="$OUTPUT_DIR/_stage-$$"
-
-# Stage clean layout
-mkdir -p "$TMP_STAGE"
-cp "$PACKAGE_DIR/service"    "$TMP_STAGE/service"
-cp "$PACKAGE_DIR/server.js"  "$TMP_STAGE/server.js"
-cp "$PACKAGE_DIR/readme.txt" "$TMP_STAGE/readme.txt"
-cp -r "$PACKAGE_DIR/web"     "$TMP_STAGE/web"
-chmod +x "$TMP_STAGE/service"
-
-# Create archive
-(cd "$OUTPUT_DIR" && tar -czf "$ARCHIVE_NAME" -C "$TMP_STAGE" .)
-rm -rf "$TMP_STAGE"
-
+(cd "$RUNTIME_STAGE" && tar -czf "$OUTPUT_DIR/$ARCHIVE_NAME" .)
 echo ""
-echo "Created: $ARCHIVE_PATH"
-echo ""
+echo "Created: $OUTPUT_DIR/$ARCHIVE_NAME"
 
-if command -v pkgbuild >/dev/null 2>&1; then
-  echo "Note: pkgbuild is available on this system."
-  echo "  A .pkg installer can be added in a future release. See docs/installer-strategy.md."
+# ── Native .pkg (macOS only) ──
+PKG_NAME="Portier-${VERSION}.pkg"
+if [ -n "$PORTABLE_ONLY" ]; then
+  echo "Skipping .pkg (--portable-only)."
+elif command -v pkgbuild >/dev/null 2>&1; then
+  PKG_STAGE="$(mktemp -d "$OUTPUT_DIR/_stage-pkg.XXXXXX")"
+  cp -R "$RUNTIME_STAGE/." "$PKG_STAGE/"
+  # Bundle the canonical macOS LaunchAgent scripts. The runtime binary is named
+  # 'service', so the scripts go under 'service-scripts/' to avoid a name clash.
+  mkdir -p "$PKG_STAGE/service-scripts"
+  cp "$REPO_ROOT/scripts/macos/service/"*.sh "$PKG_STAGE/service-scripts/"
+  cp "$REPO_ROOT/scripts/macos/service/com.portier.plist.example" "$PKG_STAGE/service-scripts/"
+
+  pkgbuild \
+    --root "$PKG_STAGE" \
+    --identifier "$PKG_IDENTIFIER" \
+    --version "$VERSION" \
+    --install-location "$PKG_INSTALL_LOCATION" \
+    "$OUTPUT_DIR/$PKG_NAME"
+
+  echo ""
+  echo "Created: $OUTPUT_DIR/$PKG_NAME"
+  echo "  File-install package (unsigned). Install location: $PKG_INSTALL_LOCATION"
+  echo "  Bundles canonical LaunchAgent scripts under service-scripts/."
+  echo "  Does NOT auto-install the LaunchAgent and does NOT touch user config/data."
 else
-  echo "Note: pkgbuild not available on this platform."
-  echo "  Portable tar.gz produced. .pkg requires macOS with Xcode Command Line Tools."
-  echo "  See docs/installer-strategy.md for the macOS .pkg follow-up."
+  echo ""
+  echo "Note: pkgbuild not available — skipping .pkg (requires macOS with Xcode Command Line Tools)."
+  echo "  Portable tar.gz produced. The .pkg is built on macOS by 'npm run build:release:current'."
 fi
+
 echo ""
-echo "Archive contents:"
-tar -tzf "$ARCHIVE_PATH"
+echo "macOS release build complete."

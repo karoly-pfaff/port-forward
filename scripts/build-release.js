@@ -149,10 +149,9 @@ for (const target of targets) {
     // to scripts/windows/legacy/ and is not built by the release flow.)
     if (!portableOnly) buildWindowsMsi(releasesDir, version);
   } else if (target === "darwin") {
-    buildMacosPortable(version);
-    if (!portableOnly) {
-      log("  macOS .pkg: planned/under evaluation for v1.18 (pkgbuild required on macOS); not built yet.");
-    }
+    // The macOS script builds the portable tar.gz and, on macOS with pkgbuild, the
+    // native .pkg (the v1.18 macOS installer track). --portable-only skips the .pkg.
+    buildMacosRelease(version, portableOnly);
   } else if (target === "linux") {
     buildLinuxPortable(version);
     if (!portableOnly) {
@@ -221,11 +220,11 @@ function buildWindowsMsi(releasesDir, version) {
 
 // ── macOS ─────────────────────────────────────────────────────────────────────
 
-function buildMacosPortable(version) {
-  log("  Portable: delegating to scripts/macos/release/build-release.sh...");
-  run("bash", ["scripts/macos/release/build-release.sh", "--no-package", "--version", version], {
-    shell: false,
-  });
+function buildMacosRelease(version, portableOnly) {
+  log("  Portable tar.gz + .pkg: delegating to scripts/macos/release/build-release.sh...");
+  const args = ["scripts/macos/release/build-release.sh", "--no-package", "--version", version];
+  if (portableOnly) args.push("--portable-only");
+  run("bash", args, { shell: false });
 }
 
 // ── Linux ─────────────────────────────────────────────────────────────────────

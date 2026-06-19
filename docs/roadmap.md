@@ -250,7 +250,7 @@ uninstall.
 
 - Make the Windows WiX/MSI installer the canonical Windows installer (replacing Inno);
   keep the portable zip.
-- Evaluate/build a native macOS `.pkg` installer alongside the portable archive.
+- Build a native macOS `.pkg` installer alongside the portable archive (in progress).
 - Clarify service install/uninstall/update flows.
 - Preserve and back up config during updates.
 - Validate service startup, web UI serving, and CLI connectivity after install.

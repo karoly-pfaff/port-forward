@@ -250,6 +250,15 @@ npm run validate:msi:install
   `msiexec /a` extraction when non-elevated and a full silent `msiexec /i`+`/x`
   install/uninstall when elevated (or `--full-install`). Not part of the cross-platform
   release matrix. See `scripts/windows/release/readme.md`.
+- [ ] macOS `.pkg` (native installer track, **macOS-only**). On macOS, `build:release`
+  also builds `Portier-<version>.pkg` via `pkgbuild` (skipped non-fatally if `pkgbuild` is
+  absent). macOS release output is the `.pkg` + portable tar.gz + `SHA256SUMS`.
+  `validate:release` reports `.pkg` presence on macOS (not fatal yet — the track is in
+  progress) and verifies its checksum. The current `.pkg` is a file-install package
+  (installs to `/usr/local/portier`, bundles the canonical LaunchAgent scripts, no
+  LaunchAgent auto-install yet, unsigned, never touches user config). Payload introspection
+  (`pkgutil --payload-files`) and a `.pkg` install smoke are follow-ups. See
+  `scripts/macos/readme.md`.
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp
