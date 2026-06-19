@@ -94,12 +94,18 @@ jobs:
       - name: Upgrade-preservation smoke
         run: npm run validate:upgrade:current
 
-      # Non-elevated MSI install smoke: validate-msi-install.js auto-selects the
-      # administrative-install extraction (msiexec /a) path when not elevated, which
-      # needs no admin and validates the installed layout. The full /i + /x install
-      # half is an honest skip without admin (documented).
-      - name: MSI install smoke (non-elevated extraction)
+      # Non-elevated MSI extraction smoke: `msiexec /a` lays out the exact payload without
+      # admin and validates the installed layout, version, and config boundary.
+      - name: MSI install smoke (extraction, msiexec /a)
         run: npm run validate:msi:install
+
+      # Full elevated MSI install/uninstall smoke: per-machine `msiexec /i` then `/x`. Asserts
+      # the installed layout + version, that NO Windows service / scheduled task is created and
+      # %ProgramData%\Portier\rules.json is preserved, and that uninstall removes the install
+      # dir while keeping user config. Hosted windows-latest runs elevated; on a non-elevated
+      # shell the script skips honestly (exit 0). No service custom actions are wired.
+      - name: MSI install smoke (full, msiexec /i + /x, elevated)
+        run: npm run validate:msi:install:full
 
       - name: List release artifacts + privacy guard
         run: npm run validate:artifacts

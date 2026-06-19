@@ -173,10 +173,14 @@ retired from the release flow — its scripts are kept, manual-only, under
 
 The current MSI is a file-install package — it bundles the canonical service scripts but does
 not auto-install the Windows Service yet, and never touches `rules.json` or
-`%ProgramData%\Portier`. Its install layout and config/data boundary are validated by
-`npm run validate:msi:install` (a non-interactive `msiexec` smoke; no admin required — it
-extracts via `msiexec /a` when not elevated, and does a full silent install/uninstall when
-elevated). See `scripts/windows/release/readme.md`.
+`%ProgramData%\Portier`. It is validated by two smokes (both non-interactive `msiexec`):
+`npm run validate:msi:install` (extraction via `msiexec /a`, no admin — validates layout,
+version, config boundary) and `npm run validate:msi:install:full` (a full elevated per-machine
+`msiexec /i` then `/x`). The full smoke additionally asserts that **no Windows service and no
+scheduled task is created**, that `%ProgramData%\Portier\rules.json` is preserved across install
+and uninstall, and that uninstall removes the install dir; it runs elevated on the `Release
+Windows` runner and skips honestly when not elevated. The MSI has **no service custom
+actions**. See `scripts/windows/release/readme.md`.
 
 On **macOS**, a native **`.pkg`** is the v1.18 installer track, built on macOS by `pkgbuild`
 (`scripts/macos/release/build-release.sh`); the portable tar.gz remains the baseline. The
@@ -272,8 +276,9 @@ workflow builds only its own platform's artifacts, package-first then portable t
 `checksums.sha256`.
 
 - **Release Windows** (`.github/workflows/release-windows.yml`, `windows-latest`): installs
-  WiX 7, builds/validates the canonical MSI → portable zip → `checksums.sha256`, and runs
-  the non-elevated MSI install smoke.
+  WiX 7, builds/validates the canonical MSI → portable zip → `checksums.sha256`, and runs both
+  the MSI extraction smoke and the full elevated MSI install/uninstall smoke (no service/task
+  creation; ProgramData config preserved).
 - **Release MacOS** (`.github/workflows/release-macos.yml`, `macos-latest`):
   builds/validates the native `.pkg` (pkgbuild) → portable tar.gz → `checksums.sha256`,
   introspects the `.pkg` payload, and runs a native `.pkg` install/uninstall smoke

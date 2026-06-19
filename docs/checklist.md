@@ -238,17 +238,28 @@ npm run validate:release:checksums
   service scripts, no Windows Service auto-install yet, never touches user config). The
   retired Inno installer lives in `scripts/windows/legacy/` (manual-only; not built or
   validated).
-- [ ] Windows MSI install smoke (Windows-only; **no admin required**):
+- [ ] Windows MSI extraction smoke (Windows-only; **no admin required**):
 
 ```powershell
 npm run validate:msi:install
 ```
 
-  Validates the MSI's installed layout, bundled service scripts, `api/openapi.json`
-  (valid JSON + version), installed CLI version, and the config/data boundary (no
-  `rules.json` inside the install dir; a seeded external data dir is untouched). It uses
-  `msiexec /a` extraction when non-elevated and a full silent `msiexec /i`+`/x`
-  install/uninstall when elevated (or `--full-install`). Not part of the cross-platform
+  `msiexec /a` lays out the exact payload without admin and validates the installed
+  layout, bundled service scripts, `api/openapi.json` (valid JSON + version), installed
+  CLI version, and the config/data boundary (no `rules.json` inside the install dir; a
+  seeded external data dir is untouched).
+- [ ] Windows MSI full install/uninstall smoke (Windows-only; **needs an elevated shell**):
+
+```powershell
+npm run validate:msi:install:full
+```
+
+  Real per-machine `msiexec /i` then `/x`. Asserts the installed layout + CLI version,
+  that **no Windows service and no scheduled task is created** (the MSI is file-install
+  only — no service custom actions are wired), that `%ProgramData%\Portier\rules.json`
+  is preserved across install **and** uninstall, and that uninstall removes the install
+  dir. Honestly **skips** (exit 0) when not elevated; the `Release Windows` workflow runs
+  it elevated. Service auto-install is still **not** wired. Not part of the cross-platform
   release matrix. See `scripts/windows/release/readme.md`.
 - [ ] macOS `.pkg` (native installer track, **macOS-only**). On macOS, `build:release`
   also builds `Portier-<version>.pkg` via `pkgbuild` (skipped non-fatally if `pkgbuild` is
@@ -350,8 +361,9 @@ then `checksums.sha256`).
 - [ ] **Release Windows** (`.github/workflows/release-windows.yml`, `windows-latest`):
   installs WiX 7 (dotnet global tool); builds/validates `Portier-<version>.msi` (canonical)
   → `portier-<version>-windows-amd64.zip` → `checksums.sha256` (incl. structural portable
-  validation); runs the non-elevated MSI install smoke (`msiexec /a`; the `/i` + `/x` half is
-  an honest skip without admin) plus runtime + upgrade smoke. Uploads
+  validation); runs the MSI extraction smoke (`msiexec /a`) **and** the full elevated MSI
+  install/uninstall smoke (`msiexec /i` + `/x`, asserting no service/task creation and
+  ProgramData config preservation), plus runtime + upgrade smoke. Uploads
   `build/releases/windows/**` as `portier-release-windows`. (Windows is amd64-only.)
 - [ ] **Release MacOS** (`.github/workflows/release-macos.yml`, `macos-latest`):
   builds/validates `Portier-<version>.pkg` (pkgbuild, unsigned) →

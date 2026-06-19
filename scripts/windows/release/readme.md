@@ -56,28 +56,31 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\release\build-release.p
 
 ## MSI install smoke
 
-A non-interactive MSI install/layout smoke validates that the MSI installs the expected
-layout and keeps user config/data outside the install dir:
+Two non-interactive MSI smokes validate the MSI:
 
 ```powershell
-npm run validate:msi:install
+npm run validate:msi:install        # extraction smoke — msiexec /a, no admin
+npm run validate:msi:install:full   # full install/uninstall — msiexec /i + /x, needs elevation
 ```
 
-It auto-selects a mode by privilege:
-
-- **Elevated** (or `--full-install`): real per-machine install to a temp `INSTALLFOLDER`
-  via `msiexec /i ... /qn`, layout assertions, then `msiexec /x ... /qn` uninstall, asserting
-  the install dir is removed.
-- **Non-elevated** (default in CI/dev shells): `msiexec /a ... /qn TARGETDIR=<temp>`
+- **Extraction** (`--extract`, no admin): `msiexec /a ... /qn TARGETDIR=<temp>`
   (administrative-install extraction) lays out the exact payload without admin and without
-  touching the system; the register/uninstall half is reported as an honest skip.
+  touching the system; the register/uninstall half is an honest skip.
+- **Full** (`--full`, elevated): real per-machine install to a temp `INSTALLFOLDER` via
+  `msiexec /i ... /qn`, then `msiexec /x ... /qn` uninstall, asserting the install dir is
+  removed. It additionally asserts that **no Windows service and no scheduled task is
+  created** and that `%ProgramData%\Portier\rules.json` is preserved across install and
+  uninstall. Needs an elevated shell — **skips honestly** (exit 0) when not elevated; the
+  `Release Windows` workflow runs it elevated. (No mode flag = auto: full when elevated, else
+  extraction.)
 
-Either mode asserts the installed layout (`portier.exe`, `service.exe`, `server.js`, `web\`,
+Both modes assert the installed layout (`portier.exe`, `service.exe`, `server.js`, `web\`,
 `api\openapi.json`, `readme.txt`, bundled `service\*.ps1`), that `api\openapi.json` is valid
 JSON whose `info.version` matches the package major.minor, that the installed `portier.exe`
 reports the package version, that no `rules.json` is created inside the install dir, and that
 a seeded external data dir (`rules.json` + backup/quarantine sentinels) is untouched.
-Flags: `--msi <path>`, `--data-dir <dir>`, `--full-install`, `--keep-temp`.
+Flags: `--extract` / `--full` (`--full-install` alias), `--msi <path>`, `--data-dir <dir>`,
+`--keep-temp`. The MSI is file-install only — **no service custom actions** are wired.
 
 ## Validation gates the MSI must satisfy
 
@@ -93,7 +96,8 @@ The **Release Windows** workflow (`.github/workflows/release-windows.yml`, manua
 (`dotnet tool install --global wix --version 7.*`, adding `%USERPROFILE%\.dotnet\tools`
 to `PATH`), then runs `build:release:current` (MSI + portable zip),
 `validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`,
-`validate:upgrade:current`, and the non-elevated `validate:msi:install` (`msiexec /a`
-extraction). It uploads `build/releases/windows/**` (MSI, portable zip,
+`validate:upgrade:current`, the `validate:msi:install` extraction smoke (`msiexec /a`), and
+the `validate:msi:install:full` elevated install/uninstall smoke (`msiexec /i` + `/x`; the
+runner is elevated). It uploads `build/releases/windows/**` (MSI, portable zip,
 `checksums.sha256`) as the `portier-release-windows` workflow artifact. It does not build
 cross-platform portables, publish a GitHub Release, or create tags.
