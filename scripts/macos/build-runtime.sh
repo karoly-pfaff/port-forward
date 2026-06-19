@@ -11,6 +11,12 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTPUT_DIR="${1:-$REPO_ROOT/build/macos}"
+# Resolve OUTPUT_DIR to an absolute path up front. Several steps run after a pushd/cd
+# into a subdirectory (Go builds in service/ and tools/cli/) or in another workspace
+# (apidoc:release via `npm -w server`), where a relative dir (e.g. ./build/portier)
+# would resolve to the wrong place. (The Windows build script resolves to absolute too.)
+mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 
 ESBUILD="$REPO_ROOT/node_modules/.bin/esbuild"
 # The packaged single-file Node fallback (server.js) bundles the NestJS server
@@ -62,10 +68,7 @@ echo "Generating OpenAPI document..."
 npm --prefix "$REPO_ROOT" run apidoc:generate
 
 echo "Copying OpenAPI document into package..."
-# Pass an ABSOLUTE release dir: apidoc:release runs via `npm -w server`, whose cwd is
-# the server workspace, so a relative path (e.g. ./build/portier) would resolve under
-# server/ instead of the repo root. (The Windows build script resolves to absolute too.)
-npm --prefix "$REPO_ROOT" run apidoc:release -w server -- "$(cd "$OUTPUT_DIR" && pwd)"
+npm --prefix "$REPO_ROOT" run apidoc:release -w server -- "$OUTPUT_DIR"
 
 echo "Building Go service for macOS (darwin/amd64)..."
 pushd "$REPO_ROOT/service" > /dev/null
