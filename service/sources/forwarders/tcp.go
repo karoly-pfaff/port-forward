@@ -274,7 +274,14 @@ func (f *TCPForwarder) handleClient(clientConn net.Conn) {
 
 func (f *TCPForwarder) copyAndClose(dst net.Conn, src net.Conn, counter *int64, onBytes func(int64), done chan<- struct{}, onCopyError func(error)) {
 	_, err := io.Copy(countingWriter{writer: dst, counter: counter, onBytes: onBytes}, src)
-	if err != nil && f.isRunning() {
+	// net.ErrClosed comes from our own intentional teardown: once either copy
+	// direction finishes, handleClient force-closes both connections, which makes the
+	// other in-flight io.Copy return "use of closed network connection". That is a
+	// normal close, not a connection error — treating it as one would set loggedError
+	// and suppress the connection.closed event (emitting a spurious error instead).
+	// Real peer failures (resets, target loss) surface as other errors and are still
+	// reported.
+	if err != nil && f.isRunning() && !errors.Is(err, net.ErrClosed) {
 		f.setLastError(err)
 		f.logInfo("TCP copy error", "ruleId", f.rule.ID, "ruleName", f.rule.Name, "error", err)
 		if onCopyError != nil {
