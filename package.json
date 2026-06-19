@@ -87,7 +87,8 @@
     "validate:release:portable:all": "node scripts/validate-portable.js --all",
     "validate:release:checksums": "node scripts/validate-release.js --platform current --checksums-only",
     "validate:upgrade:current": "node scripts/validate-upgrade.js",
-    "validate:msi:install": "node scripts/validate-msi-install.js"
+    "validate:msi:install": "node scripts/validate-msi-install.js",
+    "validate:artifacts": "node scripts/validate-artifacts.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

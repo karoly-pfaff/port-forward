@@ -305,6 +305,33 @@ npm run validate:upgrade:current
 - [ ] Confirm version numbers and release notes are correct.
 - [ ] Confirm checksums/signing/notarization status is documented if applicable.
 
+### Native Release CI Matrix (GitHub Actions)
+
+A manual GitHub Actions workflow (`.github/workflows/release-matrix.yml`,
+`workflow_dispatch` only) builds and validates the release artifacts on native
+hosted runners and uploads them as **workflow artifacts** for inspection. It does
+**not** publish a GitHub Release and does **not** create tags.
+
+- [ ] Trigger it from the Actions tab ("release-matrix" → "Run workflow"). It has no
+  push/PR triggers — manual only, so first-run issues stay controlled.
+- [ ] `windows-release` (`windows-latest`): installs WiX 7 (dotnet global tool),
+  builds/validates the canonical MSI + Windows portable zip, runs the non-elevated
+  MSI install smoke (`msiexec /a` extraction; the `/i` + `/x` half is an honest skip
+  without admin), runs runtime + upgrade smoke, then cross-builds and structurally
+  validates all three portable artifacts. Uploads `build/releases/**` as
+  `portier-release-windows`.
+- [ ] `macos-release` (`macos-latest`): builds/validates the native `.pkg` (pkgbuild)
+  + macOS portable tar.gz, runs runtime + upgrade smoke, and introspects the `.pkg`
+  payload (`pkgutil --payload-files`). Uploads `build/releases/macos/**` as
+  `portier-release-macos`. The `.pkg` is unsigned (Gatekeeper warnings expected).
+- [ ] `linux-release` (`ubuntu-latest`): builds/validates the Linux portable tar.gz
+  and runs the native runtime smoke. Uploads `build/releases/linux/**` as
+  `portier-release-linux`. Full systemd service validation (`validate:service:linux`)
+  needs root/systemd and is **not** run in CI — it stays a manual/native check.
+- [ ] Privacy: only `build/releases/**` is uploaded. `validate:artifacts` logs the
+  exact upload set and hard-fails on any `private` path segment before upload;
+  `docs/private/**` is never staged into release output.
+
 ### Platform Service Validation
 
 Run explicitly on target platforms. These are not part of `npm run check`.

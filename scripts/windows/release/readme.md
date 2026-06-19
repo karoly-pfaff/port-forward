@@ -85,3 +85,15 @@ Layout parity (incl. `api\openapi.json`), version reporting, `SHA256SUMS` checks
 coverage, the MSI install smoke above, upgrade preservation
 (`npm run validate:upgrade:current`), and — once service custom actions are wired — service
 lifecycle.
+
+## Native release CI
+
+The `windows-release` job in `.github/workflows/release-matrix.yml` (manual
+`workflow_dispatch`) installs WiX 7 as a dotnet global tool
+(`dotnet tool install --global wix --version 7.*`, adding `%USERPROFILE%\.dotnet\tools`
+to `PATH`), then runs `build:release:current` (MSI + portable zip),
+`validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`,
+`validate:upgrade:current`, the non-elevated `validate:msi:install` (`msiexec /a`
+extraction), and `build`/`validate:release:portable:all`. It uploads `build/releases/**`
+as the `portier-release-windows` workflow artifact. It does not publish a GitHub Release
+or create tags.

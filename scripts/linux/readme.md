@@ -90,6 +90,14 @@ npm run validate:release:portable:all  # structural validation (no native runtim
 Cross-built validation is structural only — the native runtime smoke (`validate:runtime:smoke`)
 must run on Linux.
 
+The `linux-release` job in `.github/workflows/release-matrix.yml` (manual
+`workflow_dispatch`) runs the native path on `ubuntu-latest`: `build:release:current`,
+`validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`, and
+`validate:upgrade:current`, then uploads `build/releases/linux/**` as the
+`portier-release-linux` workflow artifact. Full systemd service validation
+(`validate:service:linux`) needs root/systemd and is **not** run in CI — it stays a
+manual/native check. No GitHub Release or tag is created.
+
 > **`.deb` / `.rpm`:** these native packages are a **planned package-manager track for a
 > later v1.18 slice** (built and validated on native `ubuntu`/`fedora` runners once the
 > release CI lands), not shipped in this slice. The portable tar.gz + systemd scripts are the

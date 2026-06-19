@@ -245,6 +245,25 @@ npm run validate:service:linux
 These service validations are explicit release checks, not part of `npm run check`.
 They use isolated temp paths, test-specific service names, and non-production ports.
 
+### Native Release CI Matrix
+
+A manual GitHub Actions workflow (`.github/workflows/release-matrix.yml`,
+`workflow_dispatch` only) reproduces the release build + validation on native hosted
+runners — `windows-latest`, `macos-latest`, and `ubuntu-latest` — and uploads the
+resulting `build/releases/**` as workflow artifacts for inspection. It does not publish
+a GitHub Release or create tags.
+
+- Windows: installs WiX 7, builds/validates the canonical MSI + portable zip, runs the
+  non-elevated MSI install smoke, and cross-builds/validates all three portable
+  artifacts.
+- macOS: builds/validates the native `.pkg` (pkgbuild) + portable tar.gz and introspects
+  the `.pkg` payload. The `.pkg` is unsigned (see Signing And Notarization).
+- Linux: builds/validates the portable tar.gz and runs the native runtime smoke. Full
+  systemd service validation needs root and stays a manual/native check.
+
+Only `build/releases/**` is uploaded; `docs/private/**` is never staged into release
+output and a privacy guard fails the run before upload if any private path appears.
+
 ## Signing And Notarization
 
 - Windows public distribution should sign installers and binaries. Unsigned builds may

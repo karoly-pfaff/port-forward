@@ -1,0 +1,244 @@
+# Portier native release matrix.
+#
+# Builds and validates Portier release artifacts on native GitHub-hosted runners and
+# uploads them as workflow artifacts for inspection. This does NOT publish a GitHub
+# Release and does NOT create tags — it is a repeatable validation/inspection path for
+# the v1.18 install/release work.
+#
+# Manual trigger only (workflow_dispatch) so first-run issues are controlled. No push/PR
+# triggers in this slice.
+#
+# Coverage:
+#   - windows-release : WiX 7 MSI (canonical) + Windows portable .zip + non-elevated MSI
+#                       install smoke + cross-built Linux/macOS portable .tar.gz (structural).
+#   - macos-release   : native .pkg (pkgbuild) + macOS portable .tar.gz + payload introspection.
+#   - linux-release   : Linux portable .tar.gz + native runtime smoke.
+#
+# Privacy: only build/releases/** is uploaded. docs/private/** is never staged into release
+# output; validate-artifacts.js logs the upload set and hard-fails on any `private`
+# path segment before upload.
+
+name: release-matrix
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  GO_VERSION: "1.25"
+
+jobs:
+  # ── Windows: canonical WiX/MSI + Windows portable zip + cross-built portables ──
+  windows-release:
+    name: Windows release (MSI + portable + cross-portable)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Setup .NET (for WiX 7 dotnet tool)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install WiX 7 (dotnet global tool)
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 7.*
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify WiX
+        shell: pwsh
+        run: wix --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build current-platform release (MSI + portable zip)
+        run: npm run build:release:current
+
+      - name: Validate current-platform release
+        run: npm run validate:release:current
+
+      - name: Validate checksums
+        run: npm run validate:release:checksums
+
+      - name: Runtime smoke (packaged runtime)
+        run: npm run validate:runtime:smoke
+
+      - name: Upgrade-preservation smoke
+        run: npm run validate:upgrade:current
+
+      # Non-elevated MSI install smoke: validate-msi-install.js auto-selects the
+      # administrative-install extraction (msiexec /a) path when not elevated, which
+      # needs no admin and validates the installed layout. The full /i + /x install
+      # half is an honest skip without admin (documented).
+      - name: MSI install smoke (non-elevated extraction)
+        run: npm run validate:msi:install
+
+      - name: Cross-build portable artifacts (windows/linux/macos)
+        run: npm run build:release:portable:all
+
+      - name: Validate cross-built portable artifacts (structural)
+        run: npm run validate:release:portable:all
+
+      - name: List release artifacts + privacy guard
+        run: npm run validate:artifacts
+
+      - name: Upload Windows release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: portier-release-windows
+          path: build/releases/**
+          if-no-files-found: error
+
+  # ── macOS: native .pkg + macOS portable tar.gz ──
+  macos-release:
+    name: macOS release (.pkg + portable)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # build:release:current on macOS builds the portable tar.gz AND the native .pkg
+      # via pkgbuild. If pkgbuild fails, this step fails (no faked success).
+      - name: Build current-platform release (.pkg + portable tar.gz)
+        run: npm run build:release:current
+
+      - name: Validate current-platform release
+        run: npm run validate:release:current
+
+      - name: Validate checksums
+        run: npm run validate:release:checksums
+
+      - name: Runtime smoke (packaged runtime)
+        run: npm run validate:runtime:smoke
+
+      - name: Upgrade-preservation smoke
+        run: npm run validate:upgrade:current
+
+      # .pkg payload introspection: confirm the native package carries the runtime
+      # binaries and the OpenAPI artifact. The .pkg is unsigned (Gatekeeper warnings
+      # on real installs are expected and documented).
+      - name: Inspect .pkg payload
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          PKG="build/releases/macos/Portier-${VERSION}.pkg"
+          echo "Inspecting ${PKG}"
+          pkgutil --payload-files "${PKG}" | sort > payload.txt
+          cat payload.txt
+          for f in portier service api/openapi.json; do
+            if grep -qx "./${f}" payload.txt; then
+              echo "  ok: ${f}"
+            else
+              echo "  MISSING from .pkg payload: ${f}" >&2
+              exit 1
+            fi
+          done
+
+      - name: List release artifacts + privacy guard
+        run: npm run validate:artifacts
+
+      - name: Upload macOS release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: portier-release-macos
+          path: build/releases/macos/**
+          if-no-files-found: error
+
+  # ── Linux: portable tar.gz + native runtime smoke ──
+  linux-release:
+    name: Linux release (portable + native smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build current-platform release (portable tar.gz)
+        run: npm run build:release:current
+
+      - name: Validate current-platform release
+        run: npm run validate:release:current
+
+      - name: Validate checksums
+        run: npm run validate:release:checksums
+
+      - name: Runtime smoke (packaged runtime)
+        run: npm run validate:runtime:smoke
+
+      - name: Upgrade-preservation smoke
+        run: npm run validate:upgrade:current
+
+      # NOTE: full systemd service validation (npm run validate:service:linux) requires
+      # root/sudo and a systemd PID 1, so it is NOT run here. It stays a manual/native
+      # check (and a future package-manager-gate concern). See docs/checklist.md.
+
+      - name: List release artifacts + privacy guard
+        run: npm run validate:artifacts
+
+      - name: Upload Linux release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: portier-release-linux
+          path: build/releases/linux/**
+          if-no-files-found: error
