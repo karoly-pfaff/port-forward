@@ -19,24 +19,28 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CHECKSUMS_NAME } from "./release-checksums.js";
+import { CHECKSUMS_NAME, compareReleaseArtifactNames } from "./release-checksums.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const releasesDir = join(repoRoot, "build", "releases");
 
-const INSTALLER_EXTS = [".msi", ".pkg", ".deb", ".rpm", ".exe"];
-
-// Display order within a platform directory: native installer/package first, portable
-// archive second, the checksums.sha256 manifest last.
-function displayRank(path) {
-  const base = path.split("/").pop().toLowerCase();
-  if (base === CHECKSUMS_NAME) return 2;
-  if (INSTALLER_EXTS.some((ext) => base.endsWith(ext))) return 0;
-  return 1;
-}
-
 function dirOf(path) {
   return path.split("/").slice(0, -1).join("/");
+}
+
+// Display order within a platform directory: the checksums.sha256 manifest last, everything
+// else in canonical release order (native installer/package first — .deb before .rpm — then
+// portable archives, amd64 before arm64), matching the checksum manifest.
+function compareForDisplay(a, b) {
+  const da = dirOf(a);
+  const db = dirOf(b);
+  if (da !== db) return da < db ? -1 : 1;
+  const ba = a.split("/").pop();
+  const bb = b.split("/").pop();
+  const ca = ba.toLowerCase() === CHECKSUMS_NAME ? 1 : 0;
+  const cb = bb.toLowerCase() === CHECKSUMS_NAME ? 1 : 0;
+  if (ca !== cb) return ca - cb;
+  return compareReleaseArtifactNames(ba, bb);
 }
 
 function walk(dir, out = []) {
@@ -56,15 +60,7 @@ if (!existsSync(releasesDir)) {
 // Group by platform directory, then package-first / portable / checksums-last within.
 const files = walk(releasesDir)
   .map((f) => relative(repoRoot, f).split(sep).join("/"))
-  .sort((a, b) => {
-    const da = dirOf(a);
-    const db = dirOf(b);
-    if (da !== db) return da < db ? -1 : 1;
-    const ra = displayRank(a);
-    const rb = displayRank(b);
-    if (ra !== rb) return ra - rb;
-    return a < b ? -1 : a > b ? 1 : 0;
-  });
+  .sort(compareForDisplay);
 
 console.log(`[validate-artifacts] ${files.length} file(s) under build/releases/ (these are uploaded):`);
 for (const f of files) console.log(`  ${f}`);

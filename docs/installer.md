@@ -155,6 +155,7 @@ build/releases/macos/
 
 build/releases/linux/
   portier_<version>_amd64.deb         (native dpkg-deb installer — file-install, disabled unit)
+  portier-<version>-1.x86_64.rpm      (native rpmbuild installer — file-install, disabled unit)
   portier-<version>-linux-amd64.tar.gz
   portier-<version>-linux-arm64.tar.gz
   checksums.sha256
@@ -201,11 +202,13 @@ the canonical service layer. The
 tar.gz contains the full runtime layout (incl. `api/openapi.json`); it is versioned,
 checksummed in `checksums.sha256`, and GitHub-Release-ready. Installed mode lives at `/opt/portier`
 (binaries + `web/`), config at `/etc/portier/rules.json`, logs via journald, and the unit at
-`/etc/systemd/system/portier.service`. A native **`.deb`** (`portier_<version>_amd64.deb`,
-built by `scripts/linux/release/build-release.sh` via dpkg-deb and validated on the `ubuntu-latest`
-release-CI runner) is also produced: a file-install package that lays the runtime under
-`/opt/portier` and installs a **disabled** systemd unit — it never enables/starts the service
-or touches user config. `.rpm` is a **planned package track for a later slice**. See
+`/etc/systemd/system/portier.service`. Two native packages are also produced and validated on
+the `ubuntu-latest` release-CI runner: a **`.deb`** (`portier_<version>_amd64.deb`, dpkg-deb,
+`scripts/linux/release/build-release.sh`) and a **`.rpm`** (`portier-<version>-1.x86_64.rpm`,
+rpmbuild, `scripts/linux/release/build-rpm.sh`). Both are file-install packages that mirror each
+other: they lay the runtime under `/opt/portier` and install a **disabled** systemd unit — they
+never enable/start the service or touch user config. Each has a payload + install/remove smoke
+(`validate:deb:install`, `validate:rpm:payload`, `validate:rpm:install`). See
 `scripts/linux/readme.md`.
 
 **Cross-platform portable generation.** The Go CLI/service are pure Go (CGO disabled), so all
@@ -285,11 +288,12 @@ workflow builds only its own platform's artifacts, package-first then portable t
   (`installer -pkg` then remove; asserts layout, version, **no LaunchAgent loaded/started**,
   and user-config preservation). The `.pkg` is unsigned (see Signing And Notarization).
 - **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
-  builds/validates the native `.deb` (dpkg-deb) → portable tar.gz → `checksums.sha256`, runs
-  the native runtime smoke, introspects the `.deb` payload, and runs a native `.deb`
-  install/remove smoke (`apt-get install` then remove; asserts layout, version, the systemd
-  unit is **disabled + inactive**, and `/etc/portier/rules.json` preservation). Full systemd
-  service validation needs root and stays a manual/native check.
+  installs `rpm` tooling, then builds/validates the native `.deb` (dpkg-deb) + `.rpm` (rpmbuild)
+  → portable tar.gz (amd64 + arm64) → `checksums.sha256`, runs the native runtime smoke,
+  introspects both package payloads, and runs `.deb` (`apt`) and `.rpm` (`rpm`) install/remove
+  smokes — each asserting layout, version, the systemd unit is **disabled + inactive**, and
+  `/etc/portier/rules.json` preservation. Full systemd service validation needs root and stays
+  a manual/native check.
 
 Each workflow uploads only its own `build/releases/<platform>/**`; `docs/private/**` is never
 staged into release output and a privacy guard fails the run before upload if any private

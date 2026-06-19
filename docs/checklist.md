@@ -281,32 +281,33 @@ npm run validate:pkg:install
   asserts clean removal with user data preserved. macOS-only (exits 0 with a skip notice
   elsewhere). See `scripts/macos/readme.md`.
 - [ ] Linux release (Linux-only). `build:release` produces the native
-  `portier_<version>_amd64.deb` (dpkg-deb; built on Debian/Ubuntu, skipped with a notice
-  elsewhere) then the portable `portier-<version>-linux-amd64.tar.gz` and
-  `portier-<version>-linux-arm64.tar.gz` (full runtime layout, incl. `api/openapi.json`) +
-  `checksums.sha256`. `validate:release` confirms the `.deb` is present,
-  checks the tar.gz layout/OpenAPI/version, and verifies every checksum; the artifacts are
-  versioned and GitHub-Release-ready. The `.deb` is a **file-install**: it lays
-  the runtime under `/opt/portier` and installs a **disabled** systemd unit — it never
-  enables/starts the service or touches user config (`scripts/linux/release/build-release.sh`).
+  `portier_<version>_amd64.deb` (dpkg-deb) and `portier-<version>-1.x86_64.rpm` (rpmbuild —
+  needs the `rpm` package; skipped with a notice when absent), then the portable
+  `portier-<version>-linux-amd64.tar.gz` and `portier-<version>-linux-arm64.tar.gz` (full
+  runtime layout, incl. `api/openapi.json`) + `checksums.sha256`. `validate:release` confirms
+  the `.deb` is present, checks the tar.gz layout/OpenAPI/version, and verifies every checksum
+  (covering the `.rpm` too); the artifacts are versioned and GitHub-Release-ready. Both
+  packages are **file-install**, mirror each other: they lay the runtime under `/opt/portier`
+  and install a **disabled** systemd unit — never enabling/starting the service or touching
+  user config (`scripts/linux/release/build-release.sh` = `.deb`, `build-rpm.sh` = `.rpm`).
   Systemd is the canonical service layer (`scripts/linux/service/`); `install-service.sh
-  --dry-run` prints the install plan without root. `.rpm` is a planned later track.
-  See `scripts/linux/readme.md`.
-- [ ] Linux `.deb` install/remove smoke (Linux-only; needs sudo):
+  --dry-run` prints the install plan without root. See `scripts/linux/readme.md`.
+- [ ] Linux `.deb` / `.rpm` install/remove smoke (Linux-only; needs sudo):
 
 ```bash
-npm run validate:deb:install
+npm run validate:deb:install   # apt-get install ./*.deb → assert → apt-get remove
+npm run validate:rpm:payload   # rpm -qlp layout/forbidden-content check (needs the rpm CLI)
+npm run validate:rpm:install   # rpm -i ./*.rpm → assert → rpm -e
 ```
 
-  Installs the `.deb` with `apt-get install`, asserts the installed layout
-  (`/opt/portier/...` + `/lib/systemd/system/portier.service`) and CLI version, that the
-  systemd unit is **disabled and inactive** (the package never enables/starts it) and a
-  seeded `/etc/portier/rules.json` sentinel is untouched, then `apt-get remove`s the package
-  and asserts the runtime files + unit are gone, the service is not running, and user config
-  is preserved. Linux-only (exits 0 with a skip notice elsewhere). This is a
-  package-lifecycle smoke; full systemd service install validation (`validate:service:linux`,
-  needs `sudo`/systemd PID 1) stays a separate manual/native check. See
-  `scripts/linux/readme.md`.
+  Each install smoke asserts the installed layout (`/opt/portier/...` +
+  `/lib/systemd/system/portier.service`) and CLI version, that the systemd unit is
+  **disabled and inactive** (the package never enables/starts it) and a seeded
+  `/etc/portier/rules.json` sentinel is untouched, then removes the package and asserts the
+  runtime files + unit are gone, the service is not running, and user config is preserved.
+  Linux-only (exit 0 with a skip notice elsewhere). These are package-lifecycle smokes; full
+  systemd service install validation (`validate:service:linux`, needs `sudo`/systemd PID 1)
+  stays a separate manual/native check. See `scripts/linux/readme.md`.
 - [ ] Cross-platform portable artifact generation (from any host, incl. Windows). The Go
   binaries are pure Go (CGO disabled), so all five portable artifacts can be cross-built and
   structurally validated without a native runner:
@@ -373,12 +374,13 @@ then `checksums.sha256`).
   install/uninstall smoke (`validate:pkg:install`). Uploads `build/releases/macos/**` as
   `portier-release-macos`.
 - [ ] **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
-  builds/validates `portier_<version>_amd64.deb` (file-install, disabled unit) →
+  installs `rpm` tooling, then builds/validates `portier_<version>_amd64.deb` (file-install,
+  disabled unit) → `portier-<version>-1.x86_64.rpm` (file-install, disabled unit) →
   `portier-<version>-linux-amd64.tar.gz` + `portier-<version>-linux-arm64.tar.gz` →
   `checksums.sha256` (incl. structural validation of both arches); runs runtime + upgrade
-  smoke (host arch), `.deb` payload introspection (`dpkg-deb --contents`), and the `.deb`
-  install/remove smoke (`validate:deb:install`, which asserts disabled+inactive unit and
-  config preservation).
+  smoke (host arch), `.deb` + `.rpm` payload introspection, and the `.deb` (`validate:deb:install`)
+  and `.rpm` (`validate:rpm:install`) install/remove smokes (each asserts disabled+inactive
+  unit and config preservation).
   Uploads `build/releases/linux/**` as `portier-release-linux`. Full systemd service
   validation (`validate:service:linux`) needs root/systemd and is **not** run in CI — it
   stays a manual/native check.

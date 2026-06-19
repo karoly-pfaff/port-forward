@@ -94,6 +94,8 @@
     "validate:msi:install:full": "node scripts/validate-msi-install.js --full",
     "validate:pkg:install": "node scripts/validate-pkg-install.js",
     "validate:deb:install": "node scripts/validate-deb-install.js",
+    "validate:rpm:payload": "node scripts/validate-rpm-payload.js",
+    "validate:rpm:install": "node scripts/validate-rpm-install.js",
     "validate:artifacts": "node scripts/validate-artifacts.js"
   },
   "devDependencies": {

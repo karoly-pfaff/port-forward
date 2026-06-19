@@ -4,11 +4,12 @@
 # uploads them as a workflow artifact for inspection. Does NOT publish a GitHub Release
 # and does NOT create tags. Manual trigger only (workflow_dispatch).
 #
-# Artifacts (package first, portable second, checksums last):
+# Artifacts (packages first, portables second, checksums last):
 #   1. portier_<version>_amd64.deb            (file-install dpkg-deb package, disabled unit)
-#   2. portier-<version>-linux-amd64.tar.gz   (portable, x86-64)
-#   3. portier-<version>-linux-arm64.tar.gz   (portable, ARM64)
-#   4. checksums.sha256
+#   2. portier-<version>-1.x86_64.rpm         (file-install rpmbuild package, disabled unit)
+#   3. portier-<version>-linux-amd64.tar.gz   (portable, x86-64)
+#   4. portier-<version>-linux-arm64.tar.gz   (portable, ARM64)
+#   5. checksums.sha256
 # build:release:current cross-builds both Linux arches; only the host arch is runtime-smoked.
 #
 # Privacy: only build/releases/linux/** is uploaded. docs/private/** is never staged
@@ -50,6 +51,11 @@ jobs:
           # "Dependencies file is not found ... go.sum" cache warning.
           cache-dependency-path: service/go.sum
 
+      # rpm tooling (rpmbuild + the rpm CLI) so the .rpm is built and introspected/installed.
+      # The rpm db is independent of dpkg, so `rpm -i`/`rpm -e` are safe on this runner.
+      - name: Install rpm tooling
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
       - name: Install dependencies
         run: npm ci
 
@@ -59,8 +65,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # Builds the native .deb (dpkg-deb) + the Linux portable tar.gz + checksums.sha256.
-      - name: Build current-platform release (.deb + portable tar.gz)
+      # Builds the native .deb (dpkg-deb) + .rpm (rpmbuild) + the Linux portable tar.gz
+      # artifacts + checksums.sha256.
+      - name: Build current-platform release (.deb + .rpm + portable tar.gz)
         run: npm run build:release:current
 
       - name: Validate current-platform release
@@ -117,6 +124,18 @@ jobs:
       # separate manual/native check. See docs/checklist.md.
       - name: Install/remove smoke (.deb)
         run: npm run validate:deb:install
+
+      # .rpm payload introspection (rpm -qlp): same layout assertions as the .deb, plus
+      # forbidden-content (no rules.json, no docs/private).
+      - name: Inspect .rpm payload
+        run: npm run validate:rpm:payload
+
+      # Native .rpm install/remove smoke: `rpm -i` then `rpm -e` (the rpm db is independent
+      # of dpkg). Asserts the installed layout + version, that the systemd unit is DISABLED +
+      # inactive (package never enables/starts it) and a seeded /etc/portier/rules.json is
+      # untouched, then removes and asserts clean removal with user config preserved.
+      - name: Install/remove smoke (.rpm)
+        run: npm run validate:rpm:install
 
       - name: List release artifacts + privacy guard
         run: npm run validate:artifacts

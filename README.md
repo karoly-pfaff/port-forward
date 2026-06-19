@@ -268,6 +268,7 @@ build/releases/
     checksums.sha256
   linux/
     portier_<version>_amd64.deb            (native dpkg-deb installer, disabled unit)
+    portier-<version>-1.x86_64.rpm         (native rpmbuild installer, disabled unit)
     portier-<version>-linux-amd64.tar.gz   (portable)
     portier-<version>-linux-arm64.tar.gz   (portable)
     checksums.sha256

@@ -124,11 +124,12 @@ sudo systemctl enable --now portier
 skipped with a notice and the portable tar.gz remains the baseline.
 
 The **Release Linux** workflow (`.github/workflows/release-linux.yml`, manual
-`workflow_dispatch`) runs the native path on `ubuntu-latest`: `build:release:current`,
-`validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`,
-`validate:upgrade:current`, a `.deb` payload introspection (`dpkg-deb --contents`), and the
-`.deb` install/remove smoke (below), then uploads `build/releases/linux/**` (`.deb`, portable
-tar.gz, `checksums.sha256`) as the `portier-release-linux` workflow artifact.
+`workflow_dispatch`) runs the native path on `ubuntu-latest`: installs `rpm` tooling,
+`build:release:current`, `validate:release:current`, `validate:release:checksums`,
+`validate:runtime:smoke`, `validate:upgrade:current`, `.deb` and `.rpm` payload introspection,
+and the `.deb` and `.rpm` install/remove smokes (below), then uploads `build/releases/linux/**`
+(`.deb`, `.rpm`, portable tar.gz ×2, `checksums.sha256`) as the `portier-release-linux`
+workflow artifact.
 
 ### `.deb` install/remove smoke
 
@@ -144,6 +145,45 @@ starts it), and that a seeded `/etc/portier/rules.json` sentinel is untouched. I
 not running, and user config is preserved. Runs on Linux only (exits 0 with a skip notice on
 other platforms). This is a package-lifecycle smoke; full systemd service-install validation
 (`validate:service:linux`) stays a separate manual/native check.
+
+## Native `.rpm` package
+
+`build:release:current` on Linux also builds a native RPM (rpmbuild) that mirrors the `.deb`:
+
+```bash
+npm run build:release:current     # also builds portier-<version>-1.x86_64.rpm
+# or directly (reuses an existing build/portier/):
+bash scripts/linux/release/build-rpm.sh --version <version>
+```
+
+Output: `build/releases/linux/portier-<version>-1.x86_64.rpm`
+
+Same **file-install** behavior as the `.deb`: runtime under `/opt/portier`, a **disabled**
+systemd unit, scriptlets that only `systemctl daemon-reload` + print opt-in guidance (and
+stop/disable on erasure), no service enable/start, no config creation/overwrite. `AutoReqProv`
+is off (the Go binary is static), so the package declares no dependencies. `build-rpm.sh`
+requires `rpmbuild` (the `rpm` package on Debian/Ubuntu, native on Fedora/RHEL); on a host
+without it the `.rpm` step is skipped with a notice. Opt in with:
+
+```bash
+sudo dnf install ./portier-<version>-1.x86_64.rpm   # or: sudo rpm -i ./portier-<version>-1.x86_64.rpm
+sudo systemctl enable --now portier
+```
+
+### `.rpm` payload + install/remove smoke
+
+```bash
+npm run validate:rpm:payload     # rpm -qlp layout + forbidden-content check (needs the rpm CLI)
+npm run validate:rpm:install     # rpm -i → assert → rpm -e (Linux only; needs sudo + rpm)
+```
+
+`validate:rpm:payload` lists the package (`rpm -qlp`) and asserts the `/opt/portier` layout +
+systemd unit, the package metadata version, and that no `rules.json`/`docs/private` is shipped.
+`validate:rpm:install` installs with `rpm -i`, asserts the layout + CLI version, the unit is
+**disabled and inactive**, and a seeded `/etc/portier/rules.json` is untouched, then `rpm -e`s
+and asserts clean removal with user config preserved. The rpm database is independent of dpkg,
+so this runs on the Ubuntu CI runner (systemd is PID 1 there, giving real disabled/inactive
+assertions). Both run on Linux only.
 Full systemd service validation (`validate:service:linux`) needs root/systemd and is
 **not** run in CI — it stays a manual/native check. No GitHub Release or tag is created.
 

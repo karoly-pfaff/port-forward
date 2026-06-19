@@ -23,18 +23,25 @@ export const CHECKSUMS_NAME = "checksums.sha256";
 // not build them.
 const ARTIFACT_EXTENSIONS = [".zip", ".exe", ".tar.gz", ".msi", ".pkg", ".deb", ".rpm"];
 
-// Native installer/package extensions. These sort before portable archives so the
-// checksum manifest and listings read package-first, portable-second.
+// Native installer/package extensions, in user-facing priority order. They sort before
+// portable archives so the manifest/listings read package-first; among Linux packages this
+// puts .deb before .rpm regardless of filename punctuation.
 const INSTALLER_EXTENSIONS = [".msi", ".pkg", ".deb", ".rpm", ".exe"];
 
-// compareReleaseArtifactNames orders release artifacts: native installer/package first,
-// portable archive (.zip/.tar.gz) second, alphabetical within each group. Deterministic.
+// compareReleaseArtifactNames orders release artifacts deterministically: native
+// installers/packages first (by the extension priority above — e.g. .deb before .rpm), then
+// portable archives, alphabetical within each group (so amd64 sorts before arm64).
 export function compareReleaseArtifactNames(a, b) {
-  const rank = (name) =>
-    INSTALLER_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext)) ? 0 : 1;
-  const ra = rank(a);
-  const rb = rank(b);
-  if (ra !== rb) return ra - rb;
+  // [group, extIndex]: group 0 = installer (ordered by extension priority), 1 = portable.
+  const key = (name) => {
+    const lower = name.toLowerCase();
+    const idx = INSTALLER_EXTENSIONS.findIndex((ext) => lower.endsWith(ext));
+    return idx >= 0 ? [0, idx] : [1, 0];
+  };
+  const [ga, ia] = key(a);
+  const [gb, ib] = key(b);
+  if (ga !== gb) return ga - gb;
+  if (ia !== ib) return ia - ib;
   return a < b ? -1 : a > b ? 1 : 0;
 }
 

@@ -251,12 +251,12 @@ uninstall.
 - Make the Windows WiX/MSI installer the canonical Windows installer (replacing Inno);
   keep the portable zip.
 - Build a native macOS `.pkg` installer alongside the portable archive (in progress).
-- Ready the Linux release: portable tar.gz + a native `.deb` (file-install, disabled unit)
-  + the systemd story; `.rpm` planned later.
+- Ready the Linux release: portable tar.gz + native `.deb` and `.rpm` packages (file-install,
+  disabled unit, mirrored behavior) + the systemd story.
 - Cross-build Linux/macOS portable `.tar.gz` artifacts from any host (release-readiness
   infrastructure); native runtime validation still runs on each OS.
 - Provide split, manual GitHub Actions native release workflows — Release Windows (MSI +
-  portable), Release MacOS (`.pkg` + portable), Release Linux (`.deb` + portable + native
+  portable), Release MacOS (`.pkg` + portable), Release Linux (`.deb` + `.rpm` + portable + native
   smoke) — that build, validate, and upload each platform's release artifacts (package
   first, portable second, `checksums.sha256` last) for inspection — no GitHub Release or tags.
 - Add native package install/uninstall smokes (Windows MSI `/i`+`/x`, macOS `.pkg`, Linux
