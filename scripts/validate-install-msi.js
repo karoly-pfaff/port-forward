@@ -23,7 +23,7 @@
  * release validation is unaffected.
  *
  * Usage:
- *   node scripts/validate-msi-install.js [--extract | --full] [--msi <path>]
+ *   node scripts/validate-install-msi.js [--extract | --full] [--msi <path>]
  *                                        [--data-dir <dir>] [--keep-temp]
  */
 
@@ -261,7 +261,7 @@ function cleanupProgramData(seed) {
 
 async function main() {
   if (!isWindows) {
-    console.log("[validate-msi-install] Windows-only; skipping on " + process.platform + ".");
+    console.log("[validate-install-msi] Windows-only; skipping on " + process.platform + ".");
     return;
   }
 
@@ -269,24 +269,24 @@ async function main() {
   const releasesDir = join(repoRoot, "build", "releases", "windows");
   const msiPath = msiArg ? resolve(msiArg) : join(releasesDir, msiName(version));
 
-  console.log(`[validate-msi-install] MSI : ${msiPath}`);
+  console.log(`[validate-install-msi] MSI : ${msiPath}`);
   if (!existsSync(msiPath)) {
     fail(`MSI not found: ${msiPath}`);
-    console.error("[validate-msi-install] Hint: run `npm run build:release:current` (requires WiX 7).\n");
+    console.error("[validate-install-msi] Hint: run `npm run build:release:current` (requires WiX 7).\n");
     process.exit(1);
   }
   pass(`MSI present (${(statSync(msiPath).size / 1024 / 1024).toFixed(1)} MB)`);
 
   const elevated = isElevated();
   const effectiveMode = mode === "auto" ? (elevated ? "full" : "extract") : mode;
-  console.log(`[validate-msi-install] Mode: ${effectiveMode} (requested ${mode}) ${elevated ? "[elevated]" : "[non-elevated]"}`);
+  console.log(`[validate-install-msi] Mode: ${effectiveMode} (requested ${mode}) ${elevated ? "[elevated]" : "[non-elevated]"}`);
 
   // The full /i + /x smoke needs an elevated shell. Skip honestly when not elevated rather
   // than fail or fake success — the Release Windows workflow runs it elevated.
   if (effectiveMode === "full" && !elevated) {
     skip("full per-machine MSI install/uninstall (/i + /x) requires an elevated shell — run in an elevated terminal or rely on the Release Windows workflow");
-    console.log(`\n[validate-msi-install] ${passed} passed, ${skipped} skipped, ${failed} failed.`);
-    console.log("[validate-msi-install] MSI install smoke skipped (needs elevation).\n");
+    console.log(`\n[validate-install-msi] ${passed} passed, ${skipped} skipped, ${failed} failed.`);
+    console.log("[validate-install-msi] MSI install smoke skipped (needs elevation).\n");
     return;
   }
 
@@ -367,25 +367,25 @@ async function main() {
   } finally {
     if (programDataSeed) cleanupProgramData(programDataSeed);
     if (keepTemp) {
-      console.log(`\n[validate-msi-install] --keep-temp: left ${tempRoot}`);
+      console.log(`\n[validate-install-msi] --keep-temp: left ${tempRoot}`);
     } else {
       try { rmSync(tempRoot, { recursive: true, force: true }); } catch { /* best effort */ }
     }
   }
 
-  console.log(`\n[validate-msi-install] ${passed} passed, ${skipped} skipped, ${failed} failed.`);
+  console.log(`\n[validate-install-msi] ${passed} passed, ${skipped} skipped, ${failed} failed.`);
   if (failed > 0) {
-    console.error("[validate-msi-install] MSI install smoke FAILED.\n");
+    console.error("[validate-install-msi] MSI install smoke FAILED.\n");
     process.exit(1);
   }
-  console.log("[validate-msi-install] MSI install smoke passed.\n");
+  console.log("[validate-install-msi] MSI install smoke passed.\n");
 }
 
 const invokedDirectly =
   process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (invokedDirectly) {
   main().catch((err) => {
-    console.error("[validate-msi-install] Unexpected error:", err);
+    console.error("[validate-install-msi] Unexpected error:", err);
     process.exit(1);
   });
 }

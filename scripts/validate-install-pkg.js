@@ -17,7 +17,7 @@
  * created (both guarded).
  *
  * Usage:
- *   node scripts/validate-pkg-install.js [--pkg <path>] [--keep]
+ *   node scripts/validate-install-pkg.js [--pkg <path>] [--keep]
  */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
