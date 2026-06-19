@@ -110,7 +110,7 @@ jobs:
         run: npm run validate:artifacts
 
       - name: Upload Windows release artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: portier-release-windows
           path: build/releases/**
@@ -188,7 +188,7 @@ jobs:
         run: npm run validate:artifacts
 
       - name: Upload macOS release artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: portier-release-macos
           path: build/releases/macos/**
@@ -249,7 +249,7 @@ jobs:
         run: npm run validate:artifacts
 
       - name: Upload Linux release artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: portier-release-linux
           path: build/releases/linux/**
