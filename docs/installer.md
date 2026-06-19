@@ -110,6 +110,25 @@ Linux machine-wide:
 Service scripts must use test-specific names during validation and must not touch
 production installs. Installers and scripts must preserve user config by default.
 
+## Upgrade Safety
+
+Portier separates the disposable install directory (binaries, `web/`, `api/openapi.json`)
+from external data (`rules.json`, recovery backup/quarantine side files, logs). The
+install directory can be replaced wholesale; user data is never inside it.
+
+An upgrade must therefore preserve user config and data: replacing the binaries/web
+assets must not touch `rules.json`, must not rewrite or auto-migrate config, and must
+leave the runtime able to start healthy and serve the UI. There is no automatic config
+migration on upgrade; `portier config migrate` stays explicit (see `docs/recovery.md`).
+
+This guarantee is validated on the current platform by an upgrade-preservation smoke
+(`npm run validate:upgrade:current`): it extracts the portable archive, runs the runtime
+against an external data dir, replaces the install directory with a fresh extraction, and
+asserts config, the configured rules, and recovery side files survive while the runtime
+restarts healthy at the expected version. This is the safety gate that native installer
+upgrades (including the planned/under-evaluation Windows WiX/MSI and macOS `.pkg`) must
+satisfy.
+
 ## Release Artifacts
 
 Current-platform release commands write artifacts under `build/releases/<platform>/`:

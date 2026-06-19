@@ -163,6 +163,7 @@ Run this before tagging or publishing release artifacts.
 - [ ] `npm run build:client`
 - [ ] `npm run test:e2e`
 - [ ] `npm run validate:runtime:smoke`
+- [ ] `npm run validate:upgrade:current` (after `build:release:current`)
 
 ### Version Surfaces To Bump
 
@@ -227,6 +228,19 @@ readme.txt
 
 ```powershell
 npm run validate:release:checksums
+```
+
+- [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
+  archive into a temp install dir, runs the packaged runtime against an external temp
+  data dir, replaces the install dir with a freshly extracted copy (simulating an
+  upgrade), and asserts user config (`rules.json`), the sentinel rule, and recovery
+  backup/quarantine side files survive, that the runtime restarts healthy, reports the
+  package version, and does not enter recovery mode for valid config. It is portable and
+  current-platform for now (same-version replacement); it accepts `--from`/`--to` archives
+  for future cross-version runs. No admin or OS-service install required.
+
+```powershell
+npm run validate:upgrade:current
 ```
 
 - [ ] Confirm version numbers and release notes are correct.
@@ -350,6 +364,8 @@ Use these when the change touches the listed area.
 - [ ] Keep test validation names/paths separate from production names/paths.
 - [ ] Update `docs/installer.md` and platform readmes.
 - [ ] Run `npm run validate:runtime:smoke`.
+- [ ] Run `npm run validate:upgrade:current` when packaging/upgrade behavior changes
+  (config/data must survive package replacement).
 - [ ] Run platform service validation on the target OS when practical.
 
 ### Docs

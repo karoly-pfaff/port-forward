@@ -80,7 +80,8 @@
     "validate:release": "node scripts/validate-release.js --platform current",
     "validate:release:current": "node scripts/validate-release.js --platform current",
     "validate:release:portable": "node scripts/validate-release.js --platform current --portable-only",
-    "validate:release:checksums": "node scripts/validate-release.js --platform current --checksums-only"
+    "validate:release:checksums": "node scripts/validate-release.js --platform current --checksums-only",
+    "validate:upgrade:current": "node scripts/validate-upgrade.js"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",
