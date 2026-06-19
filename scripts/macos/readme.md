@@ -44,11 +44,11 @@ npm run build:service   # cross-compiles Go for current platform
 ```
 
 The native `.pkg` (pkgbuild) and portable tar.gz are built and validated on a
-`macos-latest` runner by the `macos-release` job in
-`.github/workflows/release-matrix.yml` (manual `workflow_dispatch`), which also
+`macos-latest` runner by the **Release MacOS** workflow
+(`.github/workflows/release-macos.yml`, manual `workflow_dispatch`), which also
 introspects the `.pkg` payload with `pkgutil --payload-files` and uploads
-`build/releases/macos/**` as a workflow artifact. The `.pkg` is unsigned. No GitHub
-Release or tag is created.
+`build/releases/macos/**` (`.pkg`, portable tar.gz, `checksums.sha256`) as a workflow
+artifact. The `.pkg` is unsigned. No GitHub Release or tag is created.
 
 ---
 

@@ -1,0 +1,115 @@
+# Portier Linux release.
+#
+# Builds and validates the Linux release artifacts on a native ubuntu-latest runner and
+# uploads them as a workflow artifact for inspection. Does NOT publish a GitHub Release
+# and does NOT create tags. Manual trigger only (workflow_dispatch).
+#
+# Artifacts (package first, portable second, checksums last):
+#   1. portier_<version>_amd64.deb       (file-install dpkg-deb package, disabled unit)
+#   2. portier-<version>-linux.tar.gz
+#   3. checksums.sha256
+#
+# Privacy: only build/releases/linux/** is uploaded. docs/private/** is never staged
+# into release output; validate-artifacts.js logs the upload set and hard-fails on any
+# `private` path segment before upload.
+
+name: Release Linux
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  GO_VERSION: "1.25"
+
+jobs:
+  linux-release:
+    name: Linux release (.deb + portable + native smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          # The Go module with external deps lives in service/; point the cache there
+          # (the tools/cli and tools/replay modules have no go.sum). Avoids the
+          # "Dependencies file is not found ... go.sum" cache warning.
+          cache-dependency-path: service/go.sum
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Builds the native .deb (dpkg-deb) + the Linux portable tar.gz + checksums.sha256.
+      - name: Build current-platform release (.deb + portable tar.gz)
+        run: npm run build:release:current
+
+      - name: Validate current-platform release
+        run: npm run validate:release:current
+
+      - name: Validate checksums (checksums.sha256)
+        run: npm run validate:release:checksums
+
+      - name: Runtime smoke (packaged runtime)
+        run: npm run validate:runtime:smoke
+
+      - name: Upgrade-preservation smoke
+        run: npm run validate:upgrade:current
+
+      # .deb payload introspection: confirm the package carries the runtime binaries,
+      # the OpenAPI artifact, and the (disabled) systemd unit. The package is a
+      # file-install: it does not enable/start the service (see build-release.sh).
+      - name: Inspect .deb payload
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          DEB="build/releases/linux/portier_${VERSION}_amd64.deb"
+          echo "Inspecting ${DEB}"
+          dpkg-deb --info "${DEB}"
+          dpkg-deb --contents "${DEB}" | awk '{print $NF}' | sort > deb-paths.txt
+          cat deb-paths.txt
+          for f in ./opt/portier/portier ./opt/portier/service ./opt/portier/server.js \
+                   ./opt/portier/api/openapi.json ./opt/portier/web/index.html \
+                   ./lib/systemd/system/portier.service; do
+            if grep -qxF "$f" deb-paths.txt; then
+              echo "  ok: ${f}"
+            else
+              echo "  MISSING from .deb payload: ${f}" >&2
+              exit 1
+            fi
+          done
+          # The package must NOT ship user config.
+          if grep -qE 'rules\.json$' deb-paths.txt; then
+            echo "  ERROR: .deb must not contain rules.json" >&2
+            exit 1
+          fi
+
+      # NOTE: full systemd service validation (npm run validate:service:linux) requires
+      # root/sudo and a systemd PID 1, so it is NOT run here. It stays a manual/native
+      # check (and a future package-manager-gate concern). See docs/checklist.md.
+
+      - name: List release artifacts + privacy guard
+        run: npm run validate:artifacts
+
+      - name: Upload Linux release artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: portier-release-linux
+          path: build/releases/linux/**
+          if-no-files-found: error

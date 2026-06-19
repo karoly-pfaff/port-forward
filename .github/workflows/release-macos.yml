@@ -1,0 +1,104 @@
+# Portier macOS release.
+#
+# Builds and validates the macOS release artifacts on a native macos-latest runner and
+# uploads them as a workflow artifact for inspection. Does NOT publish a GitHub Release
+# and does NOT create tags. Manual trigger only (workflow_dispatch).
+#
+# Artifacts (package first, portable second, checksums last):
+#   1. Portier-<version>.pkg             (native pkgbuild installer, unsigned)
+#   2. portier-portable-macos-<version>.tar.gz
+#   3. checksums.sha256
+#
+# Privacy: only build/releases/macos/** is uploaded. docs/private/** is never staged
+# into release output; validate-artifacts.js logs the upload set and hard-fails on any
+# `private` path segment before upload.
+
+name: Release MacOS
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  GO_VERSION: "1.25"
+
+jobs:
+  macos-release:
+    name: macOS release (.pkg + portable)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          # The Go module with external deps lives in service/; point the cache there
+          # (the tools/cli and tools/replay modules have no go.sum). Avoids the
+          # "Dependencies file is not found ... go.sum" cache warning.
+          cache-dependency-path: service/go.sum
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # build:release:current on macOS builds the native .pkg (pkgbuild) AND the portable
+      # tar.gz + checksums.sha256. If pkgbuild fails, this step fails (no faked success).
+      - name: Build current-platform release (.pkg + portable tar.gz)
+        run: npm run build:release:current
+
+      - name: Validate current-platform release
+        run: npm run validate:release:current
+
+      - name: Validate checksums (checksums.sha256)
+        run: npm run validate:release:checksums
+
+      - name: Runtime smoke (packaged runtime)
+        run: npm run validate:runtime:smoke
+
+      - name: Upgrade-preservation smoke
+        run: npm run validate:upgrade:current
+
+      # .pkg payload introspection: confirm the native package carries the runtime
+      # binaries and the OpenAPI artifact. The .pkg is unsigned (Gatekeeper warnings
+      # on real installs are expected and documented).
+      - name: Inspect .pkg payload
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          PKG="build/releases/macos/Portier-${VERSION}.pkg"
+          echo "Inspecting ${PKG}"
+          pkgutil --payload-files "${PKG}" | sort > payload.txt
+          cat payload.txt
+          for f in portier service api/openapi.json; do
+            if grep -qx "./${f}" payload.txt; then
+              echo "  ok: ${f}"
+            else
+              echo "  MISSING from .pkg payload: ${f}" >&2
+              exit 1
+            fi
+          done
+
+      - name: List release artifacts + privacy guard
+        run: npm run validate:artifacts
+
+      - name: Upload macOS release artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: portier-release-macos
+          path: build/releases/macos/**
+          if-no-files-found: error

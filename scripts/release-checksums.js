@@ -7,7 +7,9 @@
  *
  * Checksums live in a single `checksums.sha256` file next to the release artifacts,
  * in GNU coreutils text format ("<sha256>  <filename>"), one line per artifact,
- * lowercase hex, sorted by filename, LF line endings.
+ * lowercase hex, LF line endings. Entries are ordered the native installer/package
+ * first, then the portable archive, alphabetical within each group — deterministic and
+ * human-readable (package-first). Verifiable with `sha256sum -c checksums.sha256`.
  */
 
 import { createHash } from "node:crypto";
@@ -21,6 +23,21 @@ export const CHECKSUMS_NAME = "checksums.sha256";
 // not build them.
 const ARTIFACT_EXTENSIONS = [".zip", ".exe", ".tar.gz", ".msi", ".pkg", ".deb", ".rpm"];
 
+// Native installer/package extensions. These sort before portable archives so the
+// checksum manifest and listings read package-first, portable-second.
+const INSTALLER_EXTENSIONS = [".msi", ".pkg", ".deb", ".rpm", ".exe"];
+
+// compareReleaseArtifactNames orders release artifacts: native installer/package first,
+// portable archive (.zip/.tar.gz) second, alphabetical within each group. Deterministic.
+export function compareReleaseArtifactNames(a, b) {
+  const rank = (name) =>
+    INSTALLER_EXTENSIONS.some((ext) => name.toLowerCase().endsWith(ext)) ? 0 : 1;
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 // isReleaseArtifactName reports whether a filename is a release artifact (and not
 // the checksums.sha256 file itself or a per-file .sha256 sidecar).
 export function isReleaseArtifactName(name) {
@@ -31,8 +48,9 @@ export function isReleaseArtifactName(name) {
 }
 
 // findReleaseArtifacts returns the release artifact filenames in `dir` that belong
-// to `version` (the version string appears in the artifact name), sorted
-// deterministically. Stale artifacts from other versions are ignored.
+// to `version` (the version string appears in the artifact name), ordered
+// package-first then portable (compareReleaseArtifactNames). Stale artifacts from
+// other versions are ignored.
 export function findReleaseArtifacts(dir, version) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
@@ -41,7 +59,7 @@ export function findReleaseArtifacts(dir, version) {
       if (!isReleaseArtifactName(name)) return false;
       return version ? name.includes(version) : true;
     })
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    .sort(compareReleaseArtifactNames);
 }
 
 // sha256File returns the lowercase hex SHA-256 of a file's contents.
@@ -54,12 +72,12 @@ export function sha256Buffer(data) {
   return createHash("sha256").update(data).digest("hex");
 }
 
-// formatSha256Sums renders entries ({ hash, name }) sorted by name, with a
-// trailing newline.
+// formatSha256Sums renders entries ({ hash, name }) ordered package-first then portable
+// (compareReleaseArtifactNames), GNU format "<sha256>  <name>", with a trailing newline.
 export function formatSha256Sums(entries) {
   return (
     [...entries]
-      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+      .sort((a, b) => compareReleaseArtifactNames(a.name, b.name))
       .map((e) => `${e.hash.toLowerCase()}  ${e.name}`)
       .join("\n") + "\n"
   );

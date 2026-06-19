@@ -259,12 +259,12 @@ npm run validate:msi:install
   LaunchAgent auto-install yet, unsigned, never touches user config). Payload introspection
   (`pkgutil --payload-files`) and a `.pkg` install smoke are follow-ups. See
   `scripts/macos/readme.md`.
-- [ ] Linux release (Linux-only). `build:release` produces the portable
-  `portier-<version>-linux.tar.gz` (full runtime layout, incl. `api/openapi.json`) **and**
-  the native `portier_<version>_amd64.deb` (dpkg-deb; built on Debian/Ubuntu, skipped with a
-  notice elsewhere) + `checksums.sha256`. `validate:release` checks the tar.gz
-  layout/OpenAPI/version, confirms the `.deb` is present, and verifies every checksum; the
-  artifacts are versioned and GitHub-Release-ready. The `.deb` is a **file-install**: it lays
+- [ ] Linux release (Linux-only). `build:release` produces the native
+  `portier_<version>_amd64.deb` (dpkg-deb; built on Debian/Ubuntu, skipped with a notice
+  elsewhere) then the portable `portier-<version>-linux.tar.gz` (full runtime layout, incl.
+  `api/openapi.json`) + `checksums.sha256`. `validate:release` confirms the `.deb` is present,
+  checks the tar.gz layout/OpenAPI/version, and verifies every checksum; the artifacts are
+  versioned and GitHub-Release-ready. The `.deb` is a **file-install**: it lays
   the runtime under `/opt/portier` and installs a **disabled** systemd unit — it never
   enables/starts the service or touches user config (`scripts/linux/release/build-release.sh`).
   Systemd is the canonical service layer (`scripts/linux/service/`); `install-service.sh
@@ -309,33 +309,35 @@ npm run validate:upgrade:current
 - [ ] Confirm version numbers and release notes are correct.
 - [ ] Confirm checksums/signing/notarization status is documented if applicable.
 
-### Native Release CI Matrix (GitHub Actions)
+### Native Release CI (GitHub Actions, split per platform)
 
-A manual GitHub Actions workflow (`.github/workflows/release-matrix.yml`,
-`workflow_dispatch` only) builds and validates the release artifacts on native
-hosted runners and uploads them as **workflow artifacts** for inspection. It does
-**not** publish a GitHub Release and does **not** create tags.
+Three manual GitHub Actions workflows (`workflow_dispatch` only) build and validate the
+release artifacts on native hosted runners and upload them as **workflow artifacts** for
+inspection. None publish a GitHub Release or create tags. Each workflow builds only its
+own platform's artifacts, in **package-first** order (installer, then portable archive,
+then `checksums.sha256`).
 
-- [ ] Trigger it from the Actions tab ("release-matrix" → "Run workflow"). It has no
-  push/PR triggers — manual only, so first-run issues stay controlled.
-  Each job builds only its own platform's artifacts.
-- [ ] `windows-release` (`windows-latest`): installs WiX 7 (dotnet global tool),
-  builds/validates the canonical MSI + Windows portable zip, runs the non-elevated
-  MSI install smoke (`msiexec /a` extraction; the `/i` + `/x` half is an honest skip
-  without admin), and runs runtime + upgrade smoke. Uploads
-  `build/releases/windows/**` as `portier-release-windows`.
-- [ ] `macos-release` (`macos-latest`): builds/validates the native `.pkg` (pkgbuild)
-  + macOS portable tar.gz, runs runtime + upgrade smoke, and introspects the `.pkg`
-  payload (`pkgutil --payload-files`). Uploads `build/releases/macos/**` as
-  `portier-release-macos`. The `.pkg` is unsigned (Gatekeeper warnings expected).
-- [ ] `linux-release` (`ubuntu-latest`): builds/validates the native `.deb` (dpkg-deb)
-  + Linux portable tar.gz, runs runtime + upgrade smoke, and introspects the `.deb`
-  payload (`dpkg-deb --contents`). Uploads `build/releases/linux/**` as
-  `portier-release-linux`. Full systemd service validation (`validate:service:linux`)
+- [ ] **Release Windows** (`.github/workflows/release-windows.yml`, `windows-latest`):
+  installs WiX 7 (dotnet global tool); builds/validates `Portier-<version>.msi` (canonical)
+  → `portier-<version>-windows-portable.zip` → `checksums.sha256`; runs the non-elevated
+  MSI install smoke (`msiexec /a`; the `/i` + `/x` half is an honest skip without admin)
+  plus runtime + upgrade smoke. Uploads `build/releases/windows/**` as
+  `portier-release-windows`.
+- [ ] **Release MacOS** (`.github/workflows/release-macos.yml`, `macos-latest`):
+  builds/validates `Portier-<version>.pkg` (pkgbuild, unsigned) →
+  `portier-portable-macos-<version>.tar.gz` → `checksums.sha256`; runs runtime + upgrade
+  smoke and `.pkg` payload introspection (`pkgutil --payload-files`). Uploads
+  `build/releases/macos/**` as `portier-release-macos`.
+- [ ] **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
+  builds/validates `portier_<version>_amd64.deb` (file-install, disabled unit) →
+  `portier-<version>-linux.tar.gz` → `checksums.sha256`; runs runtime + upgrade smoke and
+  `.deb` payload introspection (`dpkg-deb --contents`). Uploads `build/releases/linux/**`
+  as `portier-release-linux`. Full systemd service validation (`validate:service:linux`)
   needs root/systemd and is **not** run in CI — it stays a manual/native check.
-- [ ] Privacy: only `build/releases/**` is uploaded. `validate:artifacts` logs the
-  exact upload set and hard-fails on any `private` path segment before upload;
-  `docs/private/**` is never staged into release output.
+- [ ] Privacy: each workflow uploads only its own `build/releases/<platform>/**`.
+  `validate:artifacts` logs the exact upload set (package-first, `checksums.sha256` last)
+  and hard-fails on any `private` path segment before upload; `docs/private/**` is never
+  staged into release output.
 
 ### Platform Service Validation
 

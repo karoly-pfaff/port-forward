@@ -119,11 +119,12 @@ sudo systemctl enable --now portier
 `build-release.sh` requires `dpkg-deb` (Debian/Ubuntu); on other hosts the `.deb` step is
 skipped with a notice and the portable tar.gz remains the baseline.
 
-The `linux-release` job in `.github/workflows/release-matrix.yml` (manual
+The **Release Linux** workflow (`.github/workflows/release-linux.yml`, manual
 `workflow_dispatch`) runs the native path on `ubuntu-latest`: `build:release:current`,
 `validate:release:current`, `validate:release:checksums`, `validate:runtime:smoke`,
 `validate:upgrade:current`, and a `.deb` payload introspection (`dpkg-deb --contents`),
-then uploads `build/releases/linux/**` as the `portier-release-linux` workflow artifact.
+then uploads `build/releases/linux/**` (`.deb`, portable tar.gz, `checksums.sha256`) as the
+`portier-release-linux` workflow artifact.
 Full systemd service validation (`validate:service:linux`) needs root/systemd and is
 **not** run in CI — it stays a manual/native check. No GitHub Release or tag is created.
 

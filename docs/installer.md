@@ -153,9 +153,13 @@ build/releases/macos/
   checksums.sha256
 
 build/releases/linux/
+  portier_<version>_amd64.deb   (native dpkg-deb installer — file-install, disabled unit)
   portier-<version>-linux.tar.gz
   checksums.sha256
 ```
+
+Each platform lists its native installer/package first, the portable archive second, and
+`checksums.sha256` last.
 
 The **WiX MSI is the canonical Windows installer** (silent install, Group Policy/SCCM/Intune,
 standard Add/Remove Programs + repair). It depends on the WiX Toolset v7
@@ -206,8 +210,9 @@ follow-up. `build:release:current` still owns the current-platform release (port
 installer); the Windows installer (MSI) and macOS `.pkg` remain native-built.
 
 Each platform's release directory includes a `checksums.sha256` file (GNU coreutils text
-format, sorted, lowercase hex) covering every produced release artifact for that version —
-portable archives and installer artifacts alike. `build:release` regenerates it after the
+format `<sha256>  <filename>`, lowercase hex, native installer/package first then portable
+archive) covering every produced release artifact for that version — portable archives and
+installer artifacts alike. Verify with `sha256sum -c checksums.sha256`. `build:release` regenerates it after the
 artifacts are built, and `validate:release` verifies it (every hash matches, every listed
 file exists, and every produced artifact is listed). These checksums are the integrity
 story for the currently unsigned artifacts; signing/notarization remain separate (see
@@ -248,26 +253,28 @@ npm run validate:service:linux
 These service validations are explicit release checks, not part of `npm run check`.
 They use isolated temp paths, test-specific service names, and non-production ports.
 
-### Native Release CI Matrix
+### Native Release CI (split per platform)
 
-A manual GitHub Actions workflow (`.github/workflows/release-matrix.yml`,
-`workflow_dispatch` only) reproduces the release build + validation on native hosted
-runners — `windows-latest`, `macos-latest`, and `ubuntu-latest` — and uploads the
-resulting `build/releases/**` as workflow artifacts for inspection. It does not publish
-a GitHub Release or create tags.
+Three manual GitHub Actions workflows (`workflow_dispatch` only) reproduce the release
+build + validation on native hosted runners and upload the platform's release directory as
+a workflow artifact for inspection. None publish a GitHub Release or create tags. Each
+workflow builds only its own platform's artifacts, package-first then portable then
+`checksums.sha256`.
 
-Each job builds only its own platform's artifacts.
-
-- Windows: installs WiX 7, builds/validates the canonical MSI + portable zip, and runs
+- **Release Windows** (`.github/workflows/release-windows.yml`, `windows-latest`): installs
+  WiX 7, builds/validates the canonical MSI → portable zip → `checksums.sha256`, and runs
   the non-elevated MSI install smoke.
-- macOS: builds/validates the native `.pkg` (pkgbuild) + portable tar.gz and introspects
-  the `.pkg` payload. The `.pkg` is unsigned (see Signing And Notarization).
-- Linux: builds/validates the native `.deb` (dpkg-deb) + portable tar.gz, runs the native
-  runtime smoke, and introspects the `.deb` payload. Full systemd service validation needs
-  root and stays a manual/native check.
+- **Release MacOS** (`.github/workflows/release-macos.yml`, `macos-latest`):
+  builds/validates the native `.pkg` (pkgbuild) → portable tar.gz → `checksums.sha256` and
+  introspects the `.pkg` payload. The `.pkg` is unsigned (see Signing And Notarization).
+- **Release Linux** (`.github/workflows/release-linux.yml`, `ubuntu-latest`):
+  builds/validates the native `.deb` (dpkg-deb) → portable tar.gz → `checksums.sha256`, runs
+  the native runtime smoke, and introspects the `.deb` payload. Full systemd service
+  validation needs root and stays a manual/native check.
 
-Only `build/releases/**` is uploaded; `docs/private/**` is never staged into release
-output and a privacy guard fails the run before upload if any private path appears.
+Each workflow uploads only its own `build/releases/<platform>/**`; `docs/private/**` is never
+staged into release output and a privacy guard fails the run before upload if any private
+path appears.
 
 ## Signing And Notarization
 

@@ -19,9 +19,25 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CHECKSUMS_NAME } from "./release-checksums.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const releasesDir = join(repoRoot, "build", "releases");
+
+const INSTALLER_EXTS = [".msi", ".pkg", ".deb", ".rpm", ".exe"];
+
+// Display order within a platform directory: native installer/package first, portable
+// archive second, the checksums.sha256 manifest last.
+function displayRank(path) {
+  const base = path.split("/").pop().toLowerCase();
+  if (base === CHECKSUMS_NAME) return 2;
+  if (INSTALLER_EXTS.some((ext) => base.endsWith(ext))) return 0;
+  return 1;
+}
+
+function dirOf(path) {
+  return path.split("/").slice(0, -1).join("/");
+}
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -37,9 +53,18 @@ if (!existsSync(releasesDir)) {
   process.exit(1);
 }
 
+// Group by platform directory, then package-first / portable / checksums-last within.
 const files = walk(releasesDir)
   .map((f) => relative(repoRoot, f).split(sep).join("/"))
-  .sort();
+  .sort((a, b) => {
+    const da = dirOf(a);
+    const db = dirOf(b);
+    if (da !== db) return da < db ? -1 : 1;
+    const ra = displayRank(a);
+    const rb = displayRank(b);
+    if (ra !== rb) return ra - rb;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
 
 console.log(`[validate-artifacts] ${files.length} file(s) under build/releases/ (these are uploaded):`);
 for (const f of files) console.log(`  ${f}`);
