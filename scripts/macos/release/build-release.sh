@@ -118,6 +118,12 @@ elif command -v pkgbuild >/dev/null 2>&1; then
   cp "$REPO_ROOT/scripts/macos/service/"*.sh "$PKG_STAGE/service-scripts/"
   cp "$REPO_ROOT/scripts/macos/service/com.portier.plist.example" "$PKG_STAGE/service-scripts/"
 
+  # pkgbuild maps the --root dir's own perms onto the install-location, and mktemp -d
+  # creates it 0700 — which would install /usr/local/portier unreadable to non-root users.
+  # Normalize to standard perms so installed dirs are traversable (a+rX) and files readable;
+  # the binaries keep their executable bit.
+  chmod -R a+rX "$PKG_STAGE"
+
   pkgbuild \
     --root "$PKG_STAGE" \
     --identifier "$PKG_IDENTIFIER" \
