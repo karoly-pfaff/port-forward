@@ -117,5 +117,10 @@
     "typescript-eslint": "^8.33.1",
     "vite": "^6.3.5",
     "vitest": "^3.2.1"
+  },
+  "overrides": {
+    "shell-quote": "^1.8.4",
+    "multer": "^2.2.0",
+    "js-yaml": "^4.2.0"
   }
 }
