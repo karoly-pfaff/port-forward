@@ -8,8 +8,9 @@ belong in `audits/`.
 
 - **v1.0-v1.16:** completed.
 - **v1.17:** completed — Migration & Recovery (ready for release/tag as v1.17.0).
-- **v1.18:** completed — Install, Service & Upgrade Experience (version bumped to 1.18.0; tag-ready, pending the maintainer's manual tag).
-- **v1.19 and v2.0:** planned local-first path to a stable 2.0.
+- **v1.18:** completed — Install, Service & Upgrade Experience (released; commit `cf66b37`, tag `v1.18.0` pushed, no GitHub Release published).
+- **v1.19:** current — 2.0 RC Hardening (release-candidate stabilization only; no new features).
+- **v2.0:** next — Stable Local-First Portier.
 
 ## Completed Releases
 
@@ -243,7 +244,7 @@ See `docs/changelog.md` for the shipped detail and `docs/recovery.md` for the re
 
 ## Portier v1.18 - Install, Service & Upgrade Experience
 
-**Status:** Completed — version bumped to 1.18.0; tag-ready, pending the maintainer's manual tag.
+**Status:** Completed — released as commit `cf66b37`, tag `v1.18.0` pushed (no GitHub Release published).
 
 **Core theme:** Make Portier pleasant and reliable to install, run, stop, update, and
 uninstall.
@@ -290,17 +291,44 @@ packaging/install/upgrade story.
 
 ## Portier v1.19 - 2.0 RC Hardening
 
+**Status:** Current — release-candidate hardening kicked off after `v1.18.0`. No new
+features, no installer formats, no new service lifecycle behavior (bug fixes only), no API/
+OpenAPI/`rules.json`/migration/gate changes unless a proven release blocker forces it.
+
 **Core theme:** No new features. No architecture churn. Release-candidate stabilization
 only.
 
 ### Scope
 
-- Run the complete release validation matrix.
-- Perform a local-safety audit.
-- Complete docs pass: README, install docs, upgrade guide, CLI docs, API contract,
-  glossary, troubleshooting, release notes, known limitations.
-- Create `docs/upgrade-v2.md`.
+- Triage the v1.16 deferred audit items: resolve, carry into v1.19, defer, or retire each
+  with evidence (no stale carry-forward).
+- Harden client quality gates: client lint (React-hooks rules), an honest client coverage
+  baseline, and conservative gate ratcheting only where the measured actual is safely above.
+- Replace the hand-maintained API view with a processed view generated from the existing
+  OpenAPI artifact, plus a practical client UI consistency pass (no redesign).
+- Strengthen E2E coverage with stable user-flow tests (rule lifecycle, status/recovery, the
+  new API docs view, error/empty/loading states); no brittle screenshot-only tests.
+- Add a fast push/pull-request CI workflow (separate from the manual release workflows) that
+  runs the real quality gates and never publishes or tags — a 2.0 readiness gate.
+- Land the two bounded backend RC fixes surfaced by triage (unwired UDP prune; Go generic-500
+  redaction parity).
+- Run the complete release validation matrix and a local-safety pass; complete the docs pass
+  (README, install/upgrade/CLI docs, API contract, glossary, troubleshooting, release notes,
+  known limitations) and create `docs/upgrade-v2.md`.
 - Classify remaining work as v2.1, later, not planned, or accepted local-first limitation.
+
+### Slices (finite — at most five)
+
+1. RC Scope & Deferred-Audit Triage (current).
+2. Client Quality Gates + Push CI Foundation (lint + honest coverage baseline + targeted
+   tests; fast push/PR CI workflow).
+3. Client API Documentation & UI Consistency (OpenAPI-driven API view; consistency pass).
+4. E2E Strengthening & Backend Regression Coverage (stable user-flow E2E; bounded UDP-prune
+   and generic-500 fixes).
+5. Final RC Validation & v2.0 Readiness Gate.
+
+This is a re-validation-and-targeted-fix milestone, deliberately shorter than the v1.16
+audit series. Slices split internally rather than adding a sixth.
 
 ### Acceptance Criteria
 

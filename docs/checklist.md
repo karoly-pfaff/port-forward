@@ -143,6 +143,35 @@ asserts `GET /api/runtime` reports `version` equal to the package version.
 npm run validate:runtime:smoke
 ```
 
+## v1.19 RC Hardening (2.0 Release Candidate)
+
+v1.19 is release-candidate stabilization only — no new features, no new installer formats, no
+new service lifecycle behavior (bug fixes only). Use this as a lightweight gate per RC slice;
+the full release matrix below still applies before any v2.0 tag.
+
+RC focus areas (see the maintainer plan): v1.16 deferred-audit triage, client lint hardening
+(React-hooks rules), honest client coverage baseline with conservative gate ratcheting,
+replacing the hand-maintained API view with an OpenAPI-driven one, a practical client UI
+consistency pass, stable E2E strengthening, adding a fast push/PR CI workflow (separate from
+the manual release workflows), plus the bounded UDP-prune and generic-500 backend fixes.
+
+- [ ] Add fast push/PR CI (`.github/workflows/ci.yml`) running the real gates before v2.0; it
+  must not build release packages, publish a Release, or create a tag. Manual release
+  workflows stay `workflow_dispatch`.
+
+- [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
+- [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
+  format change — unless a proven release blocker justifies it, documented if so.
+- [ ] Client lint runs clean (React-hooks rules; `--max-warnings 0`); do not lower or bypass
+  any lint gate.
+- [ ] Client coverage gate reflects the measured actual; raise a gate only when the actual is
+  safely above it; never document an unverified coverage figure. No gate lowered.
+- [ ] No automatic startup migration added; no GitHub Release published (tag-and-manual stays
+  the policy).
+- [ ] Keep `docs/private/**` out of logs, artifacts, and release output.
+- [ ] For docs/planning-only slices, run `npm run lint` + `npm run typecheck`; rerun heavy
+  hosted release/smoke workflows only when build/release scripts change.
+
 ## Before A Version Release
 
 Run this before tagging or publishing release artifacts.
@@ -366,6 +395,20 @@ npm run validate:upgrade:current
 
 - [ ] Confirm version numbers and release notes are correct.
 - [ ] Confirm checksums/signing/notarization status is documented if applicable.
+
+### Push/PR CI vs manual release workflows
+
+Two distinct kinds of GitHub Actions workflow:
+
+- **Push/PR CI** (`.github/workflows/ci.yml`, automatic on `push` to `main` and on
+  `pull_request`): fast everyday-development checks — `npm ci`, lint, typecheck, unit tests,
+  client lint + honest client coverage gate, script/contract/OpenAPI validation where
+  practical, and at most a small stable E2E smoke subset. It builds **no** release packages,
+  uploads **no** artifacts, and **never** publishes a Release or creates a tag. *(Planned in
+  v1.19 Slice 2; before v1.19 there is no automatic push/PR CI.)*
+- **Manual release workflows** (`workflow_dispatch` only — Release Windows / MacOS / Linux +
+  the two arm64 smokes): build and validate platform packages and upload release artifacts.
+  These remain manual; full E2E and release packaging do not run on every push.
 
 ### Native Release CI (GitHub Actions, split per platform)
 
