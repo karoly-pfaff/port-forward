@@ -67,16 +67,23 @@ jobs:
       - name: Tests
         run: npm run test
 
-      # Runs coverage:client and enforces the honest client gate (96/91/84).
+      # Runs coverage:client and enforces the honest client gate (100/100/100).
       - name: Client coverage gate
         run: npm run validate:coverage:client
 
       - name: Script sanity
         run: npm run validate:scripts
 
+      # Generate the canonical OpenAPI artifact (server/build/api/openapi.json) from the
+      # NestJS controllers/DTOs. The Go inventory gate below reads it; a clean checkout has
+      # no build output, so it must be generated first. (`npm run typecheck` already built
+      # @portier/shared, which the generator imports.)
+      - name: Generate OpenAPI artifact
+        run: npm run apidoc:generate
+
       # Fast Go-side API parity gate (a single focused Go test); confirms the Go service
-      # routes still match docs/openapi.json. The full cross-runtime contract suite
-      # (validate:contract) stays in the manual pre-release matrix.
+      # routes still match the freshly-generated OpenAPI artifact. The full cross-runtime
+      # contract suite (validate:contract) stays in the manual pre-release matrix.
       - name: Go ↔ OpenAPI inventory
         run: npm run validate:openapi:go
 
