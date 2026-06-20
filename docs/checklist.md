@@ -337,7 +337,7 @@ npm run validate:release:portable:all
   workflows run the shipped arm64 portable natively and assert `portier version`, `/api/health`,
   and `/api/runtime` version, plus the Mach-O/ELF machine type and `uname -m` (the smoke
   refuses to call itself arm64 unless the host really is):
-  - **Smoke macOS arm64** (`.github/workflows/smoke-macos-arm64.yml`, `macos-14` / Apple Silicon)
+  - **Smoke MacOS arm64** (`.github/workflows/smoke-macos-arm64.yml`, `macos-14` / Apple Silicon)
   - **Smoke Linux arm64** (`.github/workflows/smoke-linux-arm64.yml`, `ubuntu-24.04-arm`)
 
 ```bash

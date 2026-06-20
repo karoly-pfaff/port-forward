@@ -233,7 +233,7 @@ npm run validate:release:portable:macos  # structural validation of both arches 
 ```
 
 Cross-built validation is structural only. Native runtime smoke runs on macOS:
-`validate:runtime:smoke` covers the host arch, and the **Smoke macOS arm64** workflow
+`validate:runtime:smoke` covers the host arch, and the **Smoke MacOS arm64** workflow
 (`.github/workflows/smoke-macos-arm64.yml`, `macos-14` / Apple Silicon, manual
 `workflow_dispatch`) extracts and runs the `macos-arm64` portable natively
 (`npm run validate:portable:smoke`: `portier version` + `/api/health` + `/api/runtime`). The

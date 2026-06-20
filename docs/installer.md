@@ -227,7 +227,7 @@ against foreign binaries; native runtime validation must run on each OS/arch.
 native installer; the Windows installer (MSI) and macOS `.pkg` remain native-built.
 
 **Native arm64 runtime smoke.** `darwin/arm64` and `linux/arm64` portables are runtime-smoked on
-**real arm64 runners** (not emulation) by two manual workflows — `Smoke macOS arm64`
+**real arm64 runners** (not emulation) by two manual workflows — `Smoke MacOS arm64`
 (`macos-14`/Apple Silicon) and `Smoke Linux arm64` (`ubuntu-24.04-arm`). Each extracts the
 shipped arm64 portable and runs it (`npm run validate:portable:smoke`): `portier version`, GET
 `/api/health`, GET `/api/runtime` version, plus a Mach-O/ELF machine-type + `uname -m` check (the
