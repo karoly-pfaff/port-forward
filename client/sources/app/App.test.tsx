@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ForwardStatus } from "@portier/shared";
@@ -533,5 +533,63 @@ describe("App group actions", () => {
 
     expect(portierApi.setGroupRunning).toHaveBeenCalledWith("web", false);
     await screen.findByRole("status");
+  });
+});
+
+describe("App settings and auto-refresh", () => {
+  const sampleRule = {
+    id: "r1", name: "Test Rule", protocol: "tcp" as const, listenHost: "127.0.0.1",
+    listenPort: 48001, targetHost: "127.0.0.1", targetPort: 3000, enabled: false, advisories: []
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+  });
+
+  it("the header Settings button opens the Settings view", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([]);
+
+    render(<App />);
+    // The header (banner) Settings button is distinct from the sidebar nav item.
+    const header = await screen.findByRole("banner");
+    await userEvent.click(within(header).getByRole("button", { name: "Settings" }));
+
+    expect(await screen.findByText("Management Endpoint")).toBeInTheDocument();
+  });
+
+  it("toggling Auto-refresh enables the interval control and applies a new interval", async () => {
+    const user = userEvent.setup();
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([sampleRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([
+      { ruleId: "r1", running: false, health: "healthy", bytesIn: 0, bytesOut: 0 }
+    ]);
+
+    render(<App />);
+    await screen.findByText("Test Rule");
+
+    const intervalSelect = screen.getByRole("combobox", { name: "Auto-refresh interval" });
+    expect(intervalSelect).toBeDisabled();
+
+    await user.click(screen.getByRole("checkbox", { name: "Auto-refresh" }));
+    expect(intervalSelect).toBeEnabled();
+
+    await user.selectOptions(intervalSelect, "10");
+    expect((intervalSelect as HTMLSelectElement).value).toBe("10");
+  });
+
+  it("shows the server-unavailable banner for a network-named TypeError", async () => {
+    // Exercises the isNetworkError "network" branch (distinct from the "fetch" branch).
+    vi.mocked(portierApi.fetchForwardRules).mockRejectedValue(
+      new TypeError("network request failed")
+    );
+    vi.mocked(portierApi.fetchForwardStatus).mockRejectedValue(
+      new TypeError("network request failed")
+    );
+
+    render(<App />);
+
+    expect(await screen.findByText(/Server unavailable/)).toBeInTheDocument();
   });
 });

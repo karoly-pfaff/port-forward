@@ -146,18 +146,32 @@ npm run validate:runtime:smoke
 ## v1.19 RC Hardening (2.0 Release Candidate)
 
 v1.19 is release-candidate stabilization only — no new features, no new installer formats, no
-new service lifecycle behavior (bug fixes only). Use this as a lightweight gate per RC slice;
+new service lifecycle behavior (bug fixes only). It runs as a risk-based plan of ~9–11 bounded
+slices, each small enough to validate properly. Use this as a lightweight gate per RC slice;
 the full release matrix below still applies before any v2.0 tag.
 
-RC focus areas (see the maintainer plan): v1.16 deferred-audit triage, client lint hardening
-(React-hooks rules), honest client coverage baseline with conservative gate ratcheting,
-replacing the hand-maintained API view with an OpenAPI-driven one, a practical client UI
-consistency pass, stable E2E strengthening, adding a fast push/PR CI workflow (separate from
-the manual release workflows), plus the bounded UDP-prune and generic-500 backend fixes.
+RC focus areas (one or more bounded slices each): v1.16 deferred-audit triage; client lint
+hardening (React/hooks rules); honest client coverage baseline + a meaningful test pass with
+conservative gate ratcheting; replacing the hand-maintained API view with an OpenAPI-driven
+one; a complete Postman collection generated from the canonical OpenAPI contract; a practical
+client UI consistency pass; stable E2E strengthening; a fast push/PR CI workflow (separate from
+the manual release workflows); the bounded UDP-prune and generic-500 backend fixes;
+diagnostics/user-path docs polish; a CI/release-workflow readiness gate; and a v1.19 closure +
+v2.0 go/no-go report.
 
-- [ ] Add fast push/PR CI (`.github/workflows/ci.yml`) running the real gates before v2.0; it
-  must not build release packages, publish a Release, or create a tag. Manual release
-  workflows stay `workflow_dispatch`.
+Slice 2 status (client quality gates + push CI):
+
+- [x] Client React lint hardened — `eslint-plugin-react` (recommended + jsx-runtime) and
+  `eslint-plugin-react-hooks` (`rules-of-hooks` + `exhaustive-deps` = error) scoped to
+  `client/sources/**`; `@typescript-eslint/no-explicit-any` is now `error` repo-wide (prod
+  code was already `any`-free; two server forwarder tests were typed to drop their casts).
+- [x] `npm run lint` enforces `--max-warnings 0` and passes clean.
+- [x] Honest client coverage measured (≈97.2% stmts / 91.8% branch / 86.8% funcs) and the gate
+  ratcheted **94/89/78 → 95/90/85** (the misleading 78 function floor raised to a meaningful
+  85, still safely below actual). Added meaningful App / ActivityLogView / TopHeader tests.
+- [x] Fast push/PR CI (`.github/workflows/continous-integration.yml`) added — runs the real gates, builds no
+  release packages, uploads no artifacts, publishes nothing, creates no tag. The 5 manual
+  release/smoke workflows remain `workflow_dispatch`.
 
 - [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
 - [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
@@ -166,6 +180,11 @@ the manual release workflows), plus the bounded UDP-prune and generic-500 backen
   any lint gate.
 - [ ] Client coverage gate reflects the measured actual; raise a gate only when the actual is
   safely above it; never document an unverified coverage figure. No gate lowered.
+- [ ] Postman collection (`docs/postman/portier.postman_collection.json`, v2.1) is **generated
+  from** the canonical OpenAPI artifact (not a hand-maintained second contract); `npm run
+  validate:postman` passes (every OpenAPI operation present, `{{baseUrl}}` variable, no
+  secrets / private paths / `docs/private` references, deterministic/no-drift) and runs in
+  push/PR CI. No Postman cloud publishing.
 - [ ] No automatic startup migration added; no GitHub Release published (tag-and-manual stays
   the policy).
 - [ ] Keep `docs/private/**` out of logs, artifacts, and release output.
@@ -400,12 +419,16 @@ npm run validate:upgrade:current
 
 Two distinct kinds of GitHub Actions workflow:
 
-- **Push/PR CI** (`.github/workflows/ci.yml`, automatic on `push` to `main` and on
-  `pull_request`): fast everyday-development checks — `npm ci`, lint, typecheck, unit tests,
-  client lint + honest client coverage gate, script/contract/OpenAPI validation where
-  practical, and at most a small stable E2E smoke subset. It builds **no** release packages,
-  uploads **no** artifacts, and **never** publishes a Release or creates a tag. *(Planned in
-  v1.19 Slice 2; before v1.19 there is no automatic push/PR CI.)*
+- **Push/PR CI** (`.github/workflows/continous-integration.yml`, automatic on `push` to `main` and on
+  `pull_request`): fast everyday-development checks. A `ubuntu-latest` **baseline** job runs
+  `npm ci`, `npm run lint` (`--max-warnings 0`), `npm run typecheck`, `npm run test` (shared +
+  server + client + Go service), the honest client coverage gate
+  (`npm run validate:coverage:client`), `npm run validate:scripts`, and the Go↔OpenAPI
+  inventory check (`npm run validate:openapi:go`); a lean `windows-latest` job runs
+  lint/typecheck/script-sanity to catch Windows-specific path issues. It builds **no** release
+  packages, uploads **no** artifacts, and **never** publishes a Release or creates a tag.
+  (Full Playwright E2E and `validate:contract` are intentionally left to the manual pre-release
+  matrix / local runs — too slow for every push.)
 - **Manual release workflows** (`workflow_dispatch` only — Release Windows / MacOS / Linux +
   the two arm64 smokes): build and validate platform packages and upload release artifacts.
   These remain manual; full E2E and release packaging do not run on every push.

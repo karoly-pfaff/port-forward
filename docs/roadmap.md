@@ -317,18 +317,24 @@ only.
   known limitations) and create `docs/upgrade-v2.md`.
 - Classify remaining work as v2.1, later, not planned, or accepted local-first limitation.
 
-### Slices (finite — at most five)
+### Slices (finite — risk-based, 9–11 bounded slices)
 
-1. RC Scope & Deferred-Audit Triage (current).
-2. Client Quality Gates + Push CI Foundation (lint + honest coverage baseline + targeted
-   tests; fast push/PR CI workflow).
-3. Client API Documentation & UI Consistency (OpenAPI-driven API view; consistency pass).
-4. E2E Strengthening & Backend Regression Coverage (stable user-flow E2E; bounded UDP-prune
-   and generic-500 fixes).
-5. Final RC Validation & v2.0 Readiness Gate.
+1. RC Scope & Deferred-Audit Triage.
+2. Client Quality Gates + Push CI Foundation (React/hooks lint, honest coverage baseline, fast
+   push/PR CI).
+3. Client Coverage Meaningful Test Pass.
+4. OpenAPI-driven API Documentation View.
+5. Postman Collection & API Consumer Artifacts (generated from the canonical OpenAPI contract).
+6. Client UI Consistency Pass.
+7. E2E Strengthening: Client Flows.
+8. Backend RC Fixes from v1.16 Deferred Items (UDP prune wiring; Go generic-500 redaction).
+9. Diagnostics, Supportability & User-path Docs Polish.
+10. Full CI & Release-Workflow Readiness Gate.
+11. v1.19 Closure & v2.0 Go/No-Go Plan.
 
-This is a re-validation-and-targeted-fix milestone, deliberately shorter than the v1.16
-audit series. Slices split internally rather than adding a sixth.
+This is a re-validation-and-targeted-fix milestone. Each slice is bounded and individually
+validatable; slices split internally rather than expanding scope. More slices than first
+planned, but the goal stays correctness, stability, and reviewability — not new features.
 
 ### Acceptance Criteria
 

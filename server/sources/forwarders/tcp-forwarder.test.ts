@@ -25,6 +25,13 @@ function makeRule(overrides: Partial<ForwardRule> = {}): ForwardRule {
   };
 }
 
+// Narrow typed view of the internal listening server this test reaches into to
+// simulate a post-listen socket error. Avoids `any`.
+interface TcpForwarderInternals {
+  server: { emit(event: string, ...args: unknown[]): boolean };
+}
+const peekTcp = (forwarder: unknown): TcpForwarderInternals => forwarder as TcpForwarderInternals;
+
 describe("TcpForwarder", () => {
   it("forwards TCP data bidirectionally", async () => {
     const targetPort = await getFreeTcpPort();
@@ -175,7 +182,7 @@ describe("TcpForwarder – error handling", () => {
     cleanup.push(() => forwarder.stop());
 
     // Simulate an error emitted on the server after it is already listening
-    (forwarder as any).server.emit("error", new Error("ETIMEDOUT simulated"));
+    peekTcp(forwarder).server.emit("error", new Error("ETIMEDOUT simulated"));
 
     expect(forwarder.getStatus().lastError).toBe("ETIMEDOUT simulated");
   });

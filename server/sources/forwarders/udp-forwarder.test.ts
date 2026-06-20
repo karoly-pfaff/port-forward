@@ -78,6 +78,20 @@ async function waitUntil(cond: () => boolean, timeoutMs = 2000): Promise<void> {
 type SendStub = (msg: Buffer, port: number, host: string, cb: (err?: Error) => void) => void;
 const failingSend: SendStub = (_msg, _port, _host, cb) => cb(new Error("send boom"));
 
+// Narrow typed view of the forwarder internals these tests reach into to inject
+// socket errors / failing sends. Avoids `any` while staying decoupled from dgram's
+// heavily-overloaded Socket.send signature.
+interface TestSocket {
+  emit(event: string, ...args: unknown[]): boolean;
+  send: SendStub;
+}
+interface UdpForwarderInternals {
+  listenSocket: TestSocket;
+  targetSocket: TestSocket;
+  sessions: Map<string, { targetSocket: TestSocket }>;
+}
+const peekUdp = (forwarder: unknown): UdpForwarderInternals => forwarder as UdpForwarderInternals;
+
 describe("UdpForwarder one-way mode", () => {
   it("forwards UDP packets to target", async () => {
     const { socket: targetSocket, port: targetPort } = await bindUdpSocketOnFreePort();
@@ -705,7 +719,7 @@ describe("UdpForwarder – error handling", () => {
     const { forwarder } = await startUdpForwarder({});
     cleanup.push(() => forwarder.stop());
 
-    (forwarder as any).listenSocket.emit("error", new Error("listen error"));
+    peekUdp(forwarder).listenSocket.emit("error", new Error("listen error"));
 
     expect(forwarder.getStatus().lastError).toBe("listen error");
   });
@@ -714,7 +728,7 @@ describe("UdpForwarder – error handling", () => {
     const { forwarder } = await startUdpForwarder({});
     cleanup.push(() => forwarder.stop());
 
-    (forwarder as any).targetSocket.emit("error", new Error("target error"));
+    peekUdp(forwarder).targetSocket.emit("error", new Error("target error"));
 
     expect(forwarder.getStatus().lastError).toBe("target error");
   });
@@ -736,9 +750,9 @@ describe("UdpForwarder – error handling", () => {
     sendPacket(client, "hi", listenPort);
 
     const sessionKey = `127.0.0.1:${client.address().port}`;
-    await waitUntil(() => (forwarder as any).sessions.has(sessionKey));
-    const session = (forwarder as any).sessions.get(sessionKey);
-    expect(session).toBeDefined();
+    await waitUntil(() => peekUdp(forwarder).sessions.has(sessionKey));
+    const session = peekUdp(forwarder).sessions.get(sessionKey);
+    if (!session) throw new Error("expected an active session");
 
     session.targetSocket.emit("error", new Error("session error"));
     expect(forwarder.getStatus().lastError).toBe("session error");
@@ -756,7 +770,7 @@ describe("UdpForwarder – emitted event shape (facade regression)", () => {
     const { forwarder, listenPort } = await startUdpForwarder({}, (e) => events.push(e));
     cleanup.push(() => forwarder.stop());
 
-    (forwarder as any).targetSocket.send = failingSend;
+    peekUdp(forwarder).targetSocket.send = failingSend;
 
     const client = dgram.createSocket("udp4");
     cleanup.push(() => closeUdpSocket(client));
@@ -818,7 +832,7 @@ describe("UdpForwarder – send-callback error handling", () => {
 
     // Force the shared one-way target socket's send callback to error
     // (instance-level injection, like the existing socket.emit("error") tests).
-    (forwarder as any).targetSocket.send = failingSend;
+    peekUdp(forwarder).targetSocket.send = failingSend;
 
     const client = dgram.createSocket("udp4");
     cleanup.push(() => closeUdpSocket(client));
@@ -847,11 +861,11 @@ describe("UdpForwarder – send-callback error handling", () => {
 
     // First packet creates the session (first send succeeds).
     sendPacket(client, "first", listenPort);
-    await waitUntil(() => (forwarder as any).sessions.size >= 1);
+    await waitUntil(() => peekUdp(forwarder).sessions.size >= 1);
 
     // Inject a send failure on the session socket, then reuse the session.
-    const session = (forwarder as any).sessions.get(`127.0.0.1:${clientPort}`);
-    expect(session).toBeDefined();
+    const session = peekUdp(forwarder).sessions.get(`127.0.0.1:${clientPort}`);
+    if (!session) throw new Error("expected an active session");
     session.targetSocket.send = failingSend;
     sendPacket(client, "second", listenPort);
 
@@ -874,7 +888,7 @@ describe("UdpForwarder – send-callback error handling", () => {
     cleanup.push(() => forwarder.stop());
 
     // Fail only the return path (listen socket); the inbound forward still works.
-    (forwarder as any).listenSocket.send = failingSend;
+    peekUdp(forwarder).listenSocket.send = failingSend;
 
     const client = dgram.createSocket("udp4");
     cleanup.push(() => closeUdpSocket(client));
@@ -899,7 +913,7 @@ describe("UdpForwarder – send-callback error handling", () => {
     cleanup.push(() => forwarder.stop());
 
     // Fail the return path (listen socket) before the target reply arrives.
-    (forwarder as any).listenSocket.send = failingSend;
+    peekUdp(forwarder).listenSocket.send = failingSend;
 
     const client = dgram.createSocket("udp4");
     cleanup.push(() => closeUdpSocket(client));

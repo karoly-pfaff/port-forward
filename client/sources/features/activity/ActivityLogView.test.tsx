@@ -255,4 +255,53 @@ describe("ActivityLogView", () => {
     await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
     expect(screen.getByText(/High-frequency packet events/)).toBeInTheDocument();
   });
+
+  it("Export JSON builds a download blob from the visible events", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([sampleEvent]);
+    const createObjectURL = vi.fn(() => "blob:activity");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+
+    render(<ActivityLogView />);
+    await screen.findByText(/Rule "My Rule" started/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Export activity as JSON" }));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:activity");
+
+    clickSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("Clear activity log empties the list on success", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([sampleEvent]);
+    vi.mocked(portierApi.clearActivity).mockResolvedValue(undefined);
+
+    render(<ActivityLogView />);
+    await screen.findByText(/Rule "My Rule" started/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear activity log" }));
+
+    expect(portierApi.clearActivity).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(screen.queryByText(/Rule "My Rule" started/)).not.toBeInTheDocument()
+    );
+  });
+
+  it("Clear activity log shows an error when the API rejects", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([sampleEvent]);
+    vi.mocked(portierApi.clearActivity).mockRejectedValue(new Error("Clear failed"));
+
+    render(<ActivityLogView />);
+    await screen.findByText(/Rule "My Rule" started/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Clear activity log" }));
+
+    expect(await screen.findByText("Clear failed")).toBeInTheDocument();
+  });
 });

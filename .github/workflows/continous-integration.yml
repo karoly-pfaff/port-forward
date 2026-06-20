@@ -1,0 +1,109 @@
+# Portier push/PR continuous integration.
+#
+# Fast, everyday-development quality gate that runs automatically on every push to main
+# and on every pull request. It runs the REAL project gates — lint, typecheck, the unit
+# test matrix (shared + server + client + Go service), the honest client coverage gate,
+# script sanity, and the Go↔OpenAPI inventory check.
+#
+# This workflow deliberately does NOT:
+#   - build release packages (MSI / pkg / deb / rpm) or portable archives,
+#   - run install/remove or runtime smokes,
+#   - upload any artifacts,
+#   - publish a GitHub Release, or create tags.
+# Those belong to the manual (workflow_dispatch) Release Windows / MacOS / Linux workflows.
+#
+# Heavier, slower gates that are intentionally left to the manual pre-release matrix and
+# local runs (not run on every push): full Playwright E2E (needs a built client + browsers
+# + a spawned runtime), npm run validate:contract (needs a full build:runtime first), and
+# the platform packaging/install smokes.
+#
+# Privacy: this workflow reads the repo and runs gates only; it never stages or uploads
+# docs/private/** or any build/releases/** output.
+
+name: Continous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  GO_VERSION: "1.25"
+
+jobs:
+  baseline:
+    name: Baseline gates (lint, typecheck, tests, client coverage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (eslint, --max-warnings 0)
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Unit/integration matrix: shared + server + client (vitest) + Go service.
+      - name: Tests
+        run: npm run test
+
+      # Runs coverage:client and enforces the honest client gate (96/91/84).
+      - name: Client coverage gate
+        run: npm run validate:coverage:client
+
+      - name: Script sanity
+        run: npm run validate:scripts
+
+      # Fast Go-side API parity gate (a single focused Go test); confirms the Go service
+      # routes still match docs/openapi.json. The full cross-runtime contract suite
+      # (validate:contract) stays in the manual pre-release matrix.
+      - name: Go ↔ OpenAPI inventory
+        run: npm run validate:openapi:go
+
+  windows:
+    name: Windows path/script sanity
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # A lean Windows pass to catch Windows-specific path/case/script-resolution issues
+      # the ubuntu baseline cannot. Not a duplicate of the manual Release Windows workflow
+      # (no packaging, no smokes, no artifacts).
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Script sanity
+        run: npm run validate:scripts
