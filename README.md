@@ -1,5 +1,7 @@
 # Portier
 
+[![Continuous Integration](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/continuous-integration.yml)
+
 Portier is a local TCP/UDP port forwarding manager with a native Go service runtime, a TypeScript server runtime, and a simple React web UI.
 
 ## Install

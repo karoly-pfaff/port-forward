@@ -60,24 +60,38 @@ jobs:
       - name: Lint (eslint, --max-warnings 0)
         run: npm run lint
 
-      - name: Typecheck
-        run: npm run typecheck
+      # @portier/shared is compiled explicitly here so the per-workspace typechecks, the
+      # tests, and the OpenAPI generator (all of which import it) don't depend on a side
+      # effect of another step.
+      - name: Build shared package
+        run: npm run build:shared
 
-      # Unit/integration matrix: shared + server + client (vitest) + Go service.
-      - name: Tests
-        run: npm run test
+      # Typechecks are split per workspace so a failure names the exact package.
+      - name: Typecheck shared
+        run: npm run typecheck -w shared
+      - name: Typecheck server
+        run: npm run typecheck -w server
+      - name: Typecheck client
+        run: npm run typecheck -w client
 
-      # Runs coverage:client and enforces the honest client gate (100/100/100).
-      - name: Client coverage gate
+      # Test suites are split per runtime so a red ✗ points straight at the failing suite.
+      - name: Test shared
+        run: npm run test:shared
+      - name: Test server
+        run: npm run test:server
+      - name: Test Go service
+        run: npm run test:service
+
+      # Runs the client suite under coverage and enforces the 100/100/100 gate.
+      - name: Test client + coverage gate (100/100/100)
         run: npm run validate:coverage:client
 
       - name: Script sanity
         run: npm run validate:scripts
 
       # Generate the canonical OpenAPI artifact (server/build/api/openapi.json) from the
-      # NestJS controllers/DTOs. The Go inventory gate below reads it; a clean checkout has
-      # no build output, so it must be generated first. (`npm run typecheck` already built
-      # @portier/shared, which the generator imports.)
+      # NestJS controllers/DTOs. The Go inventory gate below reads it, and a clean checkout
+      # has no build output. (Build shared above already compiled the generator's import.)
       - name: Generate OpenAPI artifact
         run: npm run apidoc:generate
 
