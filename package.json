@@ -35,7 +35,7 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug",
-    "test:e2e:fresh": "npm run build:client && playwright test",
+    "test:e2e:fresh": "npm run build:shared && npm run build:server && npm run build:client && npm run test:e2e",
     "test:e2e:install": "playwright install chromium",
     "coverage": "npm run coverage:project",
     "coverage:project": "npm run coverage:shared && npm run coverage:server && npm run coverage:client && npm run coverage:service && npm run coverage:cli",

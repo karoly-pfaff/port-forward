@@ -28,9 +28,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // Uses tsx (workspace devDep) to run the TypeScript server without a separate build step.
-    // Requires client/build to exist — run `npm run build:client` first.
-    command: `npx tsx server/sources/index.ts --host 127.0.0.1 --port ${E2E_PORT} --static-dir client/build`,
+    // Runs the built NestJS server (decorators + metadata are compiled by tsc; tsx/esbuild
+    // does not honor experimentalDecorators here). Requires shared + server + client builds —
+    // use `npm run test:e2e:fresh`, which builds them first.
+    command: `node server/build/index.js --host 127.0.0.1 --port ${E2E_PORT} --static-dir client/build`,
     env: {
       PORTIER_CONFIG: E2E_CONFIG_PATH,
     },

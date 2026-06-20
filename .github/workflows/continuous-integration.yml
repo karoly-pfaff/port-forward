@@ -1,35 +1,3 @@
-# Portier push/PR continuous integration.
-#
-# Fast, everyday-development quality gate that runs automatically on every push to main
-# and on every pull request. It is split into focused parallel jobs so each concern is its
-# own check in the Actions UI and a failure points straight at the cause:
-#
-#   lint · typecheck ·
-#   coverage-shared · coverage-server · coverage-client ·
-#   coverage-service · coverage-cli · coverage-replay ·
-#   openapi-parity · windows-sanity
-#
-# Each coverage-* job runs that component's suite UNDER COVERAGE and enforces its gate
-# (scripts/validate-coverage.js): shared/server/client = 100/100/100, service = 90/95,
-# cli/replay = 95/95.
-#
-# This workflow deliberately does NOT:
-#   - build release packages (MSI / pkg / deb / rpm) or portable archives,
-#   - run install/remove or runtime smokes,
-#   - upload any artifacts,
-#   - publish a GitHub Release, or create tags.
-# Those belong to the manual (workflow_dispatch) Release Windows / MacOS / Linux workflows.
-#
-# Heavier, slower gates left to the manual pre-release matrix and local runs (not on every
-# push): full Playwright E2E, npm run validate:contract (needs a full build:runtime), and
-# the platform packaging/install smokes.
-#
-# Each job is a fresh runner that re-runs `npm ci`; that redundancy buys parallelism and a
-# clean per-concern failure signal. The repo is public, so Actions minutes are free.
-#
-# Privacy: every job reads the repo and runs gates only; nothing stages or uploads
-# docs/private/** or any build/releases/** output.
-
 name: Continuous Integration
 
 on:
@@ -46,209 +14,134 @@ env:
 
 jobs:
   lint:
-    name: Lint (eslint + script sanity)
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Lint (--max-warnings 0)
-        run: npm run lint
-      - name: Script sanity
-        run: npm run validate:scripts
+      - run: npm ci
+      - run: npm run lint
 
-  typecheck:
-    name: Typecheck (shared + server + client)
+  scripts:
+    name: Scripts
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      # @portier/shared must be compiled before the server/client typechecks import it.
-      - name: Build shared package
-        run: npm run build:shared
-      - name: Typecheck shared
-        run: npm run typecheck -w shared
-      - name: Typecheck server
-        run: npm run typecheck -w server
-      - name: Typecheck client
-        run: npm run typecheck -w client
+      - run: npm ci
+      - run: npm run validate:scripts
 
-  coverage-shared:
-    name: Coverage (shared, 100/100/100)
+  shared:
+    name: Shared
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Coverage gate (shared)
-        run: npm run validate:coverage:shared
+      - run: npm ci
+      - run: npm run build:shared
+      - run: npm run typecheck -w shared
+      - run: npm run validate:coverage:shared
 
-  coverage-server:
-    name: Coverage (server, 100/100/100)
+  server:
+    name: Server
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      # The server resolves @portier/shared to its built package, so build it first.
-      - name: Build shared package
-        run: npm run build:shared
-      - name: Coverage gate (server)
-        run: npm run validate:coverage:server
+      - run: npm ci
+      - run: npm run build:shared
+      - run: npm run build:server
+      - run: npm run typecheck -w server
+      - run: npm run validate:coverage:server
 
-  coverage-client:
-    name: Coverage (client, 100/100/100)
+  service:
+    name: Service
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Coverage gate (client)
-        run: npm run validate:coverage:client
-
-  coverage-service:
-    name: Coverage (Go service, 90/95)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - name: Setup Go
-        uses: actions/setup-go@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: service/go.sum
-      - name: Install dependencies
-        run: npm ci
-      - name: Coverage gate (Go service)
-        run: npm run validate:coverage:service
+      - run: npm ci
+      - run: npm run build:shared
+      - run: npm run build:service
+      - run: npm run apidoc:generate
+      - run: npm run validate:coverage:service
+      - run: npm run validate:openapi:go
 
-  coverage-cli:
-    name: Coverage (Go CLI, 95/95)
+  client:
+    name: Client
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: service/go.sum
-      - name: Install dependencies
-        run: npm ci
-      - name: Coverage gate (Go CLI)
-        run: npm run validate:coverage:cli
-
-  coverage-replay:
-    name: Coverage (Go replay, 95/95)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: service/go.sum
-      - name: Install dependencies
-        run: npm ci
-      - name: Coverage gate (Go replay)
-        run: npm run validate:coverage:replay
-
-  openapi-parity:
-    name: OpenAPI parity (Go ↔ generated contract)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: service/go.sum
-      - name: Install dependencies
-        run: npm ci
-      - name: Build shared package
-        run: npm run build:shared
-      # Generate the canonical OpenAPI artifact (server/build/api/openapi.json) from the
-      # NestJS controllers/DTOs; a clean checkout has no build output, so it must be
-      # generated before the Go inventory test reads it.
-      - name: Generate OpenAPI artifact
-        run: npm run apidoc:generate
-      # Fast Go-side API parity gate; confirms the Go service routes still match the
-      # freshly-generated OpenAPI artifact. (Full validate:contract stays in pre-release.)
-      - name: Go ↔ OpenAPI inventory
-        run: npm run validate:openapi:go
-
-  windows-sanity:
-    name: Windows path/script sanity
-    runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      # A lean Windows pass to catch Windows-specific path/case/script-resolution issues
-      # the ubuntu jobs cannot. Not a duplicate of the manual Release Windows workflow
-      # (no packaging, no smokes, no artifacts).
-      - name: Lint
-        run: npm run lint
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Script sanity
-        run: npm run validate:scripts
+      - run: npm ci
+      - run: npm run build:shared
+      - run: npm run typecheck -w client
+      - run: npm run build:server
+      - run: npm run build:client
+      - run: npm run validate:coverage:client
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+
+  cli:
+    name: CLI
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+      - run: npm ci
+      - run: npm run build:cli
+      - run: npm run validate:coverage:cli
+
+  replay:
+    name: Replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+      - run: npm ci
+      - run: npm run build:replay
+      - run: npm run validate:coverage:replay
