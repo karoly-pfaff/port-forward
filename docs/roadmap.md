@@ -8,7 +8,7 @@ belong in `audits/`.
 
 - **v1.0-v1.16:** completed.
 - **v1.17:** completed — Migration & Recovery (ready for release/tag as v1.17.0).
-- **v1.18:** feature-complete — Install, Service & Upgrade Experience (release-ready pending the version bump/tag).
+- **v1.18:** completed — Install, Service & Upgrade Experience (version bumped to 1.18.0; tag-ready, pending the maintainer's manual tag).
 - **v1.19 and v2.0:** planned local-first path to a stable 2.0.
 
 ## Completed Releases
@@ -243,7 +243,7 @@ See `docs/changelog.md` for the shipped detail and `docs/recovery.md` for the re
 
 ## Portier v1.18 - Install, Service & Upgrade Experience
 
-**Status:** Feature-complete — release-ready pending the version bump/tag.
+**Status:** Completed — version bumped to 1.18.0; tag-ready, pending the maintainer's manual tag.
 
 **Core theme:** Make Portier pleasant and reliable to install, run, stop, update, and
 uninstall.

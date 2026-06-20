@@ -4,7 +4,7 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
-## [1.18.0] - Unreleased - Install, Service & Upgrade Experience
+## [1.18.0] - 2026-06-20 - Install, Service & Upgrade Experience
 
 The install, service, and upgrade release: native installers plus validated, checksummed release artifacts for all three platforms, and an upgrade path that preserves user config. The persisted `rules.json` format, the REST API, and the OpenAPI schema are unchanged; no installer enables or starts a service on its own, and no coverage gate was lowered.
 

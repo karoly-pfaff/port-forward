@@ -634,7 +634,7 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 
 ## Release
 
-Current released version: **1.17.0** (Migration & Recovery). v1.18 (Install, Service & Upgrade Experience) is feature-complete and release-ready pending its version bump/tag.
+Current version: **1.18.0** (Install, Service & Upgrade Experience) — version surfaces bumped and tag-ready, pending the maintainer's manual tag. The previous stable release was 1.17.0 (Migration & Recovery).
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer.md](docs/installer.md) — current packaging, native installers, release artifacts, and the upgrade path.
