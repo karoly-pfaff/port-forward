@@ -59,6 +59,8 @@ jobs:
         run: npm run build:shared
       - name: Typecheck
         run: npm run typecheck -w shared
+      - name: Unit tests
+        run: npm run test:shared
       - name: Coverage
         run: npm run validate:coverage:shared
 
@@ -78,6 +80,8 @@ jobs:
         run: npm run build:shared && npm run build:server
       - name: Typecheck
         run: npm run typecheck -w server
+      - name: Unit tests
+        run: npm run test:server
       - name: Coverage
         run: npm run validate:coverage:server
 
@@ -101,6 +105,8 @@ jobs:
         run: npm run build:shared && npm run build:service
       - name: Generate OpenAPI
         run: npm run apidoc:generate
+      - name: Unit tests
+        run: npm run test:service
       - name: Coverage
         run: npm run validate:coverage:service
       - name: API parity
@@ -122,6 +128,8 @@ jobs:
         run: npm run build:shared && npm run build:server && npm run build:client
       - name: Typecheck
         run: npm run typecheck -w client
+      - name: Unit tests
+        run: npm run test:client
       - name: Coverage
         run: npm run validate:coverage:client
       - name: Install browsers
@@ -147,6 +155,8 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build:cli
+      - name: Unit tests
+        run: npm run test:cli
       - name: Coverage
         run: npm run validate:coverage:cli
 
@@ -168,5 +178,7 @@ jobs:
         run: npm ci
       - name: Build
         run: npm run build:replay
+      - name: Unit tests
+        run: npm run test:replay
       - name: Coverage
         run: npm run validate:coverage:replay
