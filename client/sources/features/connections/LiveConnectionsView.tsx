@@ -138,7 +138,7 @@ export function LiveConnectionsView(): ReactElement {
             onChange={(e) => setProtocolFilter(e.target.value as ProtocolFilter)}
             aria-label="Filter by protocol"
           >
-            <option value="">All protocols</option>
+            <option value="">All Protocols</option>
             <option value="tcp">TCP</option>
             <option value="udp">UDP</option>
           </select>
@@ -148,7 +148,7 @@ export function LiveConnectionsView(): ReactElement {
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             aria-label="Filter by status"
           >
-            <option value="">All statuses</option>
+            <option value="">All Statuses</option>
             <option value="active">Active</option>
             <option value="idle">Idle</option>
           </select>
@@ -159,7 +159,7 @@ export function LiveConnectionsView(): ReactElement {
               onChange={(e) => setRuleFilter(e.target.value)}
               aria-label="Filter by rule"
             >
-              <option value="">All rules</option>
+              <option value="">All Rules</option>
               {ruleSummaries.map((r) => (
                 <option key={r.ruleId} value={r.ruleId}>{r.ruleName}</option>
               ))}
@@ -172,7 +172,7 @@ export function LiveConnectionsView(): ReactElement {
               onClick={handleClearFilters}
               aria-label="Clear all filters"
             >
-              Clear filters
+              Clear Filters
             </button>
           )}
         </div>

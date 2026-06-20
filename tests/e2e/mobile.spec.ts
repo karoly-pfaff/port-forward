@@ -23,7 +23,7 @@ test("mobile sidebar: hamburger opens sidebar, navigation works, sidebar closes"
   await expect(nav).toBeVisible({ timeout: 3_000 });
 
   // Navigate to Activity — sidebar closes after nav click.
-  await nav.getByRole("button", { name: "Activity" }).click();
+  await nav.getByRole("button", { name: "Activity Log" }).click();
 
-  await expect(page.getByText("Activity").first()).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByText("Activity Log").first()).toBeVisible({ timeout: 3_000 });
 });

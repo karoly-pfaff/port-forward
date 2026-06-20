@@ -228,6 +228,28 @@ Slice 5 status (Postman collection & API consumer artifacts):
 - [x] CI runs `npm run validate:postman` in a dedicated **Postman** job (push/PR). No Postman
   cloud publishing, no Newman in CI (documented as an optional local run only), no network.
 
+Slice 6 status (client UI consistency pass):
+
+- [x] **Design-token vocabulary consolidated.** Four phantom CSS custom properties that had
+  drifted into the stylesheet (`--accent`, `--fg-muted`, `--surface-muted`, and a `--bg-muted`
+  fallback) — none defined in `:root`, so they silently fell back to inherited/no value — were
+  mapped to the established tokens: `--accent → --blue-dim`, `--fg-muted → --text-muted`,
+  `--surface-muted → --bg-raised`, `--bg-muted` fallback inlined. This restores the intended
+  accent on the Activity Log text buttons / filter banner and gives the OpenAPI **API Reference**
+  group headers the same `--bg-raised` background as table headers, so it matches the rest of
+  the app. No `:root` token set was changed; pixels for already-correct surfaces are unchanged.
+- [x] **Copy capitalization aligned to the established Title-Case chrome convention.** The two
+  newer feature views (Activity, Live Connections) had drifted to sentence case for their filter
+  placeholder options and the *Clear filters* button. Aligned them to the flagship Forward Rules
+  convention (Title-Case filter `<option>` labels + buttons): `All Severities` / `All Types` /
+  `All Protocols` / `All Statuses` / `All Rules`, and `Clear Filters`. The flagship's
+  E2E-pinned strings (`All Statuses`, `All Groups`) were left untouched; descriptive
+  activity-type option labels (`Rule created`, `TCP connection opened`, …) stay sentence case as
+  content, not chrome.
+- [x] Client coverage **stays 100/100/100** (gate unchanged); lint `--max-warnings 0`, typecheck,
+  and `build:client` all pass. No API/OpenAPI/`rules.json`/version/package/tag change; no private
+  docs surfaced; no new product feature or redesign.
+
 - [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
 - [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
   format change — unless a proven release blocker justifies it, documented if so.

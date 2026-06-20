@@ -375,6 +375,9 @@ func (f *UDPForwarder) handleMultiClientPacket(listenConn *net.UDPConn, clientAd
 		if err != nil {
 			f.mu.Unlock()
 			f.setLastError(err)
+			// Surface the failure as an activity event (parity with the TS server
+			// and the other UDP error paths) so it appears in the Activity Log.
+			f.emitPacketError(err.Error())
 			return
 		}
 		tc, err := net.DialUDP("udp4", nil, targetAddr)
@@ -382,6 +385,7 @@ func (f *UDPForwarder) handleMultiClientPacket(listenConn *net.UDPConn, clientAd
 			f.mu.Unlock()
 			f.setLastError(err)
 			f.logInfo("UDP session open error", "ruleId", f.rule.ID, "ruleName", f.rule.Name, "client", clientAddr.String(), "error", err)
+			f.emitPacketError(err.Error())
 			return
 		}
 

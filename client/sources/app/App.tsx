@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
-import type { ActivityEvent, ForwardRule, ForwardRuleInput, ForwardRuleResponse, ForwardStatus } from "@portier/shared";
+import type { ActivityEvent, ActivitySeverity, ForwardRule, ForwardRuleInput, ForwardRuleResponse, ForwardStatus } from "@portier/shared";
 import {
   deleteForwardRule,
   diagnoseForwardRule,
@@ -45,6 +45,7 @@ export function App(): ReactElement {
   const [autoRefreshInterval, setAutoRefreshInterval] = useState(5);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [activityRuleFilter, setActivityRuleFilter] = useState<string | null>(null);
+  const [activitySeverityFilter, setActivitySeverityFilter] = useState<"" | ActivitySeverity>("");
   const [diagnosisMap, setDiagnosisMap] = useState<Map<string, DiagnosisEntry>>(new Map());
 
   // Runtime info is fetched once for the config-recovery banner (Slice 5). The
@@ -300,7 +301,10 @@ export function App(): ReactElement {
   function handleNavClick(next: AppView): void {
     setView(next);
     setMobileSidebarOpen(false);
-    if (next === "activity") setActivityRuleFilter(null);
+    if (next === "activity") {
+      setActivityRuleFilter(null);
+      setActivitySeverityFilter("");
+    }
     if (next !== "rules") {
       setEditingRuleId(null);
       setDuplicateSourceId(null);
@@ -308,10 +312,16 @@ export function App(): ReactElement {
     }
   }
 
-  function handleGoToActivity(ruleId: string): void {
+  function handleGoToActivity(ruleId: string | null, severity: "" | ActivitySeverity = ""): void {
     setActivityRuleFilter(ruleId);
+    setActivitySeverityFilter(severity);
     setView("activity");
     setMobileSidebarOpen(false);
+  }
+
+  // Error summary card: jump to the Activity Log filtered to error events (all rules).
+  function handleGoToErrorActivity(): void {
+    handleGoToActivity(null, "error");
   }
 
   function handleRulesUpdatedFromSettings(updatedRules: ForwardRuleResponse[]): void {
@@ -368,6 +378,7 @@ export function App(): ReactElement {
               recentActivity={recentActivity}
               onGoToActivity={() => handleNavClick("activity")}
               onGoToRules={() => handleNavClick("rules")}
+              onErrorClick={handleGoToErrorActivity}
             />
           )}
 
@@ -377,6 +388,7 @@ export function App(): ReactElement {
                 rules={rules}
                 statusMap={statusMap}
                 totalDesc="All configured rules"
+                onErrorClick={handleGoToErrorActivity}
               />
               <ForwardRuleList
                 rules={rules}
@@ -407,10 +419,11 @@ export function App(): ReactElement {
 
           {view === "activity" && (
             <>
-              <RuleSummaryCards rules={rules} statusMap={statusMap} />
+              <RuleSummaryCards rules={rules} statusMap={statusMap} onErrorClick={handleGoToErrorActivity} />
               <ActivityLogView
                 rules={rules}
                 ruleId={activityRuleFilter ?? undefined}
+                severity={activitySeverityFilter || undefined}
                 onClearRuleFilter={() => setActivityRuleFilter(null)}
               />
             </>
@@ -423,7 +436,12 @@ export function App(): ReactElement {
             />
           )}
 
-          {view === "connections" && <LiveConnectionsView />}
+          {view === "connections" && (
+            <>
+              <RuleSummaryCards rules={rules} statusMap={statusMap} onErrorClick={handleGoToErrorActivity} />
+              <LiveConnectionsView />
+            </>
+          )}
 
           {view === "api-docs" && <ApiDocsView />}
         </main>

@@ -4,7 +4,7 @@ import { clearActivity, fetchActivity } from "../../api/portierApi.js";
 import { formatTimestamp } from "../../utils/format.js";
 
 const SEVERITY_OPTIONS: { value: "" | ActivitySeverity; label: string }[] = [
-  { value: "", label: "All severities" },
+  { value: "", label: "All Severities" },
   { value: "info", label: "Info" },
   { value: "success", label: "Success" },
   { value: "warning", label: "Warning" },
@@ -12,7 +12,7 @@ const SEVERITY_OPTIONS: { value: "" | ActivitySeverity; label: string }[] = [
 ];
 
 const TYPE_OPTIONS: { value: "" | ActivityEventType; label: string }[] = [
-  { value: "", label: "All types" },
+  { value: "", label: "All Types" },
   { value: "rule.created", label: "Rule created" },
   { value: "rule.updated", label: "Rule updated" },
   { value: "rule.deleted", label: "Rule deleted" },
@@ -60,16 +60,19 @@ function buildExportFilename(): string {
 interface ActivityLogViewProps {
   rules?: ForwardRuleResponse[];
   ruleId?: string;
+  /** Initial severity filter — set when navigating here from an error affordance
+   *  (the Error summary card or a rule's error health badge). */
+  severity?: ActivitySeverity;
   onClearRuleFilter?: () => void;
 }
 
-export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLogViewProps): ReactElement {
+export function ActivityLogView({ rules, ruleId, severity, onClearRuleFilter }: ActivityLogViewProps): ReactElement {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [clearError, setClearError] = useState<string | null>(null);
   const [limit, setLimit] = useState(100);
-  const [severity, setSeverity] = useState<"" | ActivitySeverity>("");
+  const [severityFilter, setSeverityFilter] = useState<"" | ActivitySeverity>(severity ?? "");
   const [type, setType] = useState<"" | ActivityEventType>("");
   const [ruleIdFilter, setRuleIdFilter] = useState(ruleId ?? "");
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -79,6 +82,10 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
   useEffect(() => {
     setRuleIdFilter(ruleId ?? "");
   }, [ruleId]);
+
+  useEffect(() => {
+    setSeverityFilter(severity ?? "");
+  }, [severity]);
 
   async function load(opts: {
     limit: number;
@@ -108,19 +115,19 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
 
   useEffect(() => {
     setLoading(true);
-    void load({ limit, severity, type, ruleId: ruleIdFilter });
-  }, [limit, severity, type, ruleIdFilter]);
+    void load({ limit, severity: severityFilter, type, ruleId: ruleIdFilter });
+  }, [limit, severityFilter, type, ruleIdFilter]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(() => {
-      void load({ limit, severity, type, ruleId: ruleIdFilter });
+      void load({ limit, severity: severityFilter, type, ruleId: ruleIdFilter });
     }, autoRefreshInterval * 1000);
     return () => clearInterval(id);
-  }, [autoRefresh, autoRefreshInterval, limit, severity, type, ruleIdFilter]);
+  }, [autoRefresh, autoRefreshInterval, limit, severityFilter, type, ruleIdFilter]);
 
   function handleRefresh(): void {
-    void load({ limit, severity, type, ruleId: ruleIdFilter });
+    void load({ limit, severity: severityFilter, type, ruleId: ruleIdFilter });
   }
 
   function handleRuleChange(e: React.ChangeEvent<HTMLSelectElement>): void {
@@ -142,7 +149,7 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
   function handleExport(): void {
     const activeFilters: Record<string, string | number> = {};
     if (ruleIdFilter) activeFilters.ruleId = ruleIdFilter;
-    if (severity) activeFilters.severity = severity;
+    if (severityFilter) activeFilters.severity = severityFilter;
     if (type) activeFilters.type = type;
     activeFilters.limit = limit;
 
@@ -165,13 +172,13 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
     ? (rules?.find((r) => r.id === ruleIdFilter)?.name ?? ruleIdFilter)
     : null;
 
-  const hasActiveFilters = !!(ruleIdFilter || severity || type);
+  const hasActiveFilters = !!(ruleIdFilter || severityFilter || type);
 
   return (
     <div className="rule-list-section">
       <div className="rule-list-header">
         <div className="rule-list-title-group">
-          <div className="rule-list-title">Activity</div>
+          <div className="rule-list-title">Activity Log</div>
           <div className="rule-list-subtitle">Recent forwarding and rule events</div>
         </div>
         <div className="rule-list-controls">
@@ -182,7 +189,7 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
               onChange={handleRuleChange}
               aria-label="Filter by rule"
             >
-              <option value="">All rules</option>
+              <option value="">All Rules</option>
               {rules.map((r) => (
                 <option key={r.id} value={r.id}>{r.name}</option>
               ))}
@@ -190,8 +197,8 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
           )}
           <select
             className="filter-select"
-            value={severity}
-            onChange={(e) => setSeverity(e.target.value as "" | ActivitySeverity)}
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value as "" | ActivitySeverity)}
             aria-label="Filter by severity"
           >
             {SEVERITY_OPTIONS.map((opt) => (
@@ -224,14 +231,14 @@ export function ActivityLogView({ rules, ruleId, onClearRuleFilter }: ActivityLo
               className="btn-text"
               onClick={() => {
                 setRuleIdFilter("");
-                setSeverity("");
+                setSeverityFilter("");
                 setType("");
                 onClearRuleFilter?.();
               }}
               aria-label="Clear all filters"
               title="Clear all filters"
             >
-              Clear filters
+              Clear Filters
             </button>
           )}
         </div>

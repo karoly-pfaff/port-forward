@@ -9,6 +9,8 @@ interface DashboardViewProps {
   recentActivity: ActivityEvent[];
   onGoToActivity: () => void;
   onGoToRules: () => void;
+  /** Navigate to the Activity Log filtered to error events (from the Error card). */
+  onErrorClick?: () => void;
 }
 
 const SEVERITY_SYMBOL: Record<string, string> = {
@@ -24,6 +26,7 @@ export function DashboardView({
   recentActivity,
   onGoToActivity,
   onGoToRules,
+  onErrorClick,
 }: DashboardViewProps): ReactElement {
   const topActive = [...rules]
     .map((r) => {
@@ -36,7 +39,7 @@ export function DashboardView({
 
   return (
     <div className="dashboard-view">
-      <RuleSummaryCards rules={rules} statusMap={statusMap} />
+      <RuleSummaryCards rules={rules} statusMap={statusMap} onErrorClick={onErrorClick} />
 
       <div className="dashboard-columns">
         {/* Top active rules */}

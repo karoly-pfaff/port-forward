@@ -262,7 +262,7 @@ describe("ForwardRuleList", () => {
     expect(screen.getByText("UDP")).toBeInTheDocument();
   });
 
-  it("shows warning icon for an errored rule", () => {
+  it("shows no status-column error icon for an errored rule (the error is shown in Health)", () => {
     const errStatus: ForwardStatus = { ...stoppedStatus, lastError: "bind EADDRINUSE" };
     renderList({
       rules: [tcpRule],
@@ -270,7 +270,37 @@ describe("ForwardRuleList", () => {
       busyRuleIds: new Set(),
       loading: false
     });
-    expect(screen.getByLabelText(/Error: bind EADDRINUSE/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Error: bind EADDRINUSE/)).not.toBeInTheDocument();
+  });
+
+  it("renders the error-health cell as a button that navigates to the rule's error activity", async () => {
+    const user = userEvent.setup();
+    const onGoToActivity = vi.fn();
+    const errorStatus: ForwardStatus = { ...stoppedStatus, health: "error", lastError: "ECONNRESET" };
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(errorStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onGoToActivity,
+    });
+
+    await user.click(screen.getByRole("button", { name: "View error activity for Test Rule" }));
+    expect(onGoToActivity).toHaveBeenCalledWith("r1", "error");
+  });
+
+  it("does not make the error-health cell clickable when onGoToActivity is absent", () => {
+    const errorStatus: ForwardStatus = { ...stoppedStatus, health: "error", lastError: "ECONNRESET" };
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(errorStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+    });
+
+    expect(screen.queryByRole("button", { name: /View error activity/ })).not.toBeInTheDocument();
+    // The health badge still renders as static text.
+    expect(screen.getByLabelText(/Health: Error/)).toBeInTheDocument();
   });
 
   it("requires a confirmation click before calling onDelete", async () => {
@@ -1388,30 +1418,11 @@ describe("ForwardRuleList drag reorder", () => {
   });
 });
 
-// Two inline callbacks not covered elsewhere: the status-badge onErrorClick
-// wrapper (line 389), which forwards the rule id to onGoToActivity, and the
-// auto-refresh interval <select> onChange (line 584).
+// Inline callback not covered elsewhere: the auto-refresh interval <select>
+// onChange, which parses the chosen value and forwards it.
 describe("ForwardRuleList extra callbacks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it("clicking the row error badge calls onGoToActivity with the rule id", async () => {
-    const user = userEvent.setup();
-    const onGoToActivity = vi.fn();
-    const errStatus: ForwardStatus = { ...stoppedStatus, lastError: "bind EADDRINUSE" };
-    renderList({
-      rules: [tcpRule],
-      statusMap: makeMap(errStatus),
-      busyRuleIds: new Set(),
-      loading: false,
-      onGoToActivity,
-    });
-
-    // The error badge renders as a button only when onGoToActivity is set; its
-    // onClick is the wrapper at line 389.
-    await user.click(screen.getByRole("button", { name: /Error: bind EADDRINUSE/ }));
-    expect(onGoToActivity).toHaveBeenCalledWith("r1");
   });
 
   it("changing the auto-refresh interval calls onChangeAutoRefreshInterval", async () => {

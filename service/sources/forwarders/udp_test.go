@@ -680,6 +680,55 @@ func TestUDPMultiClientEmitsSessionOpenedAndClosed(t *testing.T) {
 	}
 }
 
+// A multi-client session whose target cannot be dialled (here: an IPv6 target
+// under the udp4 network, which fails to resolve) must surface a
+// udp.packet.error activity event so the failure appears in the Activity Log.
+func TestUDPMultiClientEmitsPacketErrorOnTargetDialFailure(t *testing.T) {
+	var mu sync.Mutex
+	var events []activity.ActivityEventInput
+	onEvent := func(e activity.ActivityEventInput) {
+		mu.Lock()
+		events = append(events, e)
+		mu.Unlock()
+	}
+
+	forwarder, listenPort := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		rule := testUDPRule(p, 9, domain.UdpModeBidirectionalMulti)
+		rule.TargetHost = "::1" // IPv6 literal: ResolveUDPAddr("udp4", …) fails fast.
+		return NewUDPForwarderWithTimeout(rule, nil, onEvent, testSessionTimeout)
+	})
+	defer forwarder.Stop()
+
+	client := sendUDPPacket(t, listenPort, []byte("hello"))
+	defer client.Close()
+
+	waitForUDPCondition(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, e := range events {
+			if e.Type == activity.EventUDPPacketError {
+				return true
+			}
+		}
+		return false
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	found := false
+	for _, e := range events {
+		if e.Type == activity.EventUDPPacketError {
+			found = true
+			if e.Severity != activity.SeverityError {
+				t.Errorf("udp.packet.error severity = %q, want %q", e.Severity, activity.SeverityError)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected a udp.packet.error activity event on multi-client target dial failure")
+	}
+}
+
 // --- registry integration tests ---
 
 func TestUDPForwarderWithRegistryOneWayTracksSession(t *testing.T) {

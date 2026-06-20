@@ -1227,6 +1227,57 @@ describe("App connections view", () => {
   });
 });
 
+describe("App error navigation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+  });
+
+  const erroredRule = { ...sampleRule, name: "Broken Rule", enabled: true };
+  const erroredStatus: ForwardStatus = {
+    ruleId: "r1",
+    running: false,
+    health: "error",
+    lastError: "ECONNRESET",
+    bytesIn: 0,
+    bytesOut: 0,
+  };
+
+  it("clicking the Error summary card opens the Activity Log filtered to errors", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([erroredRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([erroredStatus]);
+
+    render(<App />);
+    await screen.findByText("Broken Rule");
+
+    // The Error summary card renders as a button (value 1 -> "Error: 1. Needs attention").
+    await userEvent.click(screen.getByRole("button", { name: /Error: 1\. Needs attention/ }));
+
+    // Activity Log view with the severity filter pre-set to "error", no rule filter.
+    await screen.findByText("Recent forwarding and rule events");
+    expect(await screen.findByRole("combobox", { name: "Filter by severity" })).toHaveValue("error");
+    await waitFor(() =>
+      expect(portierApi.fetchActivity).toHaveBeenCalledWith(expect.objectContaining({ severity: "error" }))
+    );
+    expect(screen.queryByText(/Filtered to rule:/)).not.toBeInTheDocument();
+  });
+
+  it("clicking a rule's error health badge opens the Activity Log filtered to that rule and errors", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([erroredRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([erroredStatus]);
+
+    render(<App />);
+    await screen.findByText("Broken Rule");
+
+    await userEvent.click(screen.getByRole("button", { name: "View error activity for Broken Rule" }));
+
+    await screen.findByText("Recent forwarding and rule events");
+    expect(await screen.findByRole("combobox", { name: "Filter by severity" })).toHaveValue("error");
+    const banner = await screen.findByText(/Filtered to rule:/);
+    expect(within(banner).getByText("Broken Rule")).toBeInTheDocument();
+  });
+});
+
 describe("App showForm keydown non-Escape", () => {
   beforeEach(() => {
     vi.clearAllMocks();

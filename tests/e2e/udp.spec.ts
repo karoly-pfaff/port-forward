@@ -178,7 +178,7 @@ test("UDP activity: forwarding events appear in Activity log", async ({ page, ba
 
     // Navigate to Activity view
     await page.getByRole("navigation", { name: "Main navigation" })
-      .getByRole("button", { name: "Activity" })
+      .getByRole("button", { name: "Activity Log" })
       .click();
     await expect(page.getByText("Recent forwarding and rule events")).toBeVisible();
 
@@ -219,7 +219,7 @@ test("TCP activity: connection events appear in Activity log after forwarding", 
 
     // Navigate to Activity
     await page.getByRole("navigation", { name: "Main navigation" })
-      .getByRole("button", { name: "Activity" })
+      .getByRole("button", { name: "Activity Log" })
       .click();
     await expect(page.getByText("Recent forwarding and rule events")).toBeVisible();
 

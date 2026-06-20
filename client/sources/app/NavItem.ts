@@ -9,7 +9,7 @@ export type NavItem = { id: AppView; label: string; Icon: LucideIcon };
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { id: "rules", label: "Forward Rules", Icon: ArrowLeftRight },
-  { id: "activity", label: "Activity", Icon: Activity },
+  { id: "activity", label: "Activity Log", Icon: Activity },
   { id: "connections", label: "Live Connections", Icon: Network },
   { id: "settings", label: "Settings", Icon: Settings },
 ];

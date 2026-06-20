@@ -469,6 +469,17 @@ button.danger:hover:not(:disabled) {
   gap: 14px;
 }
 
+/* The Error card is rendered as a <button> when clickable (navigates to the
+   Activity Log filtered to errors). Strip the generic button chrome so it
+   matches the static cards; hover/focus/cursor come from the base button rules. */
+button.stat-card {
+  font: inherit;
+  text-align: left;
+  white-space: normal;
+  width: 100%;
+  min-height: unset;
+}
+
 .stat-card-icon {
   width: 40px;
   height: 40px;
@@ -911,6 +922,30 @@ td strong {
   white-space: nowrap;
 }
 
+/* An error-health cell is a button linking to the rule's error Activity Log.
+   Reset the button chrome to keep the quiet dot+label look; underline the label
+   on hover/focus to signal it is interactive. */
+button.health-cell--clickable {
+  border: none;
+  background: transparent;
+  padding: 0;
+  min-height: unset;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.health-cell--clickable:hover .health-cell-label,
+button.health-cell--clickable:focus-visible .health-cell-label {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+button.health-cell--clickable:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 .health-cell-label {
   font-size: 0.8rem;
   color: var(--text-secondary);
@@ -948,7 +983,7 @@ td strong {
   margin-top: 3px;
   padding: 1px 6px;
   border-radius: 4px;
-  background: var(--bg-muted, rgba(127, 127, 127, 0.12));
+  background: rgba(127, 127, 127, 0.12);
   color: var(--text-muted);
   font-size: 0.7rem;
   line-height: 1.4;
@@ -1011,13 +1046,6 @@ td strong {
    Status Badge
    ============================================== */
 
-.status-cell {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-
 .state {
   width: fit-content;
   padding: 2px 8px;
@@ -1056,40 +1084,6 @@ td strong {
 
 .state.stopped::before {
   background: var(--amber);
-}
-
-.state.error {
-  background: var(--red-bg);
-  color: var(--red);
-  border: 1px solid var(--red-border);
-}
-
-.state.error::before {
-  background: var(--red);
-}
-
-.status-error-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--red-border);
-  background: var(--red-bg);
-  color: var(--red);
-  font-size: 0.75rem;
-  cursor: help;
-  flex-shrink: 0;
-  min-height: unset;
-}
-
-button.status-error-icon {
-  cursor: pointer;
-}
-
-button.status-error-icon:hover {
-  background: var(--red);
-  color: #fff;
 }
 
 /* ==============================================
@@ -2440,7 +2434,7 @@ select[aria-invalid="true"] {
 .method-put,
 .method-options,
 .method-head {
-  background: var(--surface-muted);
+  background: var(--bg-raised);
   color: var(--text-secondary);
   border: 1px solid var(--border-default);
 }
@@ -2457,7 +2451,7 @@ select[aria-invalid="true"] {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
-  background: var(--surface-muted);
+  background: var(--bg-raised);
   border-bottom: 1px solid var(--border-default);
   position: sticky;
   top: 0;
@@ -2659,16 +2653,16 @@ select[aria-invalid="true"] {
   align-items: center;
   gap: 8px;
   padding: 6px 20px;
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  background: color-mix(in srgb, var(--blue-dim) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--blue-dim) 25%, transparent);
   font-size: 0.85rem;
-  color: var(--fg-muted);
+  color: var(--text-muted);
 }
 
 .activity-throttle-note {
   margin: 8px 20px 4px;
   font-size: 0.775rem;
-  color: var(--fg-muted);
+  color: var(--text-muted);
   opacity: 0.7;
 }
 
@@ -2677,14 +2671,14 @@ select[aria-invalid="true"] {
   border: none;
   padding: 2px 6px;
   font-size: 0.8rem;
-  color: var(--accent);
+  color: var(--blue-dim);
   cursor: pointer;
   border-radius: 3px;
   white-space: nowrap;
 }
 
 .btn-text:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(in srgb, var(--blue-dim) 12%, transparent);
 }
 
 .btn-text:disabled {

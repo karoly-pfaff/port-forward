@@ -72,6 +72,22 @@ describe("DashboardView", () => {
     expect(screen.getByText("Error")).toBeInTheDocument();
   });
 
+  it("clicking the Error summary card calls onErrorClick", async () => {
+    const onErrorClick = vi.fn();
+    render(
+      <DashboardView
+        rules={[]}
+        statusMap={makeMap()}
+        recentActivity={[]}
+        onGoToActivity={vi.fn()}
+        onGoToRules={vi.fn()}
+        onErrorClick={onErrorClick}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Error: 0\. Needs attention/ }));
+    expect(onErrorClick).toHaveBeenCalled();
+  });
+
   it("shows TCP and UDP breakdown in the Total Rules card", () => {
     render(
       <DashboardView

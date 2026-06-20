@@ -33,13 +33,14 @@ describe("ForwardStatusBadge", () => {
     expect(screen.getByText("Stopped")).toBeInTheDocument();
   });
 
-  it("shows Error badge when stopped with a lastError", () => {
+  it("shows Stopped (not Error) when stopped with a lastError — the error is shown in Health", () => {
     render(
       <ForwardStatusBadge
         status={{ ...stoppedStatus, lastError: "bind EADDRINUSE" }}
       />
     );
-    expect(screen.getByText("Error")).toBeInTheDocument();
+    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.queryByText("Error")).not.toBeInTheDocument();
   });
 
   it("shows Running (not Error) when running even if lastError is set", () => {
@@ -52,13 +53,13 @@ describe("ForwardStatusBadge", () => {
     expect(screen.queryByText("Error")).not.toBeInTheDocument();
   });
 
-  it("shows warning icon with error message in tooltip when error is present", () => {
+  it("renders no status-column error icon even when a lastError is present", () => {
     render(
       <ForwardStatusBadge
         status={{ ...stoppedStatus, lastError: "bind EADDRINUSE" }}
       />
     );
-    expect(screen.getByLabelText(/Error: bind EADDRINUSE/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Error:/)).not.toBeInTheDocument();
   });
 
   it("does not show warning icon when no error is present", () => {

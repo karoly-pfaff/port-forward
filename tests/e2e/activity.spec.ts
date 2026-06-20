@@ -22,7 +22,7 @@ test("activity: view opens and shows events after rule operations", async ({ pag
 
   await page.goto("/");
   await page.getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name: "Activity" })
+    .getByRole("button", { name: "Activity Log" })
     .click();
 
   // Activity view loads — use the unique subtitle to avoid strict-mode violations.

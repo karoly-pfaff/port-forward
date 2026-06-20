@@ -43,7 +43,7 @@ describe("ActivityLogView", () => {
 
     render(<ActivityLogView />);
 
-    expect(screen.getByText("Activity")).toBeInTheDocument();
+    expect(screen.getByText("Activity Log")).toBeInTheDocument();
     expect(screen.getByText(/Recent forwarding and rule events/)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
   });
@@ -146,7 +146,32 @@ describe("ActivityLogView", () => {
 
     await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
     expect(screen.getByRole("combobox", { name: "Filter by type" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "All types" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "All Types" })).toBeInTheDocument();
+  });
+
+  it("applies the initial severity prop to the severity filter and fetch", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    render(<ActivityLogView severity="error" />);
+
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Filter by severity" })).toHaveValue("error");
+    await waitFor(() =>
+      expect(portierApi.fetchActivity).toHaveBeenCalledWith(expect.objectContaining({ severity: "error" }))
+    );
+  });
+
+  it("updates the severity filter when the severity prop changes", async () => {
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+
+    const { rerender } = render(<ActivityLogView />);
+    await waitFor(() => expect(screen.getByText("0 events shown")).toBeInTheDocument());
+    expect(screen.getByRole("combobox", { name: "Filter by severity" })).toHaveValue("");
+
+    rerender(<ActivityLogView severity="error" />);
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Filter by severity" })).toHaveValue("error")
+    );
   });
 
   it("passes type param to fetchActivity when type filter is changed", async () => {

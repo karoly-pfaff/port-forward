@@ -14,11 +14,13 @@ interface StatCardProps {
   value: number;
   label: string;
   desc: string;
+  /** When set, the card becomes a button that triggers this on click. */
+  onClick?: () => void;
 }
 
-export function StatCard({ variant, value, label, desc }: StatCardProps): ReactElement {
-  return (
-    <div className="stat-card">
+export function StatCard({ variant, value, label, desc, onClick }: StatCardProps): ReactElement {
+  const inner = (
+    <>
       <div className="stat-card-left">
         <div className={`stat-card-icon stat-card-icon--${variant}`} aria-hidden="true">
           {ICONS[variant]}
@@ -29,6 +31,21 @@ export function StatCard({ variant, value, label, desc }: StatCardProps): ReactE
         <div className="stat-card-label">{label}</div>
         <div className="stat-card-desc">{desc}</div>
       </div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className="stat-card stat-card--clickable"
+        onClick={onClick}
+        aria-label={`${label}: ${value}. ${desc}`}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return <div className="stat-card">{inner}</div>;
 }

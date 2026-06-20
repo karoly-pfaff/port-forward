@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef, Fragment, type ReactElement } from "react";
 import { Activity, Copy, MoreVertical, Pencil, Stethoscope, Trash2 } from "lucide-react";
-import type { ForwardRule, ForwardRuleResponse, ForwardStatus, GroupActionResponse, RuleDiagnosticsResult } from "@portier/shared";
+import type { ActivitySeverity, ForwardRule, ForwardRuleResponse, ForwardStatus, GroupActionResponse, RuleDiagnosticsResult } from "@portier/shared";
 import { AdvisoryList } from "../../components/AdvisoryList.js";
 import { ForwardStatusBadge } from "./ForwardStatusBadge.js";
 import { RuleHealthBadge, healthShortLabel } from "./RuleHealthBadge.js";
@@ -33,7 +33,7 @@ interface ForwardRuleListProps {
   onDiagnose: (ruleId: string) => void;
   onClearDiagnosis: (ruleId: string) => void;
   onReorder?: (ids: string[]) => void;
-  onGoToActivity?: (ruleId: string) => void;
+  onGoToActivity?: (ruleId: string, severity?: ActivitySeverity) => void;
   onGroupAction?: (group: string, action: "start" | "stop") => Promise<GroupActionResponse>;
   onAddRule: () => void;
   onRefresh: () => void;
@@ -385,19 +385,31 @@ export function ForwardRuleList({
                         </span>
                       </td>
                       <td>
-                        <ForwardStatusBadge
-                          status={status}
-                          onErrorClick={onGoToActivity ? () => onGoToActivity(rule.id) : undefined}
-                        />
+                        <ForwardStatusBadge status={status} />
                       </td>
                       <td>
                         {status ? (
-                          <span className="health-cell">
-                            <RuleHealthBadge health={status.health} />
-                            <span className="health-cell-label" aria-hidden="true">
-                              {healthShortLabel(status.health)}
+                          status.health === "error" && onGoToActivity ? (
+                            <button
+                              type="button"
+                              className="health-cell health-cell--clickable"
+                              onClick={() => onGoToActivity(rule.id, "error")}
+                              title="View this rule's error activity"
+                              aria-label={`View error activity for ${rule.name}`}
+                            >
+                              <RuleHealthBadge health={status.health} />
+                              <span className="health-cell-label" aria-hidden="true">
+                                {healthShortLabel(status.health)}
+                              </span>
+                            </button>
+                          ) : (
+                            <span className="health-cell">
+                              <RuleHealthBadge health={status.health} />
+                              <span className="health-cell-label" aria-hidden="true">
+                                {healthShortLabel(status.health)}
+                              </span>
                             </span>
-                          </span>
+                          )
                         ) : (
                           <span className="health-cell-empty" aria-hidden="true">
                             —

@@ -7,9 +7,11 @@ interface RuleSummaryCardsProps {
   statusMap: Map<string, ForwardStatus>;
   /** Override description for the Total Rules card. Defaults to "N TCP · N UDP". */
   totalDesc?: string;
+  /** When set, the Error card becomes a button (navigates to the error Activity Log). */
+  onErrorClick?: () => void;
 }
 
-export function RuleSummaryCards({ rules, statusMap, totalDesc }: RuleSummaryCardsProps): ReactElement {
+export function RuleSummaryCards({ rules, statusMap, totalDesc, onErrorClick }: RuleSummaryCardsProps): ReactElement {
   const runningCount = rules.filter((r) => statusMap.get(r.id)?.running).length;
   const errorCount = rules.filter((r) => !!statusMap.get(r.id)?.lastError).length;
   const stoppedCount = rules.length - runningCount;
@@ -26,7 +28,7 @@ export function RuleSummaryCards({ rules, statusMap, totalDesc }: RuleSummaryCar
       />
       <StatCard variant="running" value={runningCount} label="Running" desc="Currently forwarding" />
       <StatCard variant="stopped" value={stoppedCount} label="Stopped" desc="Not forwarding" />
-      <StatCard variant="error" value={errorCount} label="Error" desc="Needs attention" />
+      <StatCard variant="error" value={errorCount} label="Error" desc="Needs attention" onClick={onErrorClick} />
     </div>
   );
 }
