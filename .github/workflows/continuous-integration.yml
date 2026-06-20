@@ -1,9 +1,11 @@
 # Portier push/PR continuous integration.
 #
 # Fast, everyday-development quality gate that runs automatically on every push to main
-# and on every pull request. It runs the REAL project gates — lint, typecheck, the unit
-# test matrix (shared + server + client + Go service), the honest client coverage gate,
-# script sanity, and the Go↔OpenAPI inventory check.
+# and on every pull request. It is split into focused parallel jobs so each concern is its
+# own check in the Actions UI and a failure points straight at the cause:
+#
+#   lint · typecheck · test-shared · test-server · test-client · test-go ·
+#   openapi-parity · windows-sanity
 #
 # This workflow deliberately does NOT:
 #   - build release packages (MSI / pkg / deb / rpm) or portable archives,
@@ -12,12 +14,14 @@
 #   - publish a GitHub Release, or create tags.
 # Those belong to the manual (workflow_dispatch) Release Windows / MacOS / Linux workflows.
 #
-# Heavier, slower gates that are intentionally left to the manual pre-release matrix and
-# local runs (not run on every push): full Playwright E2E (needs a built client + browsers
-# + a spawned runtime), npm run validate:contract (needs a full build:runtime first), and
+# Heavier, slower gates left to the manual pre-release matrix and local runs (not on every
+# push): full Playwright E2E, npm run validate:contract (needs a full build:runtime), and
 # the platform packaging/install smokes.
 #
-# Privacy: this workflow reads the repo and runs gates only; it never stages or uploads
+# Each job is a fresh runner that re-runs `npm ci`; that redundancy buys parallelism and a
+# clean per-concern failure signal. The repo is public, so Actions minutes are free.
+#
+# Privacy: every job reads the repo and runs gates only; nothing stages or uploads
 # docs/private/** or any build/releases/** output.
 
 name: Continuous Integration
@@ -35,38 +39,40 @@ env:
   GO_VERSION: "1.25"
 
 jobs:
-  baseline:
-    name: Baseline gates (lint, typecheck, tests, client coverage)
+  lint:
+    name: Lint (eslint + script sanity)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: service/go.sum
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Lint (eslint, --max-warnings 0)
+      - name: Lint (--max-warnings 0)
         run: npm run lint
+      - name: Script sanity
+        run: npm run validate:scripts
 
-      # @portier/shared is compiled explicitly here so the per-workspace typechecks, the
-      # tests, and the OpenAPI generator (all of which import it) don't depend on a side
-      # effect of another step.
+  typecheck:
+    name: Typecheck (shared + server + client)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # @portier/shared must be compiled before the server/client typechecks import it.
       - name: Build shared package
         run: npm run build:shared
-
-      # Typechecks are split per workspace so a failure names the exact package.
       - name: Typecheck shared
         run: npm run typecheck -w shared
       - name: Typecheck server
@@ -74,57 +80,126 @@ jobs:
       - name: Typecheck client
         run: npm run typecheck -w client
 
-      # Test suites are split per runtime so a red ✗ points straight at the failing suite.
-      - name: Test shared
-        run: npm run test:shared
-      - name: Test server
-        run: npm run test:server
-      - name: Test Go service
-        run: npm run test:service
-
-      # Runs the client suite under coverage and enforces the 100/100/100 gate.
-      - name: Test client + coverage gate (100/100/100)
-        run: npm run validate:coverage:client
-
-      - name: Script sanity
-        run: npm run validate:scripts
-
-      # Generate the canonical OpenAPI artifact (server/build/api/openapi.json) from the
-      # NestJS controllers/DTOs. The Go inventory gate below reads it, and a clean checkout
-      # has no build output. (Build shared above already compiled the generator's import.)
-      - name: Generate OpenAPI artifact
-        run: npm run apidoc:generate
-
-      # Fast Go-side API parity gate (a single focused Go test); confirms the Go service
-      # routes still match the freshly-generated OpenAPI artifact. The full cross-runtime
-      # contract suite (validate:contract) stays in the manual pre-release matrix.
-      - name: Go ↔ OpenAPI inventory
-        run: npm run validate:openapi:go
-
-  windows:
-    name: Windows path/script sanity
-    runs-on: windows-latest
-    timeout-minutes: 20
+  test-shared:
+    name: Test (shared)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
-
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-
       - name: Install dependencies
         run: npm ci
+      - name: Test shared
+        run: npm run test:shared
 
+  test-server:
+    name: Test (server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test server
+        run: npm run test:server
+
+  test-client:
+    name: Test (client) + coverage gate (100/100/100)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # Runs the client suite under coverage and enforces the 100/100/100 gate.
+      - name: Test client + coverage gate
+        run: npm run validate:coverage:client
+
+  test-go:
+    name: Test (Go service)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+      - name: Install dependencies
+        run: npm ci
+      # test:service compiles the Go test binaries (Node driver) and runs them.
+      - name: Test Go service
+        run: npm run test:service
+
+  openapi-parity:
+    name: OpenAPI parity (Go ↔ generated contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+      - name: Install dependencies
+        run: npm ci
+      - name: Build shared package
+        run: npm run build:shared
+      # Generate the canonical OpenAPI artifact (server/build/api/openapi.json) from the
+      # NestJS controllers/DTOs; a clean checkout has no build output, so it must be
+      # generated before the Go inventory test reads it.
+      - name: Generate OpenAPI artifact
+        run: npm run apidoc:generate
+      # Fast Go-side API parity gate; confirms the Go service routes still match the
+      # freshly-generated OpenAPI artifact. (Full validate:contract stays in pre-release.)
+      - name: Go ↔ OpenAPI inventory
+        run: npm run validate:openapi:go
+
+  windows-sanity:
+    name: Windows path/script sanity
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
       # A lean Windows pass to catch Windows-specific path/case/script-resolution issues
-      # the ubuntu baseline cannot. Not a duplicate of the manual Release Windows workflow
+      # the ubuntu jobs cannot. Not a duplicate of the manual Release Windows workflow
       # (no packaging, no smokes, no artifacts).
       - name: Lint
         run: npm run lint
-
       - name: Typecheck
         run: npm run typecheck
-
       - name: Script sanity
         run: npm run validate:scripts
