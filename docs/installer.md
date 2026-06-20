@@ -233,6 +233,9 @@ shipped arm64 portable and runs it (`npm run validate:portable:smoke`): `portier
 `/api/health`, GET `/api/runtime` version, plus a Mach-O/ELF machine-type + `uname -m` check (the
 smoke fails rather than claim arm64 on non-arm64 hardware). amd64 portables are runtime-smoked on
 the amd64 release runners. Windows arm64 is not built. Emulation is never counted as native.
+These are isolated workflows (not extra jobs inside the release workflows) because the arm64
+runtime must run on a different-arch runner than the amd64 release build, scarcer arm64 capacity
+should not block the amd64 release, and Windows needs none (it ships amd64-only).
 
 Each platform's release directory includes a `checksums.sha256` file (GNU coreutils text
 format `<sha256>  <filename>`, lowercase hex, native installer/package first then portable

@@ -346,7 +346,10 @@ npm run validate:portable:smoke   # extracts + runs the HOST-arch portable (nati
 
   This replaces "structural-only" confidence for `linux/arm64` and `darwin/arm64` with real
   native runtime coverage. amd64 portables remain runtime-smoked on the amd64 release runners;
-  Windows arm64 is not built. Emulation is never counted as native.
+  Windows arm64 is not built. Emulation is never counted as native. These stay isolated workflows
+  (not extra jobs in the release workflows) because the arm64 runtime needs a different-arch runner
+  than the amd64 release build, scarcer arm64 capacity should not block the amd64 release, and
+  Windows needs none (it ships amd64-only).
 
 - [ ] Run the upgrade-preservation smoke. It extracts the current-platform portable
   archive into a temp install dir, runs the packaged runtime against an external temp
