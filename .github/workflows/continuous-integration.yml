@@ -4,8 +4,14 @@
 # and on every pull request. It is split into focused parallel jobs so each concern is its
 # own check in the Actions UI and a failure points straight at the cause:
 #
-#   lint · typecheck · test-shared · test-server · test-client · test-go ·
+#   lint · typecheck ·
+#   coverage-shared · coverage-server · coverage-client ·
+#   coverage-service · coverage-cli · coverage-replay ·
 #   openapi-parity · windows-sanity
+#
+# Each coverage-* job runs that component's suite UNDER COVERAGE and enforces its gate
+# (scripts/validate-coverage.js): shared/server/client = 100/100/100, service = 90/95,
+# cli/replay = 95/95.
 #
 # This workflow deliberately does NOT:
 #   - build release packages (MSI / pkg / deb / rpm) or portable archives,
@@ -80,8 +86,8 @@ jobs:
       - name: Typecheck client
         run: npm run typecheck -w client
 
-  test-shared:
-    name: Test (shared)
+  coverage-shared:
+    name: Coverage (shared, 100/100/100)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -93,11 +99,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Test shared
-        run: npm run test:shared
+      - name: Coverage gate (shared)
+        run: npm run validate:coverage:shared
 
-  test-server:
-    name: Test (server)
+  coverage-server:
+    name: Coverage (server, 100/100/100)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -109,11 +115,14 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Test server
-        run: npm run test:server
+      # The server resolves @portier/shared to its built package, so build it first.
+      - name: Build shared package
+        run: npm run build:shared
+      - name: Coverage gate (server)
+        run: npm run validate:coverage:server
 
-  test-client:
-    name: Test (client) + coverage gate (100/100/100)
+  coverage-client:
+    name: Coverage (client, 100/100/100)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -125,12 +134,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      # Runs the client suite under coverage and enforces the 100/100/100 gate.
-      - name: Test client + coverage gate
+      - name: Coverage gate (client)
         run: npm run validate:coverage:client
 
-  test-go:
-    name: Test (Go service)
+  coverage-service:
+    name: Coverage (Go service, 90/95)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -147,9 +155,50 @@ jobs:
           cache-dependency-path: service/go.sum
       - name: Install dependencies
         run: npm ci
-      # test:service compiles the Go test binaries (Node driver) and runs them.
-      - name: Test Go service
-        run: npm run test:service
+      - name: Coverage gate (Go service)
+        run: npm run validate:coverage:service
+
+  coverage-cli:
+    name: Coverage (Go CLI, 95/95)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+      - name: Install dependencies
+        run: npm ci
+      - name: Coverage gate (Go CLI)
+        run: npm run validate:coverage:cli
+
+  coverage-replay:
+    name: Coverage (Go replay, 95/95)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: service/go.sum
+      - name: Install dependencies
+        run: npm ci
+      - name: Coverage gate (Go replay)
+        run: npm run validate:coverage:replay
 
   openapi-parity:
     name: OpenAPI parity (Go ↔ generated contract)
