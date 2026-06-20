@@ -20,7 +20,7 @@
 # Privacy: this workflow reads the repo and runs gates only; it never stages or uploads
 # docs/private/** or any build/releases/** output.
 
-name: Continous Integration
+name: Continuous Integration
 
 on:
   push:
