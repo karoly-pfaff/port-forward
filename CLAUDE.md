@@ -40,6 +40,9 @@ the highest-impact project rules. Keep it compact; long slice history belongs in
   `tools/cli/readme.md`.
 - Doctor and policy commands are deterministic, read-only diagnostics. They must not mutate files or
   runtime state, probe forwarding targets, collect secrets/env/process/logs, or add telemetry.
+- The version has one source of truth (root `package.json`). Never hand-edit a version string —
+  use `npm run version:set <x.y.z>` / `version:bump`; `version:check` guards every surface in CI.
+  See `AGENTS.md` › Versioning. The `/portier-version` skill wraps this.
 
 ## Safety
 

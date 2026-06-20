@@ -40,6 +40,8 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      - name: Version consistency
+        run: npm run version:check
       - name: Script checks
         run: npm run validate:scripts
 
@@ -214,5 +216,7 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Version consistency
+        run: npm run version:check
       - name: Script checks
         run: npm run validate:scripts

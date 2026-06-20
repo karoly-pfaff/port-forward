@@ -116,6 +116,28 @@ npm run validate:service:linux
 Coverage gates are canonical in `scripts/validate-coverage.js`. Do not duplicate threshold
 history here; update the script and durable docs together when gates change.
 
+## Versioning
+
+The version has **one source of truth** — the root `package.json` `version` — and one script
+that keeps every other surface in lockstep. Never hand-edit a version string; that is how the
+client sidebar shipped `v1.14.1` across four releases.
+
+```powershell
+npm run version:list          # show every surface's current value
+npm run version:check         # verify all surfaces match root (runs in CI + `npm run check`)
+npm run version:set 1.19.0    # write the version everywhere (semver required)
+npm run version:bump minor    # next major|minor|patch from root, then set
+```
+
+Managed surfaces (full version): root/`client`/`server`/`shared` `package.json`,
+`shared/sources/index.ts` `PORTIER_APP_VERSION`, and the three Go `version.go` files
+(`service`, `tools/cli`, `tools/replay`). OpenAPI major.minor: `OPENAPI_DOC_VERSION` in
+`server/sources/openapi/openapi.ts` and `docs/openapi.json` `info.version`. The list lives in
+`scripts/generate-version.js` (`SURFACES`) — add an entry there to bring a new surface under the tool.
+`version:set` patches `docs/openapi.json` `info.version` in place; run `npm run apidoc:generate`
+only when the API schema itself also changed. `package-lock.json`'s top-level `version` is
+intentionally unmaintained — leave it.
+
 ## Contract And Architecture Rules
 
 - Use `docs/glossary.md` terms for docs, API docs, CLI, and UI copy. Do not rename frozen public
