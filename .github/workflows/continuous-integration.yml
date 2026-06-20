@@ -23,8 +23,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run lint
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
 
   scripts:
     name: Scripts
@@ -36,8 +38,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run validate:scripts
+      - name: Install
+        run: npm ci
+      - name: Script checks
+        run: npm run validate:scripts
 
   shared:
     name: Shared
@@ -49,10 +53,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run build:shared
-      - run: npm run typecheck -w shared
-      - run: npm run validate:coverage:shared
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build:shared
+      - name: Typecheck
+        run: npm run typecheck -w shared
+      - name: Coverage
+        run: npm run validate:coverage:shared
 
   server:
     name: Server
@@ -64,11 +72,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run build:shared
-      - run: npm run build:server
-      - run: npm run typecheck -w server
-      - run: npm run validate:coverage:server
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build:shared && npm run build:server
+      - name: Typecheck
+        run: npm run typecheck -w server
+      - name: Coverage
+        run: npm run validate:coverage:server
 
   service:
     name: Service
@@ -84,12 +95,16 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: service/go.sum
-      - run: npm ci
-      - run: npm run build:shared
-      - run: npm run build:service
-      - run: npm run apidoc:generate
-      - run: npm run validate:coverage:service
-      - run: npm run validate:openapi:go
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build:shared && npm run build:service
+      - name: Generate OpenAPI
+        run: npm run apidoc:generate
+      - name: Coverage
+        run: npm run validate:coverage:service
+      - name: API parity
+        run: npm run validate:openapi:go
 
   client:
     name: Client
@@ -101,14 +116,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - run: npm ci
-      - run: npm run build:shared
-      - run: npm run typecheck -w client
-      - run: npm run build:server
-      - run: npm run build:client
-      - run: npm run validate:coverage:client
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build:shared && npm run build:server && npm run build:client
+      - name: Typecheck
+        run: npm run typecheck -w client
+      - name: Coverage
+        run: npm run validate:coverage:client
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium
+      - name: E2E tests
+        run: npm run test:e2e
 
   cli:
     name: CLI
@@ -124,9 +143,12 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: service/go.sum
-      - run: npm ci
-      - run: npm run build:cli
-      - run: npm run validate:coverage:cli
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build:cli
+      - name: Coverage
+        run: npm run validate:coverage:cli
 
   replay:
     name: Replay
@@ -142,6 +164,9 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: service/go.sum
-      - run: npm ci
-      - run: npm run build:replay
-      - run: npm run validate:coverage:replay
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build:replay
+      - name: Coverage
+        run: npm run validate:coverage:replay
