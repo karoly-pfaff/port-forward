@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,6 +61,50 @@ func TestServeClient_RootServesIndex(t *testing.T) {
 
 	if rec.Code != http.StatusOK || rec.Body.String() != "<html>index</html>" {
 		t.Fatalf("root request did not serve index.html (code %d, body %q)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeClient_RejectsTraversalAttempt(t *testing.T) {
+	dir := writeStaticDir(t)
+	// A secret sibling of the static dir that must never be served.
+	secret := filepath.Join(filepath.Dir(dir), "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOP-SECRET"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+
+	for _, target := range []string{"/../secret.txt", "/..%2fsecret.txt", "/%2e%2e/secret.txt", "/foo/../../secret.txt"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		ServeClient(rec, req, dir)
+
+		// The secret outside dir must never be served, by any mechanism
+		// (path.Clean containment, the within() guard, or ServeFile's own
+		// ".." rejection).
+		if body := rec.Body.String(); strings.Contains(body, "TOP-SECRET") {
+			t.Fatalf("traversal %q leaked the secret file (body %q)", target, body)
+		}
+	}
+}
+
+func TestWithin(t *testing.T) {
+	dir := filepath.Join("base", "web")
+	inside := []string{
+		filepath.Join(dir, "app.js"),
+		filepath.Join(dir, "assets", "main.css"),
+	}
+	for _, c := range inside {
+		if !within(dir, c) {
+			t.Errorf("within(%q, %q) = false, want true", dir, c)
+		}
+	}
+	outside := []string{
+		filepath.Join("base", "secret.txt"),           // ../secret.txt
+		filepath.Join(filepath.Dir(dir), "..", "etc"), // escapes above base
+	}
+	for _, c := range outside {
+		if within(dir, c) {
+			t.Errorf("within(%q, %q) = true, want false", dir, c)
+		}
 	}
 }
 

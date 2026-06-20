@@ -67,7 +67,9 @@ func (s *Store) List(params ListParams) []ActivityEvent {
 	copy(snapshot, s.events)
 	s.mu.Unlock()
 
-	result := make([]ActivityEvent, 0, limit)
+	// Cap the pre-allocation by the events actually present (itself bounded by
+	// MaxEvents), so the size never depends solely on the user-supplied limit.
+	result := make([]ActivityEvent, 0, min(limit, len(snapshot)))
 	for _, e := range snapshot {
 		if params.RuleID != nil && (e.RuleID == nil || *e.RuleID != *params.RuleID) {
 			continue
