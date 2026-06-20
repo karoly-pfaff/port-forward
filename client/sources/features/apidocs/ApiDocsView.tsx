@@ -1,182 +1,24 @@
 import { type ReactElement } from "react";
-
-interface EndpointDoc {
-  method: string;
-  path: string;
-  purpose: string;
-  params?: string;
-  response?: string;
-  notes?: string;
-  planned?: string;
-  parity?: string;
-}
-
-const ENDPOINTS: EndpointDoc[] = [
-  {
-    method: "GET",
-    path: "/api/forwards",
-    purpose: "List all forwarding rules with port advisories.",
-    response: "ForwardRuleResponse[]"
-  },
-  {
-    method: "POST",
-    path: "/api/forwards",
-    purpose: "Create a new forwarding rule.",
-    params: "Body: ForwardRuleInput",
-    response: "201 ForwardRuleResponse · 400 validation · 409 duplicate binding"
-  },
-  {
-    method: "PATCH",
-    path: "/api/forwards/:id",
-    purpose: "Update an existing rule. Forwarding-affecting changes restart a running rule; name/enabled changes do not.",
-    params: "Body: Partial ForwardRuleInput",
-    response: "ForwardRuleResponse · 400 · 404 · 409"
-  },
-  {
-    method: "DELETE",
-    path: "/api/forwards/:id",
-    purpose: "Delete a rule (stops it first if running).",
-    response: "204 No Content · 404"
-  },
-  {
-    method: "POST",
-    path: "/api/forwards/:id/start",
-    purpose: "Start a forwarding rule.",
-    response: "ForwardStatus · 404 · 500"
-  },
-  {
-    method: "POST",
-    path: "/api/forwards/:id/stop",
-    purpose: "Stop a forwarding rule.",
-    response: "ForwardStatus · 404"
-  },
-  {
-    method: "POST",
-    path: "/api/forwards/:id/diagnose",
-    purpose:
-      "Diagnose an existing forwarding rule without changing its state. Does not start, stop, or modify the rule.",
-    params: "Path: id (rule ID). No request body required.",
-    response:
-      "RuleDiagnosticsResult { ruleId, ruleName, protocol, summary, checks[], diagnosedAt } · 404 when rule not found",
-    notes:
-      "Status values: pass · warn · fail · skip. Check IDs: listen-host · listen-bind · target-host · target-connect · udp-mode · lan-exposure · privileged-port · common-port. TCP: target-connect attempts a short connection to the target. UDP: target-connect is always skip (UDP reachability cannot be verified). Running rule: listen-bind returns pass if Portier owns the socket."
-  },
-  {
-    method: "POST",
-    path: "/api/forwards/reorder",
-    purpose: "Reorder rules by providing an array of IDs in the desired order. Does not restart running rules.",
-    params: "Body: { ids: string[] }",
-    response: "ForwardRuleResponse[] (updated order)"
-  },
-  {
-    method: "POST",
-    path: "/api/forwards/groups/:group/start",
-    purpose:
-      "Start every rule in the group, in rule order. Already-running rules are skipped (already_running); autostart/enabled is not a precondition. Does not change rule definitions, order, or metadata.",
-    params: "Path: group (URL-encoded group label).",
-    response:
-      "GroupActionResponse { group, action, total, succeeded, skipped, failed, results[] } · 400 invalid group · 404 when no rule has the group",
-    notes: "Per-rule result status: started | skipped | failed."
-  },
-  {
-    method: "POST",
-    path: "/api/forwards/groups/:group/stop",
-    purpose:
-      "Stop every running rule in the group, in rule order. Rules that are not running are skipped (not_running). Does not change rule definitions, order, or metadata.",
-    params: "Path: group (URL-encoded group label).",
-    response:
-      "GroupActionResponse { group, action, total, succeeded, skipped, failed, results[] } · 400 invalid group · 404 when no rule has the group",
-    notes: "Per-rule result status: stopped | skipped | failed."
-  },
-  {
-    method: "GET",
-    path: "/api/status",
-    purpose: "List runtime status for all rules.",
-    response: "ForwardStatus[]"
-  },
-  {
-    method: "GET",
-    path: "/api/runtime",
-    purpose: "Expose runtime environment details for the local management UI. Added in v1.2.",
-    response:
-      "RuntimeInfo { name, version, runtime, platform, arch, uptimeSeconds, startedAt, managementHost, managementPort, configPath, staticDir, serviceMode, pid }"
-  },
-  {
-    method: "GET",
-    path: "/api/activity",
-    purpose: "List recent activity events (in-memory, resets on restart, max 500).",
-    params: "Query: limit (default 100, max 500), ruleId, type, severity",
-    response: "{ events: ActivityEvent[] } — newest first"
-  },
-  {
-    method: "DELETE",
-    path: "/api/activity",
-    purpose: "Clear the in-memory activity log. Does not affect rules or forwarding state.",
-    response: "204 No Content"
-  },
-  {
-    method: "GET",
-    path: "/api/config/export",
-    purpose: "Export current rules as a portable JSON config.",
-    response: "{ version, exportedAt, rules }"
-  },
-  {
-    method: "POST",
-    path: "/api/config/import",
-    purpose: "Import rules from a config. Validates all rules before applying; no partial import on error.",
-    params: "Body: { mode: 'replace' | 'merge', config: ExportedConfig }",
-    response: "{ result: ImportResult, rules: ForwardRuleResponse[] } · 400 bad body · 422 validation errors"
-  },
-  {
-    method: "GET",
-    path: "/api/ports/advisory",
-    purpose: "Get port advisory messages for a given port, host, and purpose.",
-    params: "Query: port (1–65535), purpose (forward | management), listenHost (optional)",
-    response: "PortAdvisory[]"
-  },
-  {
-    method: "GET",
-    path: "/api/connections",
-    purpose:
-      "Return a read-only snapshot of active TCP connections and UDP sessions for all running forwarding rules, along with per-rule live traffic summaries.",
-    response:
-      "LiveConnectionsResponse { generatedAt, tcpConnections[], udpSessions[], ruleSummaries[] }",
-    notes:
-      "tcpConnections, udpSessions, and ruleSummaries are always arrays; empty arrays when nothing is active. TCP status: active. UDP status: active | idle (idle after 30s, retained up to 5min). bytesIn = client-to-target; bytesOut = target-to-client. IDs are runtime-local and do not persist across restarts. Payload contents are never exposed."
-  },
-  {
-    method: "POST",
-    path: "/api/config/plan",
-    purpose:
-      "Compare a desired config against the currently running configuration and return a structured plan showing adds, updates, removes, and unchanged rules. Read-only — does not modify state.",
-    params: "Body: ConfigPlanRequest { desired: { rules: ForwardRuleInput[] } }",
-    response:
-      "ConfigPlanResponse { generatedAt, mode, summary: ConfigPlanSummary, operations: ConfigPlanOperation[], errors: ConfigPlanError[], warnings: ConfigPlanWarning[] }",
-    notes:
-      "Rules are matched by stable rule id when present; otherwise by protocol+listenHost+listenPort identity. Ambiguous matches produce an error and refuse apply. hasDrift is true when any operation is add, update, or remove. destructive is true when a remove or forwarding-affecting update is present. Does not mutate running config."
-  },
-  {
-    method: "POST",
-    path: "/api/config/apply",
-    purpose:
-      "Apply a desired config to the running configuration after explicit confirmation. Supports dry-run mode.",
-    params:
-      "Body: ConfigApplyRequest { desired: DesiredConfig, yes: boolean, dryRun?: boolean }",
-    response:
-      "ConfigApplyResponse { ok: boolean, dryRun: boolean, appliedAt: string, plan: ConfigPlanResponse, applied: { add, update, remove, unchanged } }",
-    notes:
-      "Plan errors return ok:false with no mutation. Destructive operations (update, remove) require yes: true; without it returns 400. dryRun: true previews the plan counts without mutating. No drift: ok:true with no import called."
-  }
-];
+import { apiDocsModel, type ApiDocsModel, type ApiParameter } from "./openApiDocs.js";
 
 const METHOD_CLASS: Record<string, string> = {
   GET: "method-get",
   POST: "method-post",
+  PUT: "method-put",
   PATCH: "method-patch",
-  DELETE: "method-delete"
+  DELETE: "method-delete",
+  OPTIONS: "method-options",
+  HEAD: "method-head",
 };
 
-export function ApiDocsView(): ReactElement {
+function parameterLabel(param: ApiParameter): string {
+  const facets = [param.location];
+  if (param.type) facets.push(param.type);
+  if (param.required) facets.push("required");
+  return facets.join(", ");
+}
+
+export function ApiDocsView({ model = apiDocsModel }: { model?: ApiDocsModel } = {}): ReactElement {
   return (
     <div className="api-docs-view">
       <div className="rule-list-section" style={{ flex: 1, minHeight: 0 }}>
@@ -184,43 +26,65 @@ export function ApiDocsView(): ReactElement {
           <div className="rule-list-title-group">
             <div className="rule-list-title">API Reference</div>
             <div className="rule-list-subtitle">
-              Management API at 127.0.0.1:47831. Errors return{" "}
-              <code>{"{ errors: string[] }"}</code>.
+              {model.title} · v{model.version} — generated from the OpenAPI contract.
             </div>
           </div>
         </div>
         <div className="rule-list-body">
-          <ol className="api-endpoint-list">
-            {ENDPOINTS.map((ep) => (
-              <li key={`${ep.method}-${ep.path}`} className="api-endpoint">
-                <div className="api-endpoint-head">
-                  {/* v8 ignore next -- every endpoint uses a method present in METHOD_CLASS (GET/POST/PATCH/DELETE); the ?? "" fallback is unreachable */}
-                  <span className={`api-method ${METHOD_CLASS[ep.method] ?? ""}`}>
-                    {ep.method}
-                  </span>
-                  <code className="api-path">{ep.path}</code>
-                  {/* v8 ignore start -- no endpoint currently sets planned/parity, so these speculative badges are dead branches; this hand-maintained view is replaced by an OpenAPI-driven view in v1.19 Slice 4 */}
-                  {ep.planned && (
-                    <span className="api-planned-badge">Planned — {ep.planned}</span>
-                  )}
-                  {ep.parity && (
-                    <span className="api-parity-badge">{ep.parity}</span>
-                  )}
-                  {/* v8 ignore stop */}
-                </div>
-                <p className="api-purpose">{ep.purpose}</p>
-                {ep.params && (
-                  <p className="api-meta"><strong>Params:</strong> {ep.params}</p>
-                )}
-                {ep.response && (
-                  <p className="api-meta"><strong>Response:</strong> {ep.response}</p>
-                )}
-                {ep.notes && (
-                  <p className="api-meta"><strong>Notes:</strong> {ep.notes}</p>
-                )}
-              </li>
-            ))}
-          </ol>
+          {model.groups.map((group) => (
+            <section key={group.name} className="api-group" aria-label={`${group.name} endpoints`}>
+              <h3 className="api-group-title">{group.name}</h3>
+              <ol className="api-endpoint-list">
+                {group.operations.map((op) => (
+                  <li key={`${op.method}-${op.path}`} className="api-endpoint">
+                    <div className="api-endpoint-head">
+                      <span className={`api-method ${METHOD_CLASS[op.method]}`}>{op.method}</span>
+                      <code className="api-path">{op.path}</code>
+                    </div>
+                    {op.summary && <p className="api-purpose">{op.summary}</p>}
+                    <p className="api-meta">{op.description}</p>
+
+                    {op.parameters.length > 0 && (
+                      <div className="api-meta">
+                        <strong>Parameters</strong>
+                        <ul className="api-param-list">
+                          {op.parameters.map((param) => (
+                            <li key={`${param.location}-${param.name}`}>
+                              <code>{param.name}</code> ({parameterLabel(param)}) — {param.description}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {op.requestBody && (
+                      <p className="api-meta">
+                        <strong>Request body{op.requestBody.required ? " (required)" : ""}:</strong>{" "}
+                        <code>{op.requestBody.schema}</code>
+                      </p>
+                    )}
+
+                    <div className="api-meta">
+                      <strong>Responses</strong>
+                      <ul className="api-response-list">
+                        {op.responses.map((response) => (
+                          <li key={response.status}>
+                            <span className="api-status">{response.status}</span> — {response.description}
+                            {response.schema && (
+                              <>
+                                {" "}
+                                <code>{response.schema}</code>
+                              </>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ))}
         </div>
       </div>
     </div>

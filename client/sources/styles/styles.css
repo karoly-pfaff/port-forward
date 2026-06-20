@@ -309,6 +309,12 @@ button.nav-item--active svg {
   gap: 8px;
 }
 
+.api-docs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .management-chip {
   display: flex;
   align-items: center;
@@ -2429,6 +2435,54 @@ select[aria-invalid="true"] {
 
 .api-meta strong {
   color: var(--text-secondary);
+}
+
+.method-put,
+.method-options,
+.method-head {
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.api-group {
+  padding: 0;
+}
+
+.api-group-title {
+  margin: 0;
+  padding: 10px 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border-default);
+  position: sticky;
+  top: 0;
+}
+
+.api-param-list,
+.api-response-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.api-param-list code,
+.api-response-list code {
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  color: var(--text-secondary);
+}
+
+.api-status {
+  font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 /* ==============================================

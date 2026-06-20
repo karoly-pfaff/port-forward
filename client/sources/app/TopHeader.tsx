@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { Settings } from "lucide-react";
+import { FileCode } from "lucide-react";
 import { type AppView } from "./NavItem.js";
 
 interface TopHeaderProps {
@@ -30,19 +30,11 @@ export function TopHeader({ onMenuOpen, onNavClick }: TopHeaderProps): ReactElem
       <div className="app-header-right">
         <button
           type="button"
+          className="api-docs-btn"
           onClick={() => onNavClick("api-docs")}
           title="View API documentation"
         >
-          &lt;/&gt; API Docs
-        </button>
-        <button
-          type="button"
-          className="btn-icon"
-          aria-label="Settings"
-          title="Settings"
-          onClick={() => onNavClick("settings")}
-        >
-          <Settings size={16} aria-hidden="true" />
+          <FileCode size={15} aria-hidden="true" /> API Docs
         </button>
       </div>
     </header>

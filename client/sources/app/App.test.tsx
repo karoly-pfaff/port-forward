@@ -66,10 +66,9 @@ describe("App", () => {
     render(<App />);
     await screen.findByText(/No forwarding rules yet/);
 
-    // "API Docs" appears in both the sidebar and header — click either one
-    const apiDocsBtns = screen.getAllByRole("button", { name: /API Docs/ });
-    expect(apiDocsBtns.length).toBeGreaterThanOrEqual(1);
-    await userEvent.click(apiDocsBtns[0]);
+    // "API Docs" lives only in the header (not the sidebar).
+    const banner = screen.getByRole("banner");
+    await userEvent.click(within(banner).getByRole("button", { name: /API Docs/ }));
     expect(screen.getByText("API Reference")).toBeInTheDocument();
   });
 
@@ -84,12 +83,12 @@ describe("App", () => {
     // Sidebar nav buttons (use nav landmark to scope)
     const nav = screen.getByRole("navigation", { name: "Main navigation" });
     expect(nav.querySelector("button[aria-label], button")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Dashboard/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Forward Rules/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Activity/ })).toBeInTheDocument();
-    // "Settings" and "API Docs" appear in both sidebar and header
-    expect(screen.getAllByRole("button", { name: /Settings/ }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole("button", { name: /API Docs/ }).length).toBeGreaterThanOrEqual(1);
+    expect(within(nav).getByRole("button", { name: /Dashboard/ })).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: /Forward Rules/ })).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: /Activity/ })).toBeInTheDocument();
+    // Settings lives in the sidebar; "API Docs" does NOT (it moved to the header only).
+    expect(within(nav).getByRole("button", { name: /Settings/ })).toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: /API Docs/ })).not.toBeInTheDocument();
     await screen.findByText(/No forwarding rules yet/);
   });
 
@@ -555,14 +554,14 @@ describe("App settings and auto-refresh", () => {
     vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
   });
 
-  it("the header Settings button opens the Settings view", async () => {
+  it("the sidebar Settings nav item opens the Settings view", async () => {
     vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([]);
     vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([]);
 
     render(<App />);
-    // The header (banner) Settings button is distinct from the sidebar nav item.
-    const header = await screen.findByRole("banner");
-    await userEvent.click(within(header).getByRole("button", { name: "Settings" }));
+    // Settings lives in the sidebar nav (it is no longer in the header).
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    await userEvent.click(within(nav).getByRole("button", { name: "Settings" }));
 
     expect(await screen.findByText("Management Endpoint")).toBeInTheDocument();
   });
@@ -871,9 +870,9 @@ describe("App rules-updated-from-settings", () => {
     render(<App />);
     await screen.findByText(/No forwarding rules yet/);
 
-    // Navigate to Settings via the header button (scoped to the banner).
-    const header = screen.getByRole("banner");
-    await userEvent.click(within(header).getByRole("button", { name: "Settings" }));
+    // Navigate to Settings via the sidebar nav item.
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    await userEvent.click(within(nav).getByRole("button", { name: "Settings" }));
     await screen.findByText("Management Endpoint");
 
     const statusCallsBefore = vi.mocked(portierApi.fetchForwardStatus).mock.calls.length;

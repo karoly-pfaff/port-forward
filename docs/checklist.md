@@ -190,6 +190,22 @@ Slice 3 status (client coverage meaningful test pass + CI filename fix):
   `/* v8 ignore … */` annotations with documented reasons, exactly as the server does. No gate
   lowered.
 
+Slice 4 status (OpenAPI-driven API documentation view):
+
+- [x] The hand-maintained static `ENDPOINTS[]` array is **removed**. `ApiDocsView` is now
+  derived entirely from the canonical generated OpenAPI artifact (`docs/openapi.json`) via a
+  processing layer (`client/sources/features/apidocs/openApiDocs.ts`) that builds a stable,
+  display-friendly view model — grouped by tag, deterministically ordered, with parameters,
+  request-body and response schema-name summaries. No raw JSON is dumped; input is parsed as
+  `unknown` with type guards (no `any`, no unsafe casts). The dead planned/parity/method-class
+  branches are gone (and with them the v8-ignore annotations on that file).
+- [x] Client coverage **stays 100/100/100** (gate unchanged at 100/100/100); the processor and
+  view are fully covered by `openApiDocs.test.ts` (fixtures) + `ApiDocsView.test.tsx` (real
+  artifact + a crafted model for valid optional-field shapes). No coverage exception added.
+- [x] The dev server reads the repo-root artifact via `server.fs.allow` in `client/vite.config.ts`;
+  the production `vite build` bundles it deterministically. The existing API-docs E2E spec
+  (asserts `/api/forwards` + `/api/connections` render) remains valid.
+
 - [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
 - [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
   format change — unless a proven release blocker justifies it, documented if so.

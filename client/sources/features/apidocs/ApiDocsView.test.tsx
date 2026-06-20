@@ -1,187 +1,129 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ApiDocsView } from "./ApiDocsView.js";
+import type { ApiDocsModel } from "./openApiDocs.js";
 
-describe("ApiDocsView", () => {
-  it("renders the API Reference heading", () => {
+describe("ApiDocsView — driven by the real OpenAPI artifact", () => {
+  it("renders the API Reference heading with the contract title and version", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("API Reference")).toBeInTheDocument();
+    expect(screen.getByText(/Portier API · v1\.18 — generated from the OpenAPI contract/)).toBeInTheDocument();
   });
 
-  it("lists the GET and POST /api/forwards endpoints", () => {
+  it("groups operations by tag (forwards, config, connections, health)", () => {
     render(<ApiDocsView />);
-    // Both GET and POST /api/forwards are listed
-    expect(screen.getAllByText("/api/forwards").length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("lists the POST /api/forwards/reorder endpoint", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText("/api/forwards/reorder")).toBeInTheDocument();
-  });
-
-  it("lists the GET /api/status endpoint", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText("/api/status")).toBeInTheDocument();
-  });
-
-  it("lists both GET and DELETE /api/activity endpoints", () => {
-    render(<ApiDocsView />);
-    expect(screen.getAllByText("/api/activity").length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("describes DELETE /api/activity as clearing the log", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText(/Clear the in-memory activity log/)).toBeInTheDocument();
-  });
-
-  it("lists the config export and import endpoints", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText("/api/config/export")).toBeInTheDocument();
-    expect(screen.getByText("/api/config/import")).toBeInTheDocument();
-  });
-
-  it("lists the port advisory endpoint", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText("/api/ports/advisory")).toBeInTheDocument();
-  });
-
-  it("shows GET method badges", () => {
-    render(<ApiDocsView />);
-    const gets = screen.getAllByText("GET");
-    expect(gets.length).toBeGreaterThan(0);
-  });
-
-  it("shows POST method badges", () => {
-    render(<ApiDocsView />);
-    const posts = screen.getAllByText("POST");
-    expect(posts.length).toBeGreaterThan(0);
-  });
-
-  it("shows the reorder endpoint does not restart running rules", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText(/Does not restart running rules/)).toBeInTheDocument();
-  });
-
-  it("lists the POST /api/forwards/:id/diagnose endpoint", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText("/api/forwards/:id/diagnose")).toBeInTheDocument();
-  });
-
-  it("describes that diagnostics do not mutate rule state", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText(/without changing its state/i)).toBeInTheDocument();
-  });
-
-  it("shows diagnostic status values including pass, warn, fail, and skip", () => {
-    const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/pass.*warn.*fail.*skip/i);
-  });
-
-  it("includes TCP and UDP diagnostic behavior notes", () => {
-    const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/TCP:.*target-connect/i);
-    expect(container.textContent).toMatch(/UDP:.*target-connect.*skip/i);
-  });
-
-  it("lists the GET /api/runtime endpoint", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText("/api/runtime")).toBeInTheDocument();
-  });
-
-  it("lists the group start/stop endpoints", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText("/api/forwards/groups/:group/start")).toBeInTheDocument();
-    expect(screen.getByText("/api/forwards/groups/:group/stop")).toBeInTheDocument();
-  });
-
-  it("documents the GroupActionResponse shape", () => {
-    const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/GroupActionResponse/);
-    expect(container.textContent).toMatch(/succeeded.*skipped.*failed/);
-  });
-
-  it("documents all expected public API endpoints", () => {
-    render(<ApiDocsView />);
-    const expectedPaths = [
-      "/api/forwards",
-      "/api/forwards/:id/diagnose",
-      "/api/forwards/reorder",
-      "/api/status",
-      "/api/runtime",
-      "/api/activity",
-      "/api/config/export",
-      "/api/config/import",
-      "/api/ports/advisory",
-      "/api/connections",
-      "/api/config/plan",
-      "/api/config/apply",
-    ];
-    for (const path of expectedPaths) {
-      expect(screen.queryAllByText(path).length).toBeGreaterThan(0);
+    for (const tag of ["forwards", "config", "connections", "health"]) {
+      expect(screen.getByRole("heading", { name: tag })).toBeInTheDocument();
     }
   });
 
-  it("lists the GET /api/connections endpoint", () => {
+  it("renders representative endpoint paths from the contract", () => {
     render(<ApiDocsView />);
+    expect(screen.getAllByText("/api/forwards").length).toBeGreaterThanOrEqual(2); // GET + POST
     expect(screen.getByText("/api/connections")).toBeInTheDocument();
-  });
-
-  it("does not show a Planned badge for GET /api/connections", () => {
-    render(<ApiDocsView />);
-    expect(screen.queryByText("Planned — v1.4")).not.toBeInTheDocument();
-  });
-
-  it("describes GET /api/connections purpose", () => {
-    render(<ApiDocsView />);
-    expect(screen.getByText(/active TCP connections and UDP sessions/i)).toBeInTheDocument();
-  });
-
-  it("documents LiveConnectionsResponse fields for GET /api/connections", () => {
-    const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/LiveConnectionsResponse/);
-    expect(container.textContent).toMatch(/tcpConnections/);
-    expect(container.textContent).toMatch(/udpSessions/);
-    expect(container.textContent).toMatch(/ruleSummaries/);
-  });
-
-  it("notes that GET /api/connections returns empty arrays when nothing is active", () => {
-    const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/empty arrays when nothing is active/i);
-  });
-
-  it("lists the POST /api/config/plan endpoint without a parity badge (both runtimes implement it)", () => {
-    render(<ApiDocsView />);
     expect(screen.getByText("/api/config/plan")).toBeInTheDocument();
-    expect(screen.queryByText(/TypeScript server.*Go service parity pending/i)).not.toBeInTheDocument();
+    expect(screen.getByText("/health")).toBeInTheDocument();
   });
 
-  it("describes POST /api/config/plan as read-only", () => {
+  it("renders method badges", () => {
     render(<ApiDocsView />);
-    expect(screen.getByText(/does not modify state/i)).toBeInTheDocument();
+    expect(screen.getAllByText("GET").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("POST").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("PATCH").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("DELETE").length).toBeGreaterThan(0);
   });
 
-  it("documents ConfigPlanResponse fields for POST /api/config/plan", () => {
-    const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/ConfigPlanResponse/);
-    expect(container.textContent).toMatch(/ConfigPlanSummary/);
-    expect(container.textContent).toMatch(/ConfigPlanOperation/);
-    expect(container.textContent).toMatch(/hasDrift/);
-  });
-
-  it("lists the POST /api/config/apply endpoint without a Planned badge", () => {
+  it("renders operation summaries and descriptions", () => {
     render(<ApiDocsView />);
-    expect(screen.getByText("/api/config/apply")).toBeInTheDocument();
-    expect(screen.queryByText(/Planned — v1\.5/)).not.toBeInTheDocument();
+    expect(screen.getByText("Create a forward rule")).toBeInTheDocument();
+    expect(screen.getByText(/Creates a forward rule\./)).toBeInTheDocument();
   });
 
-  it("describes POST /api/config/apply response shape with ok and dryRun fields", () => {
-    const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/ok.*boolean/);
-    expect(container.textContent).toMatch(/dryRun/);
+  it("renders query/path parameters for endpoints that declare them", () => {
+    render(<ApiDocsView />);
+    // GET /api/activity declares severity/type/ruleId/limit query params.
+    const severity = screen.getByText("severity");
+    expect(severity).toBeInTheDocument();
+    expect(severity.closest("li")?.textContent).toMatch(/query/);
+    // PATCH /api/forwards/{id} declares a required path param `id`.
+    const idParams = screen.getAllByText("id");
+    expect(idParams.some((el) => /path.*required/.test(el.closest("li")?.textContent ?? ""))).toBe(true);
   });
 
-  it("describes POST /api/config/apply as requiring yes: true for destructive operations", () => {
+  it("summarises request bodies by schema name", () => {
+    render(<ApiDocsView />);
+    expect(screen.getByText("CreateForwardRuleBodyDto")).toBeInTheDocument();
+  });
+
+  it("renders response status codes and schema names", () => {
+    render(<ApiDocsView />);
+    expect(screen.getAllByText("201").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("400").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ForwardRuleResponseDto").length).toBeGreaterThan(0);
+  });
+
+  it("does not render raw JSON (no $ref strings, no document blob)", () => {
     const { container } = render(<ApiDocsView />);
-    expect(container.textContent).toMatch(/yes: true/);
+    expect(container.textContent).not.toMatch(/#\/components\/schemas\//);
+    expect(container.textContent).not.toMatch(/\{\s*"openapi"/);
+  });
+
+  it("no longer shows the removed hand-maintained planned/parity badges", () => {
+    render(<ApiDocsView />);
+    expect(screen.queryByText(/Planned — v1\.4/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/parity pending/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("ApiDocsView — optional-field rendering (crafted model)", () => {
+  // A valid model whose operation omits a summary, has a typeless query param, and a
+  // non-required request body with a null response schema — shapes a valid OpenAPI doc
+  // can produce but the Portier contract happens not to.
+  const model: ApiDocsModel = {
+    title: "Crafted",
+    version: "2",
+    description: "Crafted doc.",
+    groups: [
+      {
+        name: "group-one",
+        operations: [
+          {
+            method: "GET",
+            path: "/x",
+            summary: null,
+            description: "Reads X.",
+            parameters: [{ name: "p", location: "query", required: false, type: null, description: "A param." }],
+            requestBody: { schema: "BodyDto", required: false },
+            responses: [{ status: "200", description: "OK", schema: null }]
+          }
+        ]
+      }
+    ]
+  };
+
+  it("renders an operation without a summary (description still shown)", () => {
+    render(<ApiDocsView model={model} />);
+    expect(screen.getByText("/x")).toBeInTheDocument();
+    expect(screen.getByText("Reads X.")).toBeInTheDocument();
+  });
+
+  it("renders a parameter label without a type facet", () => {
+    render(<ApiDocsView model={model} />);
+    const param = screen.getByText("p");
+    expect(param.closest("li")?.textContent).toMatch(/\(query\)/);
+  });
+
+  it("renders a non-required request body without the (required) marker", () => {
+    render(<ApiDocsView model={model} />);
+    const bodyLine = screen.getByText("BodyDto").closest("p");
+    expect(bodyLine?.textContent).toMatch(/Request body:/);
+    expect(bodyLine?.textContent).not.toMatch(/\(required\)/);
+  });
+
+  it("renders a response line without a schema code", () => {
+    render(<ApiDocsView model={model} />);
+    const line = screen.getByText("200").closest("li");
+    expect(line?.textContent).toMatch(/OK/);
+    expect(line?.querySelector("code")).toBeNull(); // null schema → no <code> badge
   });
 });

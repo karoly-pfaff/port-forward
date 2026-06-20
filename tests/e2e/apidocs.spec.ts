@@ -10,7 +10,8 @@ test.beforeEach(async ({ baseURL }) => {
 
 test("api docs: view opens and endpoint list is visible", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Main navigation" })
+  // API Docs is reached from the header (not the left menu).
+  await page.getByRole("banner")
     .getByRole("button", { name: "API Docs" })
     .click();
 
@@ -20,7 +21,8 @@ test("api docs: view opens and endpoint list is visible", async ({ page }) => {
 
 test("api docs: GET /api/connections endpoint is listed", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Main navigation" })
+  // API Docs is reached from the header (not the left menu).
+  await page.getByRole("banner")
     .getByRole("button", { name: "API Docs" })
     .click();
 
