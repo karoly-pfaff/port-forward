@@ -36,7 +36,7 @@ import { createGzip } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import AdmZip from "adm-zip";
 import tar from "tar-stream";
-import { generateChecksums, CHECKSUMS_NAME } from "./release-checksums.js";
+import { generateChecksums, CHECKSUMS_NAME } from "./library/checksums.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageDir = join(repoRoot, "build", "portier");

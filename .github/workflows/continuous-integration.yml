@@ -43,6 +43,21 @@ jobs:
       - name: Script checks
         run: npm run validate:scripts
 
+  postman:
+    name: Postman
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Collection checks
+        run: npm run validate:postman
+
   shared:
     name: Shared
     runs-on: ubuntu-latest

@@ -29,7 +29,7 @@ import {
   parseSha256Sums,
   sha256File,
   findReleaseArtifacts,
-} from "./release-checksums.js";
+} from "./library/checksums.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");

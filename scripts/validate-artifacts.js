@@ -19,7 +19,7 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, dirname, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CHECKSUMS_NAME, compareReleaseArtifactNames } from "./release-checksums.js";
+import { CHECKSUMS_NAME, compareReleaseArtifactNames } from "./library/checksums.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const releasesDir = join(repoRoot, "build", "releases");

@@ -1,0 +1,102 @@
+{
+  "name": "Portier Local",
+  "values": [
+    {
+      "key": "host",
+      "value": "127.0.0.1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "port",
+      "value": "47831",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://{{host}}:{{port}}",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "apiPrefix",
+      "value": "/api",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "ruleName",
+      "value": "portier-postman-demo",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "listenHost",
+      "value": "127.0.0.1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "listenPort",
+      "value": "48010",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "targetHost",
+      "value": "127.0.0.1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "targetPort",
+      "value": "48011",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "protocol",
+      "value": "tcp",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "udpMode",
+      "value": "one-way",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "group",
+      "value": "postman-demo-group",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "advisoryPurpose",
+      "value": "forward",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "advisoryPort",
+      "value": "8080",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "createdRuleId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "invalidRuleId",
+      "value": "nonexistent-rule-00000000",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

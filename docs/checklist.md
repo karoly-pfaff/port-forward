@@ -206,6 +206,28 @@ Slice 4 status (OpenAPI-driven API documentation view):
   the production `vite build` bundles it deterministically. The existing API-docs E2E spec
   (asserts `/api/forwards` + `/api/connections` render) remains valid.
 
+Slice 5 status (Postman collection & API consumer artifacts):
+
+- [x] A Postman collection lives in the root `postman/` directory with simple, unprefixed
+  names: `postman/collection.json` (v2.1) + `postman/environment.json` (v2.1 environment).
+  Both are **generated from** the canonical OpenAPI artifact (`docs/openapi.json`) by
+  `npm run generate:postman` (shared builders in `scripts/library/postman.js`); not a
+  hand-maintained second contract. `postman/readme.md` documents the structure and variables.
+- [x] Collection structure: **Atomic Endpoint Tests** (one request per public OpenAPI
+  operation — 21 — grouped by tag, non-destructive: `id`/`group` params resolve to
+  `{{invalidRuleId}}`/`{{group}}`, apply is `dryRun`, import an empty merge, reorder an empty
+  no-op), a self-cleaning **Happy Path Rule Flow** (runtime → create → list/status → rename →
+  start/stop → export → delete → confirm cleanup), and **Negative/Error Tests** (400/404 with
+  the `{ errors }` envelope). Requests are `{{baseUrl}}{{apiPrefix}}`-driven; no hard-coded URLs.
+- [x] `npm run validate:postman` passes (every OpenAPI operation present exactly once in the
+  atomic folder, no extra/unknown operation, flow/negative requests map to contract operations,
+  `{{baseUrl}}`-driven URLs, required env vars, no secrets / `docs/private`, deterministic
+  regenerate-and-compare → "run `npm run generate:postman`" on drift). Negative checks
+  confirmed: missing/duplicate/extra operation, hard-coded URL, missing env var, stale output,
+  `docs/private` string, secret-looking value, and invalid JSON all fail the validator.
+- [x] CI runs `npm run validate:postman` in a dedicated **Postman** job (push/PR). No Postman
+  cloud publishing, no Newman in CI (documented as an optional local run only), no network.
+
 - [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
 - [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
   format change — unless a proven release blocker justifies it, documented if so.
@@ -213,10 +235,10 @@ Slice 4 status (OpenAPI-driven API documentation view):
   any lint gate.
 - [ ] Client coverage gate reflects the measured actual; raise a gate only when the actual is
   safely above it; never document an unverified coverage figure. No gate lowered.
-- [ ] Postman collection (`docs/postman/portier.postman_collection.json`, v2.1) is **generated
-  from** the canonical OpenAPI artifact (not a hand-maintained second contract); `npm run
-  validate:postman` passes (every OpenAPI operation present, `{{baseUrl}}` variable, no
-  secrets / private paths / `docs/private` references, deterministic/no-drift) and runs in
+- [x] Postman collection (`postman/collection.json` + `postman/environment.json`, v2.1) is
+  **generated from** the canonical OpenAPI artifact (not a hand-maintained second contract);
+  `npm run validate:postman` passes (every OpenAPI operation present, `{{baseUrl}}` variable,
+  no secrets / private paths / `docs/private` references, deterministic/no-drift) and runs in
   push/PR CI. No Postman cloud publishing.
 - [ ] No automatic startup migration added; no GitHub Release published (tag-and-manual stays
   the policy).

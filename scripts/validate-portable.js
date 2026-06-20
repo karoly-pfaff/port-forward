@@ -22,7 +22,7 @@ import { createGunzip } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import AdmZip from "adm-zip";
 import tar from "tar-stream";
-import { CHECKSUMS_NAME, parseSha256Sums, sha256File } from "./release-checksums.js";
+import { CHECKSUMS_NAME, parseSha256Sums, sha256File } from "./library/checksums.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 

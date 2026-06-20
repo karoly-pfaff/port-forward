@@ -72,6 +72,8 @@
     "validate:openapi:go": "go -C service test -count=1 -tags openapi_inventory -run TestGoAPIInventoryMatchesOpenAPI ./sources/api/",
     "validate:binary": "node scripts/validate-binary.js",
     "validate:scripts": "node scripts/validate-scripts.js",
+    "generate:postman": "node scripts/generate-postman.js",
+    "validate:postman": "node scripts/validate-postman.js",
     "validate:cli": "npm run test:cli && npm run build:cli",
     "validate:replay": "npm run test:replay && npm run build:replay",
     "build:release": "node scripts/build-release.js --current-platform",

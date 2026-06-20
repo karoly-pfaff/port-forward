@@ -321,6 +321,23 @@ Open `http://127.0.0.1:47831` in a browser to use the management interface. It h
 
 The sidebar is accessible on mobile via a hamburger button in the header. The management UI only binds to `127.0.0.1` by default and is not reachable from the LAN.
 
+## API Collection (Postman)
+
+A ready-to-run Postman collection lives in the root [`postman/`](postman/) directory,
+generated from the canonical OpenAPI contract (`docs/openapi.json`):
+
+- `postman/collection.json` — atomic endpoint tests, a self-cleaning happy-path rule flow, and negative/error tests.
+- `postman/environment.json` — a variable-driven environment. Edit it to point `host`/`port` at your runtime and to choose test values (rule name, listen/target ports, etc.).
+
+Import both files into Postman and select the **Portier Local** environment. Regenerate and validate the collection with:
+
+```powershell
+npm run generate:postman   # rebuild collection.json + environment.json from docs/openapi.json
+npm run validate:postman   # verify operation coverage, safety, and that the files are not stale
+```
+
+`validate:postman` runs in CI, so the collection cannot silently drift from the API contract. See [`postman/readme.md`](postman/readme.md) for the full variable list and an optional local Newman run.
+
 ## Recommended Forwarding Ports
 
 Portier recommends forwarding listen ports in the `48000-48999` range. This keeps forwards away from common system, database, and development ports while staying easy to remember.

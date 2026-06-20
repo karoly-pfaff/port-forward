@@ -1,0 +1,1187 @@
+{
+  "info": {
+    "name": "Portier API",
+    "description": "Portier management API — generated from the NestJS controllers and DTOs that serve the `/api` surface.\n\nGenerated from docs/openapi.json by `npm run generate:postman`. Edit postman/environment.json to point host/port and test values at your runtime. Do not hand-edit postman/collection.json.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Atomic Endpoint Tests",
+      "description": "One request per public API operation, generated from docs/openapi.json. Path params resolve to {{invalidRuleId}} / {{group}} so these calls do not mutate real rules.",
+      "item": [
+        {
+          "name": "health",
+          "item": [
+            {
+              "name": "Liveness probe",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}/health",
+                "description": "Liveness probe (outside the frozen /api contract)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "ports",
+          "item": [
+            {
+              "name": "Port advisories for a listen binding",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/ports/advisory?purpose={{advisoryPurpose}}&port={{advisoryPort}}",
+                "description": "Returns the port advisories (LAN exposure, privileged/common port, …) for a port."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "activity",
+          "item": [
+            {
+              "name": "List activity events",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/activity",
+                "description": "Returns recent activity events, newest first."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Clear the activity log",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/activity",
+                "description": "Clears the in-memory activity log."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [204];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "status",
+          "item": [
+            {
+              "name": "Per-rule status",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/status",
+                "description": "Returns the current status of every forward rule."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "forwards",
+          "item": [
+            {
+              "name": "List forward rules",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards",
+                "description": "Returns every forward rule with its port advisories."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Create a forward rule",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"{{ruleName}}\",\n  \"protocol\": \"{{protocol}}\",\n  \"listenHost\": \"{{listenHost}}\",\n  \"listenPort\": {{listenPort}},\n  \"targetHost\": \"{{targetHost}}\",\n  \"targetPort\": {{targetPort}},\n  \"enabled\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards",
+                "description": "Creates a forward rule. A created rule with autostart enabled starts its forwarder."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [201,400,409];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Update a forward rule",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"{{ruleName}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{invalidRuleId}}",
+                "description": "Partially updates a rule. Unspecified fields are left unchanged. A change to a forwarding field (protocol/listenHost/listenPort/targetHost/targetPort/udpMode) restarts the forwarder only if the rule is running; metadata-only changes (name/group/autostart) do not restart, and a stopped rule is not started."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400,404,409];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Delete a forward rule",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{invalidRuleId}}",
+                "description": "Deletes a rule. A running rule's forwarder is stopped first; an unknown id returns 404. Returns 204 with no body. The `:id` path param has no validation — an unknown id surfaces as the manager's NotFoundError → 404."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [204,404];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Diagnose a forward rule",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{invalidRuleId}}/diagnose",
+                "description": "Runs read-only diagnostics for the rule — listen-host/LAN-exposure/privileged-port/common-port advisories, a listen-bind probe (skipped while the rule is running, since Portier already owns the port), target-host DNS resolution, a TCP target-connect probe (skipped for UDP / unresolved targets), and the UDP mode (UDP only) — and returns the ordered checks plus an overall summary. Does not mutate the rule. An unknown id returns 404. Returns 200 (NestJS would otherwise default POST to 201)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,404];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Start a forward rule",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{invalidRuleId}}/start",
+                "description": "Starts the rule's forwarder and returns its current status. Idempotent — an already-running rule returns its status without restarting; autostart/enabled is not a precondition. An unknown id returns 404. Returns 200 (NestJS would otherwise default POST to 201)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,404];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Stop a forward rule",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{invalidRuleId}}/stop",
+                "description": "Stops the rule's forwarder and returns its current status. Idempotent — a rule that is not running returns its status without touching a socket. An unknown id returns 404. Returns 200 (NestJS would otherwise default POST to 201)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,404];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Start a group of forward rules",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/groups/{{group}}/start",
+                "description": "Starts every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group; autostart/enabled is not a precondition. A rule that is already running is skipped (already_running, no new socket); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (NestJS would otherwise default POST to 201)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400,404];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Stop a group of forward rules",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/groups/{{group}}/stop",
+                "description": "Stops every rule sharing the given group label, in rule order. Behaviour over existing rule metadata — never mutates rule definitions, order, autostart, or group. A rule that is not running is skipped (not_running, no socket touched); the response summarizes per-rule results. An empty/invalid group name returns 400; a group with no matching rules returns 404. Returns 200 (NestJS would otherwise default POST to 201)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400,404];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Reorder forward rules",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ids\": []\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}{{apiPrefix}}/forwards/reorder",
+                "description": "Reorders the rules to the given id order; any rule id not listed keeps its relative order at the end (a partial set is allowed, a duplicate id is tolerated, an empty list is a no-op). An unknown id returns 404 and no reorder is persisted. Returns 200 with the full reordered rule list (NestJS would otherwise default POST to 201). Reorder is metadata only — running forwarders are not affected."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400,404];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "runtime",
+          "item": [
+            {
+              "name": "Runtime info",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/runtime",
+                "description": "Returns runtime/version/uptime/process metadata."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "config",
+          "item": [
+            {
+              "name": "Apply a config change",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"desired\": {\n    \"rules\": []\n  },\n  \"dryRun\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}{{apiPrefix}}/config/apply",
+                "description": "Diffs the desired config against the current rules and applies it. A missing `desired` key returns 400; a plan with errors returns 200 `ok:false` (no mutation). `dryRun:true` returns the plan + applied counts without mutating (and is allowed even for destructive plans). A non-dry-run plan with destructive operations requires `yes:true` (else 400). When the plan has drift, the rules are replaced (MUTATING; enabled rules start). Unlike `plan` (always a dry-run) and `import` (a raw replace/merge), apply gates on drift/destructive/confirmation and returns the plan with an `appliedAt` timestamp."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Export config",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/config/export",
+                "description": "Returns the current forward rules as an exportable config."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Import a config",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"merge\",\n  \"config\": {\n    \"version\": \"1\",\n    \"exportedAt\": \"1970-01-01T00:00:00.000Z\",\n    \"rules\": []\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}{{apiPrefix}}/config/import",
+                "description": "Imports a Portier config in `replace` (replace all rules) or `merge` (add non-conflicting rules) mode. Returns 200 with the import result + the full rule list on success, or 422 with the errors + result when the import reports validation/duplicate-binding/merge-conflict errors (rejected before any mutation). An invalid mode or config returns 400. Unlike `plan` (a dry-run), import MUTATES the rules; enabled imported rules start their forwarders."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400,422];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Plan a config change",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"desired\": {\n    \"rules\": []\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": "{{baseUrl}}{{apiPrefix}}/config/plan",
+                "description": "Diffs the desired config against the current rules and returns the plan (operations, summary, errors, warnings) without mutating anything. A missing `desired` key returns 400; invalid desired rules surface as plan errors (still 200). Returns 200 (NestJS would otherwise default POST to 201)."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200,400];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "connections",
+          "item": [
+            {
+              "name": "Live connections",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": "{{baseUrl}}{{apiPrefix}}/connections",
+                "description": "Returns live TCP connections, UDP sessions, and per-rule summaries."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const documented = [200];",
+                      "pm.test(\"Status is documented by the API contract\", function () {",
+                      "  pm.expect(documented).to.include(pm.response.code);",
+                      "});",
+                      "pm.test(\"Body is JSON when a body is present\", function () {",
+                      "  if (pm.response.code !== 204 && pm.response.text()) {",
+                      "    pm.response.to.be.json;",
+                      "  }",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Happy Path Rule Flow",
+      "description": "An ordered, self-cleaning flow: create a stopped demo rule, verify, rename, start/stop it on a loopback high port, export, then delete and confirm removal.",
+      "item": [
+        {
+          "name": "Runtime check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/runtime"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Runtime responds 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Reports a version\", function () { pm.expect(pm.response.json().version).to.be.a(\"string\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create demo rule",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{ruleName}}\",\n  \"protocol\": \"{{protocol}}\",\n  \"listenHost\": \"{{listenHost}}\",\n  \"listenPort\": {{listenPort}},\n  \"targetHost\": \"{{targetHost}}\",\n  \"targetPort\": {{targetPort}},\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rule created\", function () { pm.response.to.have.status(201); });",
+                  "const created = pm.response.json();",
+                  "pm.test(\"Created rule has an id\", function () { pm.expect(created.id).to.be.a(\"string\"); });",
+                  "pm.environment.set(\"createdRuleId\", created.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List includes demo rule",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"List responds 200\", function () { pm.response.to.have.status(200); });",
+                  "const ids = pm.response.json().map(function (rule) { return rule.id; });",
+                  "pm.test(\"List contains the created rule\", function () {",
+                  "  pm.expect(ids).to.include(pm.environment.get(\"createdRuleId\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status lists rules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status responds 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Status is an array\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rename demo rule",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{ruleName}}-updated\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{createdRuleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Update responds 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Name reflects the update\", function () {",
+                  "  pm.expect(pm.response.json().name).to.eql(pm.environment.get(\"ruleName\") + \"-updated\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start demo rule",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{createdRuleId}}/start"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Start responds 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Rule is running\", function () { pm.expect(pm.response.json().running).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stop demo rule",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{createdRuleId}}/stop"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Stop responds 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Rule is stopped\", function () { pm.expect(pm.response.json().running).to.eql(false); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Export config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/config/export"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Export responds 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Export is version 1\", function () { pm.expect(pm.response.json().version).to.eql(\"1\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete demo rule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{createdRuleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Delete responds 204\", function () { pm.response.to.have.status(204); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Confirm cleanup",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"List responds 200\", function () { pm.response.to.have.status(200); });",
+                  "const ids = pm.response.json().map(function (rule) { return rule.id; });",
+                  "pm.test(\"Created rule is gone\", function () {",
+                  "  pm.expect(ids).to.not.include(pm.environment.get(\"createdRuleId\"));",
+                  "});",
+                  "pm.environment.unset(\"createdRuleId\");"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Negative/Error Tests",
+      "description": "Requests that the API is documented to reject, asserting the expected status and the { errors: string[] } envelope.",
+      "item": [
+        {
+          "name": "Create rule with invalid port",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"invalid-port\",\n  \"protocol\": \"tcp\",\n  \"listenHost\": \"127.0.0.1\",\n  \"listenPort\": 70000,\n  \"targetHost\": \"127.0.0.1\",\n  \"targetPort\": 48011,\n  \"enabled\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responds 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Error envelope has an errors array\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start unknown rule",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{invalidRuleId}}/start"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responds 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Error envelope has an errors array\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete unknown rule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards/{{invalidRuleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responds 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Error envelope has an errors array\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Plan without desired config",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}{{apiPrefix}}/config/plan"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responds 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Error envelope has an errors array\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import with invalid mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"bogus\",\n  \"config\": {\n    \"version\": \"1\",\n    \"exportedAt\": \"1970-01-01T00:00:00.000Z\",\n    \"rules\": []\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}{{apiPrefix}}/config/import"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responds 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Error envelope has an errors array\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reorder with unknown id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"{{invalidRuleId}}\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}{{apiPrefix}}/forwards/reorder"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responds 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Error envelope has an errors array\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Port advisory missing required params",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}{{apiPrefix}}/ports/advisory"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responds 400\", function () { pm.response.to.have.status(400); });",
+                  "pm.test(\"Error envelope has an errors array\", function () {",
+                  "  pm.expect(pm.response.json().errors).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

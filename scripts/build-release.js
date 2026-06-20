@@ -28,7 +28,7 @@ import { existsSync, readFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { generateChecksums, CHECKSUMS_NAME } from "./release-checksums.js";
+import { generateChecksums, CHECKSUMS_NAME } from "./library/checksums.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
