@@ -182,3 +182,22 @@ jobs:
         run: npm run test:replay
       - name: Coverage
         run: npm run validate:coverage:replay
+
+  sanity:
+    name: Sanity
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Script checks
+        run: npm run validate:scripts
