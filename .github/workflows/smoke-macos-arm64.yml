@@ -1,4 +1,4 @@
-# Portier macOS arm64 (Apple Silicon) native runtime smoke.
+# Portier MacOS arm64 (Apple Silicon) native runtime smoke.
 #
 # Runs on a real Apple Silicon runner (macos-14) — NOT emulation — to prove the shipped
 # macos-arm64 portable artifact actually runs natively: `portier version` + GET /api/health
@@ -8,7 +8,7 @@
 # the .pkg, load a LaunchAgent, publish a release, or upload artifacts. Separate from the
 # canonical Release MacOS workflow so arm64-runner availability can't block amd64 releases.
 
-name: Smoke macOS arm64
+name: Smoke MacOS arm64
 
 on:
   workflow_dispatch:
@@ -22,7 +22,7 @@ env:
 
 jobs:
   macos-arm64-smoke:
-    name: macOS arm64 portable runtime smoke
+    name: MacOS arm64 portable runtime smoke
     runs-on: macos-14
     timeout-minutes: 40
     steps:
@@ -52,8 +52,8 @@ jobs:
       - name: Build runtime
         run: npm run build:runtime
 
-      # Cross-build the macOS portable artifacts (amd64 + arm64). The arm64 one is native here.
-      - name: Build macOS portable artifacts
+      # Cross-build the MacOS portable artifacts (amd64 + arm64). The arm64 one is native here.
+      - name: Build MacOS portable artifacts
         run: npm run build:release:macos
 
       # Structural validation of both arches (layout, exec bits, Mach-O machine type, OpenAPI,
