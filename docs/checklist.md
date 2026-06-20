@@ -264,8 +264,8 @@ npm run validate:install:msi:full
 - [ ] macOS `.pkg` (native installer track, **macOS-only**). On macOS, `build:release`
   also builds `Portier-<version>.pkg` via `pkgbuild` (skipped non-fatally if `pkgbuild` is
   absent). macOS release output is the `.pkg` + portable tar.gz + `checksums.sha256`.
-  `validate:release` reports `.pkg` presence on macOS (not fatal yet — the track is in
-  progress) and verifies its checksum. The current `.pkg` is a file-install package
+  `validate:release` reports `.pkg` presence on macOS (not fatal — the portable tar.gz is
+  the cross-host baseline) and verifies its checksum. The current `.pkg` is a file-install package
   (installs to `/usr/local/portier`, bundles the canonical LaunchAgent scripts, no
   LaunchAgent auto-install yet, unsigned, never touches user config).
 - [ ] macOS `.pkg` install/uninstall smoke (macOS-only; needs sudo):

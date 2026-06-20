@@ -4,6 +4,38 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
+## [1.18.0] - Unreleased - Install, Service & Upgrade Experience
+
+The install, service, and upgrade release: native installers plus validated, checksummed release artifacts for all three platforms, and an upgrade path that preserves user config. The persisted `rules.json` format, the REST API, and the OpenAPI schema are unchanged; no installer enables or starts a service on its own, and no coverage gate was lowered.
+
+Native installers (all **file-install** — they lay down the runtime and never enable/start a service, create a scheduled task, or touch user config):
+- **Windows:** the WiX **MSI** is now the canonical Windows installer (silent install, Group Policy/SCCM/Intune, Add/Remove Programs, repair); the legacy Inno Setup installer is retired to `scripts/windows/legacy/` (manual-only). Ships with the portable zip.
+- **macOS:** an unsigned `.pkg` (pkgbuild) installing to `/usr/local/portier` and bundling the LaunchAgent scripts; not notarized (Gatekeeper warns).
+- **Linux:** native `.deb` (dpkg-deb) and `.rpm` (rpmbuild) that mirror each other — runtime under `/opt/portier` with a **disabled** systemd unit; config at `/etc/portier/rules.json` is preserved.
+
+Release artifacts:
+- Portable archives for Windows amd64, macOS amd64/arm64, and Linux amd64/arm64, each carrying the architecture in its name and structurally validated (layout, exec bits, and a PE/ELF/Mach-O machine-type check that the binary matches the named arch).
+- A `checksums.sha256` manifest (GNU coreutils text format) covering every artifact, ordered package/installer first, portables second, checksums last. (This replaces the earlier `SHA256SUMS` name.)
+
+Install & upgrade validation:
+- Native install/remove smokes for every package — Windows MSI full elevated install/uninstall, macOS `.pkg`, Linux `.deb`, and Linux `.rpm` — each asserting the installed layout, version, config preservation across install and removal, and that no service/agent/task is enabled or started.
+- Native **arm64 runtime smoke** on real arm64 hardware (macOS Apple Silicon and Linux arm64): `portier version`, `/api/health`, and `/api/runtime` against the shipped arm64 portable, refusing to claim arm64 unless the host really is. Emulation is never counted as native.
+- An upgrade-preservation smoke replaces the install directory with a fresh extraction and asserts user config, rules, and recovery side files survive while the runtime restarts healthy.
+
+Release CI:
+- Three split, manual (`workflow_dispatch`) GitHub Actions workflows — **Release Windows**, **Release MacOS**, **Release Linux** — build and validate each platform's artifacts on native hosted runners and upload them for inspection, plus two manual arm64 smoke workflows. None publish a GitHub Release or create tags. Each run uploads only its own `build/releases/<platform>/**`, and a privacy guard fails the run before upload if any private path would be staged.
+
+Deferred (non-blocking follow-ups):
+- Code signing / notarization (Windows Authenticode, macOS Developer ID + notarization).
+- Automated GitHub Release publishing and tagging.
+- arm64 **native packages** (`.pkg`/`.deb`/`.rpm`); arm64 ships as validated portables.
+- Auto-installing the OS service from the installer (MSI service custom actions, `.pkg` LaunchAgent load, package systemd enable) — all installers stay file-install by design.
+- Deeper opt-in service-lifecycle smokes (full root/systemd start-stop) remain manual/native checks.
+- Other package managers (Homebrew, winget, Chocolatey).
+
+Validation:
+- lint, typecheck, full unit/contract/coverage suites (no gate lowered), runtime + recovery smoke, current-platform release build/validate, and the per-platform release + arm64 smoke workflows all green.
+
 ## [1.17.0] - 2026-06-18 - Migration & Recovery
 
 A reliability release that resolves the v1.16 audit finding **R-1** (fatal startup lockout): a bad or unbindable configuration no longer kills the service. Portier now starts in a recoverable, observable state across both runtimes (Go service and TypeScript/NestJS), and gains an offline config migration/normalization command. No installer/upgrade work (v1.18) or lint/security hardening (v1.19) was started; no coverage gate was lowered.

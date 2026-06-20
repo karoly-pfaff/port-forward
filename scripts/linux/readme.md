@@ -190,9 +190,10 @@ assertions). Both run on Linux only.
 Full systemd service validation (`validate:service:linux`) needs root/systemd and is
 **not** run in CI — it stays a manual/native check. No GitHub Release or tag is created.
 
-> **`.rpm`:** still a **planned package-manager track for a later slice** (built and
-> validated on a native `fedora`/RHEL-family runner). The portable tar.gz + `.deb` +
-> systemd scripts are the current Linux install story.
+> **`.rpm`:** built by `rpmbuild` on the `ubuntu-latest` release runner (the `rpm` package
+> provides the toolchain) and covered by the payload + install/remove smokes above. The rpm
+> database is independent of dpkg, so the install smoke runs on the same Ubuntu CI runner. A
+> native Fedora/RHEL-family runner is not required.
 
 ## Helper Scripts (Recommended)
 

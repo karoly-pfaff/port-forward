@@ -256,8 +256,9 @@ macOS native installer track. Current status — a **file-install** package:
   -target /`).
 
 The `.pkg` is included in `checksums.sha256` and reported by `npm run validate:release:current` on
-macOS. Payload introspection (`pkgutil --payload-files`) and a `.pkg` install smoke are the
-next macOS validation follow-ups.
+macOS. It is validated on the **Release MacOS** runner by payload introspection
+(`pkgutil --payload-files`) and the `.pkg` install/uninstall smoke (`npm run validate:install:pkg`,
+above). LaunchAgent auto-install from the `.pkg`, signing, and notarization remain follow-ups.
 
 ---
 
@@ -351,6 +352,7 @@ Pass `--port <number>` to override the auto-detected free port.
 - System-level LaunchDaemon — documented as future work; requires `sudo` and a dedicated service user
 - Auto-update
 
-The native `.pkg` installer track has started (see "Native .pkg installer" above): a
-file-install `.pkg` is built on macOS. LaunchAgent auto-install from the `.pkg`, signing/
-notarization, and a `.pkg` install smoke are follow-ups.
+The native `.pkg` installer track has shipped (see "Native .pkg installer" above): a
+file-install `.pkg` is built on macOS and covered by payload introspection and an
+install/uninstall smoke. LaunchAgent auto-install from the `.pkg`, signing, and notarization
+are follow-ups.

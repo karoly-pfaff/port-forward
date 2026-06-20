@@ -10,12 +10,13 @@ only as a reference.
 
 The canonical Linux release scripts now live in the sibling
 `scripts/linux/release/build-release.sh`, which builds the native **`.deb`**
-(`portier_<version>_amd64.deb`). That is the Linux counterpart to the macOS
-`build-release.sh` `.pkg` step and the Windows WiX MSI.
+(`portier_<version>_amd64.deb`) and **`.rpm`** (`portier-<version>-1.x86_64.rpm`) via
+`--format deb|rpm`. That is the Linux counterpart to the macOS `build-release.sh` `.pkg` step
+and the Windows WiX MSI.
 
 These files are **not** part of `npm run build:release:current` and are not validated by
 `npm run validate:release:*`. New Linux release/packaging work belongs in the parent
-`scripts/linux/release/` (the `.deb`) or `scripts/build-portable.js` (the tar.gz). See
+`scripts/linux/release/` (the `.deb`/`.rpm`) or `scripts/build-portable.js` (the tar.gz). See
 `scripts/linux/readme.md` and `docs/installer.md`.
 
 ## Contents

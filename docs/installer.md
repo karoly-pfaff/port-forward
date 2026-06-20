@@ -126,7 +126,8 @@ This guarantee is validated on the current platform by an upgrade-preservation s
 against an external data dir, replaces the install directory with a fresh extraction, and
 asserts config, the configured rules, and recovery side files survive while the runtime
 restarts healthy at the expected version. This is the safety gate that native installer
-upgrades (the canonical Windows WiX/MSI and the planned macOS `.pkg`) must satisfy.
+upgrades (the canonical Windows WiX/MSI, the macOS `.pkg`, and the Linux `.deb`/`.rpm`)
+must satisfy.
 
 ## Release Artifacts
 
@@ -148,7 +149,7 @@ build/releases/windows/
   checksums.sha256
 
 build/releases/macos/
-  Portier-<version>.pkg               (native installer — built on macOS, in progress)
+  Portier-<version>.pkg               (native installer — built on macOS, unsigned)
   portier-<version>-macos-amd64.tar.gz   (Intel)
   portier-<version>-macos-arm64.tar.gz   (Apple Silicon)
   checksums.sha256
@@ -322,8 +323,8 @@ path appears.
 - Preserve `rules.json` on uninstall unless the user explicitly requests purge.
 - Keep config and logs outside the packaged runtime directory.
 - The Windows MSI (WiX) is the canonical Windows installer (Inno Setup is retired to
-  `scripts/windows/legacy/`, manual-only). The native macOS `.pkg` installer track is in
-  progress for v1.18 (file-install; built on macOS). Linux ships the portable tar.gz in
-  v1.18, with `.deb`/`.rpm` as a planned package track for a later slice. Do not add other
-  platform package managers (Homebrew, winget, Chocolatey) without a deliberate product
-  decision.
+  `scripts/windows/legacy/`, manual-only). macOS ships a native file-install `.pkg` (unsigned,
+  built on macOS) alongside the portable tar.gz, and Linux ships native file-install `.deb`
+  and `.rpm` packages (disabled systemd unit) alongside the portable tar.gz — all with green
+  install/remove smokes. Do not add other platform package managers (Homebrew, winget,
+  Chocolatey) without a deliberate product decision.

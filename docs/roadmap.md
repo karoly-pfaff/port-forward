@@ -8,7 +8,7 @@ belong in `audits/`.
 
 - **v1.0-v1.16:** completed.
 - **v1.17:** completed — Migration & Recovery (ready for release/tag as v1.17.0).
-- **v1.18:** current — Install, Service & Upgrade Experience.
+- **v1.18:** feature-complete — Install, Service & Upgrade Experience (release-ready pending the version bump/tag).
 - **v1.19 and v2.0:** planned local-first path to a stable 2.0.
 
 ## Completed Releases
@@ -243,37 +243,39 @@ See `docs/changelog.md` for the shipped detail and `docs/recovery.md` for the re
 
 ## Portier v1.18 - Install, Service & Upgrade Experience
 
+**Status:** Feature-complete — release-ready pending the version bump/tag.
+
 **Core theme:** Make Portier pleasant and reliable to install, run, stop, update, and
 uninstall.
 
-### Scope
+**Delivered:**
 
-- Make the Windows WiX/MSI installer the canonical Windows installer (replacing Inno);
-  keep the portable zip.
-- Build a native macOS `.pkg` installer alongside the portable archive (in progress).
-- Ready the Linux release: portable tar.gz + native `.deb` and `.rpm` packages (file-install,
-  disabled unit, mirrored behavior) + the systemd story.
-- Cross-build Linux/macOS portable `.tar.gz` artifacts from any host (release-readiness
-  infrastructure); native runtime validation still runs on each OS.
-- Provide split, manual GitHub Actions native release workflows — Release Windows (MSI +
-  portable), Release MacOS (`.pkg` + portable), Release Linux (`.deb` + `.rpm` + portable + native
-  smoke) — that build, validate, and upload each platform's release artifacts (package
-  first, portable second, `checksums.sha256` last) for inspection — no GitHub Release or tags.
-- Add native package install/uninstall smokes (Windows MSI `/i`+`/x`, macOS `.pkg`, Linux
-  `.deb`) that prove the package installs the expected layout, never silently creates/starts a
-  service or scheduled task, preserves user config, and removes cleanly.
-- Produce arch-suffixed portable artifacts incl. arm64 (`linux-arm64`, `macos-arm64`
-  alongside amd64; Windows amd64-only), structurally validated with a binary machine-type
-  check, and **runtime-smoked on real arm64 runners** (`macos-14`, `ubuntu-24.04-arm`) — not
-  emulation — via dedicated manual smoke workflows.
-- Clarify service install/uninstall/update flows.
-- Preserve and back up config during updates.
-- Validate service startup, web UI serving, and CLI connectivity after install.
-- Improve macOS and Linux install experience and guidance.
-- Make version reporting consistent across CLI, runtimes, UI, diagnostics, artifacts,
-  and installer metadata where practical.
-- Strengthen release artifact validation and generate checksums.
-- Document and test the v1.x upgrade path.
+- Native installers on every platform, all **file-install** (they never enable/start a
+  service, create a scheduled task, or touch user config): the canonical Windows WiX **MSI**
+  (Inno retired to `scripts/windows/legacy/`), an unsigned macOS **`.pkg`**, and Linux
+  **`.deb`** + **`.rpm`** (mirrored, disabled systemd unit). Portable archives ship alongside
+  each.
+- Arch-suffixed portable artifacts for Windows amd64 and macOS/Linux amd64 + arm64,
+  structurally validated (layout, exec bits, PE/ELF/Mach-O machine-type check), with a
+  `checksums.sha256` manifest ordered package-first.
+- Native install/remove smokes for the MSI (full elevated), `.pkg`, `.deb`, and `.rpm`, plus
+  native **arm64 runtime smoke** on real arm64 hardware (not emulation) and an
+  upgrade-preservation smoke that proves config/rules/recovery side files survive a package
+  replacement.
+- Split, manual GitHub Actions release workflows (Release Windows / MacOS / Linux) and two
+  arm64 smoke workflows that build, validate, and upload each platform's artifacts for
+  inspection — no GitHub Release or tags, with a private-path upload guard.
+
+See `docs/changelog.md` for the shipped detail and `docs/installer.md` for the current
+packaging/install/upgrade story.
+
+**Deferred (non-blocking):**
+
+- Code signing / notarization, and automated GitHub Release publishing/tagging → v1.19/v2.0.
+- arm64 native packages (`.pkg`/`.deb`/`.rpm`); arm64 ships as validated portables today.
+- Auto-installing the OS service from the installer (installers stay file-install by design)
+  and deeper opt-in root/systemd service-lifecycle smokes (manual/native checks for now).
+- Other package managers (Homebrew, winget, Chocolatey).
 
 ### Acceptance Criteria
 

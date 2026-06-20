@@ -82,9 +82,10 @@ Build a portable tar.gz for distribution:
 npm run build:release:portable
 ```
 
-Output: `build/releases/linux/portier-<version>-linux.tar.gz`
+Output: `build/releases/linux/portier-<version>-linux-amd64.tar.gz` (and
+`portier-<version>-linux-arm64.tar.gz` — portable archives carry the architecture in the name).
 
-The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). No signing required for Linux tar.gz archives. See `scripts/linux/readme.md`.
+The archive contains the clean runtime layout (`portier`, `service`, `server.js`, `web/`, `api/`, `readme.txt`). No signing required for Linux tar.gz archives. See `scripts/linux/readme.md`.
 
 ### Linux systemd Service
 
@@ -128,9 +129,10 @@ Build a portable tar.gz for distribution:
 npm run build:release:portable
 ```
 
-Output: `build/releases/macos/portier-portable-macos-<version>.tar.gz`
+Output: `build/releases/macos/portier-<version>-macos-amd64.tar.gz` (Intel) and
+`portier-<version>-macos-arm64.tar.gz` (Apple Silicon) — portable archives carry the architecture in the name.
 
-The archive contains the clean runtime layout (`service`, `server.js`, `web/`, `readme.txt`). Unsigned — macOS Gatekeeper may quarantine downloaded binaries; use `xattr -cr` to clear. Sign with Developer ID for public distribution. See `scripts/macos/readme.md` for signing notes.
+The archive contains the clean runtime layout (`portier`, `service`, `server.js`, `web/`, `api/`, `readme.txt`). Unsigned — macOS Gatekeeper may quarantine downloaded binaries; use `xattr -cr` to clear. Sign with Developer ID for public distribution. See `scripts/macos/readme.md` for signing notes.
 
 ### macOS LaunchAgent
 
@@ -156,26 +158,25 @@ Use `--runtime node` to run with `server.js` instead of the native binary. Use `
 
 Forwarded ports on `0.0.0.0` may trigger macOS Firewall prompts. The management UI stays on `127.0.0.1:47831` and is not LAN-visible by default.
 
-### Windows Installer (v1.1)
+### Windows Installer (MSI)
 
-Portier v1.1 adds an [Inno Setup](https://jrsoftware.org/isinfo.php) installer for machine-wide installation on Windows 10+ (64-bit).
+The canonical Windows installer is the WiX **MSI** (silent install, Group Policy/SCCM/Intune, Add/Remove Programs + repair). The legacy Inno Setup installer has been retired to `scripts/windows/legacy/` (manual-only; not built by the release flow).
 
-**Build the release artifacts** (requires Inno Setup 6 for the installer):
+**Build the release artifacts** (requires the WiX Toolset v7 for the MSI):
 
 ```powershell
 npm run build:release:current
 ```
 
-Output: `build/releases/windows/portier-<version>-windows-portable.zip` and `Portier-Setup-<version>.exe` (if Inno Setup is available)
+Output: `build/releases/windows/Portier-<version>.msi`, `portier-<version>-windows-amd64.zip`, and `checksums.sha256`. A full Windows release **fails if WiX 7 is unavailable**; pass `--portable-only` to build just the portable zip.
 
-The installer:
-- Installs binaries to `%ProgramFiles%\Portier\`.
-- Creates config directory at `%ProgramData%\Portier\` and writes an empty `rules.json` if absent.
-- Offers an optional **Windows Service** task (checked by default): registers `Portier` as a Windows Service that auto-starts at boot.
-- On uninstall: stops and removes the service, removes `logs\`, and preserves `rules.json`.
+The MSI is a **file-install** package:
+- Installs binaries to `%ProgramFiles%\Portier\` and bundles the canonical Windows service scripts under `%ProgramFiles%\Portier\service\`.
+- **Does not** create or start a Windows Service or scheduled task (no service custom actions). An admin opts in with the bundled `service\install-service.ps1`.
+- **Never** creates, overwrites, or migrates `rules.json`, and does not touch `%ProgramData%\Portier`.
 - Does not create Windows Firewall rules.
 
-The installer is unsigned. Windows SmartScreen may warn before running it. Sign with an EV certificate for public distribution. See `scripts/windows/readme.md` for full details and build options.
+It is validated by an extraction smoke (`npm run validate:install:msi`, no admin) and a full elevated install/uninstall smoke (`npm run validate:install:msi:full`). The MSI is unsigned — Windows SmartScreen may warn; sign with an EV certificate for public distribution. See `scripts/windows/release/readme.md` for full details.
 
 ---
 
@@ -276,9 +277,9 @@ build/releases/
 
 Each portable archive contains the clean runtime layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`). Config (`rules.json`) is never bundled.
 
-Service binaries are platform-native. For a multi-platform release, run `release:current` on each target OS. The Windows installer is skipped (non-fatal) when Inno Setup is unavailable — the portable zip is still produced.
+Service binaries are platform-native. For a multi-platform release, run `release:current` on each target OS. The Go binaries are pure Go (CGO disabled), so all portable archives (Windows amd64, macOS/Linux amd64 + arm64) can be cross-built from any host with `npm run build:release:portable:all`; native installers (MSI, `.pkg`, `.deb`/`.rpm`) are built on their own OS.
 
-macOS `.pkg` and Linux `.deb`/`.rpm` are out of v1.1 scope. See `docs/installer.md`.
+The native installers — Windows `.msi`, macOS `.pkg`, and Linux `.deb`/`.rpm` — and the split release/arm64-smoke workflows are described in `docs/installer.md`.
 
 ## Package Layout
 
@@ -622,8 +623,8 @@ bash scripts/macos/service/uninstall-launch-agent.sh
 Linux service scripts (run as root on Linux):
 
 ```bash
-npm run build:release:current                  # portable tar.gz + native .deb → build/releases/linux/
-bash scripts/linux/release/build-release.sh    # native .deb only (reuses build/portier/)
+npm run build:release:current                  # portable tar.gz (amd64+arm64) + native .deb + .rpm → build/releases/linux/
+bash scripts/linux/release/build-release.sh --format deb|rpm   # one native package (reuses build/portier/)
 sudo bash scripts/linux/service/install-service.sh [--runtime node] [--source-dir PATH] [--install-dir PATH] [--config-path PATH] [--no-enable]
 sudo bash scripts/linux/service/status-service.sh
 sudo bash scripts/linux/service/start-service.sh
@@ -633,11 +634,11 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 
 ## Release
 
-Current version: **1.4.0**
+Current released version: **1.17.0** (Migration & Recovery). v1.18 (Install, Service & Upgrade Experience) is feature-complete and release-ready pending its version bump/tag.
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
-- [docs/installer.md](docs/installer.md) — v1.1 installer and distribution strategy.
-- [docs/roadmap.md](docs/roadmap.md) — v1.4 delivered the Live Connection Inspector (`GET /api/connections`, TCP + UDP tracking in both runtimes, Live Connections UI, 116/116 contract checks); v1.5 plans Declarative Config & Drift Control (plan/diff/apply workflows); v1.6 plans a dedicated Architecture, Quality & Maintainability Audit after v1.4/v1.5 coverage work creates the safety net.
+- [docs/installer.md](docs/installer.md) — current packaging, native installers, release artifacts, and the upgrade path.
+- [docs/roadmap.md](docs/roadmap.md) — the local-first road to a stable 2.0 (v1.18 install/upgrade → v1.19 RC hardening → v2.0).
 
 ## Agent Workflow
 
