@@ -539,6 +539,74 @@ describe("ForwardRuleForm", () => {
     ).toBeInTheDocument();
   });
 
+  // friendlyErrorMessage line 26: the "conflict" + ("listen" | "binding") arm.
+  // This message contains neither "already listening" nor "duplicate" nor
+  // "already in use", so it reaches the conflict/binding sub-condition only.
+  it("maps a 'conflict' + 'binding' error to the friendly conflict copy", async () => {
+    const user = userEvent.setup();
+    const onSave = vi
+      .fn()
+      .mockRejectedValue(new Error("Listen binding conflict detected for this rule."));
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "Conflicting App");
+    await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+    expect(
+      await screen.findByText(/Another rule is already using this protocol/)
+    ).toBeInTheDocument();
+    // The raw message must not be shown — the friendly copy replaced it.
+    expect(screen.queryByText("Listen binding conflict detected for this rule.")).not.toBeInTheDocument();
+  });
+
+  // friendlyErrorMessage: the word "conflict" alone (without "listen"/"binding")
+  // falls through and the raw message is shown verbatim — covers the false side
+  // of the inner (listen || binding) condition.
+  it("shows a 'conflict' error verbatim when it mentions neither listen nor binding", async () => {
+    const user = userEvent.setup();
+    const onSave = vi
+      .fn()
+      .mockRejectedValue(new Error("Version conflict while saving the rule."));
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "Vers App");
+    await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+    expect(await screen.findByText("Version conflict while saving the rule.")).toBeInTheDocument();
+    expect(screen.queryByText(/Another rule is already using this protocol/)).not.toBeInTheDocument();
+  });
+
+  // handleSubmit catch (line 136): a non-Error rejection takes the
+  // `: "Save failed."` arm rather than reading `.message`.
+  it("shows the generic fallback message when onSave rejects with a non-Error value", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockRejectedValue("boom");
+    render(
+      <ForwardRuleForm
+        editingRule={undefined}
+        onSave={onSave}
+        onCancel={vi.fn()}
+        saving={false}
+      />
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "My App");
+    await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+    expect(await screen.findByText("Save failed.")).toBeInTheDocument();
+  });
+
   it("shows Delete Rule button in edit mode when onDelete is provided", () => {
     render(
       <ForwardRuleForm
@@ -675,6 +743,255 @@ describe("ForwardRuleForm", () => {
       );
       expect(screen.getByRole("heading", { name: "Edit Rule" })).toBeInTheDocument();
       expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Existing Rule");
+    });
+  });
+
+  describe("duplicate-name detection (rules prop)", () => {
+    const otherRule: ForwardRule = {
+      id: "other",
+      name: "Web Proxy",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 49000,
+      targetHost: "127.0.0.1",
+      targetPort: 9000,
+      enabled: false
+    };
+
+    it("shows a name-duplicate field error and blocks submit when the name matches another rule", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          rules={[otherRule]}
+          onSave={onSave}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      // Case-insensitive, trimmed match against an existing rule's name.
+      await user.type(screen.getByRole("textbox", { name: "Name" }), "  web PROXY  ");
+
+      const error = await screen.findByText("Name already exists");
+      expect(error).toBeInTheDocument();
+      // The error span lives inside the label, so the field's accessible name
+      // becomes "Name Name already exists" — match the input by its id instead.
+      expect(screen.getByRole("textbox", { name: /^Name/ })).toHaveAttribute("aria-invalid", "true");
+      // canSubmit is false while the name collides.
+      expect(screen.getByRole("button", { name: "Add Rule" })).toBeDisabled();
+
+      // Submitting via the form does not call onSave while the name duplicates.
+      await user.click(screen.getByRole("button", { name: "Add Rule" }));
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("does not flag a duplicate when the editing rule keeps its own name", () => {
+      render(
+        <ForwardRuleForm
+          editingRule={otherRule}
+          rules={[otherRule]}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      // The rule's own name must not count as a self-collision.
+      expect(screen.queryByText("Name already exists")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save Changes" })).toBeEnabled();
+    });
+
+    it("clears the duplicate error once the name is made unique", async () => {
+      const user = userEvent.setup();
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          rules={[otherRule]}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      const nameInput = screen.getByRole("textbox", { name: "Name" });
+      await user.type(nameInput, "Web Proxy");
+      expect(await screen.findByText("Name already exists")).toBeInTheDocument();
+
+      await user.type(nameInput, " 2");
+      expect(screen.queryByText("Name already exists")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add Rule" })).toBeEnabled();
+    });
+  });
+
+  describe("host validation", () => {
+    it("shows a target-host field error and blocks submit for an invalid target host", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          onSave={onSave}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      const targetHost = screen.getByRole("textbox", { name: "Target Host" });
+      await user.clear(targetHost);
+      await user.type(targetHost, "not a host!!");
+
+      // The error span lives inside the label; the field handle was captured
+      // before the error rendered, so assert aria-invalid directly on it.
+      expect(targetHost).toHaveAttribute("aria-invalid", "true");
+      // The Target Host error sits inside the Target Host label, distinct from Listen Host.
+      const targetError = await screen.findByText("Must be a valid IP or hostname");
+      expect(targetError).toHaveAttribute("id", "target-host-error");
+      expect(screen.getByRole("button", { name: "Add Rule" })).toBeDisabled();
+
+      await user.type(screen.getByRole("textbox", { name: "Name" }), "Bad Target");
+      await user.click(screen.getByRole("button", { name: "Add Rule" }));
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it("shows a listen-host field error and blocks submit for an invalid listen host", async () => {
+      const user = userEvent.setup();
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      const listenHost = screen.getByRole("textbox", { name: "Listen Host" });
+      await user.clear(listenHost);
+      await user.type(listenHost, "bad host!!");
+
+      const listenError = await screen.findByText("Must be a valid IP or hostname");
+      expect(listenError).toHaveAttribute("id", "listen-host-error");
+      expect(listenHost).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("button", { name: "Add Rule" })).toBeDisabled();
+    });
+  });
+
+  describe("UDP mode", () => {
+    it("submits the selected UDP mode in the payload when protocol is UDP", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          onSave={onSave}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      await user.type(screen.getByRole("textbox", { name: "Name" }), "UDP App");
+      await user.selectOptions(screen.getByRole("combobox", { name: "Protocol" }), "udp");
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: /UDP Mode/ }),
+        "bidirectional-multi-client"
+      );
+      await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({
+          protocol: "udp",
+          udpMode: "bidirectional-multi-client"
+        })
+      );
+    });
+
+    it("omits udpMode from the payload for a TCP rule", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          onSave={onSave}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+      await user.type(screen.getByRole("textbox", { name: "Name" }), "TCP App");
+      await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+      const payload = onSave.mock.calls[0][1];
+      expect(payload.protocol).toBe("tcp");
+      expect(payload.udpMode).toBeUndefined();
+    });
+  });
+
+  describe("footer and header actions", () => {
+    it("calls onCancel when the drawer Close button is clicked", async () => {
+      const user = userEvent.setup();
+      const onCancel = vi.fn();
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          onSave={vi.fn()}
+          onCancel={onCancel}
+          saving={false}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: "Close" }));
+      expect(onCancel).toHaveBeenCalledTimes(1);
+    });
+
+    it("backs out of the delete confirmation via Cancel Delete without deleting", async () => {
+      const user = userEvent.setup();
+      const onDelete = vi.fn();
+      render(
+        <ForwardRuleForm
+          editingRule={existingRule}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+          onDelete={onDelete}
+          saving={false}
+        />
+      );
+      await user.click(screen.getByRole("button", { name: "Delete Rule" }));
+      expect(screen.getByRole("button", { name: "Confirm Delete" })).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Cancel Delete" }));
+      expect(onDelete).not.toHaveBeenCalled();
+      // Back to the initial single-button state.
+      expect(screen.getByRole("button", { name: "Delete Rule" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Confirm Delete" })).not.toBeInTheDocument();
+    });
+  });
+
+  // The Autostart checkbox onChange (line 391) sets form.enabled. The add-mode
+  // default is unchecked; toggling it on must flow into the saved payload.
+  describe("autostart toggle", () => {
+    it("checking Autostart saves the rule with enabled: true", async () => {
+      const user = userEvent.setup();
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      render(
+        <ForwardRuleForm
+          editingRule={undefined}
+          onSave={onSave}
+          onCancel={vi.fn()}
+          saving={false}
+        />
+      );
+
+      const autostart = screen.getByRole("checkbox");
+      expect(autostart).not.toBeChecked();
+
+      // Toggling fires the checkbox onChange (line 391) → setField("enabled", true).
+      await user.click(autostart);
+      expect(autostart).toBeChecked();
+
+      // The empty form already has valid default host/port fields; only a name
+      // is required to submit, so onSave runs with the toggled enabled flag.
+      await user.type(screen.getByRole("textbox", { name: "Name" }), "Autostart Rule");
+
+      await user.click(screen.getByRole("button", { name: "Add Rule" }));
+
+      expect(onSave).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({ name: "Autostart Rule", enabled: true })
+      );
     });
   });
 });

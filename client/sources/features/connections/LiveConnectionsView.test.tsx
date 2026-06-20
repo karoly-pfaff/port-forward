@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LiveConnectionsResponse, RuleLiveSummary, TcpConnectionInfo, UdpSessionInfo } from "@portier/shared";
 import { LiveConnectionsView } from "./LiveConnectionsView.js";
 import * as portierApi from "../../api/portierApi.js";
@@ -534,6 +534,199 @@ describe("LiveConnectionsView", () => {
       await waitFor(() => expect(portierApi.fetchLiveConnections).toHaveBeenCalled());
       await userEvent.click(screen.getByRole("tab", { name: /UDP/ }));
       expect(screen.getByText("2 sessions")).toBeInTheDocument();
+    });
+  });
+
+  // Cross-protocol filtering: selecting a protocol that does not match the
+  // active tab hides every row in that tab. This exercises the protocol guards
+  // in filterTcp / filterUdp that the existing same-protocol filter tests miss.
+  describe("cross-protocol filtering", () => {
+    it("protocol filter UDP hides all rows on the TCP tab", async () => {
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(fullData);
+      render(<LiveConnectionsView />);
+      await screen.findByRole("table", { name: "TCP connections" });
+
+      await userEvent.selectOptions(
+        screen.getByRole("combobox", { name: "Filter by protocol" }),
+        "udp"
+      );
+
+      expect(screen.getByText("No active TCP connections.")).toBeInTheDocument();
+      expect(screen.queryByRole("table", { name: "TCP connections" })).not.toBeInTheDocument();
+    });
+
+    it("protocol filter TCP hides all rows on the UDP tab", async () => {
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(fullData);
+      render(<LiveConnectionsView />);
+      await waitFor(() => expect(portierApi.fetchLiveConnections).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByRole("tab", { name: /UDP/ }));
+      await userEvent.selectOptions(
+        screen.getByRole("combobox", { name: "Filter by protocol" }),
+        "tcp"
+      );
+
+      expect(screen.getByText("No active or recent UDP sessions.")).toBeInTheDocument();
+      expect(screen.queryByRole("table", { name: "UDP sessions" })).not.toBeInTheDocument();
+    });
+
+    it("status filter Active hides idle rules from the Rule Summary tab", async () => {
+      // idleSummary has zero active TCP/UDP, so the "active" status filter must
+      // drop it, leaving the empty state.
+      const data: LiveConnectionsResponse = {
+        ...emptyData,
+        ruleSummaries: [idleSummary],
+      };
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(data);
+      render(<LiveConnectionsView />);
+      await waitFor(() => expect(portierApi.fetchLiveConnections).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByRole("tab", { name: /Rule Summary/ }));
+      await userEvent.selectOptions(
+        screen.getByRole("combobox", { name: "Filter by status" }),
+        "active"
+      );
+
+      expect(screen.getByText("No rule summaries available.")).toBeInTheDocument();
+    });
+  });
+
+  // filterUdp ruleId guard (line 43): a rule filter applied while on the UDP tab
+  // must drop sessions whose ruleId does not match. The existing rule-filter test
+  // only exercises the TCP path, leaving this UDP branch uncovered.
+  describe("UDP rule filter", () => {
+    it("rule filter drops UDP sessions from other rules", async () => {
+      const otherSession: UdpSessionInfo = {
+        ...udpSession,
+        id: "udp-9",
+        ruleId: "rule-99",
+        ruleName: "Other UDP Rule",
+      };
+      const data: LiveConnectionsResponse = {
+        ...emptyData,
+        udpSessions: [udpSession, otherSession],
+        ruleSummaries: [
+          { ...tcpSummary, ruleId: "rule-2", ruleName: "Game Server", protocol: "udp" },
+          { ...tcpSummary, ruleId: "rule-99", ruleName: "Other UDP Rule", protocol: "udp" },
+        ],
+      };
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(data);
+      render(<LiveConnectionsView />);
+      await waitFor(() => expect(portierApi.fetchLiveConnections).toHaveBeenCalled());
+
+      await userEvent.click(screen.getByRole("tab", { name: /UDP/ }));
+      // Filter to the first UDP rule; the other rule's session must disappear.
+      await userEvent.selectOptions(
+        screen.getByRole("combobox", { name: "Filter by rule" }),
+        "rule-2"
+      );
+
+      const table = screen.getByRole("table", { name: "UDP sessions" });
+      expect(within(table).getByText("Game Server")).toBeInTheDocument();
+      expect(within(table).queryByText("Other UDP Rule")).not.toBeInTheDocument();
+      expect(screen.getByText("1 session")).toBeInTheDocument();
+    });
+  });
+
+  // Auto-refresh interval effect (lines 101-105): the setInterval callback at
+  // line 103 re-invokes load on each tick. Fake timers advance past one interval
+  // and observe the extra fetch, covering that callback function. fireEvent is
+  // used (not userEvent) to avoid the userEvent<->fake-timer interplay.
+  describe("auto-refresh interval", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("re-fetches connections on each interval tick while auto-refresh is on", async () => {
+      vi.useFakeTimers();
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(emptyData);
+
+      render(<LiveConnectionsView />);
+      // Flush the mount-effect load (its promise resolves on a microtask).
+      await vi.advanceTimersByTimeAsync(0);
+      expect(portierApi.fetchLiveConnections).toHaveBeenCalledTimes(1);
+
+      // Auto-refresh defaults on at 2s; advancing fires the interval callback.
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(portierApi.fetchLiveConnections).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(portierApi.fetchLiveConnections).toHaveBeenCalledTimes(3);
+
+      // Disabling auto-refresh clears the interval: no further ticks fetch.
+      fireEvent.click(screen.getByRole("checkbox", { name: "Auto-refresh" }));
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(portierApi.fetchLiveConnections).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("load resilience", () => {
+    it("non-Error rejection falls back to a generic error message", async () => {
+      // fetchLiveConnections rejects with a non-Error value; the view must not
+      // crash and should show the fallback copy rather than "[object …]".
+      vi.mocked(portierApi.fetchLiveConnections).mockRejectedValue("boom");
+      render(<LiveConnectionsView />);
+      await screen.findByText("Failed to load connections.");
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+
+    it("ignores a refresh while a fetch is already in flight", async () => {
+      // First load never resolves until we release it; clicking Refresh while it
+      // is pending must be a no-op (the in-flight guard), so no second call fires
+      // until the first settles.
+      let release!: (v: LiveConnectionsResponse) => void;
+      vi.mocked(portierApi.fetchLiveConnections).mockReturnValueOnce(
+        new Promise((r) => { release = r; })
+      );
+      render(<LiveConnectionsView />);
+      // The initial load is in flight (loading copy visible).
+      expect(screen.getByText("Loading connections…")).toBeInTheDocument();
+      expect(portierApi.fetchLiveConnections).toHaveBeenCalledTimes(1);
+
+      await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      // Guard: still only the one in-flight call.
+      expect(portierApi.fetchLiveConnections).toHaveBeenCalledTimes(1);
+
+      // Release the first load; subsequent refreshes are allowed again.
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(emptyData);
+      release(emptyData);
+      await waitFor(() =>
+        expect(screen.queryByText("Loading connections…")).not.toBeInTheDocument()
+      );
+
+      await userEvent.click(screen.getByRole("button", { name: "Refresh" }));
+      await waitFor(() => expect(portierApi.fetchLiveConnections).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  // Two inline JSX callbacks not exercised elsewhere: the TCP tab button's
+  // onClick (the tab is already active on mount, so clicking another tab and
+  // returning is the only way to invoke it) and the auto-refresh interval
+  // <select> onChange.
+  describe("tab and interval callbacks", () => {
+    it("clicking the TCP tab after switching away re-activates the TCP view", async () => {
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(fullData);
+      render(<LiveConnectionsView />);
+      await waitFor(() => expect(portierApi.fetchLiveConnections).toHaveBeenCalled());
+
+      // Switch off TCP first, then click TCP to fire its onClick (line 206).
+      await userEvent.click(screen.getByRole("tab", { name: /UDP/ }));
+      expect(screen.getByRole("tab", { name: /UDP/ })).toHaveAttribute("aria-selected", "true");
+
+      await userEvent.click(screen.getByRole("tab", { name: /TCP/ }));
+      expect(screen.getByRole("tab", { name: /TCP/ })).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("table", { name: "TCP connections" })).toBeInTheDocument();
+    });
+
+    it("selecting a new auto-refresh interval updates the control value", async () => {
+      vi.mocked(portierApi.fetchLiveConnections).mockResolvedValue(emptyData);
+      render(<LiveConnectionsView />);
+      await waitFor(() => expect(portierApi.fetchLiveConnections).toHaveBeenCalled());
+
+      const intervalSelect = screen.getByRole("combobox", { name: "Auto-refresh interval" });
+      // Default interval is 2s; choosing 10s fires onChange (line 383).
+      await userEvent.selectOptions(intervalSelect, "10");
+      expect((intervalSelect as HTMLSelectElement).value).toBe("10");
     });
   });
 });

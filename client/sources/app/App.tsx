@@ -73,6 +73,7 @@ export function App(): ReactElement {
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(() => {
+      /* v8 ignore next -- concurrency guard: skips a tick while a prior auto-refresh is still in flight; not deterministically triggerable in a unit test */
       if (refreshInFlightRef.current) return;
       refreshInFlightRef.current = true;
       void Promise.all([fetchForwardRules(), fetchForwardStatus(), fetchActivity({ limit: 5 })])

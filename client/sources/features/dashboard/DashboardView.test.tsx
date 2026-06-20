@@ -171,4 +171,25 @@ describe("DashboardView", () => {
     await user.click(viewAllBtns[1]);
     expect(onGoToActivity).toHaveBeenCalled();
   });
+
+  // A rule that has no entry in statusMap exercises the `s?.bytesIn ?? 0` /
+  // `s?.bytesOut ?? 0` fallback at line 31: with no status, its traffic is 0 and
+  // it must not appear in the Top Rules list. A second rule that does have
+  // traffic still renders, proving the missing-status rule was filtered out (not
+  // crashed on `undefined`).
+  it("treats a rule absent from statusMap as zero traffic and excludes it", () => {
+    render(
+      <DashboardView
+        rules={[tcpRule, udpRule]}
+        statusMap={makeMap(runningStatus)} // only r1 has a status; r2 (udpRule) absent
+        recentActivity={[]}
+        onGoToActivity={vi.fn()}
+        onGoToRules={vi.fn()}
+      />
+    );
+    // The rule with traffic appears in the Top Rules list...
+    expect(screen.getByText("TCP Service")).toBeInTheDocument();
+    // ...while the status-less rule (zero traffic) is excluded from it.
+    expect(screen.queryByText("UDP Metrics")).not.toBeInTheDocument();
+  });
 });

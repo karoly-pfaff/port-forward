@@ -169,9 +169,26 @@ Slice 2 status (client quality gates + push CI):
 - [x] Honest client coverage measured (≈97.2% stmts / 91.8% branch / 86.8% funcs) and the gate
   ratcheted **94/89/78 → 95/90/85** (the misleading 78 function floor raised to a meaningful
   85, still safely below actual). Added meaningful App / ActivityLogView / TopHeader tests.
-- [x] Fast push/PR CI (`.github/workflows/continous-integration.yml`) added — runs the real gates, builds no
+- [x] Fast push/PR CI (`.github/workflows/continuous-integration.yml`) added — runs the real gates, builds no
   release packages, uploads no artifacts, publishes nothing, creates no tag. The 5 manual
   release/smoke workflows remain `workflow_dispatch`.
+
+Slice 3 status (client coverage meaningful test pass + CI filename fix):
+
+- [x] CI workflow filename typo fixed → `.github/workflows/continuous-integration.yml`; all
+  references updated; the old misspelled filename no longer appears in active docs/config.
+- [x] Exhaustive meaningful client test pass (drag-and-drop reorder, status filter, traffic
+  displays, rule-form validation, App start/stop/delete/reorder/auto-refresh/go-to-activity/
+  rules-from-settings handlers, every settings panel + hook branch, Live Connections filters,
+  diagnostics/runtime-env branches, and all inline callbacks) — no shallow padding, no
+  snapshots. ~90 tests added across the slice (client suite 459 → 547).
+- [x] Client coverage **97.2/91.8/86.8 → 100/100/100**; gate ratcheted **95/90/85 →
+  100/100/100** (matching `shared`/`server`). Every reachable path is tested; the few genuinely
+  unreachable spots (concurrency in-flight guards, non-Error `JSON.parse` fallbacks,
+  button-gated early returns, strict-union switch/`??` fallbacks, and the dead
+  planned/parity/method-class badges in the soon-to-be-replaced ApiDocsView) carry narrow
+  `/* v8 ignore … */` annotations with documented reasons, exactly as the server does. No gate
+  lowered.
 
 - [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
 - [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
@@ -419,7 +436,7 @@ npm run validate:upgrade:current
 
 Two distinct kinds of GitHub Actions workflow:
 
-- **Push/PR CI** (`.github/workflows/continous-integration.yml`, automatic on `push` to `main` and on
+- **Push/PR CI** (`.github/workflows/continuous-integration.yml`, automatic on `push` to `main` and on
   `pull_request`): fast everyday-development checks. A `ubuntu-latest` **baseline** job runs
   `npm ci`, `npm run lint` (`--max-warnings 0`), `npm run typecheck`, `npm run test` (shared +
   server + client + Go service), the honest client coverage gate

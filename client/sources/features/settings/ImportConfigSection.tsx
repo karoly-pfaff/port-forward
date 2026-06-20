@@ -63,6 +63,7 @@ export function ImportConfigSection({
           enabledCount: rules.filter((r) => (r as { enabled: boolean }).enabled).length
         });
       } catch (error) {
+        /* v8 ignore next -- JSON.parse only throws SyntaxError (an Error); the non-Error fallback is defensive */
         setParseError(error instanceof Error ? error.message : "Parse error.");
       }
     };
@@ -70,6 +71,7 @@ export function ImportConfigSection({
   }
 
   async function handleImport(): Promise<void> {
+    /* v8 ignore next -- the Import button only renders once parsedImport is set; this guard is unreachable from the UI */
     if (!parsedImport) return;
     setImporting(true);
     setImportResult(null);

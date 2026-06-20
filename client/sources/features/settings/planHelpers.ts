@@ -79,6 +79,7 @@ export function describeOperationImpact(op: ConfigPlanOperation): string {
       return isMetadataOnlyUpdate(op)
         ? "Metadata only — the forwarder is not restarted"
         : "Changes forwarding — the forwarder will restart";
+    /* v8 ignore next 2 -- op.type is a strict ConfigPlanOperationType union with every member handled above; the default is unreachable */
     default:
       return "";
   }

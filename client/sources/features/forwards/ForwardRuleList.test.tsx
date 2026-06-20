@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ForwardRuleResponse, ForwardStatus, RuleDiagnosticsResult } from "@portier/shared";
@@ -512,6 +512,53 @@ describe("ForwardRuleList group filter", () => {
     expect(screen.getByText("No rules match the current filter.")).toBeInTheDocument();
   });
 
+  // activeGroupFilter clamp (line 112-117): once "api" is selected, if the rules
+  // change so "api" no longer exists as a group, the stale selection must fall
+  // back to ALL_GROUPS rather than render a value with no matching option.
+  it("clamps a stale group selection back to All Groups when its group disappears", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderGrouped();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Filter by group" }), "api");
+    // Only the single "api" rule (Beta) is visible while the filter is active.
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+
+    // Re-render with a rule set that no longer contains the "api" group.
+    const withoutApi: ForwardRuleResponse[] = [
+      { ...tcpRule, id: "r1", name: "Alpha", listenPort: 48001, group: "web" },
+      { ...tcpRule, id: "r3", name: "Gamma", listenPort: 48003, group: "web" },
+      { ...tcpRule, id: "r4", name: "Delta", listenPort: 48004 } // ungrouped
+    ];
+    rerender(
+      <ForwardRuleList
+        rules={withoutApi}
+        statusMap={new Map()}
+        busyRuleIds={new Set()}
+        loading={false}
+        editingRuleId={null}
+        diagnosisMap={new Map()}
+        onEdit={noop}
+        onStart={noop}
+        onStop={noop}
+        onDelete={noop}
+        onDiagnose={noop}
+        onClearDiagnosis={noop}
+        onAddRule={noop}
+        onRefresh={noop}
+        autoRefresh={false}
+        autoRefreshInterval={5}
+        onToggleAutoRefresh={noop}
+        onChangeAutoRefreshInterval={noop}
+      />
+    );
+
+    // The filter clamped to "All Groups": every remaining rule is shown again.
+    expect(screen.getByRole("combobox", { name: "Filter by group" })).toHaveValue("__all__");
+    for (const name of ["Alpha", "Gamma", "Delta"]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
+
   it("omits the Ungrouped option when every rule has a group", () => {
     renderList({
       rules: [
@@ -636,6 +683,19 @@ describe("ForwardRuleList group actions", () => {
     await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("No rules found in group");
+    expect(alert.className).toContain("group-action-status--error");
+  });
+
+  // runGroupAction catch fallback (line 191): when onGroupAction rejects with a
+  // NON-Error value, the `error instanceof Error` check is false, so the generic
+  // "Group action failed." message is shown.
+  it("shows the fallback message when the action rejects with a non-Error value", async () => {
+    const user = userEvent.setup();
+    renderGroupActions(vi.fn().mockRejectedValue("boom"));
+    await selectGroup("web");
+    await user.click(screen.getByRole("button", { name: 'Start group "web"' }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Group action failed.");
     expect(alert.className).toContain("group-action-status--error");
   });
 
@@ -1019,6 +1079,27 @@ describe("ForwardRuleList row action menu", () => {
     expect(screen.queryByRole("menu", { name: "Actions for Test Rule" })).not.toBeInTheDocument();
   });
 
+  // The trigger's onClick toggle (line 469): clicking the same kebab a second
+  // time takes the `openMenuId === rule.id ? null : …` close arm, hiding the menu.
+  it("toggles the menu closed when the same trigger is clicked again", async () => {
+    const user = userEvent.setup();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate: noop,
+    });
+    const trigger = screen.getByRole("button", { name: "More actions for Test Rule" });
+    await user.click(trigger);
+    expect(screen.getByRole("menu", { name: "Actions for Test Rule" })).toBeInTheDocument();
+
+    // Second click on the same trigger closes it (the toggle's null arm).
+    await user.click(trigger);
+    expect(screen.queryByRole("menu", { name: "Actions for Test Rule" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
   it("closes the menu when clicking outside it", async () => {
     const user = userEvent.setup();
     renderList({
@@ -1032,5 +1113,326 @@ describe("ForwardRuleList row action menu", () => {
     expect(screen.getByRole("menu", { name: "Actions for Test Rule" })).toBeInTheDocument();
     await user.click(screen.getByLabelText("Search rules"));
     expect(screen.queryByRole("menu", { name: "Actions for Test Rule" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ForwardRuleList status filter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Three rules whose statuses fall into the three distinct filter buckets:
+  // Alpha is running, Beta is stopped (no error), Gamma is stopped with an error.
+  const filterRules: ForwardRuleResponse[] = [
+    { ...tcpRule, id: "r1", name: "Alpha", listenPort: 48001 },
+    { ...tcpRule, id: "r2", name: "Beta", listenPort: 48002 },
+    { ...tcpRule, id: "r3", name: "Gamma", listenPort: 48003 },
+  ];
+
+  const runningAlpha: ForwardStatus = {
+    ruleId: "r1",
+    running: true,
+    health: "healthy",
+    bytesIn: 0,
+    bytesOut: 0,
+  };
+  const stoppedBeta: ForwardStatus = {
+    ruleId: "r2",
+    running: false,
+    health: "healthy",
+    bytesIn: 0,
+    bytesOut: 0,
+  };
+  const erroredGamma: ForwardStatus = {
+    ruleId: "r3",
+    running: false,
+    health: "warning",
+    bytesIn: 0,
+    bytesOut: 0,
+    lastError: "ECONNREFUSED",
+  };
+
+  function renderFiltered() {
+    return renderList({
+      rules: filterRules,
+      statusMap: makeMap(runningAlpha, stoppedBeta, erroredGamma),
+      busyRuleIds: new Set(),
+      loading: false,
+    });
+  }
+
+  it("shows only running rules when 'Running' is selected", async () => {
+    const user = userEvent.setup();
+    renderFiltered();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by status" }),
+      "Running"
+    );
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gamma")).not.toBeInTheDocument();
+  });
+
+  it("shows only stopped rules when 'Stopped' is selected", async () => {
+    const user = userEvent.setup();
+    renderFiltered();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by status" }),
+      "Stopped"
+    );
+    // Beta and Gamma are both not running (Gamma is stopped-with-error).
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+    expect(screen.getByText("Gamma")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+  });
+
+  it("shows only rules with a lastError when 'Error' is selected", async () => {
+    const user = userEvent.setup();
+    renderFiltered();
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by status" }),
+      "Error"
+    );
+    expect(screen.getByText("Gamma")).toBeInTheDocument();
+    expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+  });
+
+  it("restores every rule when the filter returns to 'All Statuses'", async () => {
+    const user = userEvent.setup();
+    renderFiltered();
+    const select = screen.getByRole("combobox", { name: "Filter by status" });
+    await user.selectOptions(select, "Running");
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument();
+    await user.selectOptions(select, "All Statuses");
+    for (const name of ["Alpha", "Beta", "Gamma"]) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+  });
+});
+
+describe("ForwardRuleList traffic display", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the active TCP connection count for a running TCP rule", () => {
+    const tcpRunning: ForwardStatus = {
+      ruleId: "r1",
+      running: true,
+      health: "healthy",
+      bytesIn: 0,
+      bytesOut: 0,
+      activeConnections: 4,
+    };
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(tcpRunning),
+      busyRuleIds: new Set(),
+      loading: false,
+    });
+    expect(screen.getByText("4 active")).toBeInTheDocument();
+  });
+
+  it("shows the active UDP session count for a running bidirectional-multi-client UDP rule", () => {
+    const multiClientRule: ForwardRuleResponse = {
+      ...udpRule,
+      id: "r5",
+      name: "UDP Game",
+      udpMode: "bidirectional-multi-client",
+    };
+    const udpSessions: ForwardStatus = {
+      ruleId: "r5",
+      running: true,
+      health: "healthy",
+      bytesIn: 0,
+      bytesOut: 0,
+      activeUdpSessions: 7,
+    };
+    renderList({
+      rules: [multiClientRule],
+      statusMap: makeMap(udpSessions),
+      busyRuleIds: new Set(),
+      loading: false,
+    });
+    expect(screen.getByText("7 sessions")).toBeInTheDocument();
+    // A multi-client UDP rule must not render the TCP "active connections" stat.
+    expect(screen.queryByText(/active$/)).not.toBeInTheDocument();
+  });
+
+  // The `?? 0` fallback (line 414): a running multi-client UDP rule whose status
+  // has activeUdpSessions undefined renders "0 sessions" rather than "undefined".
+  it("renders 0 sessions when a multi-client UDP rule has no activeUdpSessions", () => {
+    const multiClientRule: ForwardRuleResponse = {
+      ...udpRule,
+      id: "r6",
+      name: "UDP No Sessions",
+      udpMode: "bidirectional-multi-client",
+    };
+    const noSessions: ForwardStatus = {
+      ruleId: "r6",
+      running: true,
+      health: "healthy",
+      bytesIn: 0,
+      bytesOut: 0,
+      // activeUdpSessions intentionally omitted → undefined.
+    };
+    renderList({
+      rules: [multiClientRule],
+      statusMap: makeMap(noSessions),
+      busyRuleIds: new Set(),
+      loading: false,
+    });
+    expect(screen.getByText("0 sessions")).toBeInTheDocument();
+  });
+});
+
+describe("ForwardRuleList drag reorder", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Reorder is only enabled with onReorder set, no search, status "all" and no
+  // active group filter — so these rules stay ungrouped and the default view.
+  const reorderRules: ForwardRuleResponse[] = [
+    { ...tcpRule, id: "r1", name: "Alpha", listenPort: 48001 },
+    { ...tcpRule, id: "r2", name: "Beta", listenPort: 48002 },
+    { ...tcpRule, id: "r3", name: "Gamma", listenPort: 48003 },
+  ];
+
+  function rowFor(name: string): HTMLTableRowElement {
+    const row = screen.getByText(name).closest("tr");
+    if (!row) throw new Error(`No row found for rule "${name}"`);
+    return row as HTMLTableRowElement;
+  }
+
+  it("calls onReorder with the new id order when a row is dropped onto another", () => {
+    const onReorder = vi.fn();
+    renderList({
+      rules: reorderRules,
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false,
+      onReorder,
+    });
+
+    const beta = rowFor("Beta");
+    const alpha = rowFor("Alpha");
+    // Drag Beta and drop it onto Alpha → Beta moves to Alpha's index.
+    fireEvent.dragStart(beta);
+    fireEvent.dragOver(alpha);
+    fireEvent.drop(alpha);
+    fireEvent.dragEnd(beta);
+
+    expect(onReorder).toHaveBeenCalledTimes(1);
+    expect(onReorder).toHaveBeenCalledWith(["r2", "r1", "r3"]);
+  });
+
+  it("does not call onReorder when a row is dropped onto itself", () => {
+    const onReorder = vi.fn();
+    renderList({
+      rules: reorderRules,
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false,
+      onReorder,
+    });
+
+    const alpha = rowFor("Alpha");
+    fireEvent.dragStart(alpha);
+    fireEvent.dragOver(alpha);
+    fireEvent.drop(alpha);
+    fireEvent.dragEnd(alpha);
+
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+
+  it("renders rows as draggable when reorder is enabled", () => {
+    renderList({
+      rules: reorderRules,
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false,
+      onReorder: noop,
+    });
+    expect(rowFor("Alpha")).toHaveAttribute("draggable", "true");
+  });
+
+  it("disables dragging while a status filter is active (reorder would be ambiguous)", async () => {
+    const user = userEvent.setup();
+    const onReorder = vi.fn();
+    const runningAlpha: ForwardStatus = {
+      ruleId: "r1",
+      running: true,
+      health: "healthy",
+      bytesIn: 0,
+      bytesOut: 0,
+    };
+    renderList({
+      rules: reorderRules,
+      statusMap: makeMap(runningAlpha),
+      busyRuleIds: new Set(),
+      loading: false,
+      onReorder,
+    });
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by status" }),
+      "Running"
+    );
+    // Only Alpha remains; its row is no longer draggable and a drop is a no-op.
+    const alpha = rowFor("Alpha");
+    expect(alpha).toHaveAttribute("draggable", "false");
+    fireEvent.dragStart(alpha);
+    fireEvent.drop(alpha);
+    expect(onReorder).not.toHaveBeenCalled();
+  });
+});
+
+// Two inline callbacks not covered elsewhere: the status-badge onErrorClick
+// wrapper (line 389), which forwards the rule id to onGoToActivity, and the
+// auto-refresh interval <select> onChange (line 584).
+describe("ForwardRuleList extra callbacks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("clicking the row error badge calls onGoToActivity with the rule id", async () => {
+    const user = userEvent.setup();
+    const onGoToActivity = vi.fn();
+    const errStatus: ForwardStatus = { ...stoppedStatus, lastError: "bind EADDRINUSE" };
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(errStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onGoToActivity,
+    });
+
+    // The error badge renders as a button only when onGoToActivity is set; its
+    // onClick is the wrapper at line 389.
+    await user.click(screen.getByRole("button", { name: /Error: bind EADDRINUSE/ }));
+    expect(onGoToActivity).toHaveBeenCalledWith("r1");
+  });
+
+  it("changing the auto-refresh interval calls onChangeAutoRefreshInterval", async () => {
+    const user = userEvent.setup();
+    const onChangeInterval = vi.fn();
+    renderList({
+      rules: [],
+      statusMap: new Map(),
+      busyRuleIds: new Set(),
+      loading: false,
+      autoRefresh: true,
+      autoRefreshInterval: 5,
+      onChangeAutoRefreshInterval: onChangeInterval,
+    });
+
+    // The interval select is enabled while autoRefresh is true; selecting a new
+    // value fires onChange (line 584) with the parsed number.
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Auto-refresh interval" }),
+      "30"
+    );
+    expect(onChangeInterval).toHaveBeenCalledWith(30);
   });
 });

@@ -260,6 +260,37 @@ describe("buildDiagnosticsBundle — partial failure", () => {
     const bundle = await buildDiagnosticsBundle(new Map());
     expect(bundle.metadata.managementUrl).toBe("http://127.0.0.1:47831");
   });
+
+  it("records an activity error and an empty event list when activity fetch fails", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntime);
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([testRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([testStatus]);
+    vi.mocked(portierApi.fetchActivity).mockRejectedValue(new Error("activity log unavailable"));
+
+    const bundle = await buildDiagnosticsBundle(new Map());
+    // Other sources are unaffected.
+    expect(bundle.rules).toEqual([testRule]);
+    expect(bundle.statuses).toEqual([testStatus]);
+    // Activity stays "included" but its event list is empty on failure.
+    expect(bundle.activity.included).toBe(true);
+    expect(bundle.activity.events).toEqual([]);
+    // The activity branch (lines 67-69) pushes a source: "activity" error.
+    expect(bundle.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "activity", message: "activity log unavailable" })
+    ]));
+  });
+
+  it("uses a generic message when activity fetch rejects with a non-Error", async () => {
+    vi.mocked(portierApi.fetchRuntimeInfo).mockResolvedValue(testRuntime);
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([testRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([testStatus]);
+    vi.mocked(portierApi.fetchActivity).mockRejectedValue("offline");
+
+    const bundle = await buildDiagnosticsBundle(new Map());
+    expect(bundle.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "activity", message: "Unknown error." })
+    ]));
+  });
 });
 
 describe("downloadJson", () => {

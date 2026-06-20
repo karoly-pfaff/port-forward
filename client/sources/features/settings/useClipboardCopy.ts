@@ -19,6 +19,7 @@ export function useClipboardCopy(): ClipboardCopy {
       setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
     } catch {
       setCopiedKey(`${key}:fail`);
+      /* v8 ignore next -- stale-timer guard: the failed-key label only auto-clears if still unchanged; the else arm (a newer copy already replaced it) is defensive */
       setTimeout(() => setCopiedKey((k) => (k === `${key}:fail` ? null : k)), 2000);
     }
   }

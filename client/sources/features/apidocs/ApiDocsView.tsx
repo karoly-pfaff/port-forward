@@ -194,16 +194,19 @@ export function ApiDocsView(): ReactElement {
             {ENDPOINTS.map((ep) => (
               <li key={`${ep.method}-${ep.path}`} className="api-endpoint">
                 <div className="api-endpoint-head">
+                  {/* v8 ignore next -- every endpoint uses a method present in METHOD_CLASS (GET/POST/PATCH/DELETE); the ?? "" fallback is unreachable */}
                   <span className={`api-method ${METHOD_CLASS[ep.method] ?? ""}`}>
                     {ep.method}
                   </span>
                   <code className="api-path">{ep.path}</code>
+                  {/* v8 ignore start -- no endpoint currently sets planned/parity, so these speculative badges are dead branches; this hand-maintained view is replaced by an OpenAPI-driven view in v1.19 Slice 4 */}
                   {ep.planned && (
                     <span className="api-planned-badge">Planned — {ep.planned}</span>
                   )}
                   {ep.parity && (
                     <span className="api-parity-badge">{ep.parity}</span>
                   )}
+                  {/* v8 ignore stop */}
                 </div>
                 <p className="api-purpose">{ep.purpose}</p>
                 {ep.params && (

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConfigPlanResponse, ForwardRuleResponse, ForwardStatus, RuntimeInfo } from "@portier/shared";
@@ -271,6 +271,23 @@ function stubFileReader(content: string): void {
   );
 }
 
+// FileReader stub whose result is a non-string (ArrayBuffer-like), driving the
+// `typeof text !== "string"` guard in both file-picker onload handlers.
+function stubFileReaderNonString(): void {
+  vi.stubGlobal(
+    "FileReader",
+    class {
+      result: ArrayBuffer = new ArrayBuffer(8);
+      onload: ((e: ProgressEvent) => void) | null = null;
+      readAsText(): void {
+        queueMicrotask(() => {
+          this.onload?.({ target: { result: this.result } } as unknown as ProgressEvent);
+        });
+      }
+    }
+  );
+}
+
 const validConfig = {
   version: "1",
   exportedAt: new Date().toISOString(),
@@ -402,6 +419,211 @@ describe("SettingsView import flow", () => {
     render(<SettingsView onRulesUpdated={vi.fn()} />);
     expect(screen.queryByRole("button", { name: /Import Rules/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Replace All Rules/ })).not.toBeInTheDocument();
+  });
+
+  it("import API failure surfaces the error inside the file preview", async () => {
+    // A valid file parses fine, but the import call rejects. The component must
+    // keep the preview open and render the server error in its error region
+    // (not clear the form or call onRulesUpdated).
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.importConfig).mockRejectedValue(
+      new Error("listen port 48001 already in use")
+    );
+
+    const onRulesUpdated = vi.fn();
+    render(<SettingsView onRulesUpdated={onRulesUpdated} />);
+
+    const file = new File([configJson], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+
+    await screen.findByText("File preview");
+    await userEvent.click(screen.getByRole("button", { name: /Import Rules/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("listen port 48001 already in use");
+    });
+    // Preview stays visible so the user can retry; rules were not updated.
+    expect(screen.getByText("File preview")).toBeInTheDocument();
+    expect(onRulesUpdated).not.toHaveBeenCalled();
+  });
+
+  it("import non-Error rejection falls back to a generic message", async () => {
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.importConfig).mockRejectedValue("kaboom");
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+
+    const file = new File([configJson], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+
+    await screen.findByText("File preview");
+    await userEvent.click(screen.getByRole("button", { name: /Import Rules/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Import failed.");
+    });
+  });
+
+  it("replace-mode import failure shows the error after confirming", async () => {
+    // Drives the replace branch through its confirm dialog into a failing import
+    // so the error region renders for the replace flow too.
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.importConfig).mockRejectedValue(new Error("replace rejected"));
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+
+    const file = new File([configJson], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+
+    await screen.findByText("File preview");
+    await userEvent.click(screen.getByRole("radio", { name: /Replace/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Replace All Rules/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Confirm Replace/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("replace rejected");
+    });
+  });
+
+  it("clearing the file selection (no file) resets the chosen-file label without parsing", async () => {
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const input = screen.getByLabelText("Select config file");
+
+    // First pick a valid file so the preview/label populate.
+    await userEvent.upload(input, new File([configJson], "portier-rules.json", { type: "application/json" }));
+    await screen.findByText("File preview");
+    // The import picker now shows the chosen file name (the plan picker, separate,
+    // still reads "No file chosen").
+    expect(screen.getByText("portier-rules.json")).toBeInTheDocument();
+
+    // Then fire a change with an empty file list (e.g. the OS picker cancelled),
+    // hitting the `if (!file) return` early-return guard.
+    fireEvent.change(input, { target: { files: [] } });
+
+    await waitFor(() => {
+      // The chosen file name is gone — the import label reverts to its default.
+      expect(screen.queryByText("portier-rules.json")).not.toBeInTheDocument();
+    });
+    // The preview is cleared and no import API call was made.
+    expect(screen.queryByText("File preview")).not.toBeInTheDocument();
+    expect(portierApi.importConfig).not.toHaveBeenCalled();
+  });
+
+  it("non-string FileReader result surfaces a 'Could not read file.' parse error", async () => {
+    stubFileReaderNonString();
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const file = new File(["irrelevant"], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Could not read file.");
+    });
+    expect(portierApi.importConfig).not.toHaveBeenCalled();
+  });
+
+  it("backup-export button shows 'Exporting…' while a config export is in progress", async () => {
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+    // Keep the export pending so the shared `exporting` flag stays true and the
+    // backup button renders its in-progress label (line 195).
+    let resolveExport!: () => void;
+    vi.mocked(portierApi.exportConfig).mockReturnValue(
+      new Promise((resolve) => {
+        resolveExport = () => resolve({ version: "1", exportedAt: new Date().toISOString(), rules: [] });
+      })
+    );
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(
+      screen.getByLabelText("Select config file"),
+      new File([configJson], "portier-rules.json", { type: "application/json" })
+    );
+    await screen.findByText("File preview");
+    await userEvent.click(screen.getByRole("radio", { name: /Replace/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Replace All Rules/ }));
+
+    await userEvent.click(screen.getByRole("button", { name: /Export current config as backup/ }));
+
+    // The shared `exporting` flag flips the backup button's label to "Exporting…"
+    // (line 195). The Export Config panel's Download button shares the same flag,
+    // so both in-progress labels appear together.
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: /Exporting…/ }).length).toBeGreaterThanOrEqual(1);
+    });
+    // The backup button no longer offers its idle label while the export runs.
+    expect(
+      screen.queryByRole("button", { name: /Export current config as backup/ })
+    ).not.toBeInTheDocument();
+    resolveExport();
+  });
+});
+
+// Two ImportConfigSection callbacks not exercised by the flow above: the Merge
+// radio onChange (line 117 — Merge is the default, so its handler only fires
+// when re-selected after Replace) and the confirm-replace Cancel button onClick
+// (line 207).
+describe("SettingsView import mode and confirm-cancel", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("re-selecting Merge after Replace switches the import button back to merge", async () => {
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+
+    const file = new File([configJson], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+    await screen.findByText("File preview");
+
+    // Switch to Replace, then back to Merge — the Merge radio onChange (line 117)
+    // runs and the action button reverts to the merge label.
+    await userEvent.click(screen.getByRole("radio", { name: /Replace/ }));
+    expect(screen.getByRole("button", { name: /Replace All Rules/ })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("radio", { name: /Merge/ }));
+    expect(screen.getByRole("button", { name: /Import Rules/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Replace All Rules/ })).not.toBeInTheDocument();
+  });
+
+  it("Cancel in the replace-confirm dialog dismisses it without importing", async () => {
+    const configJson = JSON.stringify(validConfig);
+    stubFileReader(configJson);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+
+    const file = new File([configJson], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+    await screen.findByText("File preview");
+
+    await userEvent.click(screen.getByRole("radio", { name: /Replace/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Replace All Rules/ }));
+    expect(screen.getByText(/This will delete all existing rules/)).toBeInTheDocument();
+
+    // The confirm dialog's Cancel button onClick (line 207) sets confirmReplace
+    // false, so the dialog disappears and no import is attempted.
+    const dialog = screen.getByText(/This will delete all existing rules/).closest("div");
+    if (!dialog) throw new Error("confirm dialog not found");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByText(/This will delete all existing rules/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Replace All Rules/ })).toBeInTheDocument();
+    expect(portierApi.importConfig).not.toHaveBeenCalled();
   });
 });
 
@@ -1077,5 +1299,130 @@ describe("SettingsView Plan & Apply section", () => {
     expect(screen.getByLabelText("Select config file")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Merge/ })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Replace/ })).toBeInTheDocument();
+  });
+
+  it("successful apply reports exact add/update/remove counts", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+    vi.mocked(portierApi.applyConfig).mockResolvedValue({
+      ok: true, dryRun: false, appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: addOnlyPlan,
+      applied: { add: 2, update: 1, remove: 3, unchanged: 0 }
+    });
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([]);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+    await screen.findByText("Plan preview");
+    await userEvent.click(screen.getByRole("button", { name: /Apply changes/ }));
+
+    // The success status echoes the server's per-operation counts verbatim.
+    await screen.findByText("Config applied. 2 added, 1 updated, 3 removed.");
+  });
+
+  it("preview non-Error rejection falls back to a generic message", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockRejectedValue("offline");
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Preview failed.");
+    });
+    expect(screen.queryByText("Plan preview")).not.toBeInTheDocument();
+  });
+
+  it("apply non-Error rejection falls back to a generic message", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(addOnlyPlan);
+    vi.mocked(portierApi.applyConfig).mockRejectedValue("offline");
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+    await screen.findByText("Plan preview");
+    await userEvent.click(screen.getByRole("button", { name: /Apply changes/ }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Apply failed.");
+    });
+  });
+
+  it("destructive apply runs only after the confirmation is checked", async () => {
+    // End-to-end destructive path: the remove plan keeps Apply disabled until the
+    // checkbox is ticked, then a real (yes:true) apply succeeds and clears the form.
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+    vi.mocked(portierApi.planConfig).mockResolvedValue(destructivePlan);
+    vi.mocked(portierApi.applyConfig).mockResolvedValue({
+      ok: true, dryRun: false, appliedAt: "2026-01-01T00:00:00.000Z",
+      plan: destructivePlan,
+      applied: { add: 0, update: 0, remove: 1, unchanged: 0 }
+    });
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([]);
+    const onRulesUpdated = vi.fn();
+
+    render(<SettingsView onRulesUpdated={onRulesUpdated} />);
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"),
+      new File([configJson], "d.json", { type: "application/json" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Preview changes/ }));
+    await screen.findByText("Plan preview");
+
+    expect(screen.getByRole("button", { name: /Apply changes/ })).toBeDisabled();
+    await userEvent.click(screen.getByLabelText("Confirm destructive changes"));
+    await userEvent.click(screen.getByRole("button", { name: /Apply changes/ }));
+
+    await waitFor(() => {
+      expect(portierApi.applyConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ yes: true })
+      );
+    });
+    await screen.findByText("Config applied. 0 added, 0 updated, 1 removed.");
+    expect(onRulesUpdated).toHaveBeenCalledWith([]);
+  });
+
+  it("clearing the plan file (no file) resets its label without enabling preview", async () => {
+    const configJson = JSON.stringify(validPlanConfig);
+    stubFileReader(configJson);
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const input = screen.getByLabelText("Select config file for plan");
+
+    await userEvent.upload(input, new File([configJson], "desired.json", { type: "application/json" }));
+    await screen.findByRole("button", { name: /Preview changes/ });
+    expect(screen.getByText("desired.json")).toBeInTheDocument();
+
+    // Empty file list hits `setPlanSelectedFileName(file?.name ?? null)` with no
+    // file plus the `if (!file) return` guard (lines 50-51).
+    fireEvent.change(input, { target: { files: [] } });
+
+    await waitFor(() => {
+      expect(screen.queryByText("desired.json")).not.toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /Preview changes/ })).not.toBeInTheDocument();
+    expect(portierApi.planConfig).not.toHaveBeenCalled();
+  });
+
+  it("non-string FileReader result in the plan picker shows 'Could not read file.'", async () => {
+    stubFileReaderNonString();
+
+    render(<SettingsView onRulesUpdated={vi.fn()} />);
+    const file = new File(["irrelevant"], "desired.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file for plan"), file);
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toHaveTextContent("Could not read file.");
+    });
+    expect(screen.queryByRole("button", { name: /Preview changes/ })).not.toBeInTheDocument();
+    expect(portierApi.planConfig).not.toHaveBeenCalled();
   });
 });

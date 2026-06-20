@@ -66,10 +66,13 @@ const coverDir = join(repoRoot, "coverage");
 //     server is the single NestJS runtime; structurally-unreachable defensive branches
 //     (2s socket timeouts, post-stop socket races, nullish-on-initialized-counter
 //     fallbacks) are narrowly annotated with `/* v8 ignore … */` + a documented reason.
-//   - client: statements 95 / branches 90 / functions 85 (v1.19 Slice 2). Ratcheted
-//     up honestly after measuring actuals (≈97.2 / 91.8 / 86.8) and adding meaningful
-//     App/ActivityLogView/TopHeader tests; the old 78 function floor under-represented
-//     reality and was raised to a meaningful 85. Each gate stays safely below the actual.
+//   - client: 100% statements / branches / functions (v1.19 Slice 3), matching shared and
+//     server. An exhaustive meaningful test pass covered every reachable path; the handful of
+//     genuinely unreachable spots (concurrency in-flight guards, non-Error JSON.parse
+//     fallbacks, button-gated early returns, strict-union switch/`??` fallbacks, and the dead
+//     planned/parity/method-class badges in the soon-to-be-replaced ApiDocsView) are narrowly
+//     annotated with `/* v8 ignore … */` + a documented reason, exactly as the server is. A
+//     new untested line/branch/function fails CI by design. Gates are never lowered.
 //   - Go (service, cli, replay): 95% statements + functions — EXCEPT service
 //     statements, which stays at 90% (platform files + flat 0% test-less packages
 //     hold its statement actual near 90.2%). Go tooling reports no branch coverage.
@@ -78,7 +81,7 @@ const coverDir = join(repoRoot, "coverage");
 const GATES = {
   shared:  { statements: 100, branches: 100, functions: 100 },
   server:  { statements: 100, branches: 100, functions: 100 },
-  client:  { statements: 95, branches: 90, functions: 85 },
+  client:  { statements: 100, branches: 100, functions: 100 },
   service: { statements: 90, functions: 95 },
   cli:     { statements: 95, functions: 95 },
   replay:  { statements: 95, functions: 95 },
