@@ -65,16 +65,56 @@ paths.
   reorder id `404`, advisory missing required params `400`), asserting the status and the
   `{ errors: string[] }` envelope.
 
-## Optional: run from the CLI with Newman
+## Two ways the collection is validated
 
-The collection runs in CI only as a static drift/safety check (`validate:postman`); it is
-**not** executed against a live server in CI. To run it locally against a running Portier
-instance you can use [Newman](https://github.com/postmanlabs/newman) (install separately,
-not a project dependency):
+| | `validate:postman` | `validate:postman:local` |
+| --- | --- | --- |
+| What | Static generation/drift/safety check | Live [Newman](https://github.com/postmanlabs/newman) run against a real runtime |
+| Runs in CI | **Yes** (push/PR) | No — local-only |
+| Needs a runtime | No | Yes (started automatically) |
+| Network | None | Loopback only |
+
+### Local Newman runtime smoke
+
+```powershell
+npm run validate:postman:local
+```
+
+This is **self-contained**: it starts a fresh Portier runtime on a free port with an empty,
+temporary `rules.json`, waits for liveness, runs the collection with [Newman](https://github.com/postmanlabs/newman)
+(a dev dependency — `npm install` provides it, no global install, no network), then stops the
+runtime and deletes the temp config. **No user or production config is touched.** Each of the
+three top-level folders runs against its own freshly-started runtime so they stay independent
+(the atomic **Create a forward rule** intentionally leaves a stopped rule, which would otherwise
+collide with the Happy Path create); the Happy Path flow also deletes its own rule and asserts
+the list is empty, so nothing it creates survives.
+
+**Runtime target.** The smoke runs against the NestJS/TypeScript server (`server/build/index.js`),
+because the collection is generated from *its* OpenAPI document. The Go production service is at
+full parity on the frozen `/api` surface; it differs on exactly one path — the liveness probe:
+OpenAPI/NestJS document `GET /health`, while the Go service serves `GET /api/health` and does not
+serve `/health`. That single divergence is covered by `npm run validate:runtime:smoke` and the Go
+route-inventory parity test, so this collection-vs-OpenAPI smoke targets the contract-faithful
+NestJS server. (If `server/build/index.js` is missing, the command builds it first.)
+
+Overrides (the management/listen ports default to free ports):
+
+```powershell
+$env:PORTIER_PORT=43117; npm run validate:postman:local      # fixed management port
+npm run validate:postman:local -- --port 43117               # same, via flag
+npm run validate:postman:local -- --folder "Happy Path Rule Flow"   # one folder
+npm run validate:postman:local -- --keep-going --verbose     # run all folders, verbose
+```
+
+### Against an already-running instance
+
+To point Newman at a runtime you started yourself, edit `environment.json` (or override per
+request) and run Newman directly — no cloud account, sync, or external network needed:
 
 ```powershell
 # Start Portier first, then:
 newman run postman/collection.json -e postman/environment.json
 ```
 
-No cloud Postman account, sync, or network access beyond your local Portier is required.
+Note the liveness divergence above: against the Go service the `health` request targets `/health`
+and will `404` (use `--folder` to run the other folders, or run against the NestJS server).

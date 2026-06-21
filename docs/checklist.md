@@ -278,6 +278,64 @@ Slice 7 status (E2E runtime validation + backend RC fixes):
   pass, lint / typecheck / `version:check` (10/10) / `validate:postman` clean. `-race` skipped:
   cgo/gcc unavailable in this environment (documented).
 
+Slice 8 status (RC readiness gate + v2.0 go/no-go — milestone closure):
+
+- [x] **Full local validation gate green** at commit `06ec494` (clean tree, pushed, version still
+  **1.18.0** — no bump): lint (`--max-warnings 0`) PASS; typecheck PASS; shared 105 / server 638 /
+  client 570 tests pass; client coverage **100/100/100** and the full coverage gate PASS (shared/server/
+  client 100, service 90.4, cli 97.1, replay 96.5); `version:check` 10/10; `validate:postman` 129/0;
+  `validate:contract` **237/0/0** (run against freshly rebuilt Go + TS runtimes); `validate:openapi:go`
+  PASS; `validate:config` 71/1-skip; `validate:scripts` 48/2-skip; `validate:cli` + `validate:replay`
+  PASS; `build:client` PASS; `go vet` clean (service/cli/replay); all 6 workflow YAMLs parse. No gate
+  lowered. (`npm run check` = `version:check && lint && typecheck && test`, each run individually green.)
+- [x] **CI green** — latest `main` push run (`Continuous Integration`, `06ec494`) success, all 10 jobs
+  (Service, Server, Postman, Shared, Replay, Client, Scripts, Sanity, Lint, CLI); E2E **45 passed**;
+  CodeQL success. CI uploads no artifacts, publishes nothing, creates no tag (verified by inspection).
+- [x] **Release workflows remain manual-only** — the 5 release/smoke workflows are `workflow_dispatch`;
+  none publish a Release or tag; upload is scoped to `build/releases/<platform>/**`; the `validate:artifacts`
+  privacy guard rejects any `private` path segment; checksums file is `checksums.sha256`, package-first
+  ordering. **Not re-run this slice** — last proven release artifacts remain **v1.18.0**.
+- [x] **Negative/regression checks** (safe, reversible): version drift → `version:check` flags 7 surfaces
+  out of sync; tampered Postman → `validate:postman` reports STALE (1 failed); service gate raised 90→99 →
+  coverage gate FAILs (90.1% < 99%); invalid YAML → parser rejects (`YAMLException`). All restored; tree clean.
+- [x] **v2.0 go/no-go** recorded in the internal readiness note: **GO with named non-blocking deferrals**
+  (signing/notarization, Release-publish automation, arm64 native packages, Windows arm64, optional
+  hardening — classified post-2.0 / optional / out-of-scope). v2.0 tag stays a separate explicit manual
+  release step (bump → full release matrix → manual release workflows → upgrade guide/notes → tag/publish).
+- [x] No version bump, no tag, no GitHub Release, no API/OpenAPI-schema/`rules.json`/migration change, no
+  private-doc surfacing in this slice. Client **100/100/100** and strict lint preserved.
+
+Slice 9 status (local Newman runtime smoke):
+
+- [x] **`validate:postman:local` added** (`scripts/validate-postman-local.js`) — a local-only Newman smoke
+  that executes the generated `postman/collection.json` (+ `environment.json`) against a live runtime,
+  complementing the static `validate:postman` drift check. **Newman pinned as a devDependency**
+  (`newman ^6.2.2`, lockfile updated) so the smoke runs offline; no global install, no Postman cloud,
+  no network beyond loopback.
+- [x] **Self-contained + safe.** The script starts a fresh runtime on a free port (or `--port` /
+  `PORTIER_PORT`) with an empty **temporary** `rules.json`, polls liveness, runs Newman, then stops the
+  runtime and deletes the temp dir. No user/production config is touched. Each of the three top-level
+  folders runs against its **own** freshly-started runtime so they stay independent (the atomic *Create
+  a forward rule* intentionally leaves a stopped rule that would otherwise 409 the Happy Path create);
+  the Happy Path flow self-cleans (deletes its rule, asserts the list is empty). Ports overridable via
+  `--port` / `--listen-port` / env; folders selectable via `--folder`.
+- [x] **All three folders exercised and GREEN** against the live NestJS/TS server
+  (`server/build/index.js`): Atomic Endpoint Tests (21 requests / 42 assertions), Happy Path Rule Flow
+  (10 / 19), Negative/Error Tests (7 / 14) — 0 failures. **Runtime target rationale:** the collection is
+  generated from the NestJS OpenAPI document, so NestJS is the contract-faithful target. The Go service
+  is at full `/api` parity but documents liveness at `/api/health` (not `/health`) — the one intentional
+  divergence, already covered by `validate:runtime:smoke` + the Go route-inventory parity test; no
+  OpenAPI/API change was made.
+- [x] **CI policy: unchanged.** Static `validate:postman` stays in push/PR CI (Postman job); the live
+  Newman smoke remains **local-only** (no runtime start in CI, no artifacts). Promoting it into CI is
+  recorded as optional future hardening.
+- [x] **Negative checks:** wrong/closed port → Newman fails clearly (`ECONNREFUSED`, exit 1); stale
+  collection / missing operation / missing env var → `validate:postman` fails (Slice 5/8 coverage,
+  re-confirmed green here). Cleanup verified: no leftover temp dirs, runtimes stopped.
+- [x] **Gate green:** lint `--max-warnings 0` (covers the new script), typecheck, `version:check` 10/10,
+  `validate:postman` 129/0, shared 105 / server 638 / service 14-pkg tests pass, client **100/100/100**.
+  No API/OpenAPI/`rules.json`/version/tag change; no private docs surfaced.
+
 - [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
 - [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
   format change — unless a proven release blocker justifies it, documented if so.

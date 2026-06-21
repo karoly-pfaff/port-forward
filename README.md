@@ -332,11 +332,16 @@ generated from the canonical OpenAPI contract (`docs/openapi.json`):
 Import both files into Postman and select the **Portier Local** environment. Regenerate and validate the collection with:
 
 ```powershell
-npm run generate:postman   # rebuild collection.json + environment.json from docs/openapi.json
-npm run validate:postman   # verify operation coverage, safety, and that the files are not stale
+npm run generate:postman      # rebuild collection.json + environment.json from docs/openapi.json
+npm run validate:postman      # verify operation coverage, safety, and that the files are not stale
+npm run validate:postman:local # local-only: run the collection against a live runtime with Newman
 ```
 
-`validate:postman` runs in CI, so the collection cannot silently drift from the API contract. See [`postman/readme.md`](postman/readme.md) for the full variable list and an optional local Newman run.
+`validate:postman` runs in CI, so the collection cannot silently drift from the API contract.
+`validate:postman:local` is a local-only smoke (not in CI): it starts a throwaway runtime on a free
+port, runs the collection with [Newman](https://github.com/postmanlabs/newman) (a dev dependency), and
+cleans up — no network, no user config touched. See [`postman/readme.md`](postman/readme.md) for the
+full variable list, runtime-target notes, and override flags.
 
 ## Recommended Forwarding Ports
 

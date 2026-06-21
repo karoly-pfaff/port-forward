@@ -293,7 +293,10 @@ packaging/install/upgrade story.
 
 **Status:** Current — release-candidate hardening kicked off after `v1.18.0`. No new
 features, no installer formats, no new service lifecycle behavior (bug fixes only), no API/
-OpenAPI/`rules.json`/migration/gate changes unless a proven release blocker forces it.
+OpenAPI/`rules.json`/migration/gate changes unless a proven release blocker forces it. The RC
+readiness gate has passed with no open blockers; the v2.0 recommendation is **GO with named
+non-blocking deferrals**. The v2.0 version bump, release-artifact
+build, and tag/publish remain a separate, explicit, manual release step.
 
 **Core theme:** No new features. No architecture churn. Release-candidate stabilization
 only.
