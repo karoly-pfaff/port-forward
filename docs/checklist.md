@@ -61,7 +61,7 @@ git diff --check -- docs
 - [ ] State validation commands run and results.
 - [ ] State validation intentionally not run and why.
 - [ ] Call out risk areas, follow-up work, or platform checks still needed.
-- [ ] If API behavior changed, update `docs/api-contract.md`, the in-app API Docs view,
+- [ ] If API behavior changed, update `docs/api-contract.md`, the in-app API Reference view,
   and relevant tests.
 - [ ] If user-facing terminology changed, check `docs/glossary.md`.
 - [ ] If CLI behavior changed, update `tools/cli/readme.md` and black-box CLI tests.
@@ -143,224 +143,28 @@ asserts `GET /api/runtime` reports `version` equal to the package version.
 npm run validate:runtime:smoke
 ```
 
-## v1.19 RC Hardening (2.0 Release Candidate)
+## Release Candidate Guards (2.0 RC)
 
-**Status: CLOSED — tagged `v1.19.0`.** All RC-hardening slices landed (client lint + 100/100/100
-coverage, push/PR CI, single-source version tooling, OpenAPI-driven API Reference, generated +
-validated Postman collection, local Newman runtime smoke via `validate:postman:local`, UI
-consistency/error-navigation polish, E2E runtime validation, UDP expired-session pruning, Go
-generic-500 redaction). Version surfaces bumped to `1.19.0` via `npm run version:set`. This is a
-milestone tag, not the final v2.0 release; the next phase is the 2.0-RC documentation cleanup, and
-the full release matrix below still applies before any v2.0 tag.
+v1.19.0 (2.0 RC hardening) is **closed and tagged**; see [changelog.md](changelog.md) for what
+shipped. The next phase is the 2.0-RC documentation cleanup, and the full release matrix below still
+applies before any v2.0 tag. These guards stay in force through the RC and documentation phases:
 
-v1.19 is release-candidate stabilization only — no new features, no new installer formats, no
-new service lifecycle behavior (bug fixes only). It runs as a risk-based plan of ~9–11 bounded
-slices, each small enough to validate properly. Use this as a lightweight gate per RC slice;
-the full release matrix below still applies before any v2.0 tag.
-
-RC focus areas (one or more bounded slices each): v1.16 deferred-audit triage; client lint
-hardening (React/hooks rules); honest client coverage baseline + a meaningful test pass with
-conservative gate ratcheting; replacing the hand-maintained API view with an OpenAPI-driven
-one; a complete Postman collection generated from the canonical OpenAPI contract; a practical
-client UI consistency pass; stable E2E strengthening; a fast push/PR CI workflow (separate from
-the manual release workflows); the bounded UDP-prune and generic-500 backend fixes;
-diagnostics/user-path docs polish; a CI/release-workflow readiness gate; and a v1.19 closure +
-v2.0 go/no-go report.
-
-Slice 2 status (client quality gates + push CI):
-
-- [x] Client React lint hardened — `eslint-plugin-react` (recommended + jsx-runtime) and
-  `eslint-plugin-react-hooks` (`rules-of-hooks` + `exhaustive-deps` = error) scoped to
-  `client/sources/**`; `@typescript-eslint/no-explicit-any` is now `error` repo-wide (prod
-  code was already `any`-free; two server forwarder tests were typed to drop their casts).
-- [x] `npm run lint` enforces `--max-warnings 0` and passes clean.
-- [x] Honest client coverage measured (≈97.2% stmts / 91.8% branch / 86.8% funcs) and the gate
-  ratcheted **94/89/78 → 95/90/85** (the misleading 78 function floor raised to a meaningful
-  85, still safely below actual). Added meaningful App / ActivityLogView / TopHeader tests.
-- [x] Fast push/PR CI (`.github/workflows/continuous-integration.yml`) added — runs the real gates, builds no
-  release packages, uploads no artifacts, publishes nothing, creates no tag. The 5 manual
-  release/smoke workflows remain `workflow_dispatch`.
-
-Slice 3 status (client coverage meaningful test pass + CI filename fix):
-
-- [x] CI workflow filename typo fixed → `.github/workflows/continuous-integration.yml`; all
-  references updated; the old misspelled filename no longer appears in active docs/config.
-- [x] Exhaustive meaningful client test pass (drag-and-drop reorder, status filter, traffic
-  displays, rule-form validation, App start/stop/delete/reorder/auto-refresh/go-to-activity/
-  rules-from-settings handlers, every settings panel + hook branch, Live Connections filters,
-  diagnostics/runtime-env branches, and all inline callbacks) — no shallow padding, no
-  snapshots. ~90 tests added across the slice (client suite 459 → 547).
-- [x] Client coverage **97.2/91.8/86.8 → 100/100/100**; gate ratcheted **95/90/85 →
-  100/100/100** (matching `shared`/`server`). Every reachable path is tested; the few genuinely
-  unreachable spots (concurrency in-flight guards, non-Error `JSON.parse` fallbacks,
-  button-gated early returns, strict-union switch/`??` fallbacks, and the dead
-  planned/parity/method-class badges in the soon-to-be-replaced ApiDocsView) carry narrow
-  `/* v8 ignore … */` annotations with documented reasons, exactly as the server does. No gate
-  lowered.
-
-Slice 4 status (OpenAPI-driven API documentation view):
-
-- [x] The hand-maintained static `ENDPOINTS[]` array is **removed**. `ApiDocsView` is now
-  derived entirely from the canonical generated OpenAPI artifact (`docs/openapi.json`) via a
-  processing layer (`client/sources/features/apidocs/openApiDocs.ts`) that builds a stable,
-  display-friendly view model — grouped by tag, deterministically ordered, with parameters,
-  request-body and response schema-name summaries. No raw JSON is dumped; input is parsed as
-  `unknown` with type guards (no `any`, no unsafe casts). The dead planned/parity/method-class
-  branches are gone (and with them the v8-ignore annotations on that file).
-- [x] Client coverage **stays 100/100/100** (gate unchanged at 100/100/100); the processor and
-  view are fully covered by `openApiDocs.test.ts` (fixtures) + `ApiDocsView.test.tsx` (real
-  artifact + a crafted model for valid optional-field shapes). No coverage exception added.
-- [x] The dev server reads the repo-root artifact via `server.fs.allow` in `client/vite.config.ts`;
-  the production `vite build` bundles it deterministically. The existing API-docs E2E spec
-  (asserts `/api/forwards` + `/api/connections` render) remains valid.
-
-Slice 5 status (Postman collection & API consumer artifacts):
-
-- [x] A Postman collection lives in the root `postman/` directory with simple, unprefixed
-  names: `postman/collection.json` (v2.1) + `postman/environment.json` (v2.1 environment).
-  Both are **generated from** the canonical OpenAPI artifact (`docs/openapi.json`) by
-  `npm run generate:postman` (shared builders in `scripts/library/postman.js`); not a
-  hand-maintained second contract. `postman/readme.md` documents the structure and variables.
-- [x] Collection structure: **Atomic Endpoint Tests** (one request per public OpenAPI
-  operation — 21 — grouped by tag, non-destructive: `id`/`group` params resolve to
-  `{{invalidRuleId}}`/`{{group}}`, apply is `dryRun`, import an empty merge, reorder an empty
-  no-op), a self-cleaning **Happy Path Rule Flow** (runtime → create → list/status → rename →
-  start/stop → export → delete → confirm cleanup), and **Negative/Error Tests** (400/404 with
-  the `{ errors }` envelope). Requests are `{{baseUrl}}{{apiPrefix}}`-driven; no hard-coded URLs.
-- [x] `npm run validate:postman` passes (every OpenAPI operation present exactly once in the
-  atomic folder, no extra/unknown operation, flow/negative requests map to contract operations,
-  `{{baseUrl}}`-driven URLs, required env vars, no secrets / `docs/private`, deterministic
-  regenerate-and-compare → "run `npm run generate:postman`" on drift). Negative checks
-  confirmed: missing/duplicate/extra operation, hard-coded URL, missing env var, stale output,
-  `docs/private` string, secret-looking value, and invalid JSON all fail the validator.
-- [x] CI runs `npm run validate:postman` in a dedicated **Postman** job (push/PR). No Postman
-  cloud publishing, no Newman in CI (documented as an optional local run only), no network.
-
-Slice 6 status (client UI consistency pass):
-
-- [x] **Design-token vocabulary consolidated.** Four phantom CSS custom properties that had
-  drifted into the stylesheet (`--accent`, `--fg-muted`, `--surface-muted`, and a `--bg-muted`
-  fallback) — none defined in `:root`, so they silently fell back to inherited/no value — were
-  mapped to the established tokens: `--accent → --blue-dim`, `--fg-muted → --text-muted`,
-  `--surface-muted → --bg-raised`, `--bg-muted` fallback inlined. This restores the intended
-  accent on the Activity Log text buttons / filter banner and gives the OpenAPI **API Reference**
-  group headers the same `--bg-raised` background as table headers, so it matches the rest of
-  the app. No `:root` token set was changed; pixels for already-correct surfaces are unchanged.
-- [x] **Copy capitalization aligned to the established Title-Case chrome convention.** The two
-  newer feature views (Activity, Live Connections) had drifted to sentence case for their filter
-  placeholder options and the *Clear filters* button. Aligned them to the flagship Forward Rules
-  convention (Title-Case filter `<option>` labels + buttons): `All Severities` / `All Types` /
-  `All Protocols` / `All Statuses` / `All Rules`, and `Clear Filters`. The flagship's
-  E2E-pinned strings (`All Statuses`, `All Groups`) were left untouched; descriptive
-  activity-type option labels (`Rule created`, `TCP connection opened`, …) stay sentence case as
-  content, not chrome.
-- [x] Client coverage **stays 100/100/100** (gate unchanged); lint `--max-warnings 0`, typecheck,
-  and `build:client` all pass. No API/OpenAPI/`rules.json`/version/package/tag change; no private
-  docs surfaced; no new product feature or redesign.
-
-Slice 7 status (E2E runtime validation + backend RC fixes):
-
-- [x] **E2E executed against the live runtime** (NestJS webServer via `test:e2e:fresh` / Playwright)
-  — the full suite passes: **45/45 tests** (run in groups; `errors` 2, `summary` 4, `activity`,
-  `mobile`, `udp` 5, plus the unchanged `tcp`/`dashboard`/`connections`/`settings`/`portier`/
-  `apidocs` = 32). Fixed one selector in `errors.spec.ts`: `/TCP connection error/` matched the
-  hidden type-filter `<option>`; tightened to `/TCP connection error:/` (the event-message colon)
-  so it targets the visible Activity Log row, not the dropdown label. No assertion weakened. A
-  single *full-suite* run stalled under local resource contention (leaked node processes); running
-  in groups with a free port completes in seconds — an environment issue, not a product/test bug.
-- [x] **O-1/T-2 — UDP session pruning wired.** `PruneExpired` had zero non-test callers, so one-way
-  registry entries grew unbounded (Snapshot hid expired sessions but memory was retained). A
-  running UDP forwarder now runs a prune ticker (`DefaultUDPPruneInterval`, injectable in tests)
-  that calls `registry.PruneExpired`; it stops via a `done` channel in `Stop()` (no goroutine
-  leak, clean shutdown, no behavior change to active sessions). Added `UdpSessionRegistry.Len()`
-  to measure retained entries (Snapshot can't), and tests: registry reclaim-vs-keep via `Len`,
-  forwarder loop reclaims expired sessions, and the prune goroutine stops cleanly on `Stop`.
-- [x] **S-1 — generic Go `500` redacted.** Both Go generic-500 paths (`writeManagerError` catch-all
-  and the config-apply `ImportConfig` failure) now return the fixed `"Internal server error."`
-  envelope instead of echoing `err.Error()`, matching the NestJS `ApiErrorEnvelopeFilter` (a
-  shared `writeInternalError` helper). Tests assert the fixed message and that the injected
-  `*PathError` path is not leaked; validation/conflict/not-found messages are preserved.
-  `docs/api-contract.md` updated to reflect parity. No OpenAPI schema change (path is unmodelled).
-- [x] Validation green: service coverage gate **90.4%** PASS, `validate:contract` **237/0/0**,
-  `validate:openapi:go` PASS, `go vet` clean, client **100/100/100**, shared 105 / server 638
-  pass, lint / typecheck / `version:check` (10/10) / `validate:postman` clean. `-race` skipped:
-  cgo/gcc unavailable in this environment (documented).
-
-Slice 8 status (RC readiness gate + v2.0 go/no-go — milestone closure):
-
-- [x] **Full local validation gate green** at commit `06ec494` (clean tree, pushed, version still
-  **1.18.0** — no bump): lint (`--max-warnings 0`) PASS; typecheck PASS; shared 105 / server 638 /
-  client 570 tests pass; client coverage **100/100/100** and the full coverage gate PASS (shared/server/
-  client 100, service 90.4, cli 97.1, replay 96.5); `version:check` 10/10; `validate:postman` 129/0;
-  `validate:contract` **237/0/0** (run against freshly rebuilt Go + TS runtimes); `validate:openapi:go`
-  PASS; `validate:config` 71/1-skip; `validate:scripts` 48/2-skip; `validate:cli` + `validate:replay`
-  PASS; `build:client` PASS; `go vet` clean (service/cli/replay); all 6 workflow YAMLs parse. No gate
-  lowered. (`npm run check` = `version:check && lint && typecheck && test`, each run individually green.)
-- [x] **CI green** — latest `main` push run (`Continuous Integration`, `06ec494`) success, all 10 jobs
-  (Service, Server, Postman, Shared, Replay, Client, Scripts, Sanity, Lint, CLI); E2E **45 passed**;
-  CodeQL success. CI uploads no artifacts, publishes nothing, creates no tag (verified by inspection).
-- [x] **Release workflows remain manual-only** — the 5 release/smoke workflows are `workflow_dispatch`;
-  none publish a Release or tag; upload is scoped to `build/releases/<platform>/**`; the `validate:artifacts`
-  privacy guard rejects any `private` path segment; checksums file is `checksums.sha256`, package-first
-  ordering. **Not re-run this slice** — last proven release artifacts remain **v1.18.0**.
-- [x] **Negative/regression checks** (safe, reversible): version drift → `version:check` flags 7 surfaces
-  out of sync; tampered Postman → `validate:postman` reports STALE (1 failed); service gate raised 90→99 →
-  coverage gate FAILs (90.1% < 99%); invalid YAML → parser rejects (`YAMLException`). All restored; tree clean.
-- [x] **v2.0 go/no-go** recorded in the internal readiness note: **GO with named non-blocking deferrals**
-  (signing/notarization, Release-publish automation, arm64 native packages, Windows arm64, optional
-  hardening — classified post-2.0 / optional / out-of-scope). v2.0 tag stays a separate explicit manual
-  release step (bump → full release matrix → manual release workflows → upgrade guide/notes → tag/publish).
-- [x] No version bump, no tag, no GitHub Release, no API/OpenAPI-schema/`rules.json`/migration change, no
-  private-doc surfacing in this slice. Client **100/100/100** and strict lint preserved.
-
-Slice 9 status (local Newman runtime smoke):
-
-- [x] **`validate:postman:local` added** (`scripts/validate-postman-local.js`) — a local-only Newman smoke
-  that executes the generated `postman/collection.json` (+ `environment.json`) against a live runtime,
-  complementing the static `validate:postman` drift check. **Newman pinned as a devDependency**
-  (`newman ^6.2.2`, lockfile updated) so the smoke runs offline; no global install, no Postman cloud,
-  no network beyond loopback.
-- [x] **Self-contained + safe.** The script starts a fresh runtime on a free port (or `--port` /
-  `PORTIER_PORT`) with an empty **temporary** `rules.json`, polls liveness, runs Newman, then stops the
-  runtime and deletes the temp dir. No user/production config is touched. Each of the three top-level
-  folders runs against its **own** freshly-started runtime so they stay independent (the atomic *Create
-  a forward rule* intentionally leaves a stopped rule that would otherwise 409 the Happy Path create);
-  the Happy Path flow self-cleans (deletes its rule, asserts the list is empty). Ports overridable via
-  `--port` / `--listen-port` / env; folders selectable via `--folder`.
-- [x] **All three folders exercised and GREEN** against the live NestJS/TS server
-  (`server/build/index.js`): Atomic Endpoint Tests (21 requests / 42 assertions), Happy Path Rule Flow
-  (10 / 19), Negative/Error Tests (7 / 14) — 0 failures. **Runtime target rationale:** the collection is
-  generated from the NestJS OpenAPI document, so NestJS is the contract-faithful target. The Go service
-  is at full `/api` parity but documents liveness at `/api/health` (not `/health`) — the one intentional
-  divergence, already covered by `validate:runtime:smoke` + the Go route-inventory parity test; no
-  OpenAPI/API change was made.
-- [x] **CI policy: unchanged.** Static `validate:postman` stays in push/PR CI (Postman job); the live
-  Newman smoke remains **local-only** (no runtime start in CI, no artifacts). Promoting it into CI is
-  recorded as optional future hardening.
-- [x] **Negative checks:** wrong/closed port → Newman fails clearly (`ECONNREFUSED`, exit 1); stale
-  collection / missing operation / missing env var → `validate:postman` fails (Slice 5/8 coverage,
-  re-confirmed green here). Cleanup verified: no leftover temp dirs, runtimes stopped.
-- [x] **Gate green:** lint `--max-warnings 0` (covers the new script), typecheck, `version:check` 10/10,
-  `validate:postman` 129/0, shared 105 / server 638 / service 14-pkg tests pass, client **100/100/100**.
-  No API/OpenAPI/`rules.json`/version/tag change; no private docs surfaced.
-
-- [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
-- [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
-  format change — unless a proven release blocker justifies it, documented if so.
-- [ ] Client lint runs clean (React-hooks rules; `--max-warnings 0`); do not lower or bypass
-  any lint gate.
-- [ ] Client coverage gate reflects the measured actual; raise a gate only when the actual is
-  safely above it; never document an unverified coverage figure. No gate lowered.
-- [x] Postman collection (`postman/collection.json` + `postman/environment.json`, v2.1) is
-  **generated from** the canonical OpenAPI artifact (not a hand-maintained second contract);
-  `npm run validate:postman` passes (every OpenAPI operation present, `{{baseUrl}}` variable,
-  no secrets / private paths / `docs/private` references, deterministic/no-drift) and runs in
-  push/PR CI. No Postman cloud publishing.
-- [ ] No automatic startup migration added; no GitHub Release published (tag-and-manual stays
+- [ ] No version surface is bumped outside an explicit version release (the v2.0 bump is its own
+  step; use `npm run version:set` / `version:bump`, never hand-edit).
+- [ ] No API behavior, OpenAPI schema (beyond version metadata), or `rules.json` format change —
+  unless a proven release blocker justifies it, documented if so.
+- [ ] Client lint runs clean (React-hooks rules; `--max-warnings 0`); do not lower or bypass any
+  lint gate.
+- [ ] Client coverage gate reflects the measured actual (currently 100/100/100); never document an
+  unverified coverage figure, and never lower a gate.
+- [ ] The Postman collection stays **generated** from `docs/openapi.json` (not a hand-maintained
+  second contract); `npm run validate:postman` passes and runs in push/PR CI; `npm run
+  validate:postman:local` stays a local-only Newman smoke. No Postman cloud publishing.
+- [ ] No automatic startup migration is added; no GitHub Release is published (tag-and-manual stays
   the policy).
-- [ ] Keep `docs/private/**` out of logs, artifacts, and release output.
-- [ ] For docs/planning-only slices, run `npm run lint` + `npm run typecheck`; rerun heavy
-  hosted release/smoke workflows only when build/release scripts change.
+- [ ] `docs/private/**` stays out of logs, artifacts, release output, and public docs.
+- [ ] For docs/planning-only changes, run `npm run lint` + `npm run typecheck`; rerun heavy hosted
+  release/smoke workflows only when build/release scripts change.
 
 ## Before A Version Release
 
@@ -712,7 +516,7 @@ Use these when the change touches the listed area.
 - [ ] Update both TypeScript server and Go service when behavior is observable.
 - [ ] Update CLI DTOs if the CLI reads the shape.
 - [ ] Update `docs/api-contract.md`.
-- [ ] Update in-app API Docs and tests.
+- [ ] Update the in-app API Reference (OpenAPI-driven) and tests.
 - [ ] Run `npm run validate:contract`.
 - [ ] Run `npm run validate:openapi:go` when route/status/OpenAPI inventory changes.
 

@@ -6,7 +6,7 @@ Project documentation index.
 
 - [architecture.md](architecture.md) — monorepo layout, server runtimes, package layout, forwarding internals, UDP modes, activity log, platform service support.
 - [api-contract.md](api-contract.md) — full REST API contract: endpoints, request/response shapes, static file serving, error format.
-- [recovery.md](recovery.md) — startup/config/autostart recovery policy (v1.17): failure classes, recovery principles, quarantine, observability direction.
+- [recovery.md](recovery.md) — startup/config/autostart recovery behavior: failure classes, quarantine/preservation, and how recovery is surfaced in the API, CLI, and UI.
 - [glossary.md](glossary.md) — canonical Portier terms and frozen public-name exceptions.
 - [service/readme.md](../service/readme.md) — native Go service (preferred packaged runtime): chi API router, route modules, `app.App` container.
 - [server/readme.md](../server/readme.md) — TypeScript NestJS server (reference/Node fallback runtime): modules, controllers, OpenAPI generation.
@@ -23,6 +23,7 @@ raw/internal notes move under gitignored `audits/private/`.
 ## Platform Deployment
 
 - [installer.md](installer.md) — current packaged layout, platform install paths, release artifacts, and packaging validation.
+- [upgrade-v2.md](upgrade-v2.md) — upgrading an existing v1.x install to v2.0: compatibility, backup, verification, and rollback.
 - [scripts/windows/readme.md](../scripts/windows/readme.md) — Windows service install, packaging, both runtimes.
 - [scripts/macos/readme.md](../scripts/macos/readme.md) — macOS LaunchAgent install, Go service and Node fallback modes.
 - [scripts/linux/readme.md](../scripts/linux/readme.md) — Linux systemd unit, both runtimes, firewall notes.

@@ -27,7 +27,7 @@ the highest-impact project rules. Keep it compact; long slice history belongs in
 ## Architecture Guardrails
 
 - Management UI/API defaults to `127.0.0.1:47831`; do not expose it on `0.0.0.0` by default.
-- API changes update `docs/api-contract.md`, the in-app API Docs view, and tests.
+- API changes update `docs/api-contract.md`, the in-app API Reference view, and tests.
 - Cross-runtime behavior changes need TypeScript and Go coverage plus `npm run validate:contract`.
 - Config plan/apply logic belongs in the plan-engine helpers, not HTTP handlers.
 - Mutating manager operations must validate before mutation and roll back after persistence failure.

@@ -71,6 +71,9 @@ commands. Keep entries short. Put feature history in `docs/changelog.md` or
 
 ## Activity And Diagnostics
 
+- **Activity Log**: The UI view and feature backed by `/api/activity` — the in-memory
+  bounded event log, with severity/type/rule filters, JSON export, and clear. Use this
+  name for the view; use "activity event" for an individual record.
 - **Activity event**: An in-memory event in `/api/activity`: rule lifecycle, TCP
   connection, UDP packet/session, or config event.
 - **Activity type**: The event type value such as `rule.started` or
@@ -90,6 +93,8 @@ commands. Keep entries short. Put feature history in `docs/changelog.md` or
   secrets, environment dumps, process lists, and logs.
 - **AI handoff prompt**: A local prompt template for asking an assistant to interpret
   Portier output. Portier does not upload anything.
+- **API Reference**: The in-app UI view (opened from the header) generated from the
+  canonical OpenAPI contract (`docs/openapi.json`). Use this name, not "API Docs".
 
 ## Policy And Workflow Terms
 
@@ -139,7 +144,8 @@ Do not rename these for cosmetic consistency:
 - Prefer "forward rule" in prose; "rule" is fine when context is clear.
 - Use "Go service" and "TypeScript server" when distinguishing implementations.
 - Use "config apply" for plan-based apply and "config import" for import endpoints.
-- Use "activity event" for `/api/activity`.
+- Use "Activity Log" for the view and "activity event" for an individual `/api/activity` record.
+- Use "API Reference" for the in-app OpenAPI view, not "API Docs".
 - Keep "advisory" and "warning" distinct.
 - Use "live connection" for TCP and "UDP session" for UDP.
 - Use "diagnose" for the per-rule action and "diagnostics export" for the bundle.

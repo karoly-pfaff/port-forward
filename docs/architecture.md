@@ -180,15 +180,17 @@ In **development**, the server handles the API and the Vite dev server handles t
 The client uses relative `/api` paths (`/api/forwards`, `/api/status`, etc.) for all requests. In development, Vite proxies these to the server. In production, the server handles them directly since both the API and the UI run on the same origin. This means the client bundle does not embed the host or port.
 
 The app shell is split into focused components:
-- **`TopHeader`**: brand, subtitle, Settings and API Docs shortcuts, mobile hamburger button.
+- **`TopHeader`**: brand, subtitle, Settings and API Reference shortcuts, mobile hamburger button.
 - **`Sidebar`**: nav buttons for all five views, running status footer.
 - **`RuleSummaryCards`**: reusable 4-card summary (Total/Running/Stopped/Error) used by the Dashboard, Rules, and Activity views.
 
 The sidebar has five functional views:
 - **Dashboard** (`view = "dashboard"`): stat cards, top rules by traffic, recent activity.
 - **Forward Rules** (`view = "rules"`): stat cards, rules table with drag-to-reorder.
-- **Activity** (`view = "activity"`): the activity log viewer with severity filter, limit selector, and auto-refresh.
+- **Activity Log** (`view = "activity"`): the activity log viewer with severity filter, limit selector, and auto-refresh.
+- **Live Connections** (`view = "connections"`): read-only TCP connection and UDP session visibility with filters.
 - **Settings** (`view = "settings"`): management endpoint info, port range, config export/import.
-- **API Docs** (`view = "api-docs"`): static list of all REST endpoints.
+
+The **API Reference** view (`view = "api-docs"`) is opened from the header, not the sidebar. It is generated from the canonical OpenAPI contract (`docs/openapi.json`), grouped by tag.
 
 On mobile (≤700px), the sidebar is hidden and a hamburger button in the header opens it as an overlay.

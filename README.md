@@ -2,356 +2,68 @@
 
 [![Continuous Integration](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/continuous-integration.yml)
 
-Portier is a local TCP/UDP port forwarding manager with a native Go service runtime, a TypeScript server runtime, and a simple React web UI.
+Portier is a local TCP/UDP port-forwarding manager for development and LAN testing. It pairs a
+native Go service runtime (and a TypeScript fallback) with a React web UI and a Go CLI, all
+speaking the same local REST API. The management UI/API binds to `127.0.0.1:47831` by default and
+is not reachable from the LAN.
 
-## Install
+Portier is local-first: no telemetry, no cloud sync, no auto-update, and no remote/team/auth
+management.
 
-```powershell
-npm install
-```
-
-## Run
-
-### Development Mode
-
-Run the server and client together:
+## Quick Start
 
 ```powershell
-npm run start:dev
+npm install          # install workspace dependencies
+npm run start:dev    # run the TypeScript server + Vite client together
 ```
 
-Run them separately:
+The server listens on `http://127.0.0.1:47831`; the dev client runs on `http://127.0.0.1:5173`
+and proxies `/api` requests to it. During development, rules are stored in `data/forwards.json`
+(override with `PORTIER_CONFIG`).
 
-```powershell
-npm run dev -w server
-npm run dev -w client
-```
-
-The server listens on `http://127.0.0.1:47831` by default. The client runs at `http://127.0.0.1:5173` and proxies `/api` requests to the server.
-
-Rules are stored in `data/forwards.json` by default. Set `PORTIER_CONFIG` to use another path.
-
-### Repository Build Runtime
-
-Build all packages:
+To build everything and run the bundled runtime from the repository:
 
 ```powershell
 npm run build
+npm run start:service   # native Go service serving the built client
+npm run start:server    # TypeScript server alternative
 ```
 
-Start the built TypeScript server from the repository (serves `client/build` on the same origin as the API):
+Open `http://127.0.0.1:47831` to use the management UI.
 
-```powershell
-npm run start:server
-```
+## Runtimes
 
-Or run it directly with explicit options:
+Portier ships two server runtimes behind one REST API contract:
 
-```powershell
-$env:NODE_ENV = "production"
-node server/build/index.js --service --static-dir client/build
-```
+- **Go service** (`service` / `service.exe`) — the preferred production runtime: small binary, no
+  Node.js dependency, no warm-up.
+- **Node fallback** (`server.js`) — the supported TypeScript reference runtime; requires Node.js.
 
-This is a repository smoke-test/runtime command. Production packages use the flat install layout (`service` or `service.exe`, `server.js`, and `web/`). API routes stay under `/api`; non-API routes fall back to `index.html`. Use `--static-dir` or `PORTIER_STATIC_DIR` to point either runtime at a different web UI directory.
-
-### Native Go Service
-
-The `service/` directory contains the native Go service implementation. It is the preferred runtime for production deployment: smaller binary, no Node.js dependency, no warm-up time. The TypeScript server in `server/` remains supported as a reference implementation and fallback runtime. Both runtimes implement the same API contract.
-
-Build the Go service from the repository root:
-
-```powershell
-npm run build:service
-```
-
-The output is:
-
-```text
-service/build/portier-service
-```
-
-Run it against the dev client build:
-
-```powershell
-npm run start:service
-```
-
-### Linux Release Archive (v1.1)
-
-Build a portable tar.gz for distribution:
-
-```bash
-npm run build:release:portable
-```
-
-Output: `build/releases/linux/portier-<version>-linux-amd64.tar.gz` (and
-`portier-<version>-linux-arm64.tar.gz` — portable archives carry the architecture in the name).
-
-The archive contains the clean runtime layout (`portier`, `service`, `server.js`, `web/`, `api/`, `readme.txt`). No signing required for Linux tar.gz archives. See `scripts/linux/readme.md`.
-
-### Linux systemd Service
-
-Build the package and install in one step:
-
-```bash
-npm run build:runtime
-sudo bash scripts/linux/service/install-service.sh
-```
-
-The install script auto-copies `build/portier/` into `/opt/portier/`, creates `/etc/portier/rules.json` if missing, generates `/etc/systemd/system/portier.service`, enables and starts the service.
-
-Node fallback (requires Node.js on the target machine):
-
-```bash
-sudo bash scripts/linux/service/install-service.sh --runtime node
-```
-
-The Go service ExecStart:
-
-```text
-/opt/portier/service --service --config /etc/portier/rules.json --host 127.0.0.1 --port 47831 --static-dir /opt/portier/web
-```
-
-Open `http://127.0.0.1:47831` after installation.
-
-```bash
-sudo bash scripts/linux/service/status-service.sh
-sudo bash scripts/linux/service/stop-service.sh
-sudo bash scripts/linux/service/start-service.sh
-sudo bash scripts/linux/service/uninstall-service.sh   # preserves rules.json
-```
-
-See `scripts/linux/readme.md` for flags, manual unit file install, and firewall notes.
-
-### macOS Release Archive (v1.1)
-
-Build a portable tar.gz for distribution:
-
-```bash
-npm run build:release:portable
-```
-
-Output: `build/releases/macos/portier-<version>-macos-amd64.tar.gz` (Intel) and
-`portier-<version>-macos-arm64.tar.gz` (Apple Silicon) — portable archives carry the architecture in the name.
-
-The archive contains the clean runtime layout (`portier`, `service`, `server.js`, `web/`, `api/`, `readme.txt`). Unsigned — macOS Gatekeeper may quarantine downloaded binaries; use `xattr -cr` to clear. Sign with Developer ID for public distribution. See `scripts/macos/readme.md` for signing notes.
-
-### macOS LaunchAgent
-
-Build the package and install:
-
-```bash
-npm run build:runtime
-bash scripts/macos/service/install-launch-agent.sh
-```
-
-The install script auto-copies `build/portier/` to `~/Applications/Portier/`, creates `~/Library/Application Support/Portier/rules.json` if missing, generates `~/Library/LaunchAgents/com.portier.port-forwarding.plist` with absolute paths, and bootstraps the agent for the current user. No `sudo` is required.
-
-Open `http://127.0.0.1:47831` after installation. Logs are written to `~/Library/Logs/Portier/`.
-
-```bash
-bash scripts/macos/service/status-launch-agent.sh
-bash scripts/macos/service/stop-launch-agent.sh
-bash scripts/macos/service/start-launch-agent.sh
-bash scripts/macos/service/uninstall-launch-agent.sh   # preserves rules.json and logs
-```
-
-Use `--runtime node` to run with `server.js` instead of the native binary. Use `--purge` on uninstall to also remove config and logs. See `scripts/macos/readme.md` for full options.
-
-Forwarded ports on `0.0.0.0` may trigger macOS Firewall prompts. The management UI stays on `127.0.0.1:47831` and is not LAN-visible by default.
-
-### Windows Installer (MSI)
-
-The canonical Windows installer is the WiX **MSI** (silent install, Group Policy/SCCM/Intune, Add/Remove Programs + repair). The legacy Inno Setup installer has been retired to `scripts/windows/legacy/` (manual-only; not built by the release flow).
-
-**Build the release artifacts** (requires the WiX Toolset v7 for the MSI):
-
-```powershell
-npm run build:release:current
-```
-
-Output: `build/releases/windows/Portier-<version>.msi`, `portier-<version>-windows-amd64.zip`, and `checksums.sha256`. A full Windows release **fails if WiX 7 is unavailable**; pass `--portable-only` to build just the portable zip.
-
-The MSI is a **file-install** package:
-- Installs binaries to `%ProgramFiles%\Portier\` and bundles the canonical Windows service scripts under `%ProgramFiles%\Portier\service\`.
-- **Does not** create or start a Windows Service or scheduled task (no service custom actions). An admin opts in with the bundled `service\install-service.ps1`.
-- **Never** creates, overwrites, or migrates `rules.json`, and does not touch `%ProgramData%\Portier`.
-- Does not create Windows Firewall rules.
-
-It is validated by an extraction smoke (`npm run validate:install:msi`, no admin) and a full elevated install/uninstall smoke (`npm run validate:install:msi:full`). The MSI is unsigned — Windows SmartScreen may warn; sign with an EV certificate for public distribution. See `scripts/windows/release/readme.md` for full details.
-
----
-
-### Windows Executable and Service
-
-Build the Windows package:
-
-```powershell
-npm run build:runtime:windows
-```
-
-The output is created under `build\windows`:
-
-```text
-build\windows\
-  service.exe
-  server.js
-  web\
-    index.html
-    assets\
-  readme.txt
-```
-
-Run the Go service manually for testing:
-
-```powershell
-.\build\windows\service.exe --config ".\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\build\windows\web"
-```
-
-Machine install (Administrator required — installs to `%ProgramFiles%\Portier`):
-
-```powershell
-Copy-Item -Recurse -Force .\build\windows\* "$env:ProgramFiles\Portier\"
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1
-```
-
-User install (no Administrator — installs to `%LOCALAPPDATA%\Portier`):
-
-```powershell
-Copy-Item -Recurse -Force .\build\windows\* "$env:LOCALAPPDATA\Portier\"
-powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1 -Scope User
-```
-
-Config for machine install: `%ProgramData%\Portier\rules.json`. Config for user install: `%APPDATA%\Portier\rules.json`. Use `-UseNode` to run `node server.js` instead of the Go binary (requires Node.js).
-
-```powershell
-.\scripts\windows\service\status-service.ps1 [-Scope User]
-.\scripts\windows\service\stop-service.ps1   [-Scope User]
-.\scripts\windows\service\start-service.ps1  [-Scope User]
-.\scripts\windows\service\uninstall-service.ps1 [-Scope User]   # preserves rules.json
-```
-
-See `scripts/windows/readme.md` for detailed Windows packaging and service notes.
-See `scripts/macos/readme.md` for detailed macOS LaunchAgent notes.
-See `scripts/linux/readme.md` for detailed Linux systemd notes.
-
-### Release Artifact Generation (v1.1)
-
-Build the current platform's portable archive and installer (if tooling is available):
-
-```powershell
-npm run build:release:current
-```
-
-Portable archive only (skip installer):
-
-```powershell
-npm run build:release:portable
-```
-
-Validate the artifacts after building:
-
-```powershell
-npm run validate:release:portable
-npm run validate:release:current
-```
-
-**Output layout:**
-
-```text
-build/releases/
-  windows/
-    Portier-<version>.msi                  (canonical WiX installer)
-    portier-<version>-windows-amd64.zip    (portable)
-    checksums.sha256
-  macos/
-    Portier-<version>.pkg                  (native pkgbuild installer, unsigned)
-    portier-<version>-macos-amd64.tar.gz   (portable, Intel)
-    portier-<version>-macos-arm64.tar.gz   (portable, Apple Silicon)
-    checksums.sha256
-  linux/
-    portier_<version>_amd64.deb            (native dpkg-deb installer, disabled unit)
-    portier-<version>-1.x86_64.rpm         (native rpmbuild installer, disabled unit)
-    portier-<version>-linux-amd64.tar.gz   (portable)
-    portier-<version>-linux-arm64.tar.gz   (portable)
-    checksums.sha256
-```
-
-Each portable archive contains the clean runtime layout (`service`/`service.exe`, `server.js`, `web/`, `readme.txt`). Config (`rules.json`) is never bundled.
-
-Service binaries are platform-native. For a multi-platform release, run `release:current` on each target OS. The Go binaries are pure Go (CGO disabled), so all portable archives (Windows amd64, macOS/Linux amd64 + arm64) can be cross-built from any host with `npm run build:release:portable:all`; native installers (MSI, `.pkg`, `.deb`/`.rpm`) are built on their own OS.
-
-The native installers — Windows `.msi`, macOS `.pkg`, and Linux `.deb`/`.rpm` — and the split release/arm64-smoke workflows are described in `docs/installer.md`.
-
-## Package Layout
-
-The runtime package layout for all platforms:
-
-```text
-<install-dir>/
-  service          (or service.exe on Windows)
-  server.js        (Node fallback — requires Node.js)
-  web/
-    index.html
-    assets/
-```
-
-- `service` / `service.exe` — native Go service binary
-- `server.js` — bundled Node/TypeScript fallback
-- `web/` — built React client UI
-- `rules.json` remains external and is never packaged
-
-Development build output (repo-internal, not distributed):
-
-```text
-service/build/portier-service
-server/build/
-client/build/
-```
+Both serve the same `web/` React UI and keep `rules.json` external. See
+[docs/architecture.md](docs/architecture.md) for the runtime internals, forwarding paths, and UDP
+modes.
 
 ## Management UI
 
-Open `http://127.0.0.1:47831` in a browser to use the management interface. It has five views:
+The UI has five views:
 
-- **Dashboard** — stat cards (total/running/stopped/error, TCP/UDP counts), top rules by traffic, recent activity, quick actions.
-- **Forward Rules** — rules table with search, status filter, auto-refresh, Move Up/Down ordering, Add/Edit/Delete drawer, Diagnose action (per-rule diagnostic checks), and View Activity shortcut (per rule).
-- **Activity** — in-memory activity log with severity, type, and rule filters, export as JSON, clear log, and auto-refresh. Resets on server restart.
-- **Settings** — runtime/environment info with copy buttons, config export (datetime-stamped JSON), config import (merge or replace, with backup prompt on replace), and Download Diagnostics JSON (local bundle, no upload).
-- **API Docs** — client-side reference page listing all REST endpoints.
+- **Dashboard** — status stat cards, top rules by traffic, recent activity, quick actions.
+- **Forward Rules** — rules table with search, status filter, drag-to-reorder, add/edit/delete, and
+  per-rule diagnose.
+- **Activity Log** — in-memory event log with severity/type/rule filters, JSON export, and clear.
+- **Live Connections** — read-only TCP connection and UDP session visibility.
+- **Settings** — runtime info, config export/import (merge or replace), and a local diagnostics
+  bundle download.
+- **API Reference** — an in-app API reference generated from the canonical OpenAPI contract (opened
+  from the header).
 
-The sidebar is accessible on mobile via a hamburger button in the header. The management UI only binds to `127.0.0.1` by default and is not reachable from the LAN.
+The sidebar collapses behind a hamburger button on mobile.
 
-## API Collection (Postman)
+## Forwarding Rules
 
-A ready-to-run Postman collection lives in the root [`postman/`](postman/) directory,
-generated from the canonical OpenAPI contract (`docs/openapi.json`):
-
-- `postman/collection.json` — atomic endpoint tests, a self-cleaning happy-path rule flow, and negative/error tests.
-- `postman/environment.json` — a variable-driven environment. Edit it to point `host`/`port` at your runtime and to choose test values (rule name, listen/target ports, etc.).
-
-Import both files into Postman and select the **Portier Local** environment. Regenerate and validate the collection with:
-
-```powershell
-npm run generate:postman      # rebuild collection.json + environment.json from docs/openapi.json
-npm run validate:postman      # verify operation coverage, safety, and that the files are not stale
-npm run validate:postman:local # local-only: run the collection against a live runtime with Newman
-```
-
-`validate:postman` runs in CI, so the collection cannot silently drift from the API contract.
-`validate:postman:local` is a local-only smoke (not in CI): it starts a throwaway runtime on a free
-port, runs the collection with [Newman](https://github.com/postmanlabs/newman) (a dev dependency), and
-cleans up — no network, no user config touched. See [`postman/readme.md`](postman/readme.md) for the
-full variable list, runtime-target notes, and override flags.
-
-## Recommended Forwarding Ports
-
-Portier recommends forwarding listen ports in the `48000-48999` range. This keeps forwards away from common system, database, and development ports while staying easy to remember.
-
-Common ports are warned about, not blocked. A rule on `5173`, `8080`, or `5432` might be intentional, but it is also easy to collide with Vite, an alternate HTTP server, or PostgreSQL. Invalid ports outside `1-65535` are blocked.
-
-Using `0.0.0.0` as a forwarding `listenHost` exposes the forwarded port on all available network interfaces, including LAN interfaces. Use `127.0.0.1` when the forward should only be available on the local machine.
-
-## Example TCP Rule
+Rules are TCP or UDP port forwards (`protocol + listenHost:listenPort -> targetHost:targetPort`).
+Portier recommends listen ports in the `48000-48999` range; common system/database/development
+ports are warned about, not blocked, and ports outside `1-65535` are rejected.
 
 ```json
 {
@@ -365,343 +77,94 @@ Using `0.0.0.0` as a forwarding `listenHost` exposes the forwarded port on all a
 }
 ```
 
-This listens on `0.0.0.0:48001` and forwards TCP traffic to `127.0.0.1:3000`.
+UDP rules add a `udpMode` of `one-way`, `bidirectional-last-client`, or
+`bidirectional-multi-client` (see [docs/architecture.md](docs/architecture.md) for the trade-offs).
 
-## Example UDP Rule
+**LAN exposure:** a forwarding rule on `0.0.0.0` is reachable from the LAN and may require an OS
+firewall allowance. The management UI/API is separate and stays on `127.0.0.1:47831` unless you
+deliberately change it — keep it local-only unless you have secured remote administration.
 
-```json
-{
-  "name": "UDP metrics",
-  "protocol": "udp",
-  "listenHost": "0.0.0.0",
-  "listenPort": 48002,
-  "targetHost": "127.0.0.1",
-  "targetPort": 4100,
-  "enabled": true,
-  "udpMode": "one-way"
-}
-```
+## Install & Packaging
 
-This forwards UDP packets received on `0.0.0.0:48002` to `127.0.0.1:4100`.
+Native installers and portable archives are available for Windows, macOS, and Linux. All
+installers are **file-install only** — they never enable or start a service, create a scheduled
+task, or touch `rules.json`. See **[docs/installer.md](docs/installer.md)** for the canonical
+packaging layout, platform install paths, release artifacts, checksums, and the upgrade-safety
+guarantees, and **[docs/upgrade-v2.md](docs/upgrade-v2.md)** for upgrading from v1.x.
 
-## LAN Exposure Warning
+Per-platform service install/run notes:
 
-Forwarded listen ports are separate from the management UI/API bind address. A LAN-visible forwarding rule can be useful, but a LAN-visible management UI/API is high risk. Keep management on `127.0.0.1:47831` unless you deliberately need remote administration and have secured that access.
+- [scripts/windows/readme.md](scripts/windows/readme.md) — Windows service / scheduled task and MSI.
+- [scripts/macos/readme.md](scripts/macos/readme.md) — macOS LaunchAgent and `.pkg`.
+- [scripts/linux/readme.md](scripts/linux/readme.md) — Linux systemd and `.deb`/`.rpm`.
 
-## Windows Firewall Note
+## CLI & Replay
 
-Forwarded listen ports are separate from the management UI/API bind address. If a forward rule listens on a LAN-visible address such as `0.0.0.0`, the operating system firewall must allow inbound traffic to that forwarded port. On Windows, this may trigger Windows Firewall prompts or require an inbound firewall rule. If a rule appears to start but another machine cannot connect, check Windows Firewall and any endpoint security software.
-
-## UDP Modes
-
-- **one-way**: packets are forwarded from client to target only. No response is sent back.
-- **bidirectional-last-client**: target responses are forwarded back to the most recent UDP client. Concurrent clients may receive incorrect or missing responses.
-- **bidirectional-multi-client**: each source address/port gets its own target socket. Responses are routed back to the correct client. Sessions expire after 60 seconds of idle.
-
-## Testing
-
-### Unit and Integration Tests
+The Go `portier` CLI manages a running service from the terminal; it is a pure API client, not a
+second runtime. The separate offline `replay` tool analyzes saved Portier artifacts without
+contacting a runtime.
 
 ```powershell
-npm run test
+npm run build:cli       # build the CLI
+npm run build:replay    # build the replay tool
 ```
 
-Runs shared, server, client, and Go service tests. This requires the Go toolchain. If Go is unavailable, run the TypeScript suites individually with `npm run test:shared`, `npm run test:server`, and `npm run test:client`.
+See [tools/cli/readme.md](tools/cli/readme.md) and [tools/replay/readme.md](tools/replay/readme.md)
+for full command, flag, and exit-code documentation.
 
-### Playwright E2E Tests
+## API & Postman
 
-E2E tests run Chromium against the TypeScript server serving the built React client.
+- Full contract: **[docs/api-contract.md](docs/api-contract.md)**.
+- Canonical OpenAPI document: **[docs/openapi.json](docs/openapi.json)** (the in-app API Reference
+  is generated from it).
+- Ready-to-run Postman collection: **[postman/](postman/)** (`collection.json` + `environment.json`),
+  generated from the OpenAPI contract. `npm run validate:postman` checks it for drift in CI, and
+  `npm run validate:postman:local` runs it against a throwaway local runtime with Newman.
 
-**Prerequisites:**
+## Build & Validation
 
-1. Install Playwright browsers (one-time):
+Everyday checks:
 
 ```powershell
-npm run test:e2e:install
-```
-
-2. Build the React client (required for each client change):
-
-```powershell
-npm run build:client
-```
-
-**Run E2E tests:**
-
-```powershell
-npm run test:e2e           # headless Chromium
-npm run test:e2e:headed    # visible browser window
-npm run test:e2e:debug     # Playwright Inspector
-npm run test:e2e:fresh     # build:client then run tests
-```
-
-The E2E server starts on `127.0.0.1:47890` (distinct from the dev server at `47831`).
-Test data is isolated via a temp config in `test-results/` and reset before each test.
-Artifacts (screenshots, traces, videos) are written to `test-results/` only on failure.
-
-**What E2E covers:**
-
-*UI flows (`tests/e2e/portier.spec.ts`):*
-- App load: shell, navigation, header, empty state
-- Add Rule: drawer opens, form fills, rule appears in table
-- Edit Rule: drawer pre-fills, changes save, list updates
-- Start/Stop: status transitions between Running and Stopped
-- Delete: confirmation required, rule removed
-- Activity: view opens and events are recorded
-- Settings: config import (file upload, merge mode, success)
-- API Docs: endpoint list is visible
-- Mobile sidebar: hamburger opens sidebar, navigation closes it
-- Dashboard: stat cards render
-
-*Settings import/export flows (`tests/e2e/settings.spec.ts`):*
-- Replace-mode import using `v1-mixed.json` fixture: preview counts (4 rules, 1 TCP/3 UDP), confirm dialog, success message, all four rules visible in Forward Rules, pre-existing rule gone
-- Invalid JSON import: client-side parse error alert, no preview or import button, existing rules untouched
-- Export download: filename matches `portier-rules-YYYY-MM-DD.json`, `ExportedConfig` shape valid (`version`, `exportedAt`, `rules`), created rule present in export
-
-Config fixtures reused from `tests/fixtures/config/`. E2E intentionally does not repeat the full fixture matrix — `validate:config` owns exhaustive TS/Go parity.
-
-*Protocol forwarding (`tests/e2e/tcp.spec.ts`, `tests/e2e/udp.spec.ts`):*
-- TCP real forwarding: data passes end-to-end through a live forwarder to an in-process echo server
-- UDP one-way: packet delivered to receiver with no response path
-- UDP bidirectional-last-client: echo returned to the sender's source port
-- UDP bidirectional-multi-client: two concurrent clients each receive their own echo (no cross-contamination)
-- Activity log: TCP connection events and UDP forwarding events recorded and verifiable
-
-**OS service install validation (explicit release commands, not run automatically):**
-
-```powershell
-npm run validate:service:current              # current OS, user-scope (no admin on Windows)
-npm run validate:service:windows:user         # Windows scheduled task (no admin required)
-npm run validate:service:windows:machine      # Windows Service (Administrator required)
-```
-
-```bash
-npm run validate:service:macos    # macOS LaunchAgent (no sudo required)
-npm run validate:service:linux    # Linux systemd (requires sudo)
-```
-
-These scripts use test-specific service names, ports, and temp directories. They never touch production Portier installs or config.
-
-**Additional validation suites (explicit, not part of `npm run check`):**
-
-```powershell
-npm run validate:config            # config compatibility: fixture-based rules.json validation
-npm run validate:contract          # API contract parity: TypeScript + Go service if binary present
-npm run validate:binary            # runtime binary behavior: 5 behavioral tests against build/portier/
-npm run validate:runtime:behavior  # alias for validate:binary (fits validate:runtime:* namespace)
-npm run validate:scripts           # installer static analysis + dry-run on current platform
-```
-
-- `validate:config` — loads every fixture from `tests/fixtures/config/` and validates config compatibility: valid fixtures load and import correctly, invalid fixtures are rejected, duplicate bindings are caught, UDP mode defaults are applied, and both config shapes (raw array and Go-only wrapper) behave as documented. TypeScript runtime is always checked; Go runtime is checked when the binary is available. Pass `--skip-go` to force skip. No real `rules.json` is used.
-- `validate:contract` — runs all API scenarios (CRUD, start/stop, activity, config export/import, port advisory, error shapes) against the TypeScript server; if Go binary is built, runs the same suite against it and compares results. Skips Go parity with a clear message if the binary is absent. Pass `--skip-go` to force skip.
-- `validate:binary` — builds `build/portier/` then tests: health, static serving, missing-static-dir fallback, invalid-config exit, and clean shutdown. Pass `--no-build` to reuse an existing build.
-- `validate:scripts` — static analysis of all platform install and validate scripts (no firewall commands, test names in validate scripts, production path defaults, path quoting); plus dry-run execution on the current platform.
-
-Naming convention:
-- `npm run test` = unit/integration test runner (Vitest + Go test)
-- `npm run test:e2e` = Playwright browser E2E tests
-- `npm run validate:config` = fixture-based rules.json compatibility validation
-- `npm run validate:contract` = TS/Go API parity validation
-- `npm run validate:binary` / `validate:runtime:behavior` = packaged binary behavioral validation
-- `npm run validate:scripts` = installer/service script static + dry-run validation
-
-**Manual QA still required:**
-
-- Firewall and OS permission behavior (Windows Firewall prompts, macOS firewall dialogs, Linux firewall rules)
-
-**Automated (not manual):**
-
-- Package build and layout: `npm run validate:runtime:smoke`
-- OS service install/start/stop/uninstall: `npm run validate:service:*`
-- Config compatibility: `npm run validate:config`
-- API contract parity: `npm run validate:contract`
-- Runtime binary behavior: `npm run validate:binary`
-- Installer script analysis: `npm run validate:scripts`
-
-## Portier CLI (v1.3)
-
-The `portier` CLI is a Go-based command-line tool for managing the local Portier service from the terminal or scripts. It talks to the existing management API. It is not a second runtime.
-
-**Build:**
-
-```powershell
-npm run build:cli
-```
-
-Output: `tools/cli/build/portier-cli`. The runtime build (`npm run build:runtime`) also builds the CLI directly into `build/portier/portier[.exe]` as part of the runtime package.
-
-**Commands (Slices 2–7):**
-
-```
-portier list              # list configured forwarding rules
-portier status            # show rule runtime status
-portier activity          # show recent activity events (--limit, --rule, --type, --severity)
-portier start <id|name>   # start a rule (exact ID or unique name)
-portier stop <id|name>    # stop a rule
-portier diagnose <id|name># run diagnostics (pass/warn/fail/skip per check)
-portier config validate <file>                    # validate a local config file (no API call)
-portier config export --out <file>                # export current rules to a file
-portier config import --mode merge|replace <file> # import rules (--yes required for replace)
-portier diagnostics export --out <file>           # build a diagnostics support bundle
-portier runtime           # show runtime info from GET /api/runtime
-portier version           # show CLI version
-portier help              # show help
-```
-
-**Global flags:**
-
-```
---url string    Full management API URL (default: http://127.0.0.1:47831)
---host string   Management host
---port int      Management port
---json          Machine-readable JSON output
---version       Show CLI version
-```
-
-**Environment:** `PORTIER_URL` overrides the default URL.
-
-**Exit codes:** `0` success · `1` API error · `2` invalid args · `3` connection failure
-
-**Test:**
-
-```powershell
-npm run test:cli                   # go test ./... inside tools/cli
-npm run validate:cli               # test:cli + build:cli
-npm run validate:coverage:cli      # CLI coverage gate only (threshold: 92%, actual: 92.7%)
-npm run validate:coverage          # all five components — coverage gates enforced
-```
-
-See [tools/cli/readme.md](tools/cli/readme.md) for full usage, exit codes, and planned commands.
-
-### Replay tool (`replay`)
-
-`replay` is a **separate, offline analysis tool beside the CLI** (under `tools/replay/`, its own Go module) — not a `portier` subcommand. It reads existing Portier workflow artifacts (run/plan reports, history exports, support-report bundles) and analyzes them offline. It is strictly offline and read-only: it never executes workflows, contacts the runtime, reads referenced config/policy/baseline/report files, mutates inputs, or uploads anything.
-
-```powershell
-replay [--json] plan     --from <file-or-dir> [--out <file>]   # what analysis the artifact supports
-replay [--json] analyze  --from <file-or-dir> [--out <file>]   # deterministic findings/insights
-replay [--json] timeline --from <file-or-dir> [--out <file>]   # ordered reconstructed timeline
-replay [--json] compare  --left <a> --right <b> [--out <file>] # diff two saved artifacts
-replay [--json] explain  --from <file-or-dir> [--out <file>]   # explain emitted codes
-
-npm run build:replay      # builds tools/replay/build/replay
-npm run test:replay       # go test ./... inside tools/replay
-npm run validate:replay   # test:replay + build:replay
-```
-
-See [tools/replay/readme.md](tools/replay/readme.md) for details and the safety boundary.
-
----
-
-## Scripts
-
-```powershell
-npm run start:server
-npm run start:dev
-npm run build
-npm run build:server
-npm run build:service
-npm run build:client
-npm run start:service
-npm run test
-npm run test:e2e
-npm run test:e2e:fresh
 npm run lint
 npm run typecheck
-npm run check
-npm run build:runtime
-npm run build:runtime:windows
-npm run build:runtime:macos
-npm run build:runtime:linux
-npm run build:clean
-npm run validate:runtime           # validate existing build/portier/ layout
-npm run validate:runtime:build     # build then validate
-npm run validate:runtime:smoke     # build, validate, and run smoke test
-npm run validate:service:current          # OS service install validation for current platform
-npm run validate:service:windows:user     # Windows user-scope (scheduled task, no admin)
-npm run validate:service:windows:machine  # Windows machine-scope (Windows Service, admin required)
-npm run validate:service:macos            # macOS LaunchAgent (no sudo)
-npm run validate:service:linux            # Linux systemd (requires sudo)
-npm run build:release:current             # portable archive + installer for current platform
-npm run build:release:portable            # portable archive only (skip installer)
-npm run validate:release:current          # validate release artifacts for current platform
-npm run validate:release:portable         # validate portable archive only
-npm run build:cli                         # build CLI binary into tools/cli/build/portier[.exe]
-npm run test:cli                          # go test ./... inside tools/cli
-npm run validate:cli                      # test:cli + build:cli
-npm run validate:coverage:cli             # CLI coverage gate only (threshold: 92%)
-npm run validate:coverage                 # all five components — coverage gates enforced
+npm run test
+npm run build
+npm run check          # version:check + lint + typecheck + test
 ```
 
-macOS LaunchAgent scripts (run on macOS):
+Broader contract, coverage, packaging, and platform-service validation is documented in
+**[docs/checklist.md](docs/checklist.md)**, the practical QA checklist for development, release
+candidates, and platform release work.
 
-```bash
-bash scripts/macos/build-runtime.sh
-bash scripts/macos/service/install-launch-agent.sh [--node-mode] [--install-dir PATH] [--config-path PATH]
-bash scripts/macos/service/status-launch-agent.sh
-bash scripts/macos/service/start-launch-agent.sh
-bash scripts/macos/service/stop-launch-agent.sh
-bash scripts/macos/service/uninstall-launch-agent.sh
-```
+## Documentation
 
-Linux service scripts (run as root on Linux):
+- [docs/readme.md](docs/readme.md) — documentation index.
+- [docs/architecture.md](docs/architecture.md) — runtime internals, forwarding, UDP modes, activity log.
+- [docs/installer.md](docs/installer.md) — packaging, native installers, release artifacts, upgrade safety.
+- [docs/upgrade-v2.md](docs/upgrade-v2.md) — upgrading from v1.x to v2.0.
+- [docs/recovery.md](docs/recovery.md) — startup/config recovery behavior.
+- [docs/api-contract.md](docs/api-contract.md) — REST API contract.
+- [docs/glossary.md](docs/glossary.md) — canonical terminology.
+- [docs/checklist.md](docs/checklist.md) — validation and release checklist.
+- [docs/roadmap.md](docs/roadmap.md) — release direction and the road to 2.0.
+- [docs/changelog.md](docs/changelog.md) — release history.
+- [docs/agentic.md](docs/agentic.md) — coding-agent setup, `AGENTS.md`/`CLAUDE.md`, and helper hooks.
 
-```bash
-npm run build:release:current                  # portable tar.gz (amd64+arm64) + native .deb + .rpm → build/releases/linux/
-bash scripts/linux/release/build-release.sh --format deb|rpm   # one native package (reuses build/portier/)
-sudo bash scripts/linux/service/install-service.sh [--runtime node] [--source-dir PATH] [--install-dir PATH] [--config-path PATH] [--no-enable]
-sudo bash scripts/linux/service/status-service.sh
-sudo bash scripts/linux/service/start-service.sh
-sudo bash scripts/linux/service/stop-service.sh
-sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-config]
-```
+## Release Status
 
-## Release
+The current milestone is **v1.19.0** (2.0 RC hardening), tagged but not yet published as a stable
+release. The next phase is the 2.0-RC documentation pass ahead of a stable **v2.0**; the v2.0
+version bump, release-artifact build, and tag/publish are a separate, explicit, manual step.
 
-Current version: **1.19.0** (2.0 RC Hardening) — a release-candidate hardening milestone (strict client lint, 100% client coverage, push/PR CI, OpenAPI-driven API Reference, generated Postman collection plus a local Newman runtime smoke, UDP prune and generic-500 backend fixes). The previous release was 1.18.0 (Install, Service & Upgrade Experience). The next phase is the 2.0-RC documentation cleanup ahead of a stable v2.0.
+Release workflows build and validate platform artifacts on demand and upload them for inspection —
+they do not publish a GitHub Release or create tags automatically.
 
-- [docs/changelog.md](docs/changelog.md) — what changed in each release.
-- [docs/installer.md](docs/installer.md) — current packaging, native installers, release artifacts, and the upgrade path.
-- [docs/roadmap.md](docs/roadmap.md) — the local-first road to a stable 2.0 (v1.18 install/upgrade → v1.19 RC hardening → v2.0).
-
-## Agent Workflow
-
-`AGENTS.md` contains lightweight project guidance for Codex and other coding agents. `CLAUDE.md` contains Claude Code guidance for architecture review, UI cleanup, and risk checks. Use `npm run check` to run lint, typecheck, and tests for an agent task.
-
-See `docs/agentic.md` for agent setup: Claude Code settings, manual helper hooks, and audit skill usage.
-
-## Activity Log
-
-Portier records recent forwarding and lifecycle events in an in-memory bounded activity log. The log is visible in the UI under the **Activity** sidebar item.
-
-Events include:
-- Rule created, updated, deleted, started, stopped, and errors
-- TCP connection opened, closed, and errors
-- UDP packet forwarded, returned (bidirectional mode), and errors
-
-**Limitations:**
-- The activity log is in-memory only. It resets when the server restarts.
-- The store is bounded to the latest 500 events.
-- UDP packet events are throttled to at most one log entry per second per rule.
-
-## REST API
-
-- `GET /api/forwards`
-- `POST /api/forwards`
-- `PATCH /api/forwards/:id`
-- `DELETE /api/forwards/:id`
-- `POST /api/forwards/:id/start`
-- `POST /api/forwards/:id/stop`
-- `POST /api/forwards/:id/diagnose` — diagnostic checks without mutating state (v1.2)
-- `GET /api/ports/advisory?port=48001&listenHost=0.0.0.0&purpose=forward`
-- `GET /api/status`
-- `GET /api/runtime` — runtime environment info (v1.2)
-- `GET /api/activity?limit=100&severity=error` (optional: ruleId, type, severity)
-- `DELETE /api/activity` — clear the activity log (v1.2)
-- `GET /api/config/export`
-- `POST /api/config/import` — body: `{ mode, config }`
-- `POST /api/forwards/reorder` — body: `{ ids: string[] }`
+- Release history: [docs/changelog.md](docs/changelog.md).
+- Packaging and release process: [docs/installer.md](docs/installer.md) and [docs/checklist.md](docs/checklist.md).
+- Roadmap: [docs/roadmap.md](docs/roadmap.md).
 
 ## Credits
 
-Portier was built with human direction and AI assistance — with the human firmly in the loop. See [Credits](docs/credits.md).
+Portier was built with human direction and AI assistance, with the human firmly in the loop. See
+[Credits](docs/credits.md).
