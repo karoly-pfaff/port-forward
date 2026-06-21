@@ -643,11 +643,11 @@ service unless noted, and are guarded by `npm run validate:contract`.
 - **Liveness endpoints are outside the `/api` contract.** The Go service serves
   `GET /api/health`; the NestJS server serves `GET /health` (see above).
 - **Generic unexpected `500`.** An unexpected/internal failure returns a generic
-  `500` with the `{ "errors": [...] }` envelope and no stack trace. The NestJS
-  server uses a fixed `"Internal server error."` message; the Go service currently
-  returns the underlying error's message text. This path is intentionally not
-  modelled in OpenAPI, and stricter Go redaction (parity with the NestJS fixed
-  message) is tracked for v1.19 RC hardening.
+  `500` with the `{ "errors": [...] }` envelope and no stack trace. Both runtimes
+  return the fixed message `"Internal server error."` and never echo the underlying
+  error text to the client (defense-in-depth). The Go service redaction landed in
+  v1.19 RC hardening (S-1); the NestJS server already did this via its
+  `ApiErrorEnvelopeFilter`. This path is intentionally not modelled in OpenAPI.
 
 ## Static File Serving
 

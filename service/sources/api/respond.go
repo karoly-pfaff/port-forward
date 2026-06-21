@@ -16,6 +16,17 @@ import (
 	"portier/service/sources/manager"
 )
 
+// internalErrorMessage is the fixed body for an unexpected 500. It deliberately
+// reveals nothing about the underlying error (defense-in-depth) and matches the
+// TypeScript server's ApiErrorEnvelopeFilter for cross-runtime parity.
+const internalErrorMessage = "Internal server error."
+
+// writeInternalError responds 500 with the fixed, non-leaking error envelope.
+// The original error is intentionally not echoed to the client.
+func writeInternalError(w http.ResponseWriter) {
+	writeJSON(w, http.StatusInternalServerError, map[string][]string{"errors": {internalErrorMessage}})
+}
+
 // writeJSON writes body as JSON with the given status and the JSON content type.
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -72,5 +83,6 @@ func writeManagerError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	writeJSON(w, http.StatusInternalServerError, map[string][]string{"errors": {err.Error()}})
+	// Unexpected error: redact rather than echo err.Error() to the client.
+	writeInternalError(w)
 }

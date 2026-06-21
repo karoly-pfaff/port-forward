@@ -64,7 +64,9 @@ test("a connection error is recorded and reachable from the Error summary card",
 
   await expect(page.getByText("Recent forwarding and rule events")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Filter by severity" })).toHaveValue("error");
-  await expect(page.getByText(/TCP connection error/i).first()).toBeVisible({ timeout: 10_000 });
+  // Match the event message ("TCP connection error: <detail>") — the trailing
+  // colon avoids the type-filter <option> labelled "TCP connection error".
+  await expect(page.getByText(/TCP connection error:/i).first()).toBeVisible({ timeout: 10_000 });
 });
 
 test("a rule's error health badge opens the Activity Log filtered to that rule and errors", async ({ page, baseURL }) => {
@@ -79,5 +81,7 @@ test("a rule's error health badge opens the Activity Log filtered to that rule a
   await expect(page.getByText("Recent forwarding and rule events")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Filter by severity" })).toHaveValue("error");
   await expect(page.getByText(/Filtered to rule:/)).toBeVisible();
-  await expect(page.getByText(/TCP connection error/i).first()).toBeVisible({ timeout: 10_000 });
+  // Match the event message ("TCP connection error: <detail>") — the trailing
+  // colon avoids the type-filter <option> labelled "TCP connection error".
+  await expect(page.getByText(/TCP connection error:/i).first()).toBeVisible({ timeout: 10_000 });
 });

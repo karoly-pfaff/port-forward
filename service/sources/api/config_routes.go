@@ -168,7 +168,7 @@ func (h *Handler) configApply(w http.ResponseWriter, r *http.Request) {
 			Version: "1", Rules: applyResult.Rules,
 		}, "replace")
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string][]string{"errors": {err.Error()}})
+			writeInternalError(w)
 			return
 		}
 		// Invariant (Resilience-C): apply must never report ok:true when the

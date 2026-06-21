@@ -9,6 +9,7 @@ package api
 
 import (
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -112,8 +113,13 @@ func TestWriteManagerError_GenericErrorReturns500(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "boom") {
-		t.Fatalf("body should contain the error message, got: %s", rec.Body.String())
+	body := rec.Body.String()
+	// S-1: the generic 500 must redact the internal error, not echo it.
+	if strings.Contains(body, "boom") {
+		t.Fatalf("generic 500 must not echo the internal error, got: %s", body)
+	}
+	if !strings.Contains(body, internalErrorMessage) {
+		t.Fatalf("generic 500 should return %q, got: %s", internalErrorMessage, body)
 	}
 }
 
@@ -127,6 +133,21 @@ func TestCreateForward_PersistFailureReturns500(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", resp.StatusCode)
+	}
+	assertRedacted500(t, resp)
+}
+
+// assertRedacted500 verifies an unexpected 500 returns the fixed message and does
+// not leak the internal *PathError text (the temp path injected by persistFailingHandler).
+func assertRedacted500(t *testing.T, resp *http.Response) {
+	t.Helper()
+	raw, _ := io.ReadAll(resp.Body)
+	body := string(raw)
+	if strings.Contains(body, "notadir") {
+		t.Fatalf("500 body leaked the internal path/error, got: %s", body)
+	}
+	if !strings.Contains(body, internalErrorMessage) {
+		t.Fatalf("500 body should be %q, got: %s", internalErrorMessage, body)
 	}
 }
 
@@ -144,6 +165,7 @@ func TestConfigApply_ImportFailureReturns500(t *testing.T) {
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want 500", resp.StatusCode)
 	}
+	assertRedacted500(t, resp)
 }
 
 // --- updateForward error branches ---

@@ -250,6 +250,34 @@ Slice 6 status (client UI consistency pass):
   and `build:client` all pass. No API/OpenAPI/`rules.json`/version/package/tag change; no private
   docs surfaced; no new product feature or redesign.
 
+Slice 7 status (E2E runtime validation + backend RC fixes):
+
+- [x] **E2E executed against the live runtime** (NestJS webServer via `test:e2e:fresh` / Playwright)
+  — the full suite passes: **45/45 tests** (run in groups; `errors` 2, `summary` 4, `activity`,
+  `mobile`, `udp` 5, plus the unchanged `tcp`/`dashboard`/`connections`/`settings`/`portier`/
+  `apidocs` = 32). Fixed one selector in `errors.spec.ts`: `/TCP connection error/` matched the
+  hidden type-filter `<option>`; tightened to `/TCP connection error:/` (the event-message colon)
+  so it targets the visible Activity Log row, not the dropdown label. No assertion weakened. A
+  single *full-suite* run stalled under local resource contention (leaked node processes); running
+  in groups with a free port completes in seconds — an environment issue, not a product/test bug.
+- [x] **O-1/T-2 — UDP session pruning wired.** `PruneExpired` had zero non-test callers, so one-way
+  registry entries grew unbounded (Snapshot hid expired sessions but memory was retained). A
+  running UDP forwarder now runs a prune ticker (`DefaultUDPPruneInterval`, injectable in tests)
+  that calls `registry.PruneExpired`; it stops via a `done` channel in `Stop()` (no goroutine
+  leak, clean shutdown, no behavior change to active sessions). Added `UdpSessionRegistry.Len()`
+  to measure retained entries (Snapshot can't), and tests: registry reclaim-vs-keep via `Len`,
+  forwarder loop reclaims expired sessions, and the prune goroutine stops cleanly on `Stop`.
+- [x] **S-1 — generic Go `500` redacted.** Both Go generic-500 paths (`writeManagerError` catch-all
+  and the config-apply `ImportConfig` failure) now return the fixed `"Internal server error."`
+  envelope instead of echoing `err.Error()`, matching the NestJS `ApiErrorEnvelopeFilter` (a
+  shared `writeInternalError` helper). Tests assert the fixed message and that the injected
+  `*PathError` path is not leaked; validation/conflict/not-found messages are preserved.
+  `docs/api-contract.md` updated to reflect parity. No OpenAPI schema change (path is unmodelled).
+- [x] Validation green: service coverage gate **90.4%** PASS, `validate:contract` **237/0/0**,
+  `validate:openapi:go` PASS, `go vet` clean, client **100/100/100**, shared 105 / server 638
+  pass, lint / typecheck / `version:check` (10/10) / `validate:postman` clean. `-race` skipped:
+  cgo/gcc unavailable in this environment (documented).
+
 - [ ] Confirm no version surface is bumped during RC-prep slices (version bump is v2.0 work).
 - [ ] Confirm no API behavior, OpenAPI schema (beyond version metadata), or `rules.json`
   format change — unless a proven release blocker justifies it, documented if so.

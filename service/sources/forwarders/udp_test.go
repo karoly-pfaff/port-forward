@@ -729,6 +729,64 @@ func TestUDPMultiClientEmitsPacketErrorOnTargetDialFailure(t *testing.T) {
 	}
 }
 
+// --- prune loop (O-1/T-2) ---
+
+func seedUDPSession(reg *connections.UdpSessionRegistry, ruleID string) {
+	reg.OpenOrTouchSession(connections.UdpSessionInput{
+		RuleID:        ruleID,
+		Mode:          "one-way",
+		ClientAddress: "10.0.0.1",
+		ClientPort:    5000,
+		TargetAddress: "127.0.0.1",
+		TargetPort:    9,
+	})
+}
+
+// A running UDP forwarder periodically reclaims expired sessions from the shared
+// registry. The forwarder's clock is pushed past the expire threshold so the
+// seeded session reads as expired on the next prune tick (no real-time sleep).
+func TestUDPForwarderPruneLoopReclaimsExpiredSessions(t *testing.T) {
+	reg := connections.NewUdpSessionRegistry()
+	seedUDPSession(reg, "seed")
+	if reg.Len() != 1 {
+		t.Fatalf("seed session not registered, len = %d", reg.Len())
+	}
+
+	forwarder, _ := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		f := NewUDPForwarderWithRegistry(testUDPRule(p, 9, domain.UdpModeOneWay), nil, nil, reg)
+		f.pruneInterval = 5 * time.Millisecond
+		f.nowUTC = func() time.Time { return time.Now().UTC().Add(connections.UDPSessionExpireDuration + time.Minute) }
+		return f
+	})
+	defer forwarder.Stop()
+
+	waitForUDPCondition(t, func() bool { return reg.Len() == 0 })
+	if reg.Len() != 0 {
+		t.Fatalf("prune loop did not reclaim expired session, len = %d", reg.Len())
+	}
+}
+
+// The prune goroutine must exit cleanly on Stop (no leak, no shutdown hang).
+func TestUDPForwarderPruneLoopStopsCleanly(t *testing.T) {
+	reg := connections.NewUdpSessionRegistry()
+	forwarder, _ := startUDPForwarderOnFreePort(t, func(p int) *UDPForwarder {
+		f := NewUDPForwarderWithRegistry(testUDPRule(p, 9, domain.UdpModeOneWay), nil, nil, reg)
+		f.pruneInterval = 5 * time.Millisecond
+		return f
+	})
+
+	stopped := make(chan struct{})
+	go func() {
+		forwarder.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Stop did not return promptly — the prune goroutine likely leaked")
+	}
+}
+
 // --- registry integration tests ---
 
 func TestUDPForwarderWithRegistryOneWayTracksSession(t *testing.T) {

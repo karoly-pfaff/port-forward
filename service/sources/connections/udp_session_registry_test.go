@@ -357,6 +357,29 @@ func TestUdpSessionRegistryPruneExpiredKeepsRecent(t *testing.T) {
 	}
 }
 
+// PruneExpired must actually free memory, not merely hide sessions the way
+// Snapshot does. Len() reflects retained entries, so it distinguishes reclaim
+// from hiding.
+func TestUdpSessionRegistryPruneExpiredReclaimsMemory(t *testing.T) {
+	reg := connections.NewUdpSessionRegistry()
+	reg.OpenOrTouchSession(basicUDPInput("r1"))
+	if reg.Len() != 1 {
+		t.Fatalf("expected 1 retained entry, got %d", reg.Len())
+	}
+
+	// A recent session survives a prune well before the expire threshold.
+	reg.PruneExpired(time.Now().Add(connections.UDPSessionIdleDuration + time.Millisecond))
+	if reg.Len() != 1 {
+		t.Fatalf("recent session must survive prune, retained = %d", reg.Len())
+	}
+
+	// Past the expire threshold the entry is freed (Snapshot alone would hide it).
+	reg.PruneExpired(time.Now().Add(connections.UDPSessionExpireDuration + time.Millisecond))
+	if reg.Len() != 0 {
+		t.Fatalf("expired session must be reclaimed, retained = %d", reg.Len())
+	}
+}
+
 // --- Snapshot hides expired ---
 
 func TestUdpSessionRegistrySnapshotHidesExpiredWithoutPrune(t *testing.T) {

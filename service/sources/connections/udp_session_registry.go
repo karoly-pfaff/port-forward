@@ -164,6 +164,15 @@ func (r *UdpSessionRegistry) CloseSessionsForRule(ruleID string) {
 	}
 }
 
+// Len reports the number of sessions currently held in the registry, including
+// any that are expired but not yet pruned. Snapshot hides expired sessions, so
+// this is the accurate measure of retained memory — used to verify reclaim.
+func (r *UdpSessionRegistry) Len() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.entries)
+}
+
 // PruneExpired removes sessions that have been idle for longer than UDPSessionExpireDuration.
 func (r *UdpSessionRegistry) PruneExpired(now time.Time) {
 	cutoff := now.Add(-UDPSessionExpireDuration)

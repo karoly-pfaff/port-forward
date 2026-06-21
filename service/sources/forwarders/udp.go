@@ -15,6 +15,11 @@ import (
 const DefaultUDPSessionTimeout = 60 * time.Second
 const udpEventThrottleInterval = int64(time.Second) // nanoseconds
 
+// DefaultUDPPruneInterval is how often a running UDP forwarder reclaims expired
+// sessions from the registry. One-way sessions have no per-session close path,
+// so without periodic pruning the registry would grow unbounded under churn.
+const DefaultUDPPruneInterval = 60 * time.Second
+
 // udpSession holds a per-client target socket for bidirectional-multi-client mode.
 // The gen field is used to ensure that a stale idle timer does not expire a
 // session that was renewed by a subsequent packet before the timer fired.
@@ -54,6 +59,19 @@ type UDPForwarder struct {
 
 	stopOnce sync.Once
 	wg       sync.WaitGroup
+	done     chan struct{} // closed by Stop to end the prune loop
+
+	// Prune loop config (overridable in tests for deterministic, sleep-free runs).
+	pruneInterval time.Duration
+	nowUTC        func() time.Time // nil → time.Now().UTC()
+}
+
+// now returns the forwarder's notion of the current UTC time (injectable in tests).
+func (f *UDPForwarder) now() time.Time {
+	if f.nowUTC != nil {
+		return f.nowUTC()
+	}
+	return time.Now().UTC()
 }
 
 func newUDPForwarder(rule domain.ForwardRule, log LogFunc, onEvent activity.EventFunc, sessionTimeout time.Duration, registry *connections.UdpSessionRegistry) *UDPForwarder {
@@ -64,6 +82,8 @@ func newUDPForwarder(rule domain.ForwardRule, log LogFunc, onEvent activity.Even
 		sessionTimeout: sessionTimeout,
 		sessions:       make(map[string]*udpSession),
 		registry:       registry,
+		done:           make(chan struct{}),
+		pruneInterval:  DefaultUDPPruneInterval,
 	}
 }
 
@@ -136,11 +156,36 @@ func (f *UDPForwarder) Start() error {
 		go f.targetReadLoop(listenConn, targetConn)
 	}
 
+	// Periodically reclaim expired sessions so the shared registry stays bounded
+	// (only meaningful when tracking sessions). The loop stops on Stop via done.
+	if f.registry != nil {
+		f.wg.Add(1)
+		go f.pruneLoop()
+	}
+
 	return nil
+}
+
+// pruneLoop reclaims expired registry sessions on a fixed interval until Stop
+// closes done. PruneExpired is global/idempotent, so concurrent prune from
+// multiple UDP forwarders sharing one registry is safe.
+func (f *UDPForwarder) pruneLoop() {
+	defer f.wg.Done()
+	ticker := time.NewTicker(f.pruneInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			f.registry.PruneExpired(f.now())
+		case <-f.done:
+			return
+		}
+	}
 }
 
 func (f *UDPForwarder) Stop() {
 	f.stopOnce.Do(func() {
+		close(f.done) // stop the prune loop
 		f.mu.Lock()
 		f.running = false
 		listenConn := f.listenConn
