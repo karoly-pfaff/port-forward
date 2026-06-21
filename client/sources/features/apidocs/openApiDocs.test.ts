@@ -156,7 +156,7 @@ describe("buildApiDocsModel — operations", () => {
 describe("apiDocsModel — built from the real OpenAPI artifact", () => {
   it("exposes the Portier API title and version", () => {
     expect(apiDocsModel.title).toBe("Portier API");
-    expect(apiDocsModel.version).toBe("1.18");
+    expect(apiDocsModel.version).toBe("1.19");
   });
 
   it("groups the forwards operations under the forwards tag", () => {

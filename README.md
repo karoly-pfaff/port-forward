@@ -658,7 +658,7 @@ sudo bash scripts/linux/service/uninstall-service.sh [--remove-files] [--remove-
 
 ## Release
 
-Current version: **1.18.0** (Install, Service & Upgrade Experience) — version surfaces bumped and tag-ready, pending the maintainer's manual tag. The previous stable release was 1.17.0 (Migration & Recovery).
+Current version: **1.19.0** (2.0 RC Hardening) — a release-candidate hardening milestone (strict client lint, 100% client coverage, push/PR CI, OpenAPI-driven API Reference, generated Postman collection plus a local Newman runtime smoke, UDP prune and generic-500 backend fixes). The previous release was 1.18.0 (Install, Service & Upgrade Experience). The next phase is the 2.0-RC documentation cleanup ahead of a stable v2.0.
 
 - [docs/changelog.md](docs/changelog.md) — what changed in each release.
 - [docs/installer.md](docs/installer.md) — current packaging, native installers, release artifacts, and the upgrade path.

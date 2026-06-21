@@ -9,8 +9,9 @@ belong in `audits/`.
 - **v1.0-v1.16:** completed.
 - **v1.17:** completed — Migration & Recovery (ready for release/tag as v1.17.0).
 - **v1.18:** completed — Install, Service & Upgrade Experience (released; commit `cf66b37`, tag `v1.18.0` pushed, no GitHub Release published).
-- **v1.19:** current — 2.0 RC Hardening (release-candidate stabilization only; no new features).
-- **v2.0:** next — Stable Local-First Portier.
+- **v1.19:** completed — 2.0 RC Hardening (release-candidate stabilization only; no new features); tagged `v1.19.0`.
+- **2.0-RC documentation cleanup:** next — public docs pass ahead of the stable release.
+- **v2.0:** Stable Local-First Portier.
 
 ## Completed Releases
 
@@ -291,12 +292,12 @@ packaging/install/upgrade story.
 
 ## Portier v1.19 - 2.0 RC Hardening
 
-**Status:** Current — release-candidate hardening kicked off after `v1.18.0`. No new
+**Status:** Completed — tagged `v1.19.0`. Release-candidate hardening after `v1.18.0`: no new
 features, no installer formats, no new service lifecycle behavior (bug fixes only), no API/
-OpenAPI/`rules.json`/migration/gate changes unless a proven release blocker forces it. The RC
-readiness gate has passed with no open blockers; the v2.0 recommendation is **GO with named
-non-blocking deferrals**. The v2.0 version bump, release-artifact
-build, and tag/publish remain a separate, explicit, manual release step.
+OpenAPI/`rules.json`/migration/gate changes. The RC readiness gate passed with no open blockers;
+the v2.0 recommendation is **GO with named non-blocking deferrals**. The next phase is the
+2.0-RC documentation cleanup. The v2.0 version bump, release-artifact build, and tag/publish
+remain a separate, explicit, manual release step.
 
 **Core theme:** No new features. No architecture churn. Release-candidate stabilization
 only.

@@ -145,6 +145,14 @@ npm run validate:runtime:smoke
 
 ## v1.19 RC Hardening (2.0 Release Candidate)
 
+**Status: CLOSED — tagged `v1.19.0`.** All RC-hardening slices landed (client lint + 100/100/100
+coverage, push/PR CI, single-source version tooling, OpenAPI-driven API Reference, generated +
+validated Postman collection, local Newman runtime smoke via `validate:postman:local`, UI
+consistency/error-navigation polish, E2E runtime validation, UDP expired-session pruning, Go
+generic-500 redaction). Version surfaces bumped to `1.19.0` via `npm run version:set`. This is a
+milestone tag, not the final v2.0 release; the next phase is the 2.0-RC documentation cleanup, and
+the full release matrix below still applies before any v2.0 tag.
+
 v1.19 is release-candidate stabilization only — no new features, no new installer formats, no
 new service lifecycle behavior (bug fixes only). It runs as a risk-based plan of ~9–11 bounded
 slices, each small enough to validate properly. Use this as a lightweight gate per RC slice;

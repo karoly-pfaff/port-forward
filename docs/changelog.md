@@ -4,6 +4,19 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
+## [1.19.0] - 2026-06-21 - 2.0 RC Hardening
+
+A release-candidate hardening milestone — stabilization only, no new features, no new installer formats, and no new service lifecycle behavior. The persisted `rules.json` format and the REST API are unchanged; the only OpenAPI change is the version metadata (1.18 → 1.19). No coverage or lint gate was lowered.
+
+- **Client quality gates:** React + `react-hooks` linting (`rules-of-hooks` + `exhaustive-deps` as errors), repo-wide `@typescript-eslint/no-explicit-any` as an error, and `eslint . --max-warnings 0`. Client coverage reached and is held at **100 / 100 / 100**.
+- **CI:** a fast push/PR **Continuous Integration** workflow that runs the real quality gates and never builds packages, uploads artifacts, publishes, or tags. The five release/smoke workflows stay manual (`workflow_dispatch`).
+- **Versioning:** single-source version tooling (`version:set`/`bump`/`check`/`list`) with a CI drift guard across all 10 version surfaces.
+- **API Reference:** the in-app API view is now generated from the canonical `docs/openapi.json` (no hand-maintained endpoint table).
+- **Postman:** a `postman/collection.json` + `environment.json` generated from the OpenAPI contract and drift-checked in CI (`validate:postman`), plus a local-only Newman runtime smoke (`validate:postman:local`) that runs the collection against a live runtime and self-cleans.
+- **UI:** design-token consolidation, Title-Case chrome alignment, Live Connections summary cards, Activity Log naming, and a simplified status column (errors surface in Health + Activity Log).
+- **Runtime fixes:** UDP expired-session pruning is now wired into the Go UDP forwarder (one-way sessions no longer grow unbounded), and the Go generic `500` path redacts internal error text to match the NestJS error envelope.
+- **Validation signal:** lint / typecheck clean; shared 105, server 638, client 570 (100/100/100), Go service 90.4% (gate 90/95); `validate:contract` 237/0/0; `validate:openapi:go` PASS; `validate:postman` 129/0; live Newman smoke green; full Playwright E2E 45/45; `version:check` 10/10.
+
 ## [1.18.0] - 2026-06-20 - Install, Service & Upgrade Experience
 
 The install, service, and upgrade release: native installers plus validated, checksummed release artifacts for all three platforms, and an upgrade path that preserves user config. The persisted `rules.json` format, the REST API, and the OpenAPI schema are unchanged; no installer enables or starts a service on its own, and no coverage gate was lowered.

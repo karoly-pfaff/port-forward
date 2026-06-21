@@ -7,7 +7,7 @@ describe("ApiDocsView — driven by the real OpenAPI artifact", () => {
   it("renders the API Reference heading with the contract title and version", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("API Reference")).toBeInTheDocument();
-    expect(screen.getByText(/Portier API · v1\.18 — generated from the OpenAPI contract/)).toBeInTheDocument();
+    expect(screen.getByText(/Portier API · v1\.19 — generated from the OpenAPI contract/)).toBeInTheDocument();
   });
 
   it("groups operations by tag (forwards, config, connections, health)", () => {
