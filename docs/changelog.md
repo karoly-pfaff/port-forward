@@ -4,6 +4,29 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
+## [2.0.0] - 2026-06-21 - Stable Local-First Release
+
+Portier 2.0 is the first stable local-first release. It closes the road-to-2.0 arc — migration & recovery (v1.17), install/service/upgrade (v1.18), RC hardening (v1.19), and the 2.0-RC documentation cleanup. This is a stability and packaging milestone, not a redesign: the final bump changes only version metadata. The REST API, the OpenAPI schema (beyond its version), the persisted `rules.json` format, and CLI behavior are all unchanged from v1.19, no migration runs, and no coverage or lint gate was lowered.
+
+What Portier 2.0 is:
+- A stable, **local-first** TCP/UDP port-forwarding manager for development and LAN testing. The management UI/API stays on `127.0.0.1:47831` by default; no telemetry, cloud sync, auto-update, or remote/team/auth.
+- **Go service** — the preferred production runtime (small binary, no Node.js dependency, no warm-up).
+- **TypeScript/NestJS server** — the supported reference/fallback runtime, behind the same REST API contract.
+- **React management UI** — Dashboard, Forward Rules, Activity Log, Live Connections, Settings, and an OpenAPI-driven in-app API Reference.
+- **TCP and UDP forwarding**, including the three UDP modes (one-way, bidirectional-last-client, bidirectional-multi-client).
+- **Declarative config** import / export / plan / apply with drift control and destructive-change confirmation.
+- The Go `portier` **CLI** (a pure API client) and the separate offline `replay` analysis tool.
+- **Native installers and portables** — file-install Windows MSI, macOS `.pkg`, and Linux `.deb`/`.rpm`, plus arch-suffixed portable archives, each covered by a `checksums.sha256` manifest. Installers never enable or start a service, create a scheduled task, or touch user config.
+- **Documented, tested upgrade path** — in-place v1.x → v2.0 ([upgrade-v2.md](upgrade-v2.md)) with startup/config recovery ([recovery.md](recovery.md)); `rules.json` is preserved and never rewritten on startup.
+- **Consumer artifacts** — a canonical `docs/openapi.json` and a generated, drift-checked Postman collection (`postman/`).
+
+Compatibility:
+- No API behavior change, no OpenAPI schema change beyond version metadata (1.19 → 2.0), no `rules.json` format change, and no startup migration in this release.
+
+Known non-blocking deferrals (tracked as post-2.0 themes): code signing / notarization, automated GitHub Release publishing, arm64 **native** packages (arm64 ships as validated portables), service auto-install from installers (file-install stays by design), and remote/team/auth management. See [roadmap.md](roadmap.md#post-20-directions).
+
+- **Validation signal:** lint / typecheck clean; full unit suites (shared / server / client / Go service / CLI / replay); client coverage held at **100 / 100 / 100** with no gate lowered; `validate:contract` 237/0/0; `validate:openapi:go` PASS; `validate:config` PASS; `validate:postman` 129/0 plus a live Newman smoke; current-platform release build/validate + runtime, recovery, and upgrade smokes green; full Playwright E2E; `version:check` 10/10 at `2.0.0` (OpenAPI `2.0`). Cross-platform packages and native arm64 runtime smokes are produced and validated by the manual per-platform release workflows.
+
 ## [1.19.0] - 2026-06-21 - 2.0 RC Hardening
 
 A release-candidate hardening milestone — stabilization only, no new features, no new installer formats, and no new service lifecycle behavior. The persisted `rules.json` format and the REST API are unchanged; the only OpenAPI change is the version metadata (1.18 → 1.19). No coverage or lint gate was lowered.

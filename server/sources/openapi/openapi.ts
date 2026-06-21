@@ -21,7 +21,7 @@ import { createNestApp } from "../app/app.factory.js";
  */
 
 /** Version stamped into the generated document's `info.version` (kept stable for deterministic output). */
-export const OPENAPI_DOC_VERSION = "1.19";
+export const OPENAPI_DOC_VERSION = "2.0";
 
 /** Path of the directory this module lives in (`server/sources/openapi`). */
 const HERE = dirname(fileURLToPath(import.meta.url));
