@@ -143,12 +143,11 @@ asserts `GET /api/runtime` reports `version` equal to the package version.
 npm run validate:runtime:smoke
 ```
 
-## Release Candidate Guards (2.0 RC)
+## Standing Release Guards (2.0 stable line)
 
-v1.19.0 (2.0 RC hardening) is **closed and tagged**; see [changelog.md](changelog.md) for what
-shipped. The 2.0-RC documentation cleanup is complete; the next phase is the explicit v2.0 release
-prep (see [roadmap.md](roadmap.md#v20-release-prep)), and the full release matrix below still applies
-before any v2.0 tag. These guards stay in force until the v2.0 release:
+Portier **v2.0.0** is released and tagged — the stable local-first milestone; see
+[changelog.md](changelog.md) for what shipped. These guards remain the standing policy for any
+change on top of the stable line, and the full release matrix below applies before any future tag:
 
 - [ ] No version surface is bumped outside an explicit version release (the v2.0 bump is its own
   step; use `npm run version:set` / `version:bump`, never hand-edit).
@@ -161,8 +160,8 @@ before any v2.0 tag. These guards stay in force until the v2.0 release:
 - [ ] The Postman collection stays **generated** from `docs/openapi.json` (not a hand-maintained
   second contract); `npm run validate:postman` passes and runs in push/PR CI; `npm run
   validate:postman:local` stays a local-only Newman smoke. No Postman cloud publishing.
-- [ ] No automatic startup migration is added; no GitHub Release is published (tag-and-manual stays
-  the policy).
+- [ ] No automatic startup migration is added; release publishing stays an explicit manual step (no
+  workflow auto-publishes a GitHub Release or auto-creates a tag).
 - [ ] `docs/private/**` stays out of logs, artifacts, release output, and public docs.
 - [ ] For docs/planning-only changes, run `npm run lint` + `npm run typecheck`; rerun heavy hosted
   release/smoke workflows only when build/release scripts change.

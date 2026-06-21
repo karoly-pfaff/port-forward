@@ -153,13 +153,14 @@ candidates, and platform release work.
 
 ## Release Status
 
-The current milestone is **v1.19.0** (2.0 RC hardening), tagged but not yet published as a stable
-release. The public docs are prepared for the stable **v2.0**; the v2.0 version bump,
-release-artifact build, and tag/publish remain a separate, explicit, manual step (see the
-[roadmap](docs/roadmap.md#v20-release-prep)).
+The current stable release is **v2.0.0** — the stable local-first milestone (see the
+[changelog](docs/changelog.md)). It builds on the v1.x migration/recovery, install/upgrade, and
+RC-hardening work; the REST API, the OpenAPI schema (beyond version metadata), and the `rules.json`
+format are unchanged from v1.19.
 
-Release workflows build and validate platform artifacts on demand and upload them for inspection —
-they do not publish a GitHub Release or create tags automatically.
+Release workflows build and validate platform artifacts on demand and upload them for inspection;
+tagging and GitHub Release publishing remain explicit manual steps — no workflow publishes a Release
+or creates a tag automatically.
 
 - Release history: [docs/changelog.md](docs/changelog.md).
 - Packaging and release process: [docs/installer.md](docs/installer.md) and [docs/checklist.md](docs/checklist.md).

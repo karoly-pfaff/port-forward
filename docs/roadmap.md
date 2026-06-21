@@ -8,8 +8,11 @@ detail lives in [changelog.md](changelog.md), and detailed audit findings live i
 - **v1.0–v1.18:** completed and released.
 - **v1.19:** completed — 2.0 RC Hardening (release-candidate stabilization only); tagged `v1.19.0`.
 - **2.0-RC documentation cleanup:** completed — public docs are release-facing and consistent.
-- **v2.0 release prep:** next — Stable Local-First Portier. The version bump, release-artifact
-  build, and tag/publish are a separate, explicit, manual step (see [v2.0 Release Prep](#v20-release-prep)).
+- **v2.0:** released — Stable Local-First Portier; tagged `v2.0.0`. A version-only bump over v1.19
+  (no API, OpenAPI-schema, or `rules.json` change) with validated release artifacts for Windows,
+  macOS, and Linux. See the [changelog](changelog.md).
+- **Post-2.0:** directional themes only (see [Post-2.0 Directions](#post-20-directions)); the
+  pre-2.0 arc is closed.
 
 ## Completed Releases
 
