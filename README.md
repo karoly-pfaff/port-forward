@@ -1,6 +1,6 @@
 # Portier
 
-[![Continuous Integration](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/continuous-integration.yml/badge.svg?branch=main)](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/continuous-integration.yml)
+[![PortierCI](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/portier-ci.yml/badge.svg?branch=main)](https://github.com/karoly-pfaff/portier-port-forward/actions/workflows/portier-ci.yml)
 
 Portier is a local TCP/UDP port-forwarding manager for development and LAN testing. It pairs a
 native Go service runtime (and a TypeScript fallback) with a React web UI and a Go CLI, all

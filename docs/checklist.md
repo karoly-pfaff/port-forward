@@ -395,7 +395,7 @@ npm run validate:upgrade:current
 
 Two distinct kinds of GitHub Actions workflow:
 
-- **Push/PR CI** (`.github/workflows/continuous-integration.yml`, automatic on `push` to `main` and on
+- **Push/PR CI** (`.github/workflows/portier-ci.yml`, automatic on `push` to `main` and on
   `pull_request`): fast everyday-development checks. A `ubuntu-latest` **baseline** job runs
   `npm ci`, `npm run lint` (`--max-warnings 0`), `npm run typecheck`, `npm run test` (shared +
   server + client + Go service), the honest client coverage gate

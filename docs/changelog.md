@@ -9,7 +9,7 @@ This changelog is written for both humans and coding agents. It summarizes what 
 A release-candidate hardening milestone — stabilization only, no new features, no new installer formats, and no new service lifecycle behavior. The persisted `rules.json` format and the REST API are unchanged; the only OpenAPI change is the version metadata (1.18 → 1.19). No coverage or lint gate was lowered.
 
 - **Client quality gates:** React + `react-hooks` linting (`rules-of-hooks` + `exhaustive-deps` as errors), repo-wide `@typescript-eslint/no-explicit-any` as an error, and `eslint . --max-warnings 0`. Client coverage reached and is held at **100 / 100 / 100**.
-- **CI:** a fast push/PR **Continuous Integration** workflow that runs the real quality gates and never builds packages, uploads artifacts, publishes, or tags. The five release/smoke workflows stay manual (`workflow_dispatch`).
+- **CI:** a fast push/PR CI workflow that runs the real quality gates and never builds packages, uploads artifacts, publishes, or tags. The five release/smoke workflows stay manual (`workflow_dispatch`).
 - **Versioning:** single-source version tooling (`version:set`/`bump`/`check`/`list`) with a CI drift guard across all 10 version surfaces.
 - **API Reference:** the in-app API view is now generated from the canonical `docs/openapi.json` (no hand-maintained endpoint table).
 - **Postman:** a `postman/collection.json` + `environment.json` generated from the OpenAPI contract and drift-checked in CI (`validate:postman`), plus a local-only Newman runtime smoke (`validate:postman:local`) that runs the collection against a live runtime and self-cleans.
