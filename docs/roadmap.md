@@ -7,9 +7,9 @@ detail lives in [changelog.md](changelog.md), and detailed audit findings live i
 
 - **v1.0–v1.18:** completed and released.
 - **v1.19:** completed — 2.0 RC Hardening (release-candidate stabilization only); tagged `v1.19.0`.
-- **2.0-RC documentation cleanup:** current — a public-docs pass ahead of the stable release.
-- **v2.0:** next — Stable Local-First Portier. The version bump, release-artifact build, and
-  tag/publish are a separate, explicit, manual step.
+- **2.0-RC documentation cleanup:** completed — public docs are release-facing and consistent.
+- **v2.0 release prep:** next — Stable Local-First Portier. The version bump, release-artifact
+  build, and tag/publish are a separate, explicit, manual step (see [v2.0 Release Prep](#v20-release-prep)).
 
 ## Completed Releases
 
@@ -108,14 +108,98 @@ framework, or cosmetic public API renames.
   `validate:cli`, replay/tool validations, runtime smoke, and E2E all pass.
 - Release notes are complete; the tag/publish process is explicit and manual.
 
-## Post-2.0 — Optional Hardening Bucket
+## v2.0 Release Prep
 
-Deliberately deferred beyond 2.0 and not blocking the stable release:
+The stable v2.0 release is a deliberate, manual sequence — nothing below happens automatically:
 
-- Code signing and notarization (Windows Authenticode, macOS Developer ID + notarization).
-- Automated GitHub Release publishing and tagging.
-- arm64 **native packages** (`.pkg`/`.deb`/`.rpm`); arm64 ships as validated portables today.
-- Auto-installing the OS service from the installer (installers stay file-install by design).
-- Other package managers (Homebrew, winget, Chocolatey).
-- Remote/team/auth management — out of scope for the local-first product unless deliberately
-  rescoped.
+1. Bump every version surface: `npm run version:set 2.0.0`, then verify with `npm run version:check`.
+2. Regenerate the OpenAPI artifact if the schema changed: `npm run apidoc:generate`.
+3. Run the full local validation matrix in [checklist.md](checklist.md) › *Before A Version Release*.
+4. Add a `2.0.0` entry to [changelog.md](changelog.md) and confirm [upgrade-v2.md](upgrade-v2.md)
+   is accurate for the release.
+5. Build and validate release artifacts via the manual (`workflow_dispatch`) release workflows.
+6. Tag and publish as an explicit manual step.
+
+## Post-2.0 Directions
+
+These are **directional themes for after the stable v2.0 release**, not dated promises or fixed
+commitments. They may be reordered, combined, or dropped as priorities become clear. Pre-2.0 work
+stays closed; nothing here reopens it, and Portier stays local-first unless a theme is explicitly
+rescoped.
+
+### v2.1 — Trust & Distribution Polish
+
+Make Portier feel safer and more professional to download and install, without changing the
+local-first runtime model.
+
+- Windows Authenticode signing.
+- macOS Developer ID signing and notarization.
+- Clearer download and checksum-verification guidance.
+- A release-notes / GitHub Release publishing process.
+- Small installer trust polish.
+
+### v2.2 — Explicit Service Lifecycle
+
+Improve service lifecycle ergonomics while preserving the explicit opt-in safety model.
+
+- Polished opt-in service install/start/stop/status.
+- Windows Service / Scheduled Task hardening.
+- macOS LaunchAgent hardening.
+- Linux systemd hardening.
+- Deeper service-lifecycle smokes.
+- Installers still do not silently enable or start services by default.
+
+### v2.3 — Persistent Observability
+
+Make operational history more useful without adding telemetry or remote collection.
+
+- Optional persistent Activity Log / history.
+- A retention policy.
+- An improved diagnostics bundle/export.
+- A "what happened while I was away?" operator view.
+- Replay/tooling integration where useful.
+
+### v2.4 — Doctor & Diagnostics 2
+
+Improve troubleshooting and support workflows while keeping diagnostics local, deterministic, and
+privacy-safe.
+
+- Doctor / config-doctor UX polish.
+- Actionable remediation hints.
+- Consistent runtime/config diagnostics.
+- Support-bundle redaction-guard polish.
+- AI handoff prompt polish — offline and privacy-safe only.
+
+### v2.5 — Rule Management Power Tools
+
+Improve power-user rule management once the core 2.0 product is stable.
+
+- Bulk edit / enable / disable.
+- Saved filters and views.
+- Rule templates.
+- Duplicate-and-transform rule.
+- Group UX improvements.
+- Better import conflict resolution.
+
+### v2.6 — Package Manager Distribution
+
+Make installation easier through common package managers once signing/trust and release packaging
+are mature.
+
+- winget.
+- A Homebrew tap.
+- Chocolatey / Scoop if useful.
+- Linux repo / package-manager exploration.
+- A cautious stance on auto-update.
+
+### v2.7+ — Remote/Team Exploration
+
+Treat remote/team scenarios as exploration, not an assumed next feature — threat-model before
+implementing.
+
+- Only after threat modeling.
+- Shared config profiles.
+- Team conventions.
+- Possibly signed config bundles.
+- Auth-model exploration.
+- The local-first product posture is preserved unless explicitly changed.

@@ -146,8 +146,9 @@ npm run validate:runtime:smoke
 ## Release Candidate Guards (2.0 RC)
 
 v1.19.0 (2.0 RC hardening) is **closed and tagged**; see [changelog.md](changelog.md) for what
-shipped. The next phase is the 2.0-RC documentation cleanup, and the full release matrix below still
-applies before any v2.0 tag. These guards stay in force through the RC and documentation phases:
+shipped. The 2.0-RC documentation cleanup is complete; the next phase is the explicit v2.0 release
+prep (see [roadmap.md](roadmap.md#v20-release-prep)), and the full release matrix below still applies
+before any v2.0 tag. These guards stay in force until the v2.0 release:
 
 - [ ] No version surface is bumped outside an explicit version release (the v2.0 bump is its own
   step; use `npm run version:set` / `version:bump`, never hand-edit).

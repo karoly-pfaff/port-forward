@@ -154,8 +154,9 @@ candidates, and platform release work.
 ## Release Status
 
 The current milestone is **v1.19.0** (2.0 RC hardening), tagged but not yet published as a stable
-release. The next phase is the 2.0-RC documentation pass ahead of a stable **v2.0**; the v2.0
-version bump, release-artifact build, and tag/publish are a separate, explicit, manual step.
+release. The public docs are prepared for the stable **v2.0**; the v2.0 version bump,
+release-artifact build, and tag/publish remain a separate, explicit, manual step (see the
+[roadmap](docs/roadmap.md#v20-release-prep)).
 
 Release workflows build and validate platform artifacts on demand and upload them for inspection —
 they do not publish a GitHub Release or create tags automatically.
