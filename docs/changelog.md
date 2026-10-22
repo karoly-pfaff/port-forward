@@ -4,6 +4,16 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
+## [2.0.1] - 2026-10-22 - Dependency Security Patch
+
+A maintenance release that clears every open npm advisory (28 Dependabot alerts: 5 critical, 9 high, 13 moderate, 1 low) so the `npm audit --audit-level=high` CI gate passes again. No Go advisories were open; the Go service runtime is unchanged apart from its version string.
+
+- **Dependencies:** overrides and lockfile refreshed for `multer` 2.4, `qs` 6.16, `proxy-addr` 2.0.8, `js-yaml`, `shell-quote`, `source-map-js`, `brace-expansion`, and `ip-address`; `adm-zip` 0.6.1 and `vite` 6.4.5.
+- **Test tooling:** `vitest` / `@vitest/coverage-v8` 3 → 4.1. vitest 4 measures coverage with AST-aware remapping, so existing `v8 ignore` hints gained `-- @preserve` and newly counted paths (implicit `else` arms, best-effort `.catch` callbacks, timer callbacks) are covered by new tests or justified hints. No coverage gate was lowered.
+- **Postman smoke:** `validate:postman:local` now runs the collection with a minimal in-repo runner (`scripts/library/postman-runner.js`) instead of Newman, whose dependency tree carried advisories with no upstream fix (`node-forge`, `@faker-js/faker`, `csv-parse`). The collection itself is unchanged and still runs in Postman and Newman.
+- **Compatibility:** no API, OpenAPI schema (still `2.0`), `rules.json`, or CLI behavior change.
+- **Validation signal:** `npm audit` 0 vulnerabilities; lint / typecheck clean; shared 106, server 644, client 580 (100/100/100), Go service 90.4% (gate 90/95); `validate:contract` 117/2 skipped/0; `validate:openapi:go` PASS; `validate:postman` 129/0 plus the live local smoke (38 requests, 75 assertions); `version:check` 10/10 at `2.0.1`.
+
 ## [2.0.0] - 2026-06-21 - Stable Local-First Release
 
 Portier 2.0 is the first stable local-first release. It closes the road-to-2.0 arc — migration & recovery (v1.17), install/service/upgrade (v1.18), RC hardening (v1.19), and the 2.0-RC documentation cleanup. This is a stability and packaging milestone, not a redesign: the final bump changes only version metadata. The REST API, the OpenAPI schema (beyond its version), the persisted `rules.json` format, and CLI behavior are all unchanged from v1.19, no migration runs, and no coverage or lint gate was lowered.

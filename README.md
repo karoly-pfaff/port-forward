@@ -154,10 +154,10 @@ candidates, and platform release work.
 
 ## Release Status
 
-The current stable release is **v2.0.0** — the stable local-first milestone (see the
-[changelog](docs/changelog.md)). It builds on the v1.x migration/recovery, install/upgrade, and
-RC-hardening work; the REST API, the OpenAPI schema (beyond version metadata), and the `rules.json`
-format are unchanged from v1.19.
+The current stable release is **v2.0.1**, a dependency security patch on **v2.0.0** — the stable
+local-first milestone (see the [changelog](docs/changelog.md)). It builds on the v1.x
+migration/recovery, install/upgrade, and RC-hardening work; the REST API, the OpenAPI schema
+(beyond version metadata), and the `rules.json` format are unchanged from v1.19.
 
 Release workflows build and validate platform artifacts on demand and upload them for inspection;
 tagging and GitHub Release publishing remain explicit manual steps — no workflow publishes a Release
