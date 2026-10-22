@@ -3,7 +3,7 @@
 Portier supports two server runtimes on Windows:
 
 - **Go service** (`service.exe`) — preferred native runtime, no Node.js required.
-- **Node server** (`server.js`) — supported fallback runtime, requires Node.js.
+- **Node server** (`server.js`) — supported fallback runtime, requires Node.js 24 or later.
 
 Runtime config and the web UI stay external in both modes.
 
@@ -116,7 +116,7 @@ Go service:
 .\build\windows\service.exe --config ".\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\build\windows\web"
 ```
 
-Node server (requires Node.js):
+Node server (requires Node.js 24 or later):
 
 ```powershell
 node .\build\windows\server.js --config ".\rules.json" --host 127.0.0.1 --port 47831 --static-dir ".\build\windows\web"
@@ -158,7 +158,7 @@ The installer registers and starts a service with a command line equivalent to:
 "C:\Program Files\Portier\service.exe" --service --config "C:\ProgramData\Portier\rules.json" --host 127.0.0.1 --port 47831 --static-dir "C:\Program Files\Portier\web"
 ```
 
-Node fallback (requires Node.js; provide the full path to `node.exe` for a service):
+Node fallback (requires Node.js 24 or later; provide the full path to `node.exe` for a service):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\service\install-service.ps1 `

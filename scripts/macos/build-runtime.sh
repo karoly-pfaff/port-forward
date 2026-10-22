@@ -54,7 +54,7 @@ echo "Bundling server as server.js..."
   --minify \
   --platform=node \
   --format=cjs \
-  --target=node22 \
+  --target=node24 \
   --outfile="$BUNDLE_CJS" \
   "${BUNDLE_EXTERNALS[@]}"
 cp "$BUNDLE_CJS" "$OUTPUT_DIR/server.js"

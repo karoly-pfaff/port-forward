@@ -1,6 +1,30 @@
+import { transform } from "esbuild";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Vite 8 transpiles TypeScript with oxc, which applies stacked legacy decorators (e.g. the
+  // `@ApiQuery` stack on ActivityController.list) in a different order than tsc and esbuild, so
+  // the OpenAPI generated under test drifted from docs/openapi.json. Server tests therefore keep
+  // esbuild, the same transform `apidoc:generate` runs under (tsx) and the one Vite 6 used.
+  oxc: false,
+  plugins: [
+    {
+      name: "portier-esbuild-typescript",
+      enforce: "pre",
+      async transform(code, id) {
+        if (!id.endsWith(".ts") || id.includes("/node_modules/")) return null;
+        const result = await transform(code, {
+          loader: "ts",
+          format: "esm",
+          target: "es2022",
+          sourcefile: id,
+          sourcemap: true,
+          tsconfigRaw: { compilerOptions: { experimentalDecorators: true } }
+        });
+        return { code: result.code, map: result.map };
+      }
+    }
+  ],
   test: {
     include: ["sources/**/*.test.ts"],
     coverage: {

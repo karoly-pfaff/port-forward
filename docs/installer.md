@@ -9,7 +9,7 @@ Portier ships two server runtimes:
 
 - **Go service** (`service` or `service.exe`): preferred for production deployment.
   It has a smaller footprint and no Node.js dependency.
-- **Node fallback** (`server.js`): supported fallback runtime. It requires Node.js and
+- **Node fallback** (`server.js`): supported fallback runtime. It requires Node.js 24 or later and
   should be run with `--static-dir web` in packaged layouts.
 
 Both serve the same `web/` React UI, use external config, implement the same REST API,

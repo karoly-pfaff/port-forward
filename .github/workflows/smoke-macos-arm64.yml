@@ -26,7 +26,7 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Report runner architecture
         run: |
@@ -34,13 +34,13 @@ jobs:
           echo "uname -m: $(uname -m)"   # expect arm64 on Apple Silicon
 
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           check-latest: true

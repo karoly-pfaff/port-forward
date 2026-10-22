@@ -33,7 +33,7 @@ externally observable behavior.
 <install-dir>/
   portier          (or portier.exe on Windows)
   service          (or service.exe on Windows)
-  server.js        (Node fallback, requires Node.js)
+  server.js        (Node fallback, requires Node.js 24+)
   web/
     index.html
     assets/

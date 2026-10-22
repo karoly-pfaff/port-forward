@@ -124,7 +124,7 @@ bash scripts/macos/service/install-launch-agent.sh \
 
 ## Node.js Fallback Mode
 
-If the native binary is not available, deploy `server.js` and run with Node.js. This requires Node.js installed on the machine.
+If the native binary is not available, deploy `server.js` and run with Node.js. This requires Node.js 24 or later installed on the machine.
 
 ```bash
 bash scripts/macos/service/install-launch-agent.sh --runtime node

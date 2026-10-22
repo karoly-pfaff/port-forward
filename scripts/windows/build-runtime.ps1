@@ -81,7 +81,7 @@ Invoke-CommandInRepo $esbuild (@(
   "--minify",
   "--platform=node",
   "--format=cjs",
-  "--target=node22",
+  "--target=node24",
   "--outfile=$bundleCjsPath"
 ) + $bundleExternals)
 Copy-Item -LiteralPath $bundleCjsPath -Destination $serverJsPath -Force
