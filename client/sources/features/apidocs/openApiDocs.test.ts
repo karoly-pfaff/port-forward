@@ -1,3 +1,4 @@
+import { PORTIER_APP_VERSION } from "@portier/shared";
 import { describe, expect, it } from "vitest";
 import { apiDocsModel, buildApiDocsModel } from "./openApiDocs.js";
 
@@ -156,7 +157,8 @@ describe("buildApiDocsModel — operations", () => {
 describe("apiDocsModel — built from the real OpenAPI artifact", () => {
   it("exposes the Portier API title and version", () => {
     expect(apiDocsModel.title).toBe("Portier API");
-    expect(apiDocsModel.version).toBe("2.0");
+    // The OpenAPI document version is the app version's major.minor (set by `npm run version:set`).
+    expect(apiDocsModel.version).toBe(PORTIER_APP_VERSION.split(".").slice(0, 2).join("."));
   });
 
   it("groups the forwards operations under the forwards tag", () => {

@@ -1,13 +1,19 @@
+import { PORTIER_APP_VERSION } from "@portier/shared";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ApiDocsView } from "./ApiDocsView.js";
 import type { ApiDocsModel } from "./openApiDocs.js";
 
+// The OpenAPI document version is the app version's major.minor (set by `npm run version:set`).
+const OPENAPI_VERSION = PORTIER_APP_VERSION.split(".").slice(0, 2).join(".");
+
 describe("ApiDocsView — driven by the real OpenAPI artifact", () => {
   it("renders the API Reference heading with the contract title and version", () => {
     render(<ApiDocsView />);
     expect(screen.getByText("API Reference")).toBeInTheDocument();
-    expect(screen.getByText(/Portier API · v2\.0 — generated from the OpenAPI contract/)).toBeInTheDocument();
+    expect(
+      screen.getByText((_, element) => element?.textContent === `Portier API · v${OPENAPI_VERSION} — generated from the OpenAPI contract.`)
+    ).toBeInTheDocument();
   });
 
   it("groups operations by tag (forwards, config, connections, health)", () => {

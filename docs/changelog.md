@@ -4,14 +4,18 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
-## [Unreleased]
+## [2.1.0] - 2026-10-22 - Node 24 Floor & Tooling Updates
+
+A maintenance release that moves the toolchain to Node 24 LTS and lands the outstanding Dependabot majors that work today. The one user-facing change is the Node fallback's minimum Node.js version; the Go service, REST API, `rules.json` format, and CLI behavior are unchanged.
 
 - **Node 24 floor:** the Node fallback (`server.js`) now requires **Node.js 24 or later** (esbuild `--target=node24`; root `engines.node >=24`; `@types/node` 24). CI and release workflows run on Node 24 LTS. The Go service is unaffected.
 - **Tooling majors:** Vite 8 + `@vitejs/plugin-react` 6, jsdom 30 (now a root dev dependency next to vitest), `@testing-library/jest-dom` 7, concurrently 10, plus the minor/patch dev group (Playwright 1.64, typescript-eslint 8.72, tsx, testing-library).
 - **Server tests keep esbuild:** Vite 8 compiles TypeScript with oxc, which applies stacked legacy decorators in a different order than tsc/esbuild and reordered the `@ApiQuery` parameters in the OpenAPI generated under test. `server/vitest.config.ts` disables oxc and transpiles with esbuild, matching `apidoc:generate` (tsx). `esbuild` is now an explicit root dev dependency; the runtime build scripts call it directly and previously relied on Vite 6 pulling it in. The tracked `docs/openapi.json` is unchanged.
-- **Go:** `golang.org/x/sys` 0.49 and `go-chi/chi` 5.4 in the service (service `go.mod` now `go 1.26.0`).
-- **CI:** GitHub Actions `checkout` / `setup-node` / `setup-go` / `upload-artifact` v7, `setup-dotnet` v6. Dependabot ignores `@types/node` majors (raised by hand with the Node floor).
+- **Go:** `golang.org/x/sys` 0.49 and `go-chi/chi` 5.5 in the service (service `go.mod` now `go 1.26.0`). chi's 5.5 changes are confined to its `middleware` package, which the service does not import.
+- **CI:** CI and release workflows run on Node 24 LTS. GitHub Actions `checkout` / `setup-node` / `setup-go` / `upload-artifact` v7, `setup-dotnet` v6. Dependabot ignores `@types/node` majors (raised by hand with the Node floor).
 - **Deferred:** TypeScript 7 (typescript-eslint does not support it yet) and ESLint 10 (`eslint-plugin-react` is incompatible and unmaintained).
+- **Compatibility:** `server.js` now requires Node.js 24 or later (previously Node.js 22 or later). No REST API, OpenAPI schema (beyond version metadata 2.0 → 2.1), `rules.json`, or CLI behavior change; no migration.
+- **Validation signal:** lint / typecheck clean; shared 106, server 644, client 581 (100/100/100), Go service 90.4% (gate 90/95); `validate:contract` 237/0/0; `validate:openapi:go` PASS; `validate:postman` 129/0 plus the live local smoke (38 requests, 75 assertions); Playwright E2E 45/45; Windows runtime build + smoke on the node24 bundle 35/0; `govulncheck` and `npm audit` clean; `version:check` 10/10 at `2.1.0` (OpenAPI `2.1`).
 
 ## [2.0.1] - 2026-10-22 - Dependency Security Patch
 

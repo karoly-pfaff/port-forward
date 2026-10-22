@@ -901,7 +901,7 @@
   "info": {
     "title": "Portier API",
     "description": "Portier management API — generated from the NestJS controllers and DTOs that serve the `/api` surface.",
-    "version": "2.0",
+    "version": "2.1",
     "contact": {}
   },
   "tags": [
