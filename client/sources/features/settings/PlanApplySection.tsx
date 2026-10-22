@@ -61,7 +61,7 @@ export function PlanApplySection({
         }
         setPlanParsedConfig(parsed);
       } catch (error) {
-        /* v8 ignore next -- JSON.parse only throws SyntaxError (an Error); the non-Error fallback is defensive */
+        /* v8 ignore next -- @preserve JSON.parse only throws SyntaxError (an Error); the non-Error fallback is defensive */
         setPlanParseError(error instanceof Error ? error.message : "Parse error.");
       }
     };
@@ -69,7 +69,7 @@ export function PlanApplySection({
   }
 
   async function handlePlanPreview(): Promise<void> {
-    /* v8 ignore next -- the Preview button only renders once planParsedConfig is set; this guard is unreachable from the UI */
+    /* v8 ignore next -- @preserve the Preview button only renders once planParsedConfig is set; this guard is unreachable from the UI */
     if (!planParsedConfig) return;
     setPlanPreviewing(true);
     setPlanResult(null);
@@ -89,7 +89,7 @@ export function PlanApplySection({
   }
 
   async function handlePlanApply(): Promise<void> {
-    /* v8 ignore next -- the Apply button only renders once a plan has been previewed (planParsedConfig + planResult set); this guard is unreachable from the UI */
+    /* v8 ignore next -- @preserve the Apply button only renders once a plan has been previewed (planParsedConfig + planResult set); this guard is unreachable from the UI */
     if (!planParsedConfig || !planResult) return;
     setPlanApplying(true);
     setPlanApplyResult(null);
@@ -109,6 +109,7 @@ export function PlanApplySection({
       setPlanResult(null);
       setPlanSelectedFileName(null);
       setDestructiveConfirmed(false);
+      /* v8 ignore else -- @preserve the file input renders unconditionally, so the ref is only null if the section unmounts while the apply request is in flight; the null arm is defensive */
       if (planFileInputRef.current) planFileInputRef.current.value = "";
     } catch (error) {
       setPlanApplyError(error instanceof Error ? error.message : "Apply failed.");

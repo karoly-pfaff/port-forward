@@ -18,7 +18,7 @@ permissions:
 
 env:
   NODE_VERSION: "22"
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26"
 
 jobs:
   macos-arm64-smoke:
@@ -43,6 +43,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache-dependency-path: service/go.sum
 
       - name: Install dependencies

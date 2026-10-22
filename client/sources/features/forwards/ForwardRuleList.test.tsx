@@ -225,6 +225,26 @@ describe("ForwardRuleList", () => {
     expect(container.querySelector(".rule-group-label")).toBeNull();
   });
 
+  it("shows a rule's port advisories inline, omitting the LAN_EXPOSURE advisory", () => {
+    renderList({
+      rules: [
+        {
+          ...tcpRule,
+          listenHost: "0.0.0.0",
+          advisories: [
+            { code: "COMMON_PORT", severity: "warning", message: "Port 48001 is commonly used by Test Service." },
+            { code: "LAN_EXPOSURE", severity: "warning", message: "Listening on 0.0.0.0 exposes this forwarded port." }
+          ]
+        }
+      ],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false
+    });
+    expect(screen.getByText("Port 48001 is commonly used by Test Service.")).toBeInTheDocument();
+    expect(screen.queryByText("Listening on 0.0.0.0 exposes this forwarded port.")).not.toBeInTheDocument();
+  });
+
   it("matches rules by group in the search box", async () => {
     const user = userEvent.setup();
     renderList({
@@ -1107,6 +1127,20 @@ describe("ForwardRuleList row action menu", () => {
     expect(screen.getByRole("menu", { name: "Actions for Test Rule" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("menu", { name: "Actions for Test Rule" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the menu open when a key other than Escape is pressed", async () => {
+    const user = userEvent.setup();
+    renderList({
+      rules: [tcpRule],
+      statusMap: makeMap(stoppedStatus),
+      busyRuleIds: new Set(),
+      loading: false,
+      onDuplicate: noop,
+    });
+    await openRowMenu(user);
+    fireEvent.keyDown(document, { key: "a" });
+    expect(screen.getByRole("menu", { name: "Actions for Test Rule" })).toBeInTheDocument();
   });
 
   // The trigger's onClick toggle (line 469): clicking the same kebab a second

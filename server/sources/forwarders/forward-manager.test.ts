@@ -27,6 +27,8 @@ class ControllableStore implements RuleStore {
   readonly savedSnapshots: ForwardRule[][] = [];
   shouldFail = false;
   saveError: Error = new Error("simulated persist failure");
+  /** Optional hook run at the start of every save(), before any simulated failure. */
+  onSave: (() => Promise<void>) | undefined;
 
   constructor(private rules: ForwardRule[] = []) {}
 
@@ -36,6 +38,7 @@ class ControllableStore implements RuleStore {
 
   async save(rules: ForwardRule[]): Promise<void> {
     this.saveCallCount += 1;
+    await this.onSave?.();
     if (this.shouldFail) {
       throw this.saveError;
     }
@@ -53,6 +56,17 @@ class ControllableStore implements RuleStore {
 // live listener on a free port, avoiding the allocate-close-rebind race).
 function closeTcpServer(server: net.Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
+}
+
+// Binds a plain TCP listener on 127.0.0.1:port so a forwarder start on the same
+// listen binding fails with EADDRINUSE (used to force a deterministic start
+// failure on a rollback/import restart path).
+function occupyTcpPort(port: number): Promise<net.Server> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => resolve(server));
+  });
 }
 
 describe("ForwardManager updateRule behavior", () => {
@@ -536,6 +550,38 @@ describe("ForwardManager importConfig replace mode", () => {
     expect(result.errors).toHaveLength(0);
     expect(manager.getStatus("r-replace").running).toBe(true);
   });
+
+  it("keeps an imported enabled rule stopped with its start error when its listen port is taken", async () => {
+    const { server: blocker, port: takenPort } = await startTcpServerOnFreePort();
+    cleanup.push(() => closeTcpServer(blocker));
+    const manager = new ForwardManager(new MemoryStore());
+    cleanup.push(() => manager.stopAll());
+
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [
+        {
+          id: "r-blocked",
+          name: "Blocked",
+          protocol: "tcp",
+          listenHost: "127.0.0.1",
+          listenPort: takenPort,
+          targetHost: "127.0.0.1",
+          targetPort: 49999,
+          enabled: true
+        }
+      ]
+    };
+
+    // A start failure does not fail the import; the rule is kept, stopped, with lastError.
+    const result = await manager.importConfig(config, "replace");
+    expect(result.imported).toBe(1);
+    expect(result.errors).toHaveLength(0);
+    const status = manager.getStatus("r-blocked");
+    expect(status.running).toBe(false);
+    expect(status.lastError).toBeDefined();
+  });
 });
 
 describe("ForwardManager importConfig duplicate listen binding parity (Go parity)", () => {
@@ -945,6 +991,89 @@ describe("ForwardManager persist-failure rollback (Test-D, Go parity)", () => {
     expect(rules[0].id).toBe("r1");
     // The merged rule's forwarder must not be left running after rollback.
     expect(manager.getStatus("r2").running).toBe(false);
+  });
+
+  // G. A restart failure during updateRule rollback must not mask the persist
+  //    error: the listen port is taken while the forwarder is stopped, so the
+  //    rollback restart fails and is swallowed.
+  it("updateRule surfaces the persist error when the rollback restart also fails", async () => {
+    const [listenPort, targetPortB] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
+    const { server: targetA, port: targetPortA } = await startTcpServerOnFreePort();
+    cleanup.push(() => closeTcpServer(targetA));
+
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    cleanup.push(() => manager.stopAll());
+
+    await manager.addRule(ruleInput({ id: "r1", listenPort, targetPort: targetPortA }));
+    await startRuleStable(manager, "r1", getFreeTcpPort);
+    const boundPort = manager.listRules()[0].listenPort;
+
+    store.shouldFail = true;
+    store.onSave = async () => {
+      const blocker = await occupyTcpPort(boundPort);
+      cleanup.push(() => closeTcpServer(blocker));
+    };
+    await expect(manager.updateRule("r1", { targetPort: targetPortB })).rejects.toThrow("simulated persist failure");
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].targetPort).toBe(targetPortA);
+    const status = manager.getStatus("r1");
+    expect(status.running).toBe(false);
+    expect(status.lastError).toBeDefined();
+  });
+
+  // H. Same guarantee for deleteRule: a failed rollback restart is swallowed and
+  //    the persist error propagates; the rule itself is restored.
+  it("deleteRule surfaces the persist error when the rollback restart also fails", async () => {
+    const listenPort = await getFreeTcpPort();
+    const { server: target, port: targetPort } = await startTcpServerOnFreePort();
+    cleanup.push(() => closeTcpServer(target));
+
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    cleanup.push(() => manager.stopAll());
+
+    await manager.addRule(ruleInput({ id: "r1", listenPort, targetPort }));
+    await startRuleStable(manager, "r1", getFreeTcpPort);
+    const boundPort = manager.listRules()[0].listenPort;
+
+    store.shouldFail = true;
+    store.onSave = async () => {
+      const blocker = await occupyTcpPort(boundPort);
+      cleanup.push(() => closeTcpServer(blocker));
+    };
+    await expect(manager.deleteRule("r1")).rejects.toThrow("simulated persist failure");
+
+    const rules = manager.listRules();
+    expect(rules).toHaveLength(1);
+    expect(rules[0].id).toBe("r1");
+    expect(manager.getStatus("r1").running).toBe(false);
+  });
+
+  // I. Merge import whose enabled rule cannot start (listen port taken) and whose
+  //    persist then fails: the start failure is swallowed, the rollback skips the
+  //    never-started forwarder, and the persist error propagates.
+  it("importConfig merge rolls back cleanly when an imported rule failed to start", async () => {
+    const existingPort = await getFreeTcpPort();
+    const { server: blocker, port: takenPort } = await startTcpServerOnFreePort();
+    cleanup.push(() => closeTcpServer(blocker));
+
+    const store = new ControllableStore();
+    const manager = new ForwardManager(store);
+    cleanup.push(() => manager.stopAll());
+    await manager.addRule(ruleInput({ id: "r1", name: "Original", listenPort: existingPort }));
+
+    store.shouldFail = true;
+    const config: ExportedConfig = {
+      version: "1",
+      exportedAt: new Date().toISOString(),
+      rules: [ruleInput({ id: "r2", name: "Blocked", listenPort: takenPort, enabled: true })]
+    };
+    await expect(manager.importConfig(config, "merge")).rejects.toThrow("simulated persist failure");
+
+    expect(manager.listRules().map((rule) => rule.id)).toEqual(["r1"]);
   });
 });
 

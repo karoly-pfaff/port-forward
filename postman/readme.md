@@ -69,25 +69,34 @@ paths.
 
 | | `validate:postman` | `validate:postman:local` |
 | --- | --- | --- |
-| What | Static generation/drift/safety check | Live [Newman](https://github.com/postmanlabs/newman) run against a real runtime |
+| What | Static generation/drift/safety check | Live run of the collection against a real runtime |
 | Runs in CI | **Yes** (push/PR) | No — local-only |
 | Needs a runtime | No | Yes (started automatically) |
 | Network | None | Loopback only |
 
-### Local Newman runtime smoke
+### Local runtime smoke
 
 ```powershell
 npm run validate:postman:local
 ```
 
 This is **self-contained**: it starts a fresh Portier runtime on a free port with an empty,
-temporary `rules.json`, waits for liveness, runs the collection with [Newman](https://github.com/postmanlabs/newman)
-(a dev dependency — `npm install` provides it, no global install, no network), then stops the
+temporary `rules.json`, waits for liveness, runs the collection in-process with a minimal
+runner (`scripts/library/postman-runner.js`, no extra dependencies, no network), then stops the
 runtime and deletes the temp config. **No user or production config is touched.** Each of the
 three top-level folders runs against its own freshly-started runtime so they stay independent
 (the atomic **Create a forward rule** intentionally leaves a stopped rule, which would otherwise
 collide with the Happy Path create); the Happy Path flow also deletes its own rule and asserts
 the list is empty, so nothing it creates survives.
+
+**Runner scope.** The runner implements only the slice of the Postman sandbox the generated
+collection uses: `{{variable}}` resolution, raw bodies and headers, and `test` scripts using
+`pm.test`, `pm.expect(...).to[.not].include / .be.a / .be.an / .eql`, `pm.response.code /
+.text() / .json() / .to.be.json / .to.have.status()`, and `pm.environment.get / set / unset`.
+Anything else (a new assertion, a pre-request script, an unresolved variable) fails loudly
+instead of passing, so if the generator starts emitting something new, extend the runner. It
+replaced Newman, whose dependency tree carried advisories with no upstream fix; the collection
+itself is unchanged and still runs in Postman and Newman.
 
 **Runtime target.** The smoke runs against the NestJS/TypeScript server (`server/build/index.js`),
 because the collection is generated from *its* OpenAPI document. The Go production service is at
@@ -108,8 +117,9 @@ npm run validate:postman:local -- --keep-going --verbose     # run all folders, 
 
 ### Against an already-running instance
 
-To point Newman at a runtime you started yourself, edit `environment.json` (or override per
-request) and run Newman directly — no cloud account, sync, or external network needed:
+To run the collection against a runtime you started yourself, import `collection.json` and
+`environment.json` into Postman, or use your own [Newman](https://github.com/postmanlabs/newman)
+install (Newman is not a Portier dependency) — no cloud account or sync needed:
 
 ```powershell
 # Start Portier first, then:

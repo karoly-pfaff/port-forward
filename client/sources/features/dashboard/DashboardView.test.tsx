@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivityEvent, ForwardRuleResponse, ForwardStatus } from "@portier/shared";
@@ -207,5 +207,24 @@ describe("DashboardView", () => {
     expect(screen.getByText("TCP Service")).toBeInTheDocument();
     // ...while the status-less rule (zero traffic) is excluded from it.
     expect(screen.queryByText("UDP Metrics")).not.toBeInTheDocument();
+  });
+
+  // Two rules with traffic make the `.sort((a, b) => b.traffic - a.traffic)`
+  // comparator run. The lower-traffic rule is passed first so the sort has to
+  // reorder: the busiest rule must lead the Top Rules list.
+  it("orders the top active list by total traffic, busiest first", () => {
+    render(
+      <DashboardView
+        rules={[udpRule, tcpRule]}
+        statusMap={makeMap(runningStatus, { ...stoppedStatus, running: true, bytesIn: 100, bytesOut: 0 })}
+        recentActivity={[]}
+        onGoToActivity={vi.fn()}
+        onGoToRules={vi.fn()}
+      />
+    );
+    const rows = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("TCP Service");
+    expect(rows[1]).toHaveTextContent("UDP Metrics");
   });
 });

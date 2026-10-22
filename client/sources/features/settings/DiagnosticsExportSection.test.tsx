@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DiagnosticsExportSection } from "./DiagnosticsExportSection.js";
@@ -84,6 +84,28 @@ describe("DiagnosticsExportSection", () => {
 
       expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThan(clearCallsAfterFirst);
       expect(diagnosticsExport.downloadJson).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The success confirmation is transient: its 3s timer callback resets the
+  // success flag, removing the message again.
+  it("clears the success confirmation after 3 seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(diagnosticsExport.buildDiagnosticsBundle).mockResolvedValue(cleanBundle());
+
+      render(<DiagnosticsExportSection />);
+      await userEvent.click(screen.getByRole("button", { name: /Download Diagnostics/ }));
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent("Diagnostics exported successfully.")
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(screen.queryByText("Diagnostics exported successfully.")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

@@ -750,6 +750,51 @@ describe("App auto-refresh interval", () => {
   });
 });
 
+describe("App auto-refresh failure", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("silently skips a failed auto-refresh tick and keeps the last known rules", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([sampleRule]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([stoppedStatus]);
+
+    // Same fake-timer pattern as the interval test above: install before render
+    // and drive everything with fireEvent plus advanceTimersByTimeAsync.
+    vi.useFakeTimers();
+    try {
+      render(<App />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText("Test Rule")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("checkbox", { name: "Auto-refresh" }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // The next background tick fails; the auto-refresh swallows it.
+      vi.mocked(portierApi.fetchForwardRules).mockRejectedValue(new Error("network down"));
+      const rulesBefore = vi.mocked(portierApi.fetchForwardRules).mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+
+      expect(vi.mocked(portierApi.fetchForwardRules).mock.calls.length).toBeGreaterThan(rulesBefore);
+      expect(screen.getByText("Test Rule")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("App save-rule error path", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -902,6 +947,82 @@ describe("App rules-updated-from-settings", () => {
   });
 });
 
+describe("App rules-updated-from-settings status refetch failure", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(portierApi.fetchActivity).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the imported rules when the follow-up status refetch fails", async () => {
+    const importedRule: ForwardRuleResponse = {
+      id: "r9",
+      name: "Imported From Settings",
+      protocol: "tcp",
+      listenHost: "127.0.0.1",
+      listenPort: 48050,
+      targetHost: "127.0.0.1",
+      targetPort: 9100,
+      enabled: false,
+      advisories: []
+    };
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([]);
+
+    const configJson = JSON.stringify({
+      version: "1",
+      exportedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
+      rules: [
+        {
+          id: "r9",
+          name: "Imported From Settings",
+          protocol: "tcp",
+          listenHost: "127.0.0.1",
+          listenPort: 48050,
+          targetHost: "127.0.0.1",
+          targetPort: 9100,
+          enabled: false
+        }
+      ]
+    });
+    stubFileReader(configJson);
+    vi.mocked(portierApi.importConfig).mockResolvedValue({
+      result: { imported: 1, skipped: 0, errors: [] },
+      rules: [importedRule]
+    });
+
+    render(<App />);
+    await screen.findByText(/No forwarding rules yet/);
+
+    const nav = screen.getByRole("navigation", { name: "Main navigation" });
+    await userEvent.click(within(nav).getByRole("button", { name: "Settings" }));
+    await screen.findByText("Management Endpoint");
+
+    // From here on the status endpoint fails; the post-import refetch swallows it.
+    vi.mocked(portierApi.fetchForwardStatus).mockRejectedValue(new Error("status unavailable"));
+    const statusCallsBefore = vi.mocked(portierApi.fetchForwardStatus).mock.calls.length;
+
+    const file = new File([configJson], "portier-rules.json", { type: "application/json" });
+    await userEvent.upload(screen.getByLabelText("Select config file"), file);
+    await screen.findByText("File preview");
+    await userEvent.click(screen.getByRole("button", { name: /Import Rules/ }));
+    await screen.findByText(/Import complete/);
+
+    await waitFor(() => {
+      expect(vi.mocked(portierApi.fetchForwardStatus).mock.calls.length).toBeGreaterThan(
+        statusCallsBefore
+      );
+    });
+
+    // The imported rules still reach the Forward Rules view despite the failed refetch.
+    await userEvent.click(within(nav).getByRole("button", { name: /Forward Rules/ }));
+    await screen.findByText("Imported From Settings");
+  });
+});
+
 describe("App mobile sidebar dismissal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -923,6 +1044,21 @@ describe("App mobile sidebar dismissal", () => {
     await waitFor(() =>
       expect(document.querySelector(".sidebar--mobile-open")).not.toBeInTheDocument()
     );
+  });
+
+  it("a non-Escape keydown leaves the open mobile sidebar untouched", async () => {
+    vi.mocked(portierApi.fetchForwardRules).mockResolvedValue([]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([]);
+
+    render(<App />);
+    await screen.findByText(/No forwarding rules yet/);
+
+    await userEvent.click(screen.getByRole("button", { name: /Open navigation menu/ }));
+    expect(document.querySelector(".sidebar--mobile-open")).toBeInTheDocument();
+
+    // Only Escape dismisses the overlay; any other key is a no-op.
+    fireEvent.keyDown(document, { key: "a" });
+    expect(document.querySelector(".sidebar--mobile-open")).toBeInTheDocument();
   });
 
   it("clicking the backdrop closes the open mobile sidebar", async () => {
@@ -1115,6 +1251,25 @@ describe("App start/stop refresh and delete-while-editing", () => {
       expect.objectContaining({ id: "r1" }),
       false
     );
+  });
+
+  it("deleting a rule while no edit drawer is open removes it from the list", async () => {
+    vi.mocked(portierApi.fetchForwardRules)
+      .mockResolvedValueOnce([sampleRule])
+      .mockResolvedValue([]);
+    vi.mocked(portierApi.fetchForwardStatus).mockResolvedValue([stoppedStatus]);
+    vi.mocked(portierApi.deleteForwardRule).mockResolvedValue(undefined);
+
+    render(<App />);
+    await screen.findByText("Test Rule");
+
+    await userEvent.click(screen.getByRole("button", { name: "More actions for Test Rule" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(portierApi.deleteForwardRule).toHaveBeenCalledWith(expect.objectContaining({ id: "r1" }));
+    await screen.findByText(/No forwarding rules yet/);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("deleting the rule that is open in the edit drawer closes the drawer", async () => {

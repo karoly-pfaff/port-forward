@@ -37,7 +37,7 @@ export function parseConfig(raw: string): ForwardRule[] {
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    /* v8 ignore next -- JSON.parse always throws a SyntaxError (an Error); the String() fallback is defensive */
+    /* v8 ignore next -- @preserve JSON.parse always throws a SyntaxError (an Error); the String() fallback is defensive */
     const detail = error instanceof Error ? error.message : String(error);
     throw new MalformedConfigError(`Invalid JSON: ${detail}`);
   }

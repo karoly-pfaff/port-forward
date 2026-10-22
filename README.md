@@ -1,6 +1,7 @@
 # Portier
 
 [![PortierCI](https://github.com/karoly-pfaff/port-forward/actions/workflows/portier-ci.yml/badge.svg?branch=main)](https://github.com/karoly-pfaff/port-forward/actions/workflows/portier-ci.yml)
+[![Sponsor](https://img.shields.io/github/sponsors/karoly-pfaff?label=Sponsor&logo=GitHub)](https://github.com/sponsors/karoly-pfaff)
 
 Portier is a local TCP/UDP port-forwarding manager for development and LAN testing. It pairs a
 native Go service runtime (and a TypeScript fallback) with a React web UI and a Go CLI, all
@@ -119,7 +120,7 @@ for full command, flag, and exit-code documentation.
   is generated from it).
 - Ready-to-run Postman collection: **[postman/](postman/)** (`collection.json` + `environment.json`),
   generated from the OpenAPI contract. `npm run validate:postman` checks it for drift in CI, and
-  `npm run validate:postman:local` runs it against a throwaway local runtime with Newman.
+  `npm run validate:postman:local` runs it against a throwaway local runtime.
 
 ## Build & Validation
 
@@ -153,10 +154,10 @@ candidates, and platform release work.
 
 ## Release Status
 
-The current stable release is **v2.0.0** — the stable local-first milestone (see the
-[changelog](docs/changelog.md)). It builds on the v1.x migration/recovery, install/upgrade, and
-RC-hardening work; the REST API, the OpenAPI schema (beyond version metadata), and the `rules.json`
-format are unchanged from v1.19.
+The current stable release is **v2.0.1**, a dependency security patch on **v2.0.0** — the stable
+local-first milestone (see the [changelog](docs/changelog.md)). It builds on the v1.x
+migration/recovery, install/upgrade, and RC-hardening work; the REST API, the OpenAPI schema
+(beyond version metadata), and the `rules.json` format are unchanged from v1.19.
 
 Release workflows build and validate platform artifacts on demand and upload them for inspection;
 tagging and GitHub Release publishing remain explicit manual steps — no workflow publishes a Release
@@ -165,6 +166,12 @@ or creates a tag automatically.
 - Release history: [docs/changelog.md](docs/changelog.md).
 - Packaging and release process: [docs/installer.md](docs/installer.md) and [docs/checklist.md](docs/checklist.md).
 - Roadmap: [docs/roadmap.md](docs/roadmap.md).
+
+## Sponsoring
+
+Portier is free and open source. If it saves you time, you can support its development through
+[GitHub Sponsors](https://github.com/sponsors/karoly-pfaff). Sponsoring is entirely optional and
+does not change what the app does: there is no paid tier, license check, or in-app prompt.
 
 ## Credits
 

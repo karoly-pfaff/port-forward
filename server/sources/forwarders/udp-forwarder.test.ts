@@ -354,6 +354,36 @@ describe("UdpForwarder bidirectional-last-client – stats and events", () => {
     sendPacket(client, "ping", listenPort);
     await returnedPromise;
   });
+
+  it("rate-limits repeated returned events within 1s window", async () => {
+    const { socket: targetSocket, port: targetPort } = await bindUdpSocketOnFreePort();
+    cleanup.push(() => closeUdpSocket(targetSocket));
+
+    targetSocket.on("message", (msg, rinfo) => {
+      targetSocket.send(Buffer.from(`reply:${msg.toString()}`), rinfo.port, rinfo.address);
+    });
+
+    let returnedCount = 0;
+    const { forwarder, listenPort } = await startUdpForwarder(
+      { targetPort, udpMode: "bidirectional-last-client" },
+      (e: ActivityEventInput) => { if (e.type === "udp.packet.returned") returnedCount++; }
+    );
+    cleanup.push(() => forwarder.stop());
+
+    const client = await bindUdpClient();
+    cleanup.push(() => closeUdpSocket(client));
+
+    let repliesReceived = 0;
+    client.on("message", () => { repliesReceived++; });
+    sendPacket(client, "p1", listenPort);
+    sendPacket(client, "p2", listenPort);
+
+    // Both replies are returned to the client; the rate-limit must collapse
+    // them to a single udp.packet.returned event.
+    await waitUntil(() => repliesReceived === 2 && returnedCount >= 1);
+    expect(forwarder.getStatus().packetsOut).toBe(2);
+    expect(returnedCount).toBe(1);
+  });
 });
 
 describe("UdpForwarder bidirectional-multi-client – session management", () => {
