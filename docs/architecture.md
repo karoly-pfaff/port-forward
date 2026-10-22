@@ -34,7 +34,7 @@ The production/install layout for all platforms:
 ```text
 <install-dir>/
   service          (or service.exe on Windows)
-  server.js        (Node fallback — requires Node.js)
+  server.js        (Node fallback — requires Node.js 24+)
   web/
     index.html
     assets/

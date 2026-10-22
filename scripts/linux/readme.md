@@ -208,7 +208,7 @@ sudo bash scripts/linux/service/install-service.sh
 
 The install script auto-copies `build/portier/` into `/opt/portier/`, creates the config directory and `rules.json` if missing, generates the systemd unit file, and enables and starts the service.
 
-Node fallback (requires Node.js):
+Node fallback (requires Node.js 24 or later):
 
 ```bash
 sudo bash scripts/linux/service/install-service.sh --runtime node

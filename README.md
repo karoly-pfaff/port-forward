@@ -38,7 +38,7 @@ Portier ships two server runtimes behind one REST API contract:
 
 - **Go service** (`service` / `service.exe`) — the preferred production runtime: small binary, no
   Node.js dependency, no warm-up.
-- **Node fallback** (`server.js`) — the supported TypeScript reference runtime; requires Node.js.
+- **Node fallback** (`server.js`) — the supported TypeScript reference runtime; requires Node.js 24 or later.
 
 Both serve the same `web/` React UI and keep `rules.json` external. See
 [docs/architecture.md](docs/architecture.md) for the runtime internals, forwarding paths, and UDP
