@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,9 +90,20 @@ func TestRun_VersionCommand(t *testing.T) {
 }
 
 func TestVersion_IsCurrentRelease(t *testing.T) {
-	// The replay tool version tracks the overall Portier release version.
-	if version.Version != "2.0.0" {
-		t.Errorf("version.Version = %q, want 2.0.0", version.Version)
+	// The replay tool version tracks the overall Portier release version, whose single
+	// source of truth is the root package.json (propagated by `npm run version:set`).
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "package.json"))
+	if err != nil {
+		t.Fatalf("read root package.json: %v", err)
+	}
+	var root struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		t.Fatalf("parse root package.json: %v", err)
+	}
+	if version.Version != root.Version {
+		t.Errorf("version.Version = %q, want %q (root package.json)", version.Version, root.Version)
 	}
 }
 
