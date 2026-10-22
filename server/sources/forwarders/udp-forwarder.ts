@@ -57,7 +57,7 @@ export class UdpForwarder implements Forwarder {
     const listenSocket = dgram.createSocket("udp4");
     this.listenSocket = listenSocket;
 
-    /* v8 ignore next -- udpMode is normally set explicitly; the one-way default is defensive */
+    /* v8 ignore next -- @preserve udpMode is normally set explicitly; the one-way default is defensive */
     const mode = this.rule.udpMode ?? "one-way";
 
     if (mode === "bidirectional-multi-client") {
@@ -73,6 +73,7 @@ export class UdpForwarder implements Forwarder {
         if (mode === "bidirectional-last-client" && this.registry) {
           const prev = this.lastClient;
           if (prev && (prev.address !== remote.address || prev.port !== remote.port)) {
+            /* v8 ignore else -- @preserve with a registry present every prior packet stored a session id, so a previous client always has one */
             if (this.lastClientSessionId) {
               this.registry.closeSession(this.lastClientSessionId);
               this.lastClientSessionId = undefined;
@@ -82,7 +83,7 @@ export class UdpForwarder implements Forwarder {
 
         this.lastClient = remote;
         this.status.bytesIn += message.length;
-        /* v8 ignore next -- packetsIn is initialized to 0 for UDP; the ?? 0 fallback is defensive */
+        /* v8 ignore next -- @preserve packetsIn is initialized to 0 for UDP; the ?? 0 fallback is defensive */
         this.status.packetsIn = (this.status.packetsIn ?? 0) + 1;
 
         const sessionId = this.registry?.openOrTouchSession({
@@ -124,12 +125,12 @@ export class UdpForwarder implements Forwarder {
       // This mode only remembers the most recent UDP client.
       if (mode === "bidirectional-last-client") {
         targetSocket.on("message", (message) => {
-          /* v8 ignore next 3 -- pre-client race guard: a target response before any client packet is non-deterministic */
+          /* v8 ignore next -- @preserve pre-client race guard: a target response before any client packet is non-deterministic */
           if (!this.lastClient) {
             return;
           }
           this.status.bytesOut += message.length;
-          /* v8 ignore next -- packetsOut is initialized to 0 for UDP; the ?? 0 fallback is defensive */
+          /* v8 ignore next -- @preserve packetsOut is initialized to 0 for UDP; the ?? 0 fallback is defensive */
           this.status.packetsOut = (this.status.packetsOut ?? 0) + 1;
           if (this.lastClientSessionId) this.registry?.recordOutbound(this.lastClientSessionId, message.length);
 
@@ -221,7 +222,7 @@ export class UdpForwarder implements Forwarder {
   ): void {
     const sessionKey = `${remote.address}:${remote.port}`;
     this.status.bytesIn += message.length;
-    /* v8 ignore next -- packetsIn is initialized to 0 for UDP; the ?? 0 fallback is defensive */
+    /* v8 ignore next -- @preserve packetsIn is initialized to 0 for UDP; the ?? 0 fallback is defensive */
     this.status.packetsIn = (this.status.packetsIn ?? 0) + 1;
 
     const registryId = this.registry?.openOrTouchSession({
@@ -240,12 +241,12 @@ export class UdpForwarder implements Forwarder {
       const targetSocket = dgram.createSocket("udp4");
 
       targetSocket.on("message", (response) => {
-        /* v8 ignore next -- post-stop race guard: a target response after the listen socket closed is non-deterministic */
+        /* v8 ignore next -- @preserve post-stop race guard: a target response after the listen socket closed is non-deterministic */
         if (!this.listenSocket) return;
         this.status.bytesOut += response.length;
-        /* v8 ignore next -- packetsOut is initialized to 0 for UDP; the ?? 0 fallback is defensive */
+        /* v8 ignore next -- @preserve packetsOut is initialized to 0 for UDP; the ?? 0 fallback is defensive */
         this.status.packetsOut = (this.status.packetsOut ?? 0) + 1;
-        /* v8 ignore next -- registryId is set whenever a registry is present; the falsy branch is defensive */
+        /* v8 ignore next -- @preserve registryId is set whenever a registry is present; the falsy branch is defensive */
         if (registryId) this.registry?.recordOutbound(registryId, response.length);
 
         listenSocket.send(response, remote.port, remote.address, (error) => {
@@ -283,7 +284,7 @@ export class UdpForwarder implements Forwarder {
       // Reset idle timer
       clearTimeout(session.timer);
       session.timer = setTimeout(() => {
-        /* v8 ignore next -- idle-session expiry fires on a real timer; not deterministic in a unit test */
+        /* v8 ignore next -- @preserve idle-session expiry fires on a real timer; not deterministic in a unit test */
         this.closeSession(sessionKey, session!.targetSocket, remote);
       }, this.sessionTimeoutMs);
     }

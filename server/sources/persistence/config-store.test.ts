@@ -44,8 +44,8 @@ const sampleRules: ForwardRule[] = [
 ];
 
 // InjectableFileOps wraps the real fs-backed defaultFileOps but can fail at a
-// precise step of the atomic-write path (write / sync / rename), so durability
-// behavior can be tested without a real disk-full event. The temp file is still
+// precise step of the atomic-write path (write / sync / close / rename / remove), so
+// durability behavior can be tested without a real disk-full event. The temp file is still
 // genuinely created on disk by the real delegate, so cleanup is observable.
 class InjectableFileOps implements ConfigStoreFileOps {
   lastTempPath: string | undefined;
@@ -53,6 +53,8 @@ class InjectableFileOps implements ConfigStoreFileOps {
   failWrite = false;
   failSync = false;
   failRename = false;
+  failClose = false;
+  failRemove = false;
 
   constructor(private readonly delegate: ConfigStoreFileOps = defaultFileOps) {}
 
@@ -73,7 +75,9 @@ class InjectableFileOps implements ConfigStoreFileOps {
         await handle.sync();
       },
       close: async () => {
+        // Always release the real handle first so the temp dir can be removed.
         await handle.close();
+        if (this.failClose) throw new Error("simulated close failure");
       }
     };
   }
@@ -85,6 +89,7 @@ class InjectableFileOps implements ConfigStoreFileOps {
 
   async remove(path: string): Promise<void> {
     this.removed.push(path);
+    if (this.failRemove) throw new Error("simulated remove failure");
     await this.delegate.remove(path);
   }
 }
@@ -261,6 +266,28 @@ describe("ConfigStore", () => {
       expect(fileOps.removed).toContain(fileOps.lastTempPath);
       expect(await pathExists(fileOps.lastTempPath as string)).toBe(false);
       expect(await tempFilesIn(dir)).toEqual([]);
+    });
+
+    it("surfaces the original write error when the best-effort close and temp cleanup also fail", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "portier-config-"));
+      tempDirs.push(dir);
+      const filePath = join(dir, "forwards.json");
+
+      const original = new ConfigStore(filePath);
+      await original.save(sampleRules);
+      const before = await readFile(filePath, "utf8");
+
+      const fileOps = new InjectableFileOps();
+      fileOps.failWrite = true;
+      fileOps.failClose = true;
+      fileOps.failRemove = true;
+      const store = new ConfigStore(filePath, fileOps);
+
+      const next: ForwardRule[] = [{ ...sampleRules[0], id: "rule-2", name: "Changed" }];
+      // Neither the close error nor the cleanup error may mask the write error.
+      await expect(store.save(next)).rejects.toThrow("simulated write failure");
+      expect(fileOps.removed).toContain(fileOps.lastTempPath);
+      expect(await readFile(filePath, "utf8")).toBe(before);
     });
 
     it("creates no target file when the first save fails before rename", async () => {

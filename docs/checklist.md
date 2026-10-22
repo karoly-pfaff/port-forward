@@ -159,7 +159,7 @@ change on top of the stable line, and the full release matrix below applies befo
   unverified coverage figure, and never lower a gate.
 - [ ] The Postman collection stays **generated** from `docs/openapi.json` (not a hand-maintained
   second contract); `npm run validate:postman` passes and runs in push/PR CI; `npm run
-  validate:postman:local` stays a local-only Newman smoke. No Postman cloud publishing.
+  validate:postman:local` stays a local-only runtime smoke. No Postman cloud publishing.
 - [ ] No automatic startup migration is added; release publishing stays an explicit manual step (no
   workflow auto-publishes a GitHub Release or auto-creates a tag).
 - [ ] `docs/private/**` stays out of logs, artifacts, release output, and public docs.

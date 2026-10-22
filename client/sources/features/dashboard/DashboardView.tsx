@@ -78,8 +78,10 @@ export function DashboardView({
               {recentActivity.map((ev) => (
                 <li key={ev.id} className={`dashboard-activity-row dashboard-activity-row--${ev.severity}`}>
                   <span className="dashboard-activity-sym" aria-hidden="true">
-                    {/* v8 ignore next -- ev.severity is a strict ActivitySeverity union fully mapped by SEVERITY_SYMBOL; the ?? fallback is unreachable */}
-                    {SEVERITY_SYMBOL[ev.severity] ?? "·"}
+                    {
+                      /* v8 ignore next -- @preserve ev.severity is a strict ActivitySeverity union fully mapped by SEVERITY_SYMBOL; the ?? fallback is unreachable */
+                      SEVERITY_SYMBOL[ev.severity] ?? "·"
+                    }
                   </span>
                   <span className="dashboard-activity-time">{formatTimestamp(ev.timestamp)}</span>
                   <span className="dashboard-activity-msg">{ev.message}</span>

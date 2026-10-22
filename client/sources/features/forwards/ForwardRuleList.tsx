@@ -171,9 +171,10 @@ export function ForwardRuleList({
   }
 
   async function runGroupAction(action: "start" | "stop"): Promise<void> {
-    /* v8 ignore next 2 -- defensive guards: runGroupAction is only invoked from buttons that render solely when onGroupAction is set, no action is in flight, and a concrete group (not All/Ungrouped) is selected */
+    /* v8 ignore start -- @preserve defensive guards: runGroupAction is only invoked from buttons that render solely when onGroupAction is set, no action is in flight, and a concrete group (not All/Ungrouped) is selected */
     if (!onGroupAction || groupActionInFlight) return;
     if (activeGroupFilter === ALL_GROUPS || activeGroupFilter === UNGROUPED) return;
+    /* v8 ignore stop -- @preserve */
     const group = activeGroupFilter;
     setGroupActionBusy(action);
     setGroupActionResult(null);

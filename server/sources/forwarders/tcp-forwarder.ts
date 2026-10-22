@@ -91,11 +91,12 @@ export class TcpForwarder implements Forwarder {
 
     this.trackSocket(clientSocket);
     this.trackSocket(targetSocket);
-    /* v8 ignore next -- activeConnections is initialized to 0; the ?? 0 fallback is defensive */
+    /* v8 ignore next -- @preserve activeConnections is initialized to 0; the ?? 0 fallback is defensive */
     this.status.activeConnections = (this.status.activeConnections ?? 0) + 1;
 
-    /* v8 ignore next 2 -- a connected socket always exposes remoteAddress/remotePort; the fallbacks are defensive */
+    /* v8 ignore next -- @preserve a connected socket always exposes remoteAddress; the fallback is defensive */
     const remoteAddress = clientSocket.remoteAddress ?? "unknown";
+    /* v8 ignore next -- @preserve a connected socket always exposes remotePort; the fallback is defensive */
     const remotePort = clientSocket.remotePort ?? 0;
 
     const connId = this.registry?.openConnection({
@@ -136,6 +137,7 @@ export class TcpForwarder implements Forwarder {
 
     let loggedError = false;
     const closeBoth = (error?: Error) => {
+      /* v8 ignore else -- @preserve closeBoth only runs from an "error" event; a second error after both sockets were destroyed is non-deterministic in a unit test */
       if (error && !loggedError) {
         loggedError = true;
         this.status.lastError = error.message;
@@ -161,10 +163,10 @@ export class TcpForwarder implements Forwarder {
     const onClosed = () => {
       this.sockets.delete(clientSocket);
       this.sockets.delete(targetSocket);
-      /* v8 ignore next -- re-entry guard: the second of the paired client/target close events is non-deterministic in a unit test */
+      /* v8 ignore next -- @preserve re-entry guard: the second of the paired client/target close events is non-deterministic in a unit test */
       if (!countedClosed) {
         countedClosed = true;
-        /* v8 ignore next -- activeConnections was incremented when the connection opened; the ?? 0 fallback is defensive */
+        /* v8 ignore next -- @preserve activeConnections was incremented when the connection opened; the ?? 0 fallback is defensive */
         this.status.activeConnections = Math.max(0, (this.status.activeConnections ?? 0) - 1);
         if (connId) this.registry?.closeConnection(connId);
         if (!loggedError) {

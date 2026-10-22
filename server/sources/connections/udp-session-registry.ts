@@ -105,6 +105,7 @@ export class UdpSessionRegistry {
     }
     for (const id of toDelete) {
       const entry = this.entries.get(id);
+      /* v8 ignore else -- @preserve every id in toDelete was just read from this.entries synchronously; a missing entry is unreachable */
       if (entry) this.keyToId.delete(entry.key);
       this.entries.delete(id);
     }
@@ -118,6 +119,7 @@ export class UdpSessionRegistry {
     }
     for (const id of toDelete) {
       const entry = this.entries.get(id);
+      /* v8 ignore else -- @preserve every id in toDelete was just read from this.entries synchronously; a missing entry is unreachable */
       if (entry) this.keyToId.delete(entry.key);
       this.entries.delete(id);
     }

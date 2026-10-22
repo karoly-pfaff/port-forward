@@ -119,7 +119,7 @@ for full command, flag, and exit-code documentation.
   is generated from it).
 - Ready-to-run Postman collection: **[postman/](postman/)** (`collection.json` + `environment.json`),
   generated from the OpenAPI contract. `npm run validate:postman` checks it for drift in CI, and
-  `npm run validate:postman:local` runs it against a throwaway local runtime with Newman.
+  `npm run validate:postman:local` runs it against a throwaway local runtime.
 
 ## Build & Validation
 

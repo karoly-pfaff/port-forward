@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* global console, process, setTimeout */
 /**
- * Local-only Newman runtime smoke for the generated Postman collection.
+ * Local-only runtime smoke for the generated Postman collection.
  *
  * Runs `postman/collection.json` (with `postman/environment.json`) against a live,
  * locally-started Portier runtime. This complements the static `validate:postman`
@@ -9,8 +9,10 @@
  * running runtime and that documented statuses/envelopes hold.
  *
  * It is local-only by design (not wired into push/PR CI). It needs no external
- * internet: Newman is a dev dependency and the runtime is started on loopback with a
- * throwaway config.
+ * internet: the collection is executed in-process by scripts/library/postman-runner.js
+ * (a minimal runner for the slice of the Postman sandbox the generated collection uses;
+ * it replaced Newman, whose dependency tree carried unfixable advisories) and the
+ * runtime is started on loopback with a throwaway config.
  *
  * Runtime target — the NestJS/TypeScript server (`server/build/index.js`):
  *   The Postman collection is generated from the canonical OpenAPI document, which is
@@ -34,7 +36,7 @@
  *                  (default: a free port; env PORTIER_LISTEN_PORT also honored)
  *   --folder       run only one top-level folder (repeatable); default runs all three
  *   --keep-going   run every folder even if one fails (default: stop on first failure)
- *   --verbose      pass Newman's verbose reporter
+ *   --verbose      print response bodies
  *
  * Each top-level folder runs against its OWN freshly-started runtime with an empty,
  * temporary rules.json. This isolates the folders: the Atomic Endpoint Tests folder
@@ -45,13 +47,14 @@
  * is deleted on teardown). No user/production config is touched.
  */
 
-import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { get } from "node:http";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { runFolder } from "./library/postman-runner.js";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -60,7 +63,6 @@ const npmCommand = isWindows ? "npm.cmd" : "npm";
 
 const collectionPath = join(repoRoot, "postman", "collection.json");
 const environmentPath = join(repoRoot, "postman", "environment.json");
-const newmanCli = join(repoRoot, "node_modules", "newman", "bin", "newman.js");
 const serverEntry = join(repoRoot, "server", "build", "index.js");
 
 // The three top-level folders the collection ships, in execution order.
@@ -138,24 +140,19 @@ function ensureServerBuilt() {
   }
 }
 
-// Run a single Newman folder against an already-running runtime on managementPort.
-// Returns the Newman process exit code (0 = all assertions passed).
-function runNewmanFolder(folder, managementPort, listenPort, verbose) {
-  const args = [
-    newmanCli,
-    "run", collectionPath,
-    "-e", environmentPath,
-    "--folder", folder,
+// Run a single collection folder against an already-running runtime on managementPort.
+// Returns 0 when every request completed and every assertion passed, otherwise 1.
+async function runCollectionFolder(folder, managementPort, listenPort, verbose) {
+  const summary = await runFolder({
+    collection: JSON.parse(readFileSync(collectionPath, "utf8")),
+    environment: JSON.parse(readFileSync(environmentPath, "utf8")),
+    folder,
     // Override the environment so the collection targets THIS runtime. baseUrl is
     // `http://{{host}}:{{port}}`, so overriding host/port cascades into every URL.
-    "--env-var", "host=127.0.0.1",
-    "--env-var", `port=${managementPort}`,
-    "--env-var", `listenPort=${listenPort}`,
-    "--reporters", "cli",
-  ];
-  if (verbose) args.push("--verbose");
-  const r = spawnSync(process.execPath, args, { cwd: repoRoot, stdio: "inherit" });
-  return r.status ?? 1;
+    overrides: { host: "127.0.0.1", port: managementPort, listenPort },
+    verbose,
+  });
+  return summary.failedRequests === 0 && summary.failedAssertions === 0 ? 0 : 1;
 }
 
 // Start a fresh runtime (empty temp rules.json, given management port), run one folder
@@ -198,7 +195,7 @@ async function smokeFolder(folder, managementPort, listenPort, verbose) {
       console.error(`[postman-local] Runtime did not become healthy within 20s (exit=${exitedEarly}).`);
       return 1;
     }
-    return runNewmanFolder(folder, managementPort, listenPort, verbose);
+    return await runCollectionFolder(folder, managementPort, listenPort, verbose);
   } finally {
     if (exitedEarly === null) {
       proc.kill();
@@ -219,10 +216,6 @@ async function main() {
     console.error("[postman-local] Run: npm run generate:postman");
     process.exit(1);
   }
-  if (!existsSync(newmanCli)) {
-    console.error("[postman-local] Newman is not installed. Run: npm install");
-    process.exit(1);
-  }
 
   const folders = opts.folders.length ? opts.folders : ALL_FOLDERS;
   for (const f of folders) {
@@ -239,14 +232,14 @@ async function main() {
   const managementPort = opts.port || envPort || (await getFreePort());
   const listenPort = opts.listenPort || envListen || (await getFreePort());
 
-  console.log("[postman-local] Local Newman runtime smoke (local-only; no network, no user config touched).");
+  console.log("[postman-local] Local Postman collection runtime smoke (local-only; no network, no user config touched).");
 
   let failed = 0;
   for (const folder of folders) {
     const code = await smokeFolder(folder, managementPort, listenPort, opts.verbose);
     if (code !== 0) {
       failed++;
-      console.error(`[postman-local] FAILED: "${folder}" (newman exit ${code}).`);
+      console.error(`[postman-local] FAILED: "${folder}".`);
       if (!opts.keepGoing) break;
     } else {
       console.log(`[postman-local] PASSED: "${folder}".`);

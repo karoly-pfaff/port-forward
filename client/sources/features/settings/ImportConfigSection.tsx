@@ -63,7 +63,7 @@ export function ImportConfigSection({
           enabledCount: rules.filter((r) => (r as { enabled: boolean }).enabled).length
         });
       } catch (error) {
-        /* v8 ignore next -- JSON.parse only throws SyntaxError (an Error); the non-Error fallback is defensive */
+        /* v8 ignore next -- @preserve JSON.parse only throws SyntaxError (an Error); the non-Error fallback is defensive */
         setParseError(error instanceof Error ? error.message : "Parse error.");
       }
     };
@@ -71,7 +71,7 @@ export function ImportConfigSection({
   }
 
   async function handleImport(): Promise<void> {
-    /* v8 ignore next -- the Import button only renders once parsedImport is set; this guard is unreachable from the UI */
+    /* v8 ignore next -- @preserve the Import button only renders once parsedImport is set; this guard is unreachable from the UI */
     if (!parsedImport) return;
     setImporting(true);
     setImportResult(null);
@@ -85,6 +85,7 @@ export function ImportConfigSection({
       setParsedImport(null);
       setConfirmReplace(false);
       setSelectedFileName(null);
+      /* v8 ignore else -- @preserve the file input renders unconditionally, so the ref is only null if the section unmounts while the import request is in flight; the null arm is defensive */
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error) {
       setImportErrors([error instanceof Error ? error.message : "Import failed."]);

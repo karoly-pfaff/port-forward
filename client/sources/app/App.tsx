@@ -53,6 +53,7 @@ export function App(): ReactElement {
   const { runtimeInfo } = useRuntimeInfo();
 
   const refreshInFlightRef = useRef(false);
+  /* v8 ignore next -- @preserve placeholder only: handleCancelRef.current is reassigned to handleCancel on every render, before the Escape listener can fire, so this default is never called */
   const handleCancelRef = useRef<() => void>(() => {});
 
   const statusMap = new Map(statuses.map((s) => [s.ruleId, s]));
@@ -74,7 +75,7 @@ export function App(): ReactElement {
   useEffect(() => {
     if (!autoRefresh) return;
     const id = setInterval(() => {
-      /* v8 ignore next -- concurrency guard: skips a tick while a prior auto-refresh is still in flight; not deterministically triggerable in a unit test */
+      /* v8 ignore next -- @preserve concurrency guard: skips a tick while a prior auto-refresh is still in flight; not deterministically triggerable in a unit test */
       if (refreshInFlightRef.current) return;
       refreshInFlightRef.current = true;
       void Promise.all([fetchForwardRules(), fetchForwardStatus(), fetchActivity({ limit: 5 })])

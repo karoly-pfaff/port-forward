@@ -30,6 +30,15 @@ describe("summarizeGroupAction", () => {
     expect(summary).toMatchObject({ action: "stop", total: 2, succeeded: 1, skipped: 1, failed: 0 });
   });
 
+  it("counts an unrecognised status toward total only (matches the Go switch with no default)", () => {
+    const results = [
+      { ruleId: "1", ruleName: "a", status: "started" },
+      { ruleId: "2", ruleName: "b", status: "unknown" }
+    ] as unknown as GroupActionResult[];
+    const summary = summarizeGroupAction("web", "start", results);
+    expect(summary).toMatchObject({ total: 2, succeeded: 1, skipped: 0, failed: 0 });
+  });
+
   it("returns zeroed counts for an empty result list", () => {
     expect(summarizeGroupAction("web", "start", [])).toEqual({
       group: "web",

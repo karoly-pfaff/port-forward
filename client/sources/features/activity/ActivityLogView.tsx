@@ -93,7 +93,7 @@ export function ActivityLogView({ rules, ruleId, severity, onClearRuleFilter }: 
     type: "" | ActivityEventType;
     ruleId: string;
   }): Promise<void> {
-    /* v8 ignore next -- concurrency guard: skips an overlapping load while one is in flight; not deterministically triggerable in a unit test */
+    /* v8 ignore next -- @preserve concurrency guard: skips an overlapping load while one is in flight; not deterministically triggerable in a unit test */
     if (fetchInFlightRef.current) return;
     fetchInFlightRef.current = true;
     setError(null);
