@@ -1,6 +1,12 @@
 import dgram from "node:dgram";
 import net from "node:net";
 
+// A TCP target that refuses connections. A port taken from getFreeTcpPort() and released
+// is not reliably closed: parallel test files (or the forwarder's own listen port) can be
+// handed the same ephemeral port. Port 1 (tcpmux) is outside the OS ephemeral range, so no
+// test can bind it, and nothing listens on it on dev machines or CI runners.
+export const REFUSED_TCP_PORT = 1;
+
 export async function getFreeTcpPort(): Promise<number> {
   const server = net.createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

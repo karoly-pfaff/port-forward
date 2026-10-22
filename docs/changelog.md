@@ -4,6 +4,13 @@ All notable changes to Portier are documented here.
 
 This changelog is written for both humans and coding agents. It summarizes what changed, why it matters, and the validation signal for each release. Detailed implementation history, audit notes, and commit-level rationale live in `audits/` and Git history.
 
+## [Unreleased]
+
+- **NestJS 12** for the TypeScript fallback server: `@nestjs/core` / `common` / `platform-express` / `testing` 12.2 and `@nestjs/swagger` 12.0. The generated `docs/openapi.json` is unchanged; the server uses no lifecycle hooks, so NestJS 12's hook-ordering change does not apply.
+- **Packaged Node fallback bundle:** NestJS 12 ships ESM and imports `@nestjs/websockets/socket-module.js`; `@nestjs/swagger` 12 imports the optional `@fastify/static`. The build-runtime scripts now mark `@nestjs/websockets` (whole package) and `@fastify/static` external, alongside the existing optional transports.
+- **Production group:** class-validator 0.15 (its only breaking change, `@IsIBAN`, is unused), express 5.3, react / react-dom 19.3, lucide-react.
+- **Tests:** refused-connection tests target port 1 (`REFUSED_TCP_PORT` / `refusedAPITCPPort`) instead of a released ephemeral port, which parallel tests could re-bind and turn into a rare timeout.
+
 ## [2.1.0] - 2026-10-22 - Node 24 Floor & Tooling Updates
 
 A maintenance release that moves the toolchain to Node 24 LTS and lands the outstanding Dependabot majors that work today. The one user-facing change is the Node fallback's minimum Node.js version; the Go service, REST API, `rules.json` format, and CLI behavior are unchanged.

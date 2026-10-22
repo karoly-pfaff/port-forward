@@ -26,9 +26,10 @@ ESBUILD="$REPO_ROOT/node_modules/.bin/esbuild"
 BUNDLE_ENTRY="$REPO_ROOT/server/sources/index.ts"
 BUNDLE_EXTERNALS=(
   --external:@nestjs/microservices
-  --external:@nestjs/websockets/socket-module
+  --external:@nestjs/websockets
   --external:@nestjs/microservices/microservices-module
   --external:class-transformer/storage
+  --external:@fastify/static
 )
 BUNDLE_WORK="$OUTPUT_DIR/_bundle"
 BUNDLE_CJS="$BUNDLE_WORK/server.cjs"

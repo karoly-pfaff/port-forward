@@ -189,8 +189,9 @@ The serialized document is deterministic — `components.schemas` is sorted by n
 The packaged single-file Node fallback `server.js` is an esbuild `--bundle --minify
 --format=cjs` of `sources/index.ts` (the NestJS entry). NestJS lazily `require()`s a
 few optional transports it never uses for a plain HTTP app, so the build scripts mark
-them external (`@nestjs/microservices`, `@nestjs/websockets/socket-module`,
-`@nestjs/microservices/microservices-module`, `class-transformer/storage`). Because
+them external (`@nestjs/microservices`, `@nestjs/websockets`,
+`@nestjs/microservices/microservices-module`, `class-transformer/storage`, and
+`@fastify/static`, which `@nestjs/swagger` only loads for the Fastify adapter). Because
 the bundle is CommonJS and the repo root is `"type": "module"`, the build scripts also
 write a `{ "type": "commonjs" }` `package.json` into the package dir so Node loads
 `server.js` as CommonJS. The Go service remains the **preferred** packaged runtime

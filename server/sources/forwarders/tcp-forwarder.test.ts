@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { ActivityEventInput, ForwardRule } from "@portier/shared";
 import { TcpForwarder } from "./tcp-forwarder.js";
 import { TcpConnectionRegistry } from "../connections/tcp-connection-registry.js";
-import { getFreeTcpPort, startForwarderOnFreePort } from "../testing/test-helpers.js";
+import { getFreeTcpPort, REFUSED_TCP_PORT, startForwarderOnFreePort } from "../testing/test-helpers.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -149,7 +149,6 @@ describe("TcpForwarder – connection events", () => {
 
 describe("TcpForwarder – error handling", () => {
   it("emits tcp.connection.error and sets lastError when target is unreachable", async () => {
-    const unusedPort = await getFreeTcpPort(); // allocated but nothing listening
 
     const events: string[] = [];
     let errorResolve!: () => void;
@@ -157,7 +156,7 @@ describe("TcpForwarder – error handling", () => {
 
     const { forwarder, listenPort } = await startForwarderOnFreePort(getFreeTcpPort, (listenPort) =>
       new TcpForwarder(
-        makeRule({ listenPort, targetPort: unusedPort }),
+        makeRule({ listenPort, targetPort: REFUSED_TCP_PORT }),
         (e: ActivityEventInput) => {
           events.push(e.type);
           if (e.type === "tcp.connection.error") errorResolve();
@@ -330,7 +329,6 @@ describe("TcpForwarder – live tracking integration", () => {
   });
 
   it("failed target connection does not leak a live connection entry", async () => {
-    const unusedPort = await getFreeTcpPort(); // nothing listening
     const registry = new TcpConnectionRegistry();
 
     let errorResolve!: () => void;
@@ -338,7 +336,7 @@ describe("TcpForwarder – live tracking integration", () => {
 
     const { forwarder, listenPort } = await startForwarderOnFreePort(getFreeTcpPort, (listenPort) =>
       new TcpForwarder(
-        makeRule({ listenPort, targetPort: unusedPort }),
+        makeRule({ listenPort, targetPort: REFUSED_TCP_PORT }),
         (e) => { if (e.type === "tcp.connection.error") errorResolve(); },
         registry
       )
