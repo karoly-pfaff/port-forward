@@ -68,4 +68,33 @@ describe("useConfigExport — failure handling", () => {
     });
     expect(result.current.exportError).toBeNull();
   });
+
+  it("clears the success flag 3 seconds after a successful export", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(portierApi.exportConfig).mockResolvedValue({
+        version: "1",
+        exportedAt: new Date().toISOString(),
+        rules: []
+      });
+
+      const { result } = renderHook(() => useConfigExport());
+      await act(async () => {
+        await result.current.handleExport();
+      });
+      expect(result.current.exportSuccess).toBe(true);
+
+      act(() => {
+        vi.advanceTimersByTime(2999);
+      });
+      expect(result.current.exportSuccess).toBe(true);
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(result.current.exportSuccess).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
