@@ -6,13 +6,14 @@ This changelog is written for both humans and coding agents. It summarizes what 
 
 ## [2.0.1] - 2026-10-22 - Dependency Security Patch
 
-A maintenance release that clears every open npm advisory (28 Dependabot alerts: 5 critical, 9 high, 13 moderate, 1 low) so the `npm audit --audit-level=high` CI gate passes again. No Go advisories were open; the Go service runtime is unchanged apart from its version string.
+A maintenance release that clears every open npm advisory (28 Dependabot alerts: 5 critical, 9 high, 13 moderate, 1 low) so the `npm audit --audit-level=high` CI gate passes again, and moves Go builds to Go 1.26, clearing the Go standard-library advisories that `govulncheck` reports against the Go 1.25 line.
 
+- **Go toolchain:** CI and release workflows build with Go 1.26 (was 1.25). On Go 1.25.14, `govulncheck` reports 9 reachable standard-library advisories in the service and 10 in the CLI (`net/http`, `crypto/tls`, `crypto/x509`, `net/textproto`), fixed only in Go 1.26.9/1.26.10. The `go` directive in each `go.mod` stays at 1.25.0 (minimum language version). `govulncheck` is pinned in CI instead of `@latest`.
 - **Dependencies:** overrides and lockfile refreshed for `multer` 2.4, `qs` 6.16, `proxy-addr` 2.0.8, `js-yaml`, `shell-quote`, `source-map-js`, `brace-expansion`, and `ip-address`; `adm-zip` 0.6.1 and `vite` 6.4.5.
 - **Test tooling:** `vitest` / `@vitest/coverage-v8` 3 → 4.1. vitest 4 measures coverage with AST-aware remapping, so existing `v8 ignore` hints gained `-- @preserve` and newly counted paths (implicit `else` arms, best-effort `.catch` callbacks, timer callbacks) are covered by new tests or justified hints. No coverage gate was lowered.
 - **Postman smoke:** `validate:postman:local` now runs the collection with a minimal in-repo runner (`scripts/library/postman-runner.js`) instead of Newman, whose dependency tree carried advisories with no upstream fix (`node-forge`, `@faker-js/faker`, `csv-parse`). The collection itself is unchanged and still runs in Postman and Newman.
 - **Compatibility:** no API, OpenAPI schema (still `2.0`), `rules.json`, or CLI behavior change.
-- **Validation signal:** `npm audit` 0 vulnerabilities; lint / typecheck clean; shared 106, server 644, client 580 (100/100/100), Go service 90.4% (gate 90/95); `validate:contract` 117/2 skipped/0; `validate:openapi:go` PASS; `validate:postman` 129/0 plus the live local smoke (38 requests, 75 assertions); `version:check` 10/10 at `2.0.1`.
+- **Validation signal:** `npm audit` 0 vulnerabilities; `govulncheck` clean for service / CLI / replay on Go 1.26.10; lint / typecheck clean; shared 106, server 644, client 580 (100/100/100), Go service 90.4% (gate 90/95); `validate:contract` 117/2 skipped/0; `validate:openapi:go` PASS; `validate:postman` 129/0 plus the live local smoke (38 requests, 75 assertions); `version:check` 10/10 at `2.0.1`.
 
 ## [2.0.0] - 2026-06-21 - Stable Local-First Release
 

@@ -19,7 +19,7 @@ permissions:
 
 env:
   NODE_VERSION: "22"
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26"
 
 jobs:
   linux-arm64-smoke:
