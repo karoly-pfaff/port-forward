@@ -26,9 +26,10 @@ $bundleCjsPath = Join-Path $bundleWorkPath "server.cjs"
 $bundleEntryPath = Join-Path $repoRoot "server\sources\index.ts"
 $bundleExternals = @(
   "--external:@nestjs/microservices",
-  "--external:@nestjs/websockets/socket-module",
+  "--external:@nestjs/websockets",
   "--external:@nestjs/microservices/microservices-module",
-  "--external:class-transformer/storage"
+  "--external:class-transformer/storage",
+  "--external:@fastify/static"
 )
 
 function Get-LocalToolPath {

@@ -1465,6 +1465,12 @@ func writeTCPRuleConfig(t *testing.T, id string, listenPort int, targetPort int,
 ]`, id, listenPort, targetPort, enabled))
 }
 
+// refusedAPITCPPort is a TCP target that refuses connections. A port taken from
+// freeAPITCPPort and released is not reliably closed: parallel tests can be handed the same
+// ephemeral port. Port 1 (tcpmux) is outside the OS ephemeral range, so no test can bind it,
+// and nothing listens on it on dev machines or CI runners.
+const refusedAPITCPPort = 1
+
 func freeAPITCPPort(t *testing.T) int {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -1936,7 +1942,7 @@ func TestDiagnoseTCPReachableTargetPassesConnect(t *testing.T) {
 
 func TestDiagnoseTCPUnreachableTargetFailsConnect(t *testing.T) {
 	listenPort := freeAPITCPPort(t)
-	unreachablePort := freeAPITCPPort(t) // nothing listening
+	unreachablePort := refusedAPITCPPort
 	configPath := writeTestConfig(t, fmt.Sprintf(`[
   {
     "id": "diag-unreach",

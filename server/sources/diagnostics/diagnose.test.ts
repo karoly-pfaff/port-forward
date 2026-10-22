@@ -3,7 +3,7 @@ import dgram from "node:dgram";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ForwardRule } from "@portier/shared";
 import { diagnoseRule } from "./diagnose.js";
-import { getFreeTcpPort, getFreeUdpPort } from "../testing/test-helpers.js";
+import { getFreeTcpPort, getFreeUdpPort, REFUSED_TCP_PORT } from "../testing/test-helpers.js";
 
 function udpRule(overrides: Partial<ForwardRule> = {}): ForwardRule {
   return {
@@ -124,9 +124,9 @@ describe("diagnoseRule TCP bind and target connection", () => {
   });
 
   it("returns fail target-connect when the target refuses the connection", async () => {
-    const [listenPort, targetPort] = await Promise.all([getFreeTcpPort(), getFreeTcpPort()]);
-    // targetPort is allocated but nothing listens → connection refused.
-    const result = await diagnoseRule(tcpRule({ listenPort, targetPort }), false);
+    const listenPort = await getFreeTcpPort();
+    // Nothing can listen on REFUSED_TCP_PORT → connection refused.
+    const result = await diagnoseRule(tcpRule({ listenPort, targetPort: REFUSED_TCP_PORT }), false);
     const connect = result.checks.find((c) => c.id === "target-connect");
     expect(connect?.status).toBe("fail");
     expect(connect?.message).toContain("failed");
