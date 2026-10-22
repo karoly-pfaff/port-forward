@@ -45,6 +45,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           # The Go module with external deps lives in service/; point the cache there
           # (the tools/cli and tools/replay modules have no go.sum). Avoids the
           # "Dependencies file is not found ... go.sum" cache warning.
