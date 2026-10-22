@@ -1,6 +1,7 @@
 # Portier
 
 [![PortierCI](https://github.com/karoly-pfaff/port-forward/actions/workflows/portier-ci.yml/badge.svg?branch=main)](https://github.com/karoly-pfaff/port-forward/actions/workflows/portier-ci.yml)
+[![Sponsor](https://img.shields.io/github/sponsors/karoly-pfaff?label=Sponsor&logo=GitHub)](https://github.com/sponsors/karoly-pfaff)
 
 Portier is a local TCP/UDP port-forwarding manager for development and LAN testing. It pairs a
 native Go service runtime (and a TypeScript fallback) with a React web UI and a Go CLI, all
@@ -165,6 +166,12 @@ or creates a tag automatically.
 - Release history: [docs/changelog.md](docs/changelog.md).
 - Packaging and release process: [docs/installer.md](docs/installer.md) and [docs/checklist.md](docs/checklist.md).
 - Roadmap: [docs/roadmap.md](docs/roadmap.md).
+
+## Sponsoring
+
+Portier is free and open source. If it saves you time, you can support its development through
+[GitHub Sponsors](https://github.com/sponsors/karoly-pfaff). Sponsoring is entirely optional and
+does not change what the app does: there is no paid tier, license check, or in-app prompt.
 
 ## Credits
 
