@@ -110,7 +110,7 @@
     "validate:artifacts": "node scripts/validate-artifacts.js"
   },
   "devDependencies": {
-    "@eslint/js": "^9.28.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.1",
     "@types/node": "^24.19.2",
     "@vitejs/plugin-react": "^6.1.2",
